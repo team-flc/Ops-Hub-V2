@@ -7,6 +7,7 @@ import {
   ChevronsRight, ShieldCheck, Sparkles, Database, Trash2, LogOut
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { ROLE_DISPLAY_NAMES } from '../../types';
 
 const ICON_MAP: Record<string, any> = {
   Activity,
@@ -35,7 +36,15 @@ export const Sidebar: React.FC = () => {
   const deleteList = useOpsStore((state) => state.deleteList);
   const currentUser = useOpsStore((state) => state.currentUser);
   const tasks = useOpsStore((state) => state.tasks);
-  const { signOut } = useAuth();
+  const { signOut, profile, user } = useAuth();
+  const displayName = profile?.fullName || user?.email?.split('@')[0] || currentUser.name || 'Team Member';
+  const displayRole = profile?.role ? ROLE_DISPLAY_NAMES[profile.role] : 'Team Member';
+  const displayInitials = displayName
+    .split(' ')
+    .map((n: string) => n[0])
+    .join('')
+    .substring(0, 2)
+    .toUpperCase() || 'FL';
 
   const [expandedSpaces, setExpandedSpaces] = useState<Record<string, boolean>>({
     'space-1': true,
@@ -426,16 +435,14 @@ export const Sidebar: React.FC = () => {
       {/* Bottom User Pill */}
       <div className="p-3 border-t border-gray-100 dark:border-dark-border/60 bg-gray-50/60 dark:bg-dark-sidebar flex items-center justify-between">
         <div className="flex items-center gap-2.5 min-w-0">
-          <img
-            src={currentUser.avatar}
-            alt={currentUser.name}
-            className="w-8 h-8 rounded-full object-cover flex-shrink-0"
-          />
+          <div className="w-8 h-8 rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-400 font-bold text-xs flex items-center justify-center flex-shrink-0 border border-brand-500/20">
+            {displayInitials}
+          </div>
           <div className="min-w-0">
             <div className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">
-              {currentUser.name}
+              {displayName}
             </div>
-            <div className="text-[10px] text-gray-400 truncate">{currentUser.role}</div>
+            <div className="text-[10px] text-gray-400 font-medium truncate">{displayRole}</div>
           </div>
         </div>
 

@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { Routes, Route, Navigate } from 'react-router-dom';
+import { Routes, Route } from 'react-router-dom';
 import { useOpsStore } from './store/opsStore';
 import { supabaseService, mapDbTaskToTask } from './lib/supabaseService';
 import { useAuth } from './context/AuthContext';
@@ -153,7 +153,7 @@ export const OpsHubWorkspace: React.FC = () => {
 };
 
 /**
- * Top-Level Root Application with Strict Phase 1 Production Auth Routing
+ * Top-Level Root Application with Mutually Exclusive Role Routing
  */
 export const App: React.FC = () => {
   return (
@@ -163,17 +163,17 @@ export const App: React.FC = () => {
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/update-password" element={<UpdatePasswordPage />} />
 
-      {/* Protected Client Portal Route (Isolated from internal staff workspace) */}
+      {/* Protected Client Portal Route (Strictly Client Role Only) */}
       <Route
         path="/client"
         element={
-          <ProtectedRoute allowedRoles={['client', 'owner', 'operational_manager', 'team_member']}>
+          <ProtectedRoute allowedRoles={['client']}>
             <ClientPortalHoldingPage />
           </ProtectedRoute>
         }
       />
 
-      {/* Protected Internal Staff Application */}
+      {/* Protected Internal Staff Application (Strictly Staff Roles Only) */}
       <Route
         path="/*"
         element={

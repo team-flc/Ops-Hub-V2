@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, ReactNode } from 'react';
 import { User, Session, AuthChangeEvent } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
-import { UserProfile, UserRole, AccountStatus } from '../types';
+import { UserProfile, UserRole, AccountStatus, isStaffRole, isClientRole, ROLE_DISPLAY_NAMES } from '../types';
 import { useOpsStore } from '../store/opsStore';
 
 interface AuthContextType {
@@ -9,6 +9,7 @@ interface AuthContextType {
   profile: UserProfile | null;
   session: Session | null;
   isLoading: boolean;
+  profileError: string | null;
   isConfigured: boolean;
   signIn: (email: string, password: string) => Promise<{ error?: string }>;
   signOut: () => Promise<void>;
@@ -20,62 +21,90 @@ interface AuthContextType {
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const GENERIC_AUTH_ERROR = "We couldn't sign you in. Check your email and password and try again.";
-const GENERIC_RESET_SUCCESS = "If an account exists for this email, password reset instructions have been sent.";
 
 export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [session, setSession] = useState<Session | null>(null);
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
+  const [profileError, setProfileError] = useState<string | null>(null);
 
-  // Fetch verified profile from Supabase profiles table
-  const fetchProfile = useCallback(async (userId: string, userEmail?: string): Promise<UserProfile | null> => {
-    if (!supabase) return null;
+  // Fetch verified profile from Supabase profiles table - Strict Fail-Closed
+  const fetchProfile = useCallback(async (userId: string, userEmail?: string): Promise<{ profile: UserProfile | null; error: string | null }> => {
+    if (!supabase) {
+      return { profile: null, error: 'Database service is unconfigured.' };
+    }
+
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('*')
+        .select('id, full_name, role, status, organization_id, created_at, updated_at')
         .eq('id', userId)
-        .single();
+        .maybeSingle();
 
-      if (error || !data) {
-        // Fallback: If trigger didn't run or table has no row yet, attempt creating minimal profile
-        const fallbackProfile: UserProfile = {
-          id: userId,
-          email: userEmail,
-          fullName: userEmail ? userEmail.split('@')[0] : 'Ops User',
-          role: 'team_member',
-          status: 'active',
-          organizationId: null,
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString()
-        };
-        return fallbackProfile;
+      if (error) {
+        console.error('Profile fetch database error:', error.message);
+        return { profile: null, error: 'Unable to verify account profile. Please check your connection and try again.' };
+      }
+
+      if (!data) {
+        return { profile: null, error: 'No profile found for this account. Please contact your FLC administrator.' };
+      }
+
+      const role = data.role as UserRole;
+      if (!isStaffRole(role) && !isClientRole(role)) {
+        return { profile: null, error: 'Invalid or unrecognized account role. Please contact your FLC administrator.' };
+      }
+
+      const status = data.status as AccountStatus;
+      if (status !== 'active') {
+        return { profile: null, error: status === 'suspended' ? 'Your account has been suspended.' : 'Your account is currently inactive.' };
       }
 
       const userProf: UserProfile = {
         id: data.id,
         email: userEmail,
         fullName: data.full_name || 'Ops User',
-        role: (data.role as UserRole) || 'team_member',
-        status: (data.status as AccountStatus) || 'active',
+        role,
+        status,
         organizationId: data.organization_id || null,
         createdAt: data.created_at || new Date().toISOString(),
         updatedAt: data.updated_at || new Date().toISOString()
       };
 
-      return userProf;
+      return { profile: userProf, error: null };
     } catch (err) {
-      console.error('Error loading profile:', err);
-      return null;
+      console.error('Fatal profile loading error:', err);
+      return { profile: null, error: 'A network or system error occurred while retrieving your profile.' };
+    }
+  }, []);
+
+  const syncProfileToStore = useCallback((prof: UserProfile | null) => {
+    if (prof) {
+      useOpsStore.setState({
+        currentUser: {
+          id: prof.id,
+          name: prof.fullName,
+          email: prof.email || '',
+          avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+          role: prof.role === 'owner' ? 'Ops Director' : prof.role === 'operational_manager' ? 'Operations Lead' : 'Ops Specialist',
+          department: 'Faseeh Lall & Co. Operations',
+          status: 'online',
+          initials: prof.fullName.split(' ').map((n: string) => n[0]).join('').substring(0, 2).toUpperCase() || 'FL'
+        }
+      });
     }
   }, []);
 
   const refreshProfile = useCallback(async () => {
     if (!user) return;
-    const prof = await fetchProfile(user.id, user.email);
+    setIsLoading(true);
+    const { profile: prof, error: err } = await fetchProfile(user.id, user.email);
     setProfile(prof);
-  }, [user, fetchProfile]);
+    setProfileError(err);
+    syncProfileToStore(prof);
+    setIsLoading(false);
+  }, [user, fetchProfile, syncProfileToStore]);
 
   // Initial Auth Check & Session Listener
   useEffect(() => {
@@ -88,7 +117,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       try {
-        // Use verified server check getUser() instead of getSession() alone
         const { data: { user: verifiedUser }, error: verifyError } = await supabase.auth.getUser();
 
         if (verifyError || !verifiedUser) {
@@ -96,18 +124,21 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             setUser(null);
             setSession(null);
             setProfile(null);
+            setProfileError(null);
             setIsLoading(false);
           }
           return;
         }
 
         const { data: { session: currentSession } } = await supabase.auth.getSession();
-        const prof = await fetchProfile(verifiedUser.id, verifiedUser.email);
+        const { profile: prof, error: profErr } = await fetchProfile(verifiedUser.id, verifiedUser.email);
 
         if (mounted) {
           setUser(verifiedUser);
           setSession(currentSession);
           setProfile(prof);
+          setProfileError(profErr);
+          syncProfileToStore(prof);
           setIsLoading(false);
         }
       } catch (err) {
@@ -116,6 +147,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
           setUser(null);
           setSession(null);
           setProfile(null);
+          setProfileError('Failed to verify session.');
           setIsLoading(false);
         }
       }
@@ -123,7 +155,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     initAuth();
 
-    // Supabase reactive listener
     if (supabase) {
       const { data: { subscription } } = supabase.auth.onAuthStateChange(
         async (event: AuthChangeEvent, newSession: Session | null) => {
@@ -133,13 +164,16 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             setUser(null);
             setSession(null);
             setProfile(null);
+            setProfileError(null);
             setIsLoading(false);
           } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
             const authUser = newSession.user;
             setUser(authUser);
             setSession(newSession);
-            const prof = await fetchProfile(authUser.id, authUser.email);
+            const { profile: prof, error: profErr } = await fetchProfile(authUser.id, authUser.email);
             setProfile(prof);
+            setProfileError(profErr);
+            syncProfileToStore(prof);
             setIsLoading(false);
           }
         }
@@ -152,7 +186,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } else {
       mounted = false;
     }
-  }, [fetchProfile]);
+  }, [fetchProfile, syncProfileToStore]);
 
   // Real Email/Password Sign-In
   const signIn = async (email: string, password: string): Promise<{ error?: string }> => {
@@ -168,36 +202,29 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const { data, error } = await supabase.auth.signInWithPassword({
         email: cleanEmail,
-        password: password // Do not trim or alter password
+        password: password
       });
 
       if (error || !data.user) {
         return { error: GENERIC_AUTH_ERROR };
       }
 
-      const prof = await fetchProfile(data.user.id, data.user.email);
-      if (!prof || prof.status !== 'active') {
+      const { profile: prof, error: profErr } = await fetchProfile(data.user.id, data.user.email);
+      if (profErr || !prof) {
         await supabase.auth.signOut();
-        return { error: 'Your account is inactive or suspended. Contact your FLC administrator.' };
+        return { error: profErr || 'Account configuration error. Please contact your FLC administrator.' };
+      }
+
+      if (prof.status !== 'active') {
+        await supabase.auth.signOut();
+        return { error: prof.status === 'suspended' ? 'Your account has been suspended. Contact your FLC administrator.' : 'Your account is inactive. Contact your FLC administrator.' };
       }
 
       setUser(data.user);
       setSession(data.session);
       setProfile(prof);
-
-      // Sync into opsStore for current active session display
-      useOpsStore.setState({
-        currentUser: {
-          id: prof.id,
-          name: prof.fullName,
-          email: prof.email || cleanEmail,
-          avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
-          role: prof.role === 'owner' ? 'Ops Director' : prof.role === 'operational_manager' ? 'Operations Lead' : 'Ops Specialist',
-          department: 'Faseeh Lall & Co. Operations',
-          status: 'online',
-          initials: prof.fullName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase()
-        }
-      });
+      setProfileError(null);
+      syncProfileToStore(prof);
 
       return {};
     } catch {
@@ -205,7 +232,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // Real Password Reset Request
   const resetPasswordForEmail = async (email: string): Promise<{ error?: string }> => {
     if (!supabase) {
       return { error: 'Authentication service is not configured.' };
@@ -217,13 +243,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     try {
-      // Use current window origin (Cloudflare Pages deployment URL) for password update redirect
       const redirectTo = `${window.location.origin}/update-password`;
       const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
         redirectTo
       });
 
-      // Always return generic success message to prevent user enumeration
       if (error) {
         console.warn('Reset password error (masked):', error.message);
       }
@@ -233,7 +257,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // Real Password Update
   const updatePassword = async (newPassword: string): Promise<{ error?: string }> => {
     if (!supabase) {
       return { error: 'Authentication service is not configured.' };
@@ -258,7 +281,6 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
   };
 
-  // Sign Out
   const signOut = async () => {
     if (supabase) {
       try {
@@ -268,10 +290,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
     }
 
-    // Clear state
     setUser(null);
     setSession(null);
     setProfile(null);
+    setProfileError(null);
   };
 
   return (
@@ -281,6 +303,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         profile,
         session,
         isLoading,
+        profileError,
         isConfigured: isSupabaseConfigured,
         signIn,
         signOut,

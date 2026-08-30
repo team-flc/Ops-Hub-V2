@@ -134,6 +134,24 @@ export interface Space {
 export type UserRole = 'owner' | 'operational_manager' | 'team_member' | 'client';
 export type AccountStatus = 'active' | 'inactive' | 'suspended';
 
+export const STAFF_ROLES: readonly UserRole[] = ['owner', 'operational_manager', 'team_member'] as const;
+export const CLIENT_ROLES: readonly UserRole[] = ['client'] as const;
+
+export const ROLE_DISPLAY_NAMES: Record<UserRole, string> = {
+  owner: 'Owner',
+  operational_manager: 'Operational Manager',
+  team_member: 'Team Member',
+  client: 'Client'
+};
+
+export const isStaffRole = (role?: string): role is 'owner' | 'operational_manager' | 'team_member' => {
+  return typeof role === 'string' && (STAFF_ROLES as readonly string[]).includes(role);
+};
+
+export const isClientRole = (role?: string): role is 'client' => {
+  return role === 'client';
+};
+
 export interface UserProfile {
   id: string; // UUID references auth.users
   email?: string;

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation, Link } from 'react-router-dom';
 import { useAuth } from '../../context/AuthContext';
+import { isClientRole } from '../../types';
 import { Eye, EyeOff, Lock, Mail, ShieldCheck, AlertCircle, Loader2 } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
@@ -14,14 +15,15 @@ export const LoginPage: React.FC = () => {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // If already authenticated, redirect
+  // If already authenticated with verified profile, redirect to mutually exclusive role area
   React.useEffect(() => {
-    if (user && profile) {
-      if (profile.role === 'client') {
+    if (user && profile && profile.status === 'active') {
+      if (isClientRole(profile.role)) {
         navigate('/client', { replace: true });
       } else {
-        const from = (location.state as any)?.from?.pathname || '/';
-        navigate(from, { replace: true });
+        const from = (location.state as any)?.from?.pathname;
+        const target = from && from !== '/client' && from !== '/login' ? from : '/';
+        navigate(target, { replace: true });
       }
     }
   }, [user, profile, navigate, location]);
@@ -39,7 +41,6 @@ export const LoginPage: React.FC = () => {
         setErrorMessage(result.error);
         setIsSubmitting(false);
       } else {
-        // Navigation is handled by reactive useEffect or here
         setIsSubmitting(false);
       }
     } catch {
