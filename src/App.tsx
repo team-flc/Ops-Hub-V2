@@ -1,6 +1,15 @@
 import React, { useEffect } from 'react';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { useOpsStore } from './store/opsStore';
 import { supabaseService, mapDbTaskToTask } from './lib/supabaseService';
+import { useAuth } from './context/AuthContext';
+import { ProtectedRoute } from './components/auth/ProtectedRoute';
+import { LoginPage } from './components/auth/LoginPage';
+import { ForgotPasswordPage } from './components/auth/ForgotPasswordPage';
+import { UpdatePasswordPage } from './components/auth/UpdatePasswordPage';
+import { ClientPortalHoldingPage } from './components/auth/ClientPortalHoldingPage';
+
+// Internal Workspace Components (Preserved 100% Unchanged)
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
 import { ListView } from './components/views/ListView';
@@ -19,11 +28,18 @@ import { NewSpaceModal } from './components/spaces/NewSpaceModal';
 import { NewListModal } from './components/spaces/NewListModal';
 import { AutomationsModal } from './components/automations/AutomationsModal';
 
-export const App: React.FC = () => {
+/**
+ * Existing Internal FLC Ops Hub Workspace
+ * Strictly accessible only by authenticated staff (owner, operational_manager, team_member).
+ */
+export const OpsHubWorkspace: React.FC = () => {
   const viewMode = useOpsStore((state) => state.viewMode);
+  const { user } = useAuth();
 
   // Sync with Supabase on mount and listen to realtime updates
   useEffect(() => {
+    if (!user) return;
+
     async function loadSupabase() {
       if (!supabaseService.isConfigured()) return;
       const data = await supabaseService.fetchAllData();
@@ -82,7 +98,7 @@ export const App: React.FC = () => {
       unsubTasks();
       unsubClients();
     };
-  }, []);
+  }, [user]);
 
   const renderActiveView = () => {
     switch (viewMode) {
@@ -133,6 +149,40 @@ export const App: React.FC = () => {
       <NewListModal />
       <AutomationsModal />
     </div>
+  );
+};
+
+/**
+ * Top-Level Root Application with Strict Phase 1 Production Auth Routing
+ */
+export const App: React.FC = () => {
+  return (
+    <Routes>
+      {/* Public Auth Routes */}
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/forgot-password" element={<ForgotPasswordPage />} />
+      <Route path="/update-password" element={<UpdatePasswordPage />} />
+
+      {/* Protected Client Portal Route (Isolated from internal staff workspace) */}
+      <Route
+        path="/client"
+        element={
+          <ProtectedRoute allowedRoles={['client', 'owner', 'operational_manager', 'team_member']}>
+            <ClientPortalHoldingPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Protected Internal Staff Application */}
+      <Route
+        path="/*"
+        element={
+          <ProtectedRoute allowedRoles={['owner', 'operational_manager', 'team_member']}>
+            <OpsHubWorkspace />
+          </ProtectedRoute>
+        }
+      />
+    </Routes>
   );
 };
 

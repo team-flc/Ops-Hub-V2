@@ -4,8 +4,9 @@ import {
   Activity, Truck, Headphones, Cpu, Users, Layers, 
   ChevronDown, ChevronRight, Plus, Folder, List as ListIcon, 
   BookOpen, Zap, Building2, BarChart3, Settings, ChevronsLeft, 
-  ChevronsRight, ShieldCheck, Sparkles, Database, Trash2
+  ChevronsRight, ShieldCheck, Sparkles, Database, Trash2, LogOut
 } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 const ICON_MAP: Record<string, any> = {
   Activity,
@@ -34,6 +35,7 @@ export const Sidebar: React.FC = () => {
   const deleteList = useOpsStore((state) => state.deleteList);
   const currentUser = useOpsStore((state) => state.currentUser);
   const tasks = useOpsStore((state) => state.tasks);
+  const { signOut } = useAuth();
 
   const [expandedSpaces, setExpandedSpaces] = useState<Record<string, boolean>>({
     'space-1': true,
@@ -436,6 +438,15 @@ export const Sidebar: React.FC = () => {
             <div className="text-[10px] text-gray-400 truncate">{currentUser.role}</div>
           </div>
         </div>
+
+        <button
+          type="button"
+          onClick={() => signOut()}
+          className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-dark-100 rounded-lg transition-colors"
+          title="Sign out of Ops Hub"
+        >
+          <LogOut className="w-4 h-4" />
+        </button>
       </div>
     </aside>
   );

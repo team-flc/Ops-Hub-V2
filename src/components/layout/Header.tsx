@@ -4,10 +4,11 @@ import { ViewMode, Priority, GroupByOption } from '../../types';
 import { 
   List as ListIcon, Kanban, Calendar as CalendarIcon, 
   Clock, Table as TableIcon, Search, Plus, Filter, 
-  Moon, Sun, RotateCcw, Play, Square, Sparkles, SlidersHorizontal, Database, Building2 
+  Moon, Sun, RotateCcw, Play, Square, Sparkles, SlidersHorizontal, Database, Building2, LogOut 
 } from 'lucide-react';
 import { formatSecondsToDigital } from '../../utils/helpers';
 import { SupabaseModal } from '../settings/SupabaseModal';
+import { useAuth } from '../../context/AuthContext';
 
 export const Header: React.FC = () => {
   const spaces = useOpsStore((state) => state.spaces);
@@ -24,6 +25,7 @@ export const Header: React.FC = () => {
   const activeTimer = useOpsStore((state) => state.activeTimer);
   const stopTimer = useOpsStore((state) => state.stopTimer);
   const users = useOpsStore((state) => state.users);
+  const { signOut } = useAuth();
 
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -170,6 +172,16 @@ export const Header: React.FC = () => {
             title="Reset to initial demo data"
           >
             <RotateCcw className="w-4 h-4" />
+          </button>
+
+          {/* Sign Out Action */}
+          <button
+            type="button"
+            onClick={() => signOut()}
+            className="p-2 rounded-xl border border-gray-200 dark:border-dark-border text-gray-500 hover:text-red-600 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-dark-200 transition-colors"
+            title="Sign out of Ops Hub"
+          >
+            <LogOut className="w-4 h-4" />
           </button>
 
           {/* Add Client Quick Action */}

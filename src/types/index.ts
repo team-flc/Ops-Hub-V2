@@ -131,6 +131,20 @@ export interface Space {
   lists: List[];
 }
 
+export type UserRole = 'owner' | 'operational_manager' | 'team_member' | 'client';
+export type AccountStatus = 'active' | 'inactive' | 'suspended';
+
+export interface UserProfile {
+  id: string; // UUID references auth.users
+  email?: string;
+  fullName: string;
+  role: UserRole;
+  status: AccountStatus;
+  organizationId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface User {
   id: string;
   name: string;
