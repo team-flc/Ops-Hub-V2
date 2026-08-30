@@ -568,16 +568,22 @@ export const useOpsStore = create<OpsStore>()(
           id: `cv-${Date.now()}`
         };
         set((state) => ({ clientsVendors: [...state.clientsVendors, newCv] }));
+        supabaseService.upsertClientVendor(newCv);
       },
 
       updateClientVendor: (id, updates) => {
+        const prev = get().clientsVendors.find((c) => c.id === id);
+        if (!prev) return;
+        const updated = { ...prev, ...updates };
         set((state) => ({
-          clientsVendors: state.clientsVendors.map((c) => (c.id === id ? { ...c, ...updates } : c))
+          clientsVendors: state.clientsVendors.map((c) => (c.id === id ? updated : c))
         }));
+        supabaseService.upsertClientVendor(updated);
       },
 
       deleteClientVendor: (id) => {
         set((state) => ({ clientsVendors: state.clientsVendors.filter((c) => c.id !== id) }));
+        supabaseService.deleteClientVendor(id);
       },
 
       // Users

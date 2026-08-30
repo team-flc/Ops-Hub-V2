@@ -29,6 +29,22 @@ export function mapDbTaskToTask(dbRow: any): Task {
   };
 }
 
+export function mapDbClientToClient(dbRow: any): ClientVendor {
+  return {
+    id: dbRow.id,
+    name: dbRow.name,
+    type: dbRow.type || 'client',
+    contactPerson: dbRow.contact_person || dbRow.contactPerson || '',
+    email: dbRow.email || '',
+    phone: dbRow.phone || '',
+    slaTier: dbRow.sla_tier || dbRow.slaTier || 'Standard',
+    status: dbRow.status || 'active',
+    activeContracts: Number(dbRow.active_contracts || dbRow.activeContracts || 1),
+    monthlyValue: dbRow.monthly_value || dbRow.monthlyValue || '',
+    notes: dbRow.notes || ''
+  };
+}
+
 export const supabaseService = {
   isConfigured: () => isSupabaseConfigured,
 
@@ -49,18 +65,19 @@ export const supabaseService = {
         supabase.from('tasks').select('*').order('created_at', { ascending: false }),
         supabase.from('sop_documents').select('*'),
         supabase.from('automation_rules').select('*'),
-        supabase.from('clients_vendors').select('*'),
+        supabase.from('clients_vendors').select('*').order('created_at', { ascending: false }),
         supabase.from('users').select('*')
       ]);
 
       const mappedTasks = tasks ? tasks.map(mapDbTaskToTask) : null;
+      const mappedClients = clients ? clients.map(mapDbClientToClient) : null;
 
       return {
         spaces: (spaces && spaces.length > 0) ? (spaces as Space[]) : null,
         tasks: mappedTasks,
         docs: (docs && docs.length > 0) ? (docs as SOPDocument[]) : null,
         automations: (automations && automations.length > 0) ? (automations as AutomationRule[]) : null,
-        clientsVendors: (clients && clients.length > 0) ? (clients as ClientVendor[]) : null,
+        clientsVendors: mappedClients,
         users: (users && users.length > 0) ? (users as User[]) : null
       };
     } catch (error) {
@@ -110,6 +127,38 @@ export const supabaseService = {
     }
   },
 
+  // Client CRUD
+  async upsertClientVendor(cv: ClientVendor) {
+    if (!supabase) return;
+    try {
+      await supabase.from('clients_vendors').upsert({
+        id: cv.id,
+        name: cv.name,
+        type: cv.type,
+        contact_person: cv.contactPerson,
+        email: cv.email,
+        phone: cv.phone,
+        sla_tier: cv.slaTier,
+        status: cv.status,
+        active_contracts: cv.activeContracts,
+        monthly_value: cv.monthlyValue,
+        notes: cv.notes,
+        created_at: new Date().toISOString()
+      });
+    } catch (err) {
+      console.error('Error syncing client to Supabase:', err);
+    }
+  },
+
+  async deleteClientVendor(id: string) {
+    if (!supabase) return;
+    try {
+      await supabase.from('clients_vendors').delete().eq('id', id);
+    } catch (err) {
+      console.error('Error deleting client from Supabase:', err);
+    }
+  },
+
   // Realtime Subscriptions
   subscribeToTasks(onUpdate: (payload: any) => void) {
     if (!supabase) return () => {};
@@ -119,6 +168,27 @@ export const supabaseService = {
       .on(
         'postgres_changes',
         { event: '*', schema: 'public', table: 'tasks' },
+        (payload) => {
+          onUpdate(payload);
+        }
+      )
+      .subscribe();
+
+    return () => {
+      if (supabase) {
+        supabase.removeChannel(channel);
+      }
+    };
+  },
+
+  subscribeToClients(onUpdate: (payload: any) => void) {
+    if (!supabase) return () => {};
+
+    const channel = supabase
+      .channel('clients-realtime')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'clients_vendors' },
         (payload) => {
           onUpdate(payload);
         }

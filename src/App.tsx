@@ -41,8 +41,8 @@ export const App: React.FC = () => {
 
     loadSupabase();
 
-    // Subscribe to realtime database changes
-    const unsubscribe = supabaseService.subscribeToTasks((payload) => {
+    // Subscribe to realtime database changes (Tasks & Clients)
+    const unsubTasks = supabaseService.subscribeToTasks((payload) => {
       if (payload.eventType === 'INSERT' && payload.new) {
         const newTask = mapDbTaskToTask(payload.new);
         useOpsStore.setState((state) => {
@@ -61,8 +61,26 @@ export const App: React.FC = () => {
       }
     });
 
+    const unsubClients = supabaseService.subscribeToClients((payload) => {
+      if (payload.eventType === 'INSERT' && payload.new) {
+        useOpsStore.setState((state) => {
+          if (state.clientsVendors.some((c) => c.id === payload.new.id)) return state;
+          return { clientsVendors: [payload.new, ...state.clientsVendors] };
+        });
+      } else if (payload.eventType === 'UPDATE' && payload.new) {
+        useOpsStore.setState((state) => ({
+          clientsVendors: state.clientsVendors.map((c) => (c.id === payload.new.id ? payload.new : c))
+        }));
+      } else if (payload.eventType === 'DELETE' && payload.old) {
+        useOpsStore.setState((state) => ({
+          clientsVendors: state.clientsVendors.filter((c) => c.id !== payload.old.id)
+        }));
+      }
+    });
+
     return () => {
-      unsubscribe();
+      unsubTasks();
+      unsubClients();
     };
   }, []);
 
