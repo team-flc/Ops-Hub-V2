@@ -225,6 +225,37 @@ export const OperationsDirectory: React.FC = () => {
                   {cv.notes}
                 </p>
 
+                {/* Client Active Tasks Count */}
+                {(() => {
+                  const clientTasks = tasks.filter(
+                    (t) => t.customFields?.clientName?.toLowerCase() === cv.name.toLowerCase()
+                  );
+                  return (
+                    <div className="mt-3 p-2.5 rounded-xl bg-gray-50 dark:bg-dark-300 border border-gray-100 dark:border-dark-border/40 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                          Active Tasks ({clientTasks.length})
+                        </span>
+                        {clientTasks.some((t) => t.priority === 'urgent') && (
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-red-500/10 text-red-500 animate-pulse">
+                            Urgent SLA
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          useOpsStore.getState().setCreateTaskModalOpen(true);
+                        }}
+                        className="flex items-center gap-1 text-[11px] font-bold text-brand-500 hover:text-brand-600"
+                      >
+                        <Plus className="w-3 h-3" />
+                        <span>Add Task</span>
+                      </button>
+                    </div>
+                  );
+                })()}
+
                 <div className="mt-4 pt-3 border-t border-gray-100 dark:border-dark-border/60 grid grid-cols-2 gap-2 text-xs">
                   <div className="flex items-center gap-1.5 text-gray-600 dark:text-gray-400">
                     <Mail className="w-3.5 h-3.5 text-gray-400" />

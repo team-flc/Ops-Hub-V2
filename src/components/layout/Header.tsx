@@ -26,9 +26,14 @@ export const Header: React.FC = () => {
   const users = useOpsStore((state) => state.users);
 
   const [isFilterOpen, setIsFilterOpen] = useState(false);
-  const [isDarkMode, setIsDarkMode] = useState(true);
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const [elapsedTimerSecs, setElapsedTimerSecs] = useState(0);
   const [isSupabaseModalOpen, setIsSupabaseModalOpen] = useState(false);
+
+  // Initialize light mode by default
+  useEffect(() => {
+    document.documentElement.classList.remove('dark');
+  }, []);
 
   // Live timer tick
   useEffect(() => {
@@ -77,7 +82,9 @@ export const Header: React.FC = () => {
       <div className="flex items-center justify-between gap-4">
         {/* Breadcrumb Info */}
         <div className="flex items-center gap-2 text-xs">
-          <span className="text-gray-400 font-medium">Ops Hub</span>
+          <span className="text-brand-600 font-bold tracking-tight">FASEEH LALL & CO.</span>
+          <span className="text-gray-300 dark:text-gray-600">/</span>
+          <span className="text-gray-500 font-medium">Ops Hub</span>
           <span className="text-gray-300 dark:text-gray-600">/</span>
           <div className="flex items-center gap-1.5 font-bold text-gray-800 dark:text-gray-200">
             {currentSpace ? (

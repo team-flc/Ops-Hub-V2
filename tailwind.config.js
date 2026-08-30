@@ -9,16 +9,16 @@ export default {
     extend: {
       colors: {
         brand: {
-          50: '#f5f3ff',
-          100: '#ede9fe',
-          200: '#ddd6fe',
-          300: '#c4b5fd',
-          400: '#a78bfa',
-          500: '#7b68ee', // ClickUp purple signature
-          600: '#6c5ce7',
-          700: '#5a4bd1',
-          800: '#483bb0',
-          900: '#382e8f',
+          50: '#fff1f2',
+          100: '#ffe4e6',
+          200: '#fecdd3',
+          300: '#fda4af',
+          400: '#fb7185',
+          500: '#e62e43', // Faseeh Lall Crimson Brand Red
+          600: '#be123c', // Hover Ruby Red
+          700: '#9f1239', // Deep Burgundy
+          800: '#881337',
+          900: '#4c0519',
         },
         dark: {
           50: '#2d303e',
@@ -37,8 +37,8 @@ export default {
       },
       boxShadow: {
         'subtle': '0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03)',
-        'modal': '0 20px 25px -5px rgba(0, 0, 0, 0.25), 0 10px 10px -5px rgba(0, 0, 0, 0.1)',
-        'card': '0 2px 8px -2px rgba(0, 0, 0, 0.08), 0 1px 4px -1px rgba(0, 0, 0, 0.04)',
+        'modal': '0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.08)',
+        'card': '0 2px 8px -2px rgba(0, 0, 0, 0.06), 0 1px 4px -1px rgba(0, 0, 0, 0.03)',
       },
       keyframes: {
         slideInRight: {

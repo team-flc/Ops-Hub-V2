@@ -14,6 +14,8 @@ export const CreateTaskModal: React.FC = () => {
   const activeListId = useOpsStore((state) => state.activeListId);
   const createTask = useOpsStore((state) => state.createTask);
   const setSelectedTaskId = useOpsStore((state) => state.setSelectedTaskId);
+  const clientsVendors = useOpsStore((state) => state.clientsVendors);
+  const createClientVendor = useOpsStore((state) => state.createClientVendor);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -247,13 +249,27 @@ export const CreateTaskModal: React.FC = () => {
             <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1.5">
               Client / Account
             </label>
-            <input
-              type="text"
-              value={clientName}
-              onChange={(e) => setClientName(e.target.value)}
-              placeholder="e.g. Apex Global Logistics"
-              className="w-full px-3 py-2 rounded-xl bg-gray-50 dark:bg-dark-300 border border-gray-200 dark:border-dark-border text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
-            />
+            <div className="space-y-1.5">
+              <select
+                value={clientName}
+                onChange={(e) => setClientName(e.target.value)}
+                className="w-full px-3 py-2 rounded-xl bg-gray-50 dark:bg-dark-300 border border-gray-200 dark:border-dark-border text-gray-900 dark:text-gray-100 text-sm focus:outline-none focus:ring-2 focus:ring-brand-500"
+              >
+                <option value="">-- Internal / General Ops --</option>
+                {clientsVendors.map((c) => (
+                  <option key={c.id} value={c.name}>
+                    {c.name} ({c.slaTier})
+                  </option>
+                ))}
+              </select>
+              <input
+                type="text"
+                value={clientName}
+                onChange={(e) => setClientName(e.target.value)}
+                placeholder="Or type custom client name..."
+                className="w-full px-3 py-1.5 rounded-lg bg-gray-50 dark:bg-dark-300 border border-gray-200 dark:border-dark-border text-gray-900 dark:text-gray-100 text-xs placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-brand-500"
+              />
+            </div>
           </div>
 
           <div>

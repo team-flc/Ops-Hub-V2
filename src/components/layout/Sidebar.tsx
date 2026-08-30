@@ -60,10 +60,10 @@ export const Sidebar: React.FC = () => {
           <button
             type="button"
             onClick={toggleSidebar}
-            className="w-10 h-10 rounded-xl bg-brand-500 text-white flex items-center justify-center font-black text-lg shadow-lg shadow-brand-500/25 hover:scale-105 transition-transform"
+            className="w-10 h-10 rounded-xl bg-white p-1 flex items-center justify-center shadow-md border border-gray-100 hover:scale-105 transition-transform"
             title="Expand Sidebar"
           >
-            OH
+            <img src="/logo.png" alt="Faseeh Lall Logo" className="w-8 h-8 object-contain" />
           </button>
 
           {/* Quick Icons */}
@@ -126,16 +126,10 @@ export const Sidebar: React.FC = () => {
     <aside className="w-64 bg-white dark:bg-dark-sidebar border-r border-gray-200 dark:border-dark-border h-screen flex flex-col justify-between z-30 flex-shrink-0 select-none">
       {/* Top Organization Header */}
       <div>
-        <div className="p-4 border-b border-gray-100 dark:border-dark-border/60 flex items-center justify-between">
+        <div className="p-3.5 border-b border-gray-100 dark:border-dark-border/60 flex items-center justify-between bg-white dark:bg-dark-card/50">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-500 text-white flex items-center justify-center font-bold text-sm shadow-md shadow-brand-500/25">
-              OH
-            </div>
-            <div>
-              <h1 className="font-extrabold text-sm text-gray-900 dark:text-gray-100 leading-none">
-                Ops Hub
-              </h1>
-              <span className="text-[10px] text-gray-400 font-medium">Enterprise Operations</span>
+            <div className="h-9 max-w-[160px] flex items-center">
+              <img src="/logo.png" alt="FASEEH LALL & CO." className="h-7 w-auto object-contain" />
             </div>
           </div>
 
