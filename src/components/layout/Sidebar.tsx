@@ -98,6 +98,19 @@ export const Sidebar: React.FC = () => {
 
           <button
             type="button"
+            onClick={() => setViewMode('clients')}
+            className={`p-2.5 rounded-xl transition-colors ${
+              viewMode === 'clients'
+                ? 'bg-brand-500/10 text-brand-500'
+                : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-100'
+            }`}
+            title="Clients & Accounts"
+          >
+            <Building2 className="w-5 h-5" />
+          </button>
+
+          <button
+            type="button"
             onClick={() => setViewMode('docs')}
             className={`p-2.5 rounded-xl transition-colors ${
               viewMode === 'docs'
@@ -194,6 +207,24 @@ export const Sidebar: React.FC = () => {
 
           <button
             type="button"
+            onClick={() => setViewMode('clients')}
+            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition-all ${
+              viewMode === 'clients'
+                ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400 font-bold'
+                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100 font-medium'
+            }`}
+          >
+            <div className="flex items-center gap-2.5">
+              <Building2 className="w-4 h-4 text-brand-500" />
+              <span>Clients & Accounts</span>
+            </div>
+            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-brand-500/10 text-brand-600">
+              {useOpsStore.getState().clientsVendors.length}
+            </span>
+          </button>
+
+          <button
+            type="button"
             onClick={() => setViewMode('directory')}
             className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-xl transition-all ${
               viewMode === 'directory'
@@ -201,8 +232,8 @@ export const Sidebar: React.FC = () => {
                 : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100 font-medium'
             }`}
           >
-            <Building2 className="w-4 h-4 text-emerald-500" />
-            <span>Operations Directory</span>
+            <Users className="w-4 h-4 text-emerald-500" />
+            <span>Team & SLA Directory</span>
           </button>
 
           <button

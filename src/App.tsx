@@ -11,6 +11,7 @@ import { TableView } from './components/views/TableView';
 import { DashboardView } from './components/views/DashboardView';
 import { DocsView } from './components/views/DocsView';
 import { OperationsDirectory } from './components/views/OperationsDirectory';
+import { ClientsView } from './components/views/ClientsView';
 import { TaskModal } from './components/tasks/TaskModal';
 import { CreateTaskModal } from './components/tasks/CreateTaskModal';
 import { CommandPalette } from './components/layout/CommandPalette';
@@ -83,6 +84,8 @@ export const App: React.FC = () => {
         return <DocsView />;
       case 'directory':
         return <OperationsDirectory />;
+      case 'clients':
+        return <ClientsView />;
       default:
         return <ListView />;
     }

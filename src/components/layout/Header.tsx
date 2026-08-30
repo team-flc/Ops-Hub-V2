@@ -4,7 +4,7 @@ import { ViewMode, Priority, GroupByOption } from '../../types';
 import { 
   List as ListIcon, Kanban, Calendar as CalendarIcon, 
   Clock, Table as TableIcon, Search, Plus, Filter, 
-  Moon, Sun, RotateCcw, Play, Square, Sparkles, SlidersHorizontal, Database 
+  Moon, Sun, RotateCcw, Play, Square, Sparkles, SlidersHorizontal, Database, Building2 
 } from 'lucide-react';
 import { formatSecondsToDigital } from '../../utils/helpers';
 import { SupabaseModal } from '../settings/SupabaseModal';
@@ -170,6 +170,17 @@ export const Header: React.FC = () => {
             title="Reset to initial demo data"
           >
             <RotateCcw className="w-4 h-4" />
+          </button>
+
+          {/* Add Client Quick Action */}
+          <button
+            type="button"
+            onClick={() => setViewMode('clients')}
+            className="flex items-center gap-1.5 px-3 py-2 border border-brand-500/30 bg-brand-500/10 text-brand-600 dark:text-brand-400 hover:bg-brand-500/20 rounded-xl text-xs font-bold transition-all"
+            title="Clients & Accounts Hub"
+          >
+            <Building2 className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">+ Client</span>
           </button>
 
           {/* Primary Create Task Button */}

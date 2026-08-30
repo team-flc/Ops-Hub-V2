@@ -194,6 +194,7 @@ export type ViewMode =
   | 'dashboard' 
   | 'docs' 
   | 'directory' 
+  | 'clients'
   | 'automations';
 
 export type GroupByOption = 'status' | 'priority' | 'assignee' | 'dueDate' | 'none';
