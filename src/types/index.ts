@@ -152,12 +152,85 @@ export const isClientRole = (role?: string): role is 'client' => {
   return role === 'client';
 };
 
+export interface Department {
+  id: string;
+  name: string;
+  slug: string;
+  status: 'active' | 'archived';
+  sortOrder: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface Designation {
+  id: string;
+  name: string;
+  status: 'active' | 'archived';
+  createdBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ProfileDepartment {
+  profileId: string;
+  departmentId: string;
+  departmentName?: string;
+  createdAt: string;
+}
+
+export interface ProfileClientAccess {
+  profileId: string;
+  clientId: string;
+  clientName?: string;
+  grantedBy?: string | null;
+  createdAt: string;
+}
+
+export interface TeamMemberRecord {
+  id: string;
+  fullName: string;
+  workEmail: string;
+  phone?: string | null;
+  role: UserRole;
+  status: AccountStatus;
+  designationId?: string | null;
+  designationName?: string;
+  reportingManagerId?: string | null;
+  reportingManagerName?: string;
+  startDate: string;
+  suspendedAt?: string | null;
+  suspendedBy?: string | null;
+  departments: Department[];
+  clientAccessCount: number;
+  clientIds: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AuditLogEntry {
+  id: string;
+  actorId: string;
+  actorName?: string;
+  targetUserId: string;
+  targetUserName?: string;
+  action: string;
+  safeChanges: Record<string, any>;
+  createdAt: string;
+}
+
 export interface UserProfile {
   id: string; // UUID references auth.users
   email?: string;
+  workEmail?: string;
   fullName: string;
+  phone?: string | null;
   role: UserRole;
   status: AccountStatus;
+  designationId?: string | null;
+  reportingManagerId?: string | null;
+  startDate?: string;
+  suspendedAt?: string | null;
+  suspendedBy?: string | null;
   organizationId?: string | null;
   createdAt: string;
   updatedAt: string;

@@ -244,7 +244,7 @@ export const Sidebar: React.FC = () => {
             }`}
           >
             <Users className="w-4 h-4 text-emerald-500" />
-            <span>Team & SLA Directory</span>
+            <span>{profile?.role === 'owner' || profile?.role === 'operational_manager' ? 'Team Management' : 'Team & SLA Directory'}</span>
           </button>
 
           <button

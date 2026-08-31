@@ -9,7 +9,7 @@ import { ForgotPasswordPage } from './components/auth/ForgotPasswordPage';
 import { UpdatePasswordPage } from './components/auth/UpdatePasswordPage';
 import { ClientPortalHoldingPage } from './components/auth/ClientPortalHoldingPage';
 
-// Internal Workspace Components (Preserved 100% Unchanged)
+// Internal Workspace Views
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
 import { ListView } from './components/views/ListView';
@@ -20,6 +20,7 @@ import { TableView } from './components/views/TableView';
 import { DashboardView } from './components/views/DashboardView';
 import { DocsView } from './components/views/DocsView';
 import { OperationsDirectory } from './components/views/OperationsDirectory';
+import { TeamManagementView } from './components/views/TeamManagementView';
 import { ClientsView } from './components/views/ClientsView';
 import { TaskModal } from './components/tasks/TaskModal';
 import { CreateTaskModal } from './components/tasks/CreateTaskModal';
@@ -32,9 +33,16 @@ import { AutomationsModal } from './components/automations/AutomationsModal';
  * Existing Internal FLC Ops Hub Workspace
  * Strictly accessible only by authenticated staff (owner, operational_manager, team_member).
  */
-export const OpsHubWorkspace: React.FC = () => {
+export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard' | 'list' }> = ({ initialView }) => {
   const viewMode = useOpsStore((state) => state.viewMode);
-  const { user } = useAuth();
+  const setViewMode = useOpsStore((state) => state.setViewMode);
+  const { user, profile } = useAuth();
+
+  useEffect(() => {
+    if (initialView) {
+      setViewMode(initialView);
+    }
+  }, [initialView, setViewMode]);
 
   // Sync with Supabase on mount and listen to realtime updates
   useEffect(() => {
@@ -100,6 +108,8 @@ export const OpsHubWorkspace: React.FC = () => {
     };
   }, [user]);
 
+  const isManagerOrOwner = profile?.role === 'owner' || profile?.role === 'operational_manager';
+
   const renderActiveView = () => {
     switch (viewMode) {
       case 'list':
@@ -117,7 +127,7 @@ export const OpsHubWorkspace: React.FC = () => {
       case 'docs':
         return <DocsView />;
       case 'directory':
-        return <OperationsDirectory />;
+        return isManagerOrOwner ? <TeamManagementView /> : <OperationsDirectory />;
       case 'clients':
         return <ClientsView />;
       default:
@@ -127,7 +137,7 @@ export const OpsHubWorkspace: React.FC = () => {
 
   return (
     <div className="flex h-screen w-screen overflow-hidden bg-gray-50 dark:bg-dark-400 text-gray-900 dark:text-gray-100 font-sans antialiased">
-      {/* ClickUp 3.0 Left Sidebar */}
+      {/* Left Sidebar */}
       <Sidebar />
 
       {/* Main Workspace Area */}
@@ -169,6 +179,16 @@ export const App: React.FC = () => {
         element={
           <ProtectedRoute allowedRoles={['client']}>
             <ClientPortalHoldingPage />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Dedicated Team Management Route for Owner and Operational Manager */}
+      <Route
+        path="/team"
+        element={
+          <ProtectedRoute allowedRoles={['owner', 'operational_manager']}>
+            <OpsHubWorkspace initialView="directory" />
           </ProtectedRoute>
         }
       />
