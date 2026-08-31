@@ -72,6 +72,14 @@ interface OpsStore {
   updateClientVendor: (id: string, updates: Partial<ClientVendor>) => void;
   deleteClientVendor: (id: string) => void;
 
+  // Phase 2B Clients
+  clients: import('../types').ClientRecord[];
+  selectedClientId: string | null;
+  setClients: (clients: import('../types').ClientRecord[]) => void;
+  setSelectedClientId: (id: string | null) => void;
+  addClientRecord: (client: import('../types').ClientRecord) => void;
+  updateClientRecord: (client: import('../types').ClientRecord) => void;
+
   // Users & Current User
   users: User[];
   currentUser: User;
@@ -129,6 +137,8 @@ export const useOpsStore = create<OpsStore>()(
       selectedDocId: INITIAL_DOCS[0]?.id || null,
       automations: INITIAL_AUTOMATIONS,
       clientsVendors: INITIAL_CLIENTS_VENDORS,
+      clients: [],
+      selectedClientId: null,
       users: INITIAL_USERS,
       currentUser: INITIAL_USERS[0],
       viewMode: 'list',
@@ -585,6 +595,19 @@ export const useOpsStore = create<OpsStore>()(
         set((state) => ({ clientsVendors: state.clientsVendors.filter((c) => c.id !== id) }));
         supabaseService.deleteClientVendor(id);
       },
+
+      // Phase 2B Clients Actions
+      setClients: (clients) => set({ clients }),
+      setSelectedClientId: (id) => set({ selectedClientId: id }),
+      addClientRecord: (client) =>
+        set((state) => ({
+          clients: [client, ...state.clients.filter((c) => c.id !== client.id)],
+          selectedClientId: client.id
+        })),
+      updateClientRecord: (client) =>
+        set((state) => ({
+          clients: state.clients.map((c) => (c.id === client.id ? client : c))
+        })),
 
       // Users
       setCurrentUser: (user) => set({ currentUser: user }),

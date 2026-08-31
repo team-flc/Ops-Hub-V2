@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useOpsStore } from '../../store/opsStore';
 import { 
   Activity, Truck, Headphones, Cpu, Users, Layers, 
@@ -7,7 +7,11 @@ import {
   ChevronsRight, ShieldCheck, Sparkles, Database, Trash2, LogOut
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { ROLE_DISPLAY_NAMES } from '../../types';
+import { ROLE_DISPLAY_NAMES, ClientRecord, UserProfile } from '../../types';
+import { ClientSwitcher } from '../clients/ClientSwitcher';
+import { CreateClientModal } from '../clients/CreateClientModal';
+import { DuplicateClientModal } from '../clients/DuplicateClientModal';
+import { clientManagementService } from '../../lib/clientManagementService';
 
 const ICON_MAP: Record<string, any> = {
   Activity,
@@ -36,6 +40,14 @@ export const Sidebar: React.FC = () => {
   const deleteList = useOpsStore((state) => state.deleteList);
   const currentUser = useOpsStore((state) => state.currentUser);
   const tasks = useOpsStore((state) => state.tasks);
+  
+  // Phase 2B Clients
+  const clients = useOpsStore((state) => state.clients);
+  const setClients = useOpsStore((state) => state.setClients);
+  const selectedClientId = useOpsStore((state) => state.selectedClientId);
+  const setSelectedClientId = useOpsStore((state) => state.setSelectedClientId);
+  const addClientRecord = useOpsStore((state) => state.addClientRecord);
+
   const { signOut, profile, user } = useAuth();
   const displayName = profile?.fullName || user?.email?.split('@')[0] || currentUser.name || 'Team Member';
   const displayRole = profile?.role ? ROLE_DISPLAY_NAMES[profile.role] : 'Team Member';
@@ -56,12 +68,57 @@ export const Sidebar: React.FC = () => {
     'folder-2-1': true
   });
 
+  // Client Modals State
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
+  const [sourceClientForDuplicate, setSourceClientForDuplicate] = useState<ClientRecord | null>(null);
+  const [eligibleManagers, setEligibleManagers] = useState<UserProfile[]>([]);
+
+  // Fetch Clients & Managers
+  useEffect(() => {
+    async function loadClientData() {
+      const [fetchedClients, fetchedManagers] = await Promise.all([
+        clientManagementService.fetchClients(),
+        clientManagementService.fetchEligibleManagers()
+      ]);
+      setClients(fetchedClients);
+      setEligibleManagers(fetchedManagers);
+
+      if (!selectedClientId && fetchedClients.length > 0) {
+        setSelectedClientId(fetchedClients[0].id);
+      }
+    }
+    loadClientData();
+  }, [setClients, selectedClientId, setSelectedClientId]);
+
+  const selectedClient = clients.find((c) => c.id === selectedClientId) || clients[0] || null;
+
   const toggleSpaceExpand = (spaceId: string) => {
     setExpandedSpaces((prev) => ({ ...prev, [spaceId]: !prev[spaceId] }));
   };
 
   const toggleFolderExpand = (folderId: string) => {
     setExpandedFolders((prev) => ({ ...prev, [folderId]: !prev[folderId] }));
+  };
+
+  const handleSelectClient = (client: ClientRecord) => {
+    setSelectedClientId(client.id);
+    setViewMode('client_workspace');
+  };
+
+  const handleOpenCreateModal = () => {
+    setIsCreateModalOpen(true);
+  };
+
+  const handleOpenDuplicateModal = (client: ClientRecord) => {
+    setSourceClientForDuplicate(client);
+    setIsDuplicateModalOpen(true);
+  };
+
+  const handleClientCreated = (newClient: ClientRecord) => {
+    addClientRecord(newClient);
+    setSelectedClientId(newClient.id);
+    setViewMode('client_workspace');
   };
 
   if (sidebarCollapsed) {
@@ -109,13 +166,13 @@ export const Sidebar: React.FC = () => {
 
           <button
             type="button"
-            onClick={() => setViewMode('clients')}
+            onClick={() => setViewMode('client_workspace')}
             className={`p-2.5 rounded-xl transition-colors ${
-              viewMode === 'clients'
+              viewMode === 'client_workspace'
                 ? 'bg-brand-500/10 text-brand-500'
                 : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-100'
             }`}
-            title="Clients & Accounts"
+            title="Client Workspace"
           >
             <Building2 className="w-5 h-5" />
           </button>
@@ -167,18 +224,29 @@ export const Sidebar: React.FC = () => {
           </button>
         </div>
 
+        {/* GoHighLevel-Style Client Switcher */}
+        <div className="p-3 border-b border-gray-100 dark:border-dark-border/60">
+          <ClientSwitcher
+            clients={clients}
+            selectedClient={selectedClient}
+            onSelectClient={handleSelectClient}
+            onOpenCreateModal={handleOpenCreateModal}
+            onOpenDuplicateModal={handleOpenDuplicateModal}
+          />
+        </div>
+
         {/* Global Navigation Section */}
         <div className="p-3 space-y-1 border-b border-gray-100 dark:border-dark-border/60 text-xs">
           <button
             type="button"
             onClick={() => {
               setActiveSelection(null, null, null);
-              if (['docs', 'directory', 'dashboard'].includes(viewMode)) {
+              if (['docs', 'directory', 'dashboard', 'client_workspace'].includes(viewMode)) {
                 setViewMode('list');
               }
             }}
             className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition-all ${
-              activeSpaceId === null && !['docs', 'directory', 'dashboard'].includes(viewMode)
+              activeSpaceId === null && !['docs', 'directory', 'dashboard', 'client_workspace'].includes(viewMode)
                 ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400 font-bold'
                 : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100 font-medium'
             }`}
@@ -214,24 +282,6 @@ export const Sidebar: React.FC = () => {
           >
             <BookOpen className="w-4 h-4 text-indigo-500" />
             <span>SOPs & Playbooks</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setViewMode('clients')}
-            className={`w-full flex items-center justify-between px-3 py-2 rounded-xl transition-all ${
-              viewMode === 'clients'
-                ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400 font-bold'
-                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100 font-medium'
-            }`}
-          >
-            <div className="flex items-center gap-2.5">
-              <Building2 className="w-4 h-4 text-brand-500" />
-              <span>Clients & Accounts</span>
-            </div>
-            <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-brand-500/10 text-brand-600">
-              {useOpsStore.getState().clientsVendors.length}
-            </span>
           </button>
 
           <button
@@ -278,7 +328,7 @@ export const Sidebar: React.FC = () => {
             </button>
           </div>
 
-          <div className="space-y-1 max-h-[calc(100vh-420px)] overflow-y-auto pr-1">
+          <div className="space-y-1 max-h-[calc(100vh-480px)] overflow-y-auto pr-1">
             {spaces.map((space) => {
               const isExpanded = expandedSpaces[space.id];
               const isSpaceActive = activeSpaceId === space.id && !activeFolderId && !activeListId;
@@ -289,26 +339,24 @@ export const Sidebar: React.FC = () => {
                 <div key={space.id} className="space-y-0.5">
                   {/* Space Row */}
                   <div
-                    className={`group flex items-center justify-between px-2.5 py-1.5 rounded-xl text-xs cursor-pointer transition-colors ${
+                    className={`group flex items-center justify-between px-2 py-1.5 rounded-xl cursor-pointer text-xs font-semibold transition-colors ${
                       isSpaceActive
-                        ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400 font-bold'
-                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100'
+                        ? 'bg-gray-100 dark:bg-dark-100 text-brand-600 dark:text-brand-400'
+                        : 'text-gray-700 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-dark-200'
                     }`}
                     onClick={() => {
                       setActiveSelection(space.id, null, null);
-                      if (['docs', 'directory', 'dashboard'].includes(viewMode)) {
-                        setViewMode('list');
-                      }
+                      setViewMode('list');
                     }}
                   >
-                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                    <div className="flex items-center gap-2 min-w-0">
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
                           toggleSpaceExpand(space.id);
                         }}
-                        className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+                        className="p-0.5 hover:bg-gray-200 dark:hover:bg-dark-200 rounded text-gray-400 hover:text-gray-600"
                       >
                         {isExpanded ? (
                           <ChevronDown className="w-3.5 h-3.5" />
@@ -317,78 +365,102 @@ export const Sidebar: React.FC = () => {
                         )}
                       </button>
 
-                      <span
-                        className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                      <div
+                        className="w-5 h-5 rounded-lg flex items-center justify-center text-white"
                         style={{ backgroundColor: space.color }}
-                      />
+                      >
+                        <IconComp className="w-3 h-3" />
+                      </div>
 
-                      <span className="truncate font-semibold">{space.name}</span>
+                      <span className="truncate">{space.name}</span>
                     </div>
 
-                    <div className="flex items-center gap-1">
-                      <span className="text-[10px] text-gray-400 group-hover:hidden">
+                    <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span className="text-[10px] text-gray-400 font-bold px-1">
                         {spaceTasksCount}
                       </span>
                       <button
                         type="button"
                         onClick={(e) => {
                           e.stopPropagation();
-                          setActiveSelection(space.id);
                           setNewListModalOpen(true);
                         }}
+                        className="p-1 rounded hover:bg-gray-200 dark:hover:bg-dark-200 text-gray-400 hover:text-brand-500"
                         title="Add List in Space"
-                        className="hidden group-hover:block p-0.5 text-gray-400 hover:text-brand-500"
                       >
-                        <Plus className="w-3.5 h-3.5" />
+                        <Plus className="w-3 h-3" />
                       </button>
                     </div>
                   </div>
 
-                  {/* Folders & Lists Inside Space */}
+                  {/* Folders and Lists */}
                   {isExpanded && (
-                    <div className="pl-6 space-y-0.5 text-xs">
+                    <div className="pl-6 space-y-0.5 border-l border-gray-100 dark:border-dark-border/40 ml-4 mt-0.5">
                       {/* Folders */}
-                      {space.folders.map((folder) => {
-                        const isFolderExp = expandedFolders[folder.id];
+                      {space.folders?.map((folder) => {
+                        const isFolderExpanded = expandedFolders[folder.id];
+                        const isFolderActive = activeFolderId === folder.id;
+
                         return (
                           <div key={folder.id} className="space-y-0.5">
                             <div
-                              onClick={() => toggleFolderExpand(folder.id)}
-                              className="flex items-center gap-1.5 py-1 px-2 text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 cursor-pointer rounded-lg hover:bg-gray-100 dark:hover:bg-dark-100"
+                              className={`flex items-center justify-between px-2 py-1 rounded-lg cursor-pointer text-xs transition-colors ${
+                                isFolderActive
+                                  ? 'bg-brand-500/10 text-brand-600 font-bold'
+                                  : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-dark-200'
+                              }`}
+                              onClick={() => {
+                                setActiveSelection(space.id, folder.id, null);
+                                setViewMode('list');
+                              }}
                             >
-                              {isFolderExp ? (
-                                <ChevronDown className="w-3 h-3 text-gray-400" />
-                              ) : (
-                                <ChevronRight className="w-3 h-3 text-gray-400" />
-                              )}
-                              <Folder className="w-3.5 h-3.5 text-amber-500" />
-                              <span className="truncate font-medium">{folder.name}</span>
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    toggleFolderExpand(folder.id);
+                                  }}
+                                  className="p-0.5 text-gray-400 hover:text-gray-600"
+                                >
+                                  {isFolderExpanded ? (
+                                    <ChevronDown className="w-3 h-3" />
+                                  ) : (
+                                    <ChevronRight className="w-3 h-3" />
+                                  )}
+                                </button>
+                                <Folder className="w-3.5 h-3.5 text-amber-500 flex-shrink-0" />
+                                <span className="truncate">{folder.name}</span>
+                              </div>
                             </div>
 
-                            {/* Lists in Folder */}
-                            {isFolderExp && (
-                              <div className="pl-4 space-y-0.5">
-                                {folder.lists.map((list) => {
+                            {/* Folder Lists */}
+                            {isFolderExpanded && (
+                              <div className="pl-5 space-y-0.5">
+                                {folder.lists?.map((list) => {
                                   const isListActive = activeListId === list.id;
+                                  const listTaskCount = tasks.filter((t) => t.listId === list.id).length;
+
                                   return (
                                     <div
                                       key={list.id}
                                       onClick={() => {
                                         setActiveSelection(space.id, folder.id, list.id);
-                                        if (['docs', 'directory', 'dashboard'].includes(viewMode)) {
-                                          setViewMode('list');
-                                        }
+                                        setViewMode('list');
                                       }}
-                                      className={`flex items-center justify-between py-1 px-2 rounded-lg cursor-pointer transition-colors ${
+                                      className={`flex items-center justify-between px-2 py-1 rounded-lg cursor-pointer text-[11px] transition-colors ${
                                         isListActive
-                                          ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400 font-bold'
-                                          : 'text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-dark-100'
+                                          ? 'bg-brand-500/10 text-brand-600 font-bold'
+                                          : 'text-gray-500 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-dark-200'
                                       }`}
                                     >
                                       <div className="flex items-center gap-1.5 min-w-0">
-                                        <ListIcon className="w-3 h-3 text-gray-400" />
+                                        <ListIcon className="w-3 h-3 text-gray-400 flex-shrink-0" />
                                         <span className="truncate">{list.name}</span>
                                       </div>
+                                      <span className="text-[10px] text-gray-400 font-medium">
+                                        {listTaskCount}
+                                      </span>
                                     </div>
                                   );
                                 })}
@@ -398,28 +470,31 @@ export const Sidebar: React.FC = () => {
                         );
                       })}
 
-                      {/* Loose Lists */}
-                      {space.lists.map((list) => {
+                      {/* Direct Space Lists */}
+                      {space.lists?.map((list) => {
                         const isListActive = activeListId === list.id;
+                        const listTaskCount = tasks.filter((t) => t.listId === list.id).length;
+
                         return (
                           <div
                             key={list.id}
                             onClick={() => {
                               setActiveSelection(space.id, null, list.id);
-                              if (['docs', 'directory', 'dashboard'].includes(viewMode)) {
-                                setViewMode('list');
-                              }
+                              setViewMode('list');
                             }}
-                            className={`flex items-center justify-between py-1 px-2 rounded-lg cursor-pointer transition-colors ${
+                            className={`flex items-center justify-between px-2 py-1 rounded-lg cursor-pointer text-xs transition-colors ${
                               isListActive
-                                ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400 font-bold'
-                                : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-dark-100'
+                                ? 'bg-brand-500/10 text-brand-600 font-bold'
+                                : 'text-gray-600 dark:text-gray-400 hover:bg-gray-50 dark:hover:bg-dark-200'
                             }`}
                           >
                             <div className="flex items-center gap-1.5 min-w-0">
-                              <ListIcon className="w-3 h-3 text-gray-400" />
+                              <ListIcon className="w-3.5 h-3.5 text-gray-400 flex-shrink-0" />
                               <span className="truncate">{list.name}</span>
                             </div>
+                            <span className="text-[10px] text-gray-400 font-medium">
+                              {listTaskCount}
+                            </span>
                           </div>
                         );
                       })}
@@ -432,29 +507,56 @@ export const Sidebar: React.FC = () => {
         </div>
       </div>
 
-      {/* Bottom User Pill */}
-      <div className="p-3 border-t border-gray-100 dark:border-dark-border/60 bg-gray-50/60 dark:bg-dark-sidebar flex items-center justify-between">
-        <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-400 font-bold text-xs flex items-center justify-center flex-shrink-0 border border-brand-500/20">
-            {displayInitials}
-          </div>
-          <div className="min-w-0">
-            <div className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">
-              {displayName}
+      {/* Bottom User Profile Section */}
+      <div className="p-3 border-t border-gray-100 dark:border-dark-border/60 bg-gray-50/50 dark:bg-dark-300/30">
+        <div className="flex items-center justify-between gap-2 p-1.5 rounded-xl bg-white dark:bg-dark-card border border-gray-100 dark:border-dark-border shadow-sm">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-600 text-white font-black text-xs flex items-center justify-center shadow-sm flex-shrink-0">
+              {displayInitials}
             </div>
-            <div className="text-[10px] text-gray-400 font-medium truncate">{displayRole}</div>
+            <div className="min-w-0">
+              <div className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">
+                {displayName}
+              </div>
+              <div className="text-[10px] font-semibold text-brand-600 dark:text-brand-400 truncate">
+                {displayRole}
+              </div>
+            </div>
           </div>
-        </div>
 
-        <button
-          type="button"
-          onClick={() => signOut()}
-          className="p-1.5 text-gray-400 hover:text-red-600 dark:hover:text-red-400 hover:bg-gray-100 dark:hover:bg-dark-100 rounded-lg transition-colors"
-          title="Sign out of Ops Hub"
-        >
-          <LogOut className="w-4 h-4" />
-        </button>
+          <button
+            type="button"
+            onClick={() => signOut()}
+            className="p-1.5 text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors flex-shrink-0"
+            title="Sign Out"
+          >
+            <LogOut className="w-4 h-4" />
+          </button>
+        </div>
       </div>
+
+      {/* Modals for Create & Duplicate Client */}
+      <CreateClientModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSuccess={handleClientCreated}
+        currentUserProfile={profile}
+        eligibleManagers={eligibleManagers}
+      />
+
+      {sourceClientForDuplicate && (
+        <DuplicateClientModal
+          isOpen={isDuplicateModalOpen}
+          onClose={() => {
+            setIsDuplicateModalOpen(false);
+            setSourceClientForDuplicate(null);
+          }}
+          onSuccess={handleClientCreated}
+          sourceClient={sourceClientForDuplicate}
+          currentUserProfile={profile}
+          eligibleManagers={eligibleManagers}
+        />
+      )}
     </aside>
   );
 };

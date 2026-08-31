@@ -1,7 +1,8 @@
-import React, { useEffect } from 'react';
-import { Routes, Route } from 'react-router-dom';
+import React, { useEffect, useState } from 'react';
+import { Routes, Route, useParams, useNavigate } from 'react-router-dom';
 import { useOpsStore } from './store/opsStore';
 import { supabaseService, mapDbTaskToTask } from './lib/supabaseService';
+import { clientManagementService } from './lib/clientManagementService';
 import { useAuth } from './context/AuthContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { LoginPage } from './components/auth/LoginPage';
@@ -22,27 +23,68 @@ import { DocsView } from './components/views/DocsView';
 import { OperationsDirectory } from './components/views/OperationsDirectory';
 import { TeamManagementView } from './components/views/TeamManagementView';
 import { ClientsView } from './components/views/ClientsView';
+import { ClientWorkspaceView } from './components/clients/ClientWorkspaceView';
 import { TaskModal } from './components/tasks/TaskModal';
 import { CreateTaskModal } from './components/tasks/CreateTaskModal';
 import { CommandPalette } from './components/layout/CommandPalette';
 import { NewSpaceModal } from './components/spaces/NewSpaceModal';
 import { NewListModal } from './components/spaces/NewListModal';
 import { AutomationsModal } from './components/automations/AutomationsModal';
+import { UserProfile, ClientRecord } from './types';
 
 /**
  * Existing Internal FLC Ops Hub Workspace
  * Strictly accessible only by authenticated staff (owner, operational_manager, team_member).
  */
-export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard' | 'list' }> = ({ initialView }) => {
+export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard' | 'list' | 'client_workspace' }> = ({ initialView }) => {
   const viewMode = useOpsStore((state) => state.viewMode);
   const setViewMode = useOpsStore((state) => state.setViewMode);
+  const clients = useOpsStore((state) => state.clients);
+  const setClients = useOpsStore((state) => state.setClients);
+  const selectedClientId = useOpsStore((state) => state.selectedClientId);
+  const setSelectedClientId = useOpsStore((state) => state.setSelectedClientId);
+  const updateClientRecord = useOpsStore((state) => state.updateClientRecord);
+
   const { user, profile } = useAuth();
+  const params = useParams<{ clientId?: string }>();
+  const navigate = useNavigate();
+
+  const [eligibleManagers, setEligibleManagers] = useState<UserProfile[]>([]);
+
+  // Synchronize route param clientId with store
+  useEffect(() => {
+    if (params.clientId) {
+      setSelectedClientId(params.clientId);
+      setViewMode('client_workspace');
+    }
+  }, [params.clientId, setSelectedClientId, setViewMode]);
 
   useEffect(() => {
     if (initialView) {
       setViewMode(initialView);
     }
   }, [initialView, setViewMode]);
+
+  // Load clients & managers on mount
+  useEffect(() => {
+    if (!user) return;
+
+    async function loadData() {
+      const [fetchedClients, managers] = await Promise.all([
+        clientManagementService.fetchClients(),
+        clientManagementService.fetchEligibleManagers()
+      ]);
+      setClients(fetchedClients);
+      setEligibleManagers(managers);
+
+      if (params.clientId) {
+        setSelectedClientId(params.clientId);
+      } else if (!selectedClientId && fetchedClients.length > 0) {
+        setSelectedClientId(fetchedClients[0].id);
+      }
+    }
+    loadData();
+  }, [user, params.clientId, setClients, selectedClientId, setSelectedClientId]);
 
   // Sync with Supabase on mount and listen to realtime updates
   useEffect(() => {
@@ -109,6 +151,7 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
   }, [user]);
 
   const isManagerOrOwner = profile?.role === 'owner' || profile?.role === 'operational_manager';
+  const selectedClient = clients.find((c) => c.id === selectedClientId) || clients[0] || null;
 
   const renderActiveView = () => {
     switch (viewMode) {
@@ -130,6 +173,24 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
         return isManagerOrOwner ? <TeamManagementView /> : <OperationsDirectory />;
       case 'clients':
         return <ClientsView />;
+      case 'client_workspace':
+        return selectedClient ? (
+          <ClientWorkspaceView
+            client={selectedClient}
+            currentUserProfile={profile}
+            eligibleManagers={eligibleManagers}
+            onClientUpdated={updateClientRecord}
+          />
+        ) : (
+          <div className="p-12 text-center text-gray-500">
+            <h3 className="text-base font-bold text-gray-800 dark:text-gray-200">
+              No Client Selected
+            </h3>
+            <p className="text-xs text-gray-400 mt-1">
+              Use the Client Switcher in the top of the left sidebar to select or create a client workspace.
+            </p>
+          </div>
+        );
       default:
         return <ListView />;
     }
@@ -189,6 +250,24 @@ export const App: React.FC = () => {
         element={
           <ProtectedRoute allowedRoles={['owner', 'operational_manager']}>
             <OpsHubWorkspace initialView="directory" />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Dedicated Client Management Direct Routes */}
+      <Route
+        path="/clients/:clientId"
+        element={
+          <ProtectedRoute allowedRoles={['owner', 'operational_manager', 'team_member']}>
+            <OpsHubWorkspace initialView="client_workspace" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/clients"
+        element={
+          <ProtectedRoute allowedRoles={['owner', 'operational_manager', 'team_member']}>
+            <OpsHubWorkspace initialView="client_workspace" />
           </ProtectedRoute>
         }
       />

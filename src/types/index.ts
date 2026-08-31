@@ -300,6 +300,7 @@ export type ViewMode =
   | 'docs' 
   | 'directory' 
   | 'clients'
+  | 'client_workspace'
   | 'automations';
 
 export type GroupByOption = 'status' | 'priority' | 'assignee' | 'dueDate' | 'none';
@@ -313,3 +314,53 @@ export interface FilterState {
   slaFilter: string | 'all';
   groupBy: GroupByOption;
 }
+
+// --- PHASE 2B: CLIENT MANAGEMENT TYPES ---
+export type ClientPackage = 'Basic' | 'Intermediate' | 'Advanced';
+export type ClientStatus = 'Onboarding' | 'Active' | 'Paused' | 'Archived';
+export type ClientPauseReason = 'Payment overdue' | 'Client request' | 'Operational reason' | 'Other';
+export type ClientLinkType = 'google_drive' | 'facebook' | 'instagram' | 'slack_channel' | 'whatsapp_group';
+
+export interface ClientLink {
+  id?: string;
+  clientId: string;
+  linkType: ClientLinkType;
+  url: string;
+  createdBy?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface ClientRecord {
+  id: string;
+  companyName: string;
+  clientName: string;
+  package: ClientPackage;
+  operationalManagerId: string;
+  operationalManagerName?: string;
+  activationDate: string;
+  status: ClientStatus;
+  pauseReason?: ClientPauseReason | null;
+  sourceClientId?: string | null;
+  sourceCompanyName?: string | null;
+  links: Partial<Record<ClientLinkType, string>>;
+  assignedTeamMemberIds?: string[];
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt?: string | null;
+}
+
+export interface ClientAuditEntry {
+  id: string;
+  clientId?: string;
+  actorId?: string;
+  actorName?: string;
+  action: string;
+  changedField?: string;
+  previousValue?: string;
+  newValue?: string;
+  safeMetadata?: Record<string, any>;
+  createdAt: string;
+}
+
