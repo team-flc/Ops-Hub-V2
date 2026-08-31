@@ -1,0 +1,5 @@
+# Supabase Project Configuration for Ops Hub V2
+project_id = "jcaptlqenwmpfchjyipw"
+
+[functions.manage-team-member]
+verify_jwt = true

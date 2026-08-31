@@ -18,7 +18,6 @@ export const CommandPalette: React.FC = () => {
   const setCreateTaskModalOpen = useOpsStore((state) => state.setCreateTaskModalOpen);
   const setAutomationsModalOpen = useOpsStore((state) => state.setAutomationsModalOpen);
   const exportDataAsJSON = useOpsStore((state) => state.exportDataAsJSON);
-  const resetToDemoData = useOpsStore((state) => state.resetToDemoData);
 
   const [query, setQuery] = useState('');
 

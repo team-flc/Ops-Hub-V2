@@ -160,19 +160,21 @@ export const Header: React.FC = () => {
             {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-600" />}
           </button>
 
-          {/* Demo Reset */}
-          <button
-            type="button"
-            onClick={() => {
-              if (confirm('Reset Ops Hub demo data to default?')) {
-                resetToDemoData();
-              }
-            }}
-            className="p-2 rounded-xl border border-gray-200 dark:border-dark-border text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-dark-200 transition-colors"
-            title="Reset to initial demo data"
-          >
-            <RotateCcw className="w-4 h-4" />
-          </button>
+          {/* Demo Reset - Strictly Local Dev Mode Only (Never in Preview / Production) */}
+          {import.meta.env.DEV && (
+            <button
+              type="button"
+              onClick={() => {
+                if (confirm('Reset Ops Hub demo data to default?')) {
+                  resetToDemoData();
+                }
+              }}
+              className="p-2 rounded-xl border border-gray-200 dark:border-dark-border text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-dark-200 transition-colors"
+              title="Reset to initial demo data (Dev Only)"
+            >
+              <RotateCcw className="w-4 h-4" />
+            </button>
+          )}
 
           {/* Sign Out Action */}
           <button

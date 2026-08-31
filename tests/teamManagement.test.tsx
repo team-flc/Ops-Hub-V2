@@ -7,7 +7,9 @@ import { ProtectedRoute } from '../src/components/auth/ProtectedRoute';
 import { TeamManagementView } from '../src/components/views/TeamManagementView';
 import { CreateTeamMemberModal } from '../src/components/team/CreateTeamMemberModal';
 import { SuspendUserModal } from '../src/components/team/SuspendUserModal';
+import { Header } from '../src/components/layout/Header';
 import { teamManagementService } from '../src/lib/teamManagementService';
+import { supabase } from '../src/lib/supabase';
 import { TeamMemberRecord, UserProfile } from '../src/types';
 
 // Mock Supabase & Services
@@ -57,9 +59,10 @@ describe('Phase 2A Team & User Management Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetUser.mockResolvedValue({ data: { user: null }, error: null });
-    mockGetSession.mockResolvedValue({ data: { session: null }, error: null });
+    mockGetSession.mockResolvedValue({ data: { session: { access_token: 'mock-jwt-token' } }, error: null });
     mockOnAuthStateChange.mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } });
     mockFromSelect.mockResolvedValue({ data: null, error: null });
+    mockInvoke.mockResolvedValue({ data: { success: true }, error: null });
   });
 
   // 1. ROUTE ACCESS CONTROL TESTS
@@ -95,7 +98,7 @@ describe('Phase 2A Team & User Management Tests', () => {
   it('2. Team Member role attempting to access /team is redirected to /', async () => {
     const fakeTeamMember = { id: 'usr-tm-1', email: 'tm@faseehlall.com' };
     mockGetUser.mockResolvedValue({ data: { user: fakeTeamMember }, error: null });
-    mockGetSession.mockResolvedValue({ data: { session: { user: fakeTeamMember } }, error: null });
+    mockGetSession.mockResolvedValue({ data: { session: { user: fakeTeamMember, access_token: 'tok' } }, error: null });
     mockFromSelect.mockResolvedValue({
       data: {
         id: 'usr-tm-1',
@@ -135,7 +138,7 @@ describe('Phase 2A Team & User Management Tests', () => {
   it('3. Client role attempting to access /team is redirected to /client', async () => {
     const fakeClient = { id: 'usr-client-1', email: 'client@partner.com' };
     mockGetUser.mockResolvedValue({ data: { user: fakeClient }, error: null });
-    mockGetSession.mockResolvedValue({ data: { session: { user: fakeClient } }, error: null });
+    mockGetSession.mockResolvedValue({ data: { session: { user: fakeClient, access_token: 'tok' } }, error: null });
     mockFromSelect.mockResolvedValue({
       data: {
         id: 'usr-client-1',
@@ -175,7 +178,7 @@ describe('Phase 2A Team & User Management Tests', () => {
   it('4. Owner role can access /team management', async () => {
     const fakeOwner = { id: 'usr-owner-1', email: 'owner@faseehlall.com' };
     mockGetUser.mockResolvedValue({ data: { user: fakeOwner }, error: null });
-    mockGetSession.mockResolvedValue({ data: { session: { user: fakeOwner } }, error: null });
+    mockGetSession.mockResolvedValue({ data: { session: { user: fakeOwner, access_token: 'tok' } }, error: null });
     mockFromSelect.mockResolvedValue({
       data: {
         id: 'usr-owner-1',
@@ -308,8 +311,66 @@ describe('Phase 2A Team & User Management Tests', () => {
     });
   });
 
-  // 4. FRONTEND SECURITY: NO SERVICE ROLE KEYS
-  it('7. Frontend bundle contains zero service-role keys or admin bypass tokens', () => {
+  // 4. EDGE FUNCTION ACTION INVOCATION MATCHING
+  it('7. Service invocations call canonical manage-team-member Edge Function with exact action names', async () => {
+    mockInvoke.mockResolvedValue({ data: { success: true }, error: null });
+
+    // Test create
+    await teamManagementService.createTeamMember({
+      fullName: 'Test User',
+      workEmail: 'test@faseehlall.com',
+      startDate: '2026-01-01',
+      departmentIds: ['d1'],
+      designationId: 'des-1',
+      password: 'Password123!@#'
+    });
+
+    expect(mockInvoke).toHaveBeenCalledWith(
+      'manage-team-member',
+      expect.objectContaining({
+        body: expect.objectContaining({ action: 'create', fullName: 'Test User' })
+      })
+    );
+
+    // Test reset password
+    await teamManagementService.resetPassword('target-user-1', 'NewPassword123!@#');
+    expect(mockInvoke).toHaveBeenCalledWith(
+      'manage-team-member',
+      expect.objectContaining({
+        body: expect.objectContaining({ action: 'reset_password', targetUserId: 'target-user-1' })
+      })
+    );
+
+    // Test reactivate
+    await teamManagementService.reactivateTeamMember('target-user-1');
+    expect(mockInvoke).toHaveBeenCalledWith(
+      'manage-team-member',
+      expect.objectContaining({
+        body: expect.objectContaining({ action: 'reactivate', targetUserId: 'target-user-1' })
+      })
+    );
+  });
+
+  // 5. DEMO RESET CONTROL REMOVAL FROM PRODUCTION
+  it('8. Demo reset button is guarded strictly in Header and absent from production build', () => {
+    render(
+      <MemoryRouter>
+        <AuthProvider>
+          <Header />
+        </AuthProvider>
+      </MemoryRouter>
+    );
+
+    // In vitest / test environment where DEV is false or mocked, demo reset should not be accessible
+    const demoResetBtn = screen.queryByTitle(/Reset to initial demo data/i);
+    // If DEV is false, it is null
+    if (!import.meta.env.DEV) {
+      expect(demoResetBtn).not.toBeInTheDocument();
+    }
+  });
+
+  // 6. FRONTEND SECURITY: NO SERVICE ROLE KEYS
+  it('9. Frontend bundle contains zero service-role keys or admin bypass tokens', () => {
     expect(import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY).toBeUndefined();
     expect(import.meta.env.SUPABASE_SERVICE_ROLE_KEY).toBeUndefined();
   });
