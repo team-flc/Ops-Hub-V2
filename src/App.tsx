@@ -70,10 +70,11 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
     if (!user) return;
 
     async function loadData() {
-      const [fetchedClients, managers] = await Promise.all([
+      const [clientRes, managers] = await Promise.all([
         clientManagementService.fetchClients(),
         clientManagementService.fetchEligibleManagers()
       ]);
+      const fetchedClients = clientRes.data || [];
       setClients(fetchedClients);
       setEligibleManagers(managers);
 

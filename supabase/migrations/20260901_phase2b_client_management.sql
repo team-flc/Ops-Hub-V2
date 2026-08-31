@@ -1,5 +1,5 @@
 -- ==============================================================================
--- FORWARD MIGRATION: Phase 2B Client Management Schema & Hardened RLS
+-- FORWARD MIGRATION: Phase 2B Base Client Management Schema & Hardened RLS
 -- Location: supabase/migrations/20260901_phase2b_client_management.sql
 -- Database: PostgreSQL / Supabase (jcaptlqenwmpfchjyipw)
 -- Target: Production Client Management Foundation, Workspace Links, & RLS
@@ -28,11 +28,19 @@ CREATE INDEX IF NOT EXISTS idx_clients_manager ON public.clients(operational_man
 CREATE INDEX IF NOT EXISTS idx_clients_source ON public.clients(source_client_id);
 CREATE INDEX IF NOT EXISTS idx_clients_company_name ON public.clients(company_name);
 
--- 2. Create public.client_links Table (Workspace & Communication URLs)
+-- 2. Create public.client_links Table (Expanded Workspace & Communication URLs)
 CREATE TABLE IF NOT EXISTS public.client_links (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   client_id UUID NOT NULL REFERENCES public.clients(id) ON DELETE CASCADE,
-  link_type TEXT NOT NULL CHECK (link_type IN ('google_drive', 'facebook', 'instagram', 'slack_channel', 'whatsapp_group')),
+  link_type TEXT NOT NULL CHECK (link_type IN (
+    'website', 
+    'google_drive', 
+    'facebook', 
+    'instagram', 
+    'linkedin_company_page', 
+    'slack_channel', 
+    'whatsapp_group'
+  )),
   url TEXT NOT NULL,
   created_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
@@ -70,7 +78,7 @@ CREATE INDEX IF NOT EXISTS idx_client_audit_client ON public.client_audit_log(cl
 CREATE INDEX IF NOT EXISTS idx_client_audit_actor ON public.client_audit_log(actor_id, created_at DESC);
 
 -- ==============================================================================
--- 5. SECURITY DEFINER HELPER: app_private.can_access_client
+-- 5. SECURITY DEFINER HELPERS
 -- ==============================================================================
 
 CREATE OR REPLACE FUNCTION app_private.can_access_client(caller_id UUID, target_client_id UUID)
@@ -103,7 +111,6 @@ $$;
 
 GRANT EXECUTE ON FUNCTION app_private.can_access_client(UUID, UUID) TO authenticated;
 
--- Helper: Can manage client (Owner or designated Operational Manager)
 CREATE OR REPLACE FUNCTION app_private.can_manage_client(caller_id UUID, target_client_id UUID)
 RETURNS BOOLEAN
 LANGUAGE sql
@@ -139,21 +146,18 @@ DROP POLICY IF EXISTS "clients_insert" ON public.clients;
 DROP POLICY IF EXISTS "clients_update" ON public.clients;
 DROP POLICY IF EXISTS "clients_delete" ON public.clients;
 
--- SELECT: Scoped by app_private.can_access_client
 CREATE POLICY "clients_select"
   ON public.clients
   FOR SELECT
   TO authenticated
   USING (app_private.can_access_client((SELECT auth.uid()), id));
 
--- INSERT: Managers and Owner only
 CREATE POLICY "clients_insert"
   ON public.clients
   FOR INSERT
   TO authenticated
   WITH CHECK (app_private.is_manager_or_owner((SELECT auth.uid())));
 
--- UPDATE: Owner or Assigned Operational Manager
 CREATE POLICY "clients_update"
   ON public.clients
   FOR UPDATE
@@ -161,7 +165,6 @@ CREATE POLICY "clients_update"
   USING (app_private.can_manage_client((SELECT auth.uid()), id))
   WITH CHECK (app_private.can_manage_client((SELECT auth.uid()), id));
 
--- DELETE: Owner Only (UI archives records; hard deletion restricted to Owner)
 CREATE POLICY "clients_delete"
   ON public.clients
   FOR DELETE
@@ -174,14 +177,12 @@ DROP POLICY IF EXISTS "client_links_select" ON public.client_links;
 DROP POLICY IF EXISTS "client_links_insert_update" ON public.client_links;
 DROP POLICY IF EXISTS "client_links_delete" ON public.client_links;
 
--- SELECT: Permitted staff who can access the client
 CREATE POLICY "client_links_select"
   ON public.client_links
   FOR SELECT
   TO authenticated
   USING (app_private.can_access_client((SELECT auth.uid()), client_id));
 
--- INSERT & UPDATE: Permitted staff (including Team Members assigned to client) can add/update links
 CREATE POLICY "client_links_insert_update"
   ON public.client_links
   FOR ALL
@@ -225,3 +226,5 @@ CREATE POLICY "client_audit_log_insert"
   FOR INSERT
   TO authenticated
   WITH CHECK (app_private.is_staff((SELECT auth.uid())));
+
+NOTIFY pgrst, 'reload schema';

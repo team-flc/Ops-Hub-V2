@@ -53,11 +53,16 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
   const [managerId, setManagerId] = useState(
     sourceClient.operationalManagerId || currentUserProfile?.id || ''
   );
+  const [requiredCount, setRequiredCount] = useState<number>(
+    sourceClient.requiredLinkedinProfileCount || 3
+  );
 
-  // Links start blank (per requirement: do not copy client-specific links)
+  // Links start blank (per requirement: do not copy client-specific links or profiles)
+  const [websiteUrl, setWebsiteUrl] = useState('');
   const [driveUrl, setDriveUrl] = useState('');
   const [facebookUrl, setFacebookUrl] = useState('');
   const [instagramUrl, setInstagramUrl] = useState('');
+  const [linkedinPageUrl, setLinkedinPageUrl] = useState('');
   const [slackUrl, setSlackUrl] = useState('');
   const [whatsappUrl, setWhatsappUrl] = useState('');
 
@@ -85,9 +90,11 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
 
     // Validate provided URLs
     const rawLinks: Partial<Record<ClientLinkType, string>> = {
+      website: websiteUrl,
       google_drive: driveUrl,
       facebook: facebookUrl,
       instagram: instagramUrl,
+      linkedin_company_page: linkedinPageUrl,
       slack_channel: slackUrl,
       whatsapp_group: whatsappUrl
     };
@@ -96,7 +103,7 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
       if (raw && raw.trim()) {
         const sanitized = sanitizeUrl(raw);
         if (!sanitized) {
-          setErrorMsg(`Invalid URL for ${key.replace('_', ' ')}. Only http:// and https:// URLs are allowed.`);
+          setErrorMsg(`Invalid URL for ${key.replace(/_/g, ' ')}. Only http:// and https:// URLs are allowed.`);
           return;
         }
       }
@@ -115,6 +122,7 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
           activationDate,
           status,
           pauseReason: status === 'Paused' ? pauseReason : null,
+          requiredLinkedinProfileCount: Math.max(1, requiredCount),
           links: rawLinks
         },
         currentUserProfile?.id
@@ -126,7 +134,6 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
         return;
       }
 
-      // Success
       setIsSubmitting(false);
       onSuccess(result.data);
       onClose();
@@ -139,7 +146,7 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
       <div 
-        className="relative w-full max-w-2xl bg-white dark:bg-dark-card rounded-2xl shadow-2xl border border-gray-200 dark:border-dark-border overflow-hidden animate-scale-up max-h-[90vh] flex flex-col"
+        className="relative w-full max-w-3xl bg-white dark:bg-dark-card rounded-2xl shadow-2xl border border-gray-200 dark:border-dark-border overflow-hidden animate-scale-up max-h-[90vh] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
@@ -153,7 +160,7 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
                 Duplicate Client: <span className="text-brand-600 dark:text-brand-400">{sourceClient.companyName}</span>
               </h3>
               <p className="text-xs text-gray-500">
-                Creates a new independent client workspace prefilled with package and manager settings.
+                Creates a new independent client workspace prefilled with operational package & LinkedIn requirements.
               </p>
             </div>
           </div>
@@ -185,7 +192,6 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* New Company Name */}
               <div>
                 <label htmlFor="dup-company-name" className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
                   New Company Name <span className="text-rose-500">*</span>
@@ -201,7 +207,6 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
                 />
               </div>
 
-              {/* New Client/Owner Name */}
               <div>
                 <label htmlFor="dup-client-name" className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
                   Client / Owner Full Name <span className="text-rose-500">*</span>
@@ -217,7 +222,6 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
                 />
               </div>
 
-              {/* Package Dropdown (Prefilled) */}
               <div>
                 <label htmlFor="dup-package" className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
                   Service Package <span className="text-rose-500">*</span>
@@ -234,12 +238,12 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
                 </select>
               </div>
 
-              {/* Operational Manager Dropdown (Prefilled) */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
+                <label htmlFor="dup-manager" className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
                   Operational Manager <span className="text-rose-500">*</span>
                 </label>
                 <select
+                  id="dup-manager"
                   value={managerId}
                   onChange={(e) => setManagerId(e.target.value)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
@@ -252,12 +256,12 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
                 </select>
               </div>
 
-              {/* Activation Date */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
+                <label htmlFor="dup-activation-date" className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
                   Activation Date <span className="text-rose-500">*</span>
                 </label>
                 <input
+                  id="dup-activation-date"
                   type="date"
                   value={activationDate}
                   onChange={(e) => setActivationDate(e.target.value)}
@@ -266,12 +270,12 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
                 />
               </div>
 
-              {/* Lifecycle Status */}
               <div>
-                <label className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
+                <label htmlFor="dup-status" className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
                   Lifecycle Status <span className="text-rose-500">*</span>
                 </label>
                 <select
+                  id="dup-status"
                   value={status}
                   onChange={(e) => setStatus(e.target.value as ClientStatus)}
                   className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
@@ -281,15 +285,31 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
                   ))}
                 </select>
               </div>
+
+              {/* Prefilled Required LinkedIn Profiles Count */}
+              <div>
+                <label htmlFor="dup-req-count" className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
+                  Required LinkedIn Profiles Count <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  id="dup-req-count"
+                  type="number"
+                  min="1"
+                  max="20"
+                  value={requiredCount}
+                  onChange={(e) => setRequiredCount(Math.max(1, parseInt(e.target.value) || 1))}
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                />
+              </div>
             </div>
 
-            {/* Pause Reason (Conditional on Paused Status) */}
             {status === 'Paused' && (
               <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-2 animate-fade-in">
-                <label className="block text-xs font-bold text-amber-700 dark:text-amber-300">
+                <label htmlFor="dup-pause-reason" className="block text-xs font-bold text-amber-700 dark:text-amber-300">
                   Pause Reason <span className="text-rose-500">*</span>
                 </label>
                 <select
+                  id="dup-pause-reason"
                   value={pauseReason}
                   onChange={(e) => setPauseReason(e.target.value as ClientPauseReason)}
                   className="w-full px-3.5 py-2 rounded-xl border border-amber-300 dark:border-amber-700/50 bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none"
@@ -302,19 +322,48 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
             )}
           </div>
 
-          {/* Section 2: Workspace & Communication Links */}
+          {/* Section 2: Blank Workspace & Communication Links */}
           <div className="space-y-4 pt-4 border-t border-gray-100 dark:border-dark-border">
             <div className="text-[11px] font-bold uppercase tracking-wider text-purple-600 dark:text-purple-400 flex items-center gap-1.5">
               <Link2 className="w-3.5 h-3.5" />
               <span>New Client Workspace Links (Optional)</span>
             </div>
 
-            <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                <label htmlFor="dup-website" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Website / Landing Page URL
+                </label>
+                <input
+                  id="dup-website"
+                  type="url"
+                  value={websiteUrl}
+                  onChange={(e) => setWebsiteUrl(e.target.value)}
+                  placeholder="https://clientwebsite.com"
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="dup-linkedin-page" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  LinkedIn Company Page URL
+                </label>
+                <input
+                  id="dup-linkedin-page"
+                  type="url"
+                  value={linkedinPageUrl}
+                  onChange={(e) => setLinkedinPageUrl(e.target.value)}
+                  placeholder="https://linkedin.com/company/..."
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="dup-drive" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Google Drive Folder URL
                 </label>
                 <input
+                  id="dup-drive"
                   type="url"
                   value={driveUrl}
                   onChange={(e) => setDriveUrl(e.target.value)}
@@ -323,58 +372,60 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Facebook Page URL
-                  </label>
-                  <input
-                    type="url"
-                    value={facebookUrl}
-                    onChange={(e) => setFacebookUrl(e.target.value)}
-                    placeholder="https://facebook.com/..."
-                    className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                  />
-                </div>
+              <div>
+                <label htmlFor="dup-facebook" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Facebook Page URL
+                </label>
+                <input
+                  id="dup-facebook"
+                  type="url"
+                  value={facebookUrl}
+                  onChange={(e) => setFacebookUrl(e.target.value)}
+                  placeholder="https://facebook.com/..."
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                />
+              </div>
 
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Instagram Page URL
-                  </label>
-                  <input
-                    type="url"
-                    value={instagramUrl}
-                    onChange={(e) => setInstagramUrl(e.target.value)}
-                    placeholder="https://instagram.com/..."
-                    className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                  />
-                </div>
+              <div>
+                <label htmlFor="dup-instagram" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Instagram Page URL
+                </label>
+                <input
+                  id="dup-instagram"
+                  type="url"
+                  value={instagramUrl}
+                  onChange={(e) => setInstagramUrl(e.target.value)}
+                  placeholder="https://instagram.com/..."
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                />
+              </div>
 
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    Slack Channel URL
-                  </label>
-                  <input
-                    type="url"
-                    value={slackUrl}
-                    onChange={(e) => setSlackUrl(e.target.value)}
-                    placeholder="https://app.slack.com/client/..."
-                    className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                  />
-                </div>
+              <div>
+                <label htmlFor="dup-slack" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Slack Channel URL
+                </label>
+                <input
+                  id="dup-slack"
+                  type="url"
+                  value={slackUrl}
+                  onChange={(e) => setSlackUrl(e.target.value)}
+                  placeholder="https://app.slack.com/client/..."
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                />
+              </div>
 
-                <div>
-                  <label className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                    WhatsApp Group URL
-                  </label>
-                  <input
-                    type="url"
-                    value={whatsappUrl}
-                    onChange={(e) => setWhatsappUrl(e.target.value)}
-                    placeholder="https://chat.whatsapp.com/..."
-                    className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
-                  />
-                </div>
+              <div className="sm:col-span-2">
+                <label htmlFor="dup-whatsapp" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  WhatsApp Group URL
+                </label>
+                <input
+                  id="dup-whatsapp"
+                  type="url"
+                  value={whatsappUrl}
+                  onChange={(e) => setWhatsappUrl(e.target.value)}
+                  placeholder="https://chat.whatsapp.com/..."
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-purple-500/50"
+                />
               </div>
             </div>
           </div>

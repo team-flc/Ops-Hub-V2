@@ -186,17 +186,6 @@ export const Header: React.FC = () => {
             <LogOut className="w-4 h-4" />
           </button>
 
-          {/* Add Client Quick Action */}
-          <button
-            type="button"
-            onClick={() => setViewMode('clients')}
-            className="flex items-center gap-1.5 px-3 py-2 border border-brand-500/30 bg-brand-500/10 text-brand-600 dark:text-brand-400 hover:bg-brand-500/20 rounded-xl text-xs font-bold transition-all"
-            title="Clients & Accounts Hub"
-          >
-            <Building2 className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">+ Client</span>
-          </button>
-
           {/* Primary Create Task Button */}
           <button
             type="button"

@@ -9,14 +9,21 @@ import { CreateClientModal } from '../src/components/clients/CreateClientModal';
 import { DuplicateClientModal } from '../src/components/clients/DuplicateClientModal';
 import { SelectedClientHeader } from '../src/components/clients/SelectedClientHeader';
 import { ClientWorkspaceView } from '../src/components/clients/ClientWorkspaceView';
-import { clientManagementService, sanitizeUrl } from '../src/lib/clientManagementService';
-import { ClientRecord, UserProfile } from '../src/types';
+import { Header } from '../src/components/layout/Header';
+import { 
+  clientManagementService, 
+  sanitizeUrl, 
+  isValidLinkedInUrl, 
+  calculateLinkedInReadiness 
+} from '../src/lib/clientManagementService';
+import { ClientRecord, UserProfile, ClientLinkedInProfile } from '../src/types';
 
 // Mock Supabase
 const mockGetUser = vi.fn();
 const mockGetSession = vi.fn();
 const mockOnAuthStateChange = vi.fn();
 const mockFromSelect = vi.fn();
+const mockInsert = vi.fn();
 
 vi.mock('../src/lib/supabase', () => {
   return {
@@ -40,13 +47,44 @@ vi.mock('../src/lib/supabase', () => {
           }),
           order: () => Promise.resolve({ data: [], error: null })
         }),
-        insert: () => ({ select: () => ({ single: () => Promise.resolve({ data: {}, error: null }) }) }),
+        insert: (data: any) => ({
+          select: () => ({
+            single: () => Promise.resolve({ data: { id: 'new-id', ...data }, error: null })
+          })
+        }),
         update: () => ({ eq: () => ({ select: () => ({ single: () => Promise.resolve({ data: {}, error: null }) }) }) }),
         delete: () => ({ eq: () => ({ eq: () => Promise.resolve({ data: null, error: null }) }) })
       })
     }
   };
 });
+
+const mockProfiles: ClientLinkedInProfile[] = [
+  {
+    id: 'p-1',
+    clientId: 'client-1',
+    profileLabel: 'LinkedIn ID 1',
+    profileUrl: 'https://linkedin.com/in/alice-smith',
+    salesNavigatorActive: true,
+    salesNavigatorActivatedOn: '2026-01-15',
+    sortOrder: 0,
+    status: 'active',
+    createdAt: '2026-01-15T00:00:00Z',
+    updatedAt: '2026-01-15T00:00:00Z'
+  },
+  {
+    id: 'p-2',
+    clientId: 'client-1',
+    profileLabel: 'LinkedIn ID 2',
+    profileUrl: 'https://linkedin.com/in/alice-smith-backup',
+    salesNavigatorActive: true,
+    salesNavigatorActivatedOn: '2026-01-20',
+    sortOrder: 1,
+    status: 'active',
+    createdAt: '2026-01-20T00:00:00Z',
+    updatedAt: '2026-01-20T00:00:00Z'
+  }
+];
 
 const mockClients: ClientRecord[] = [
   {
@@ -59,9 +97,13 @@ const mockClients: ClientRecord[] = [
     activationDate: '2026-01-15',
     status: 'Active',
     pauseReason: null,
+    requiredLinkedinProfileCount: 3,
+    linkedinProfiles: mockProfiles,
     sourceClientId: null,
     links: {
+      website: 'https://acmelogistics.com',
       google_drive: 'https://drive.google.com/drive/folders/acme',
+      linkedin_company_page: 'https://linkedin.com/company/acme-logistics',
       slack_channel: 'https://app.slack.com/client/T01/C01'
     },
     createdAt: '2026-01-15T00:00:00Z',
@@ -77,6 +119,8 @@ const mockClients: ClientRecord[] = [
     activationDate: '2026-02-01',
     status: 'Paused',
     pauseReason: 'Payment overdue',
+    requiredLinkedinProfileCount: 3,
+    linkedinProfiles: [],
     sourceClientId: null,
     links: {},
     createdAt: '2026-02-01T00:00:00Z',
@@ -103,7 +147,7 @@ const mockManagers: UserProfile[] = [
   }
 ];
 
-describe('Phase 2B: Client Management Foundation Tests', () => {
+describe('Phase 2B: Client Management & Dynamic LinkedIn Access Tests', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockGetUser.mockResolvedValue({ data: { user: null }, error: null });
@@ -122,116 +166,170 @@ describe('Phase 2B: Client Management Foundation Tests', () => {
     expect(sanitizeUrl(null)).toBeNull();
   });
 
-  // 2. CLIENT SWITCHER BEHAVIOR
-  it('2. ClientSwitcher renders collapsed state with selected client and opens popover with search & list', () => {
-    const handleSelect = vi.fn();
-    const handleCreate = vi.fn();
-    const handleDuplicate = vi.fn();
-
-    render(
-      <ClientSwitcher
-        clients={mockClients}
-        selectedClient={mockClients[0]}
-        onSelectClient={handleSelect}
-        onOpenCreateModal={handleCreate}
-        onOpenDuplicateModal={handleDuplicate}
-      />
-    );
-
-    // Collapsed state
-    expect(screen.getByText('Acme Logistics')).toBeInTheDocument();
-
-    // Open popover
-    fireEvent.click(screen.getByRole('button', { name: /switch client workspace/i }));
-
-    // Popover elements
-    expect(screen.getByText('Switch Client')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('Search clients...')).toBeInTheDocument();
-    expect(screen.getByText('Beta Retailers')).toBeInTheDocument();
-
-    // Single Create Client button in switcher
-    const createBtn = screen.getByRole('button', { name: /create client/i });
-    expect(createBtn).toBeInTheDocument();
-    fireEvent.click(createBtn);
-    expect(handleCreate).toHaveBeenCalled();
+  // 2. LINKEDIN URL VALIDATION
+  it('2. isValidLinkedInUrl accepts valid LinkedIn profile URLs and rejects non-LinkedIn URLs', () => {
+    expect(isValidLinkedInUrl('https://linkedin.com/in/john-doe')).toBe(true);
+    expect(isValidLinkedInUrl('https://www.linkedin.com/in/sarah-smith/')).toBe(true);
+    expect(isValidLinkedInUrl('https://facebook.com/john')).toBe(false);
+    expect(isValidLinkedInUrl('javascript:alert(1)')).toBe(false);
   });
 
-  it('3. Duplicate icon opens Duplicate Client modal without selecting the source row (stopPropagation)', () => {
-    const handleSelect = vi.fn();
-    const handleCreate = vi.fn();
-    const handleDuplicate = vi.fn();
+  // 3. LINKEDIN ACCESS READINESS CALCULATION
+  it('3. calculateLinkedInReadiness calculates readiness and completeness accurately', () => {
+    // 0 added of 3
+    const r0 = calculateLinkedInReadiness(3, []);
+    expect(r0.isComplete).toBe(false);
+    expect(r0.totalAdded).toBe(0);
+    expect(r0.statusText).toBe('0 of 3 LinkedIn Profiles Added');
 
-    render(
-      <ClientSwitcher
-        clients={mockClients}
-        selectedClient={mockClients[0]}
-        onSelectClient={handleSelect}
-        onOpenCreateModal={handleCreate}
-        onOpenDuplicateModal={handleDuplicate}
-      />
-    );
+    // 2 added with Sales Nav of 3 required
+    const r2 = calculateLinkedInReadiness(3, mockProfiles);
+    expect(r2.isComplete).toBe(false);
+    expect(r2.totalAdded).toBe(2);
+    expect(r2.salesNavActiveCount).toBe(2);
+    expect(r2.statusText).toBe('2 of 3 LinkedIn Profiles Added');
 
-    // Open popover
-    fireEvent.click(screen.getByRole('button', { name: /switch client workspace/i }));
-
-    // Click Duplicate icon on second client
-    const duplicateButtons = screen.getAllByTitle(/duplicate client:/i);
-    expect(duplicateButtons.length).toBe(2);
-
-    fireEvent.click(duplicateButtons[1]);
-
-    // handleDuplicate must be called with Beta Retailers
-    expect(handleDuplicate).toHaveBeenCalledWith(mockClients[1]);
-    // handleSelect must NOT be called
-    expect(handleSelect).not.toHaveBeenCalled();
+    // 3 added with Sales Nav of 3 required
+    const completeProfiles: ClientLinkedInProfile[] = [
+      ...mockProfiles,
+      {
+        id: 'p-3',
+        clientId: 'client-1',
+        profileLabel: 'LinkedIn ID 3',
+        profileUrl: 'https://linkedin.com/in/director',
+        salesNavigatorActive: true,
+        salesNavigatorActivatedOn: '2026-01-25',
+        sortOrder: 2,
+        status: 'active',
+        createdAt: '',
+        updatedAt: ''
+      }
+    ];
+    const r3 = calculateLinkedInReadiness(3, completeProfiles);
+    expect(r3.isComplete).toBe(true);
+    expect(r3.statusText).toBe('LinkedIn Access Complete');
   });
 
-  it('4. Search input filters client list without page reload', () => {
-    render(
+  // 4. CLIENT SWITCHER STATES (LOADING, ERROR WITH RETRY, EMPTY, AND SUCCESS)
+  it('4. ClientSwitcher distinguishes loading, error with retry, and empty states', () => {
+    const handleRetry = vi.fn();
+
+    // Loading State
+    const { rerender } = render(
       <ClientSwitcher
-        clients={mockClients}
-        selectedClient={mockClients[0]}
+        clients={[]}
+        selectedClient={null}
+        isLoading={true}
+        fetchError={null}
+        onRetry={handleRetry}
         onSelectClient={vi.fn()}
         onOpenCreateModal={vi.fn()}
         onOpenDuplicateModal={vi.fn()}
       />
     );
-
     fireEvent.click(screen.getByRole('button', { name: /switch client workspace/i }));
-    const searchInput = screen.getByPlaceholderText('Search clients...');
+    expect(screen.getByText('Loading clients...')).toBeInTheDocument();
 
-    // Type 'Beta'
-    fireEvent.change(searchInput, { target: { value: 'Beta' } });
-    expect(screen.getByText('Beta Retailers')).toBeInTheDocument();
+    // Error State (NOT disguised as empty list)
+    rerender(
+      <ClientSwitcher
+        clients={[]}
+        selectedClient={null}
+        isLoading={false}
+        fetchError="Could not find the table 'public.clients'"
+        onRetry={handleRetry}
+        onSelectClient={vi.fn()}
+        onOpenCreateModal={vi.fn()}
+        onOpenDuplicateModal={vi.fn()}
+      />
+    );
+    expect(screen.getByText('Unable to load clients')).toBeInTheDocument();
+    expect(screen.getByText("Could not find the table 'public.clients'")).toBeInTheDocument();
+    expect(screen.queryByText('No accessible clients found')).not.toBeInTheDocument();
 
-    // Type non-existent query
-    fireEvent.change(searchInput, { target: { value: 'NonExistentClientXYZ' } });
-    expect(screen.getByText('No accessible clients found.')).toBeInTheDocument();
+    // Retry control
+    const retryBtn = screen.getByRole('button', { name: /retry/i });
+    expect(retryBtn).toBeInTheDocument();
+    fireEvent.click(retryBtn);
+    expect(handleRetry).toHaveBeenCalled();
+
+    // Successful Empty State
+    rerender(
+      <ClientSwitcher
+        clients={[]}
+        selectedClient={null}
+        isLoading={false}
+        fetchError={null}
+        onRetry={handleRetry}
+        onSelectClient={vi.fn()}
+        onOpenCreateModal={vi.fn()}
+        onOpenDuplicateModal={vi.fn()}
+      />
+    );
+    expect(screen.getByText('No accessible clients found')).toBeInTheDocument();
   });
 
-  // 3. CREATE CLIENT MODAL VALIDATION
-  it('5. CreateClientModal validates required fields and submits clean payload', () => {
-    const handleSuccess = vi.fn();
-    const handleClose = vi.fn();
+  // 5. REMOVE GLOBAL + CLIENT BUTTON (STRICT SINGLE ACTION LOCATION)
+  it('5. Global Header does NOT contain any + Client button', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: null }, error: null });
+    await act(async () => {
+      render(
+        <AuthProvider>
+          <Header />
+        </AuthProvider>
+      );
+    });
+    expect(screen.queryByText('+ Client')).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /\+ client/i })).not.toBeInTheDocument();
+  });
 
+  // 6. DUPLICATE ICON ISOLATION
+  it('6. Duplicate icon opens Duplicate modal without selecting client row (stopPropagation)', () => {
+    const handleSelect = vi.fn();
+    const handleDuplicate = vi.fn();
+
+    render(
+      <ClientSwitcher
+        clients={mockClients}
+        selectedClient={mockClients[0]}
+        isLoading={false}
+        fetchError={null}
+        onSelectClient={handleSelect}
+        onOpenCreateModal={vi.fn()}
+        onOpenDuplicateModal={handleDuplicate}
+      />
+    );
+
+    fireEvent.click(screen.getByRole('button', { name: /switch client workspace/i }));
+    const duplicateButtons = screen.getAllByTitle(/duplicate client:/i);
+    expect(duplicateButtons.length).toBe(2);
+
+    fireEvent.click(duplicateButtons[1]);
+    expect(handleDuplicate).toHaveBeenCalledWith(mockClients[1]);
+    expect(handleSelect).not.toHaveBeenCalled();
+  });
+
+  // 7. CREATE CLIENT MODAL WITH EXPANDED LINKS AND LINKEDIN PROFILES
+  it('7. CreateClientModal includes Website, LinkedIn Company Page, and dynamic LinkedIn Lead Gen Profiles', () => {
     render(
       <CreateClientModal
         isOpen={true}
-        onClose={handleClose}
-        onSuccess={handleSuccess}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
         currentUserProfile={mockManagers[1]}
         eligibleManagers={mockManagers}
       />
     );
 
     expect(screen.getByText('Create New Client Workspace')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('e.g. Acme Corp')).toBeInTheDocument();
-    expect(screen.getByPlaceholderText('e.g. Sarah Jenkins')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: /create client workspace/i })).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('https://clientwebsite.com')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('https://linkedin.com/company/...')).toBeInTheDocument();
+    expect(screen.getByText('LinkedIn Lead Generation Profiles')).toBeInTheDocument();
+    expect(screen.getByText('+ Add LinkedIn Profile')).toBeInTheDocument();
   });
 
-  // 4. DUPLICATE CLIENT MODAL PREFILLING
-  it('6. DuplicateClientModal prefills reusable operational configuration and leaves links blank', () => {
+  // 8. DUPLICATE CLIENT PREFILLS REQUIREMENTS AND LEAVES LINKS/PROFILES BLANK
+  it('8. DuplicateClientModal prefills required count and operational package and leaves links blank', () => {
     render(
       <DuplicateClientModal
         isOpen={true}
@@ -246,40 +344,40 @@ describe('Phase 2B: Client Management Foundation Tests', () => {
     expect(screen.getByText(/Duplicate Client:/i)).toBeInTheDocument();
     expect(screen.getByText('Acme Logistics')).toBeInTheDocument();
 
-    // Package should be prefilled with Advanced
     const packageSelect = screen.getByLabelText(/service package/i) as HTMLSelectElement;
     expect(packageSelect.value).toBe('Advanced');
 
-    // Link input should be blank
-    const driveInput = screen.getByPlaceholderText(/https:\/\/drive\.google\.com/i) as HTMLInputElement;
-    expect(driveInput.value).toBe('');
+    const reqCountInput = screen.getByLabelText(/required linkedin profiles count/i) as HTMLInputElement;
+    expect(reqCountInput.value).toBe('3');
+
+    const websiteInput = screen.getByPlaceholderText(/https:\/\/clientwebsite\.com/i) as HTMLInputElement;
+    expect(websiteInput.value).toBe('');
   });
 
-  // 5. SELECTED CLIENT HEADER & QUICK-LINK ICONS
-  it('7. SelectedClientHeader displays badges, pause reason when paused, and only active links', () => {
-    // Client 1 has Google Drive and Slack links
-    const { rerender } = render(<SelectedClientHeader client={mockClients[0]} />);
+  // 9. SELECTED CLIENT HEADER & COMBINED LINKEDIN TRACKER
+  it('9. SelectedClientHeader displays quick-links and combined LinkedIn Profiles tracker', () => {
+    render(<SelectedClientHeader client={mockClients[0]} />);
 
     expect(screen.getByText('Acme Logistics')).toBeInTheDocument();
-    expect(screen.getByText('Advanced')).toBeInTheDocument();
-    expect(screen.getByText('Active')).toBeInTheDocument();
-
-    // Google Drive and Slack buttons should exist
+    expect(screen.getByTitle('Open Website / Landing Page')).toBeInTheDocument();
+    expect(screen.getByTitle('Open LinkedIn Company Page')).toBeInTheDocument();
     expect(screen.getByTitle('Open Google Drive Folder')).toBeInTheDocument();
     expect(screen.getByTitle('Open Slack Channel')).toBeInTheDocument();
-    // Facebook and Instagram buttons should not exist
-    expect(screen.queryByTitle('Open Facebook Page')).not.toBeInTheDocument();
 
-    // Re-render with Client 2 (Paused with reason)
-    rerender(<SelectedClientHeader client={mockClients[1]} />);
-    expect(screen.getByText('Beta Retailers')).toBeInTheDocument();
-    expect(screen.getByText('Paused — Payment overdue')).toBeInTheDocument();
-    // No links for client 2
-    expect(screen.queryByTitle('Open Google Drive Folder')).not.toBeInTheDocument();
+    // Combined LinkedIn tracker button
+    const linkedInBtn = screen.getByRole('button', { name: /linkedin profiles/i });
+    expect(linkedInBtn).toBeInTheDocument();
+    expect(screen.getByText('LinkedIn Profiles (2/3)')).toBeInTheDocument();
+    expect(screen.getByText('Pending')).toBeInTheDocument();
+
+    // Click to open popover
+    fireEvent.click(linkedInBtn);
+    expect(screen.getByText('LinkedIn Access Readiness')).toBeInTheDocument();
+    expect(screen.getByText('2 of 3 LinkedIn Profiles Added')).toBeInTheDocument();
   });
 
-  // 6. 30-DAY SETUP WORKSPACE & ADD TASK PLACEHOLDER
-  it('8. ClientWorkspaceView renders Week 1-4 tabs and + Add Task placeholder without DB mutation', () => {
+  // 10. 30-DAY WORKSPACE WITH ADD TASK PLACEHOLDER
+  it('10. ClientWorkspaceView renders Week 1-4 and + Add Task placeholder without DB mutation', () => {
     render(
       <ClientWorkspaceView
         client={mockClients[0]}
@@ -289,23 +387,20 @@ describe('Phase 2B: Client Management Foundation Tests', () => {
       />
     );
 
-    // 4 Weekly Tabs
     expect(screen.getByText('Week 1')).toBeInTheDocument();
     expect(screen.getByText('Week 2')).toBeInTheDocument();
     expect(screen.getByText('Week 3')).toBeInTheDocument();
     expect(screen.getByText('Week 4')).toBeInTheDocument();
 
-    // Add Task placeholder button
     const addTaskBtn = screen.getByRole('button', { name: /\+ add task/i });
     expect(addTaskBtn).toBeInTheDocument();
 
-    // Clicking Add Task shows neutral message toast
     fireEvent.click(addTaskBtn);
     expect(screen.getByText('Task creation will be configured in the next phase.')).toBeInTheDocument();
   });
 
-  // 7. ROUTE ACCESS CONTROL
-  it('9. Anonymous user attempting to access /clients is redirected to /login', async () => {
+  // 11. ROUTE PROTECTION
+  it('11. Anonymous user attempting to access /clients is redirected to /login', async () => {
     mockGetUser.mockResolvedValue({ data: { user: null }, error: null });
 
     await act(async () => {
@@ -334,8 +429,8 @@ describe('Phase 2B: Client Management Foundation Tests', () => {
     });
   });
 
-  // 8. SECURITY AUDIT
-  it('10. Frontend bundle contains zero service-role keys or admin bypass tokens', () => {
+  // 12. SECURITY AUDIT
+  it('12. Frontend bundle contains zero service-role keys or admin bypass tokens', () => {
     expect(import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY).toBeUndefined();
     expect(import.meta.env.SUPABASE_SERVICE_ROLE_KEY).toBeUndefined();
   });

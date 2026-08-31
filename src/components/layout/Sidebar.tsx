@@ -68,28 +68,42 @@ export const Sidebar: React.FC = () => {
     'folder-2-1': true
   });
 
-  // Client Modals State
+  // Client Modals & Loading State
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
   const [sourceClientForDuplicate, setSourceClientForDuplicate] = useState<ClientRecord | null>(null);
   const [eligibleManagers, setEligibleManagers] = useState<UserProfile[]>([]);
+  const [isClientsLoading, setIsClientsLoading] = useState(true);
+  const [clientsError, setClientsError] = useState<string | null>(null);
 
-  // Fetch Clients & Managers
-  useEffect(() => {
-    async function loadClientData() {
-      const [fetchedClients, fetchedManagers] = await Promise.all([
+  const loadClientData = async () => {
+    setIsClientsLoading(true);
+    setClientsError(null);
+    try {
+      const [clientRes, fetchedManagers] = await Promise.all([
         clientManagementService.fetchClients(),
         clientManagementService.fetchEligibleManagers()
       ]);
-      setClients(fetchedClients);
-      setEligibleManagers(fetchedManagers);
-
-      if (!selectedClientId && fetchedClients.length > 0) {
-        setSelectedClientId(fetchedClients[0].id);
+      if (clientRes.error) {
+        setClientsError(clientRes.error);
+      } else {
+        setClients(clientRes.data);
+        if (!selectedClientId && clientRes.data.length > 0) {
+          setSelectedClientId(clientRes.data[0].id);
+        }
       }
+      setEligibleManagers(fetchedManagers);
+    } catch (err: any) {
+      setClientsError(err?.message || 'Failed to load clients.');
+    } finally {
+      setIsClientsLoading(false);
     }
+  };
+
+  // Fetch Clients & Managers on mount
+  useEffect(() => {
     loadClientData();
-  }, [setClients, selectedClientId, setSelectedClientId]);
+  }, [setClients]);
 
   const selectedClient = clients.find((c) => c.id === selectedClientId) || clients[0] || null;
 
@@ -229,6 +243,9 @@ export const Sidebar: React.FC = () => {
           <ClientSwitcher
             clients={clients}
             selectedClient={selectedClient}
+            isLoading={isClientsLoading}
+            fetchError={clientsError}
+            onRetry={loadClientData}
             onSelectClient={handleSelectClient}
             onOpenCreateModal={handleOpenCreateModal}
             onOpenDuplicateModal={handleOpenDuplicateModal}

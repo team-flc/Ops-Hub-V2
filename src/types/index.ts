@@ -319,7 +319,14 @@ export interface FilterState {
 export type ClientPackage = 'Basic' | 'Intermediate' | 'Advanced';
 export type ClientStatus = 'Onboarding' | 'Active' | 'Paused' | 'Archived';
 export type ClientPauseReason = 'Payment overdue' | 'Client request' | 'Operational reason' | 'Other';
-export type ClientLinkType = 'google_drive' | 'facebook' | 'instagram' | 'slack_channel' | 'whatsapp_group';
+export type ClientLinkType = 
+  | 'website' 
+  | 'google_drive' 
+  | 'facebook' 
+  | 'instagram' 
+  | 'linkedin_company_page' 
+  | 'slack_channel' 
+  | 'whatsapp_group';
 
 export interface ClientLink {
   id?: string;
@@ -329,6 +336,32 @@ export interface ClientLink {
   createdBy?: string;
   createdAt?: string;
   updatedAt?: string;
+}
+
+export interface ClientLinkedInProfile {
+  id: string;
+  clientId: string;
+  profileLabel: string;
+  profileUrl: string;
+  salesNavigatorActive: boolean;
+  salesNavigatorActivatedOn?: string | null;
+  sortOrder: number;
+  status: 'active' | 'archived';
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt?: string | null;
+}
+
+export interface LinkedInReadiness {
+  totalAdded: number;
+  requiredCount: number;
+  salesNavActiveCount: number;
+  isProfileCountComplete: boolean;
+  isSalesNavComplete: boolean;
+  isComplete: boolean;
+  statusText: string;
+  summaryLabel: string;
 }
 
 export interface ClientRecord {
@@ -341,6 +374,8 @@ export interface ClientRecord {
   activationDate: string;
   status: ClientStatus;
   pauseReason?: ClientPauseReason | null;
+  requiredLinkedinProfileCount: number;
+  linkedinProfiles?: ClientLinkedInProfile[];
   sourceClientId?: string | null;
   sourceCompanyName?: string | null;
   links: Partial<Record<ClientLinkType, string>>;
@@ -354,6 +389,7 @@ export interface ClientRecord {
 export interface ClientAuditEntry {
   id: string;
   clientId?: string;
+  linkedinProfileId?: string;
   actorId?: string;
   actorName?: string;
   action: string;
@@ -363,4 +399,5 @@ export interface ClientAuditEntry {
   safeMetadata?: Record<string, any>;
   createdAt: string;
 }
+
 
