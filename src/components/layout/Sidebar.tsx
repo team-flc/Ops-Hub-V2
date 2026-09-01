@@ -94,8 +94,7 @@ export const Sidebar: React.FC = () => {
   };
 
   const isManagerOrOwner = profile?.role === 'owner' || profile?.role === 'operational_manager';
-  const isClientWorkspaceActive = viewMode === 'client_workspace' || viewMode === 'clients' || !['directory'].includes(viewMode);
-  const isTeamManagementActive = viewMode === 'directory';
+  const isSettingsActive = viewMode === 'settings';
 
   if (sidebarCollapsed) {
     return (
@@ -109,46 +108,24 @@ export const Sidebar: React.FC = () => {
           >
             <img src="/logo.png" alt="Faseeh Lall Logo" className="w-8 h-8 object-contain" />
           </button>
-
-          {/* Quick Icons */}
-          <button
-            type="button"
-            onClick={() => setViewMode('client_workspace')}
-            className={`p-2.5 rounded-xl transition-colors ${
-              isClientWorkspaceActive
-                ? 'bg-brand-500/10 text-brand-500'
-                : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-100'
-            }`}
-            title="Client Management"
-          >
-            <Building2 className="w-5 h-5" />
-          </button>
-
-          {isManagerOrOwner && (
-            <button
-              type="button"
-              onClick={() => setViewMode('directory')}
-              className={`p-2.5 rounded-xl transition-colors ${
-                isTeamManagementActive
-                  ? 'bg-brand-500/10 text-brand-500'
-                  : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-100'
-              }`}
-              title="Team Management"
-            >
-              <Users className="w-5 h-5" />
-            </button>
-          )}
         </div>
 
         <div className="flex flex-col items-center gap-3">
-          <button
-            type="button"
-            onClick={() => signOut()}
-            className="p-2 text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl transition-colors"
-            title="Sign Out"
-          >
-            <LogOut className="w-5 h-5" />
-          </button>
+          {/* Settings icon for Owner and Manager */}
+          {isManagerOrOwner && (
+            <button
+              type="button"
+              onClick={() => setViewMode('settings')}
+              className={`p-2.5 rounded-xl transition-colors ${
+                isSettingsActive
+                  ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
+                  : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-100'
+              }`}
+              title="Settings"
+            >
+              <Building2 className="w-5 h-5" />
+            </button>
+          )}
 
           <button
             type="button"
@@ -165,9 +142,9 @@ export const Sidebar: React.FC = () => {
 
   return (
     <aside className="w-64 bg-white dark:bg-dark-sidebar border-r border-gray-200 dark:border-dark-border h-screen flex flex-col justify-between z-30 flex-shrink-0 select-none">
-      {/* Top Organization Header & Navigation */}
-      <div>
-        <div className="p-3.5 border-b border-gray-100 dark:border-dark-border/60 flex items-center justify-between bg-white dark:bg-dark-card/50">
+      {/* Top Organization Header & Client Switcher */}
+      <div className="flex-1 flex flex-col min-h-0">
+        <div className="p-3.5 border-b border-gray-100 dark:border-dark-border/60 flex items-center justify-between bg-white dark:bg-dark-card/50 flex-shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="h-9 max-w-[160px] flex items-center">
               <img src="/logo.png" alt="FASEEH LALL & CO." className="h-7 w-auto object-contain" />
@@ -185,10 +162,11 @@ export const Sidebar: React.FC = () => {
         </div>
 
         {/* GoHighLevel-Style Client Switcher */}
-        <div className="p-3 border-b border-gray-100 dark:border-dark-border/60">
+        <div className="p-3 border-b border-gray-100 dark:border-dark-border/60 flex-shrink-0">
           <ClientSwitcher
             clients={clients}
             selectedClient={selectedClient}
+            currentUserRole={profile?.role}
             isLoading={isClientsLoading}
             fetchError={clientsError}
             onRetry={loadClientData}
@@ -198,65 +176,27 @@ export const Sidebar: React.FC = () => {
           />
         </div>
 
-        {/* Clean Application Navigation */}
-        <div className="p-3 space-y-1.5 text-xs">
+        {/* Space reserved for future operational modules */}
+        <div className="flex-1 overflow-y-auto p-3" />
+      </div>
+
+      {/* Bottom Section: Single Settings Action for Owner/Manager */}
+      {isManagerOrOwner && (
+        <div className="p-3 border-t border-gray-100 dark:border-dark-border/60 bg-gray-50/50 dark:bg-dark-300/30 flex-shrink-0">
           <button
             type="button"
-            onClick={() => setViewMode('client_workspace')}
-            className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all ${
-              isClientWorkspaceActive
-                ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400 font-bold shadow-sm'
-                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100 font-medium'
+            onClick={() => setViewMode('settings')}
+            className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl transition-all ${
+              isSettingsActive
+                ? 'bg-brand-500 text-white font-bold shadow-md shadow-brand-500/25'
+                : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100 font-semibold'
             }`}
           >
-            <Building2 className="w-4 h-4 text-brand-500" />
-            <span>Client Management</span>
-          </button>
-
-          {isManagerOrOwner && (
-            <button
-              type="button"
-              onClick={() => setViewMode('directory')}
-              className={`w-full flex items-center gap-2.5 px-3 py-2.5 rounded-xl transition-all ${
-                isTeamManagementActive
-                  ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400 font-bold shadow-sm'
-                  : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100 font-medium'
-              }`}
-            >
-              <Users className="w-4 h-4 text-emerald-500" />
-              <span>Team Management</span>
-            </button>
-          )}
-        </div>
-      </div>
-
-      {/* Bottom User Profile Section with Single Sign Out */}
-      <div className="p-3 border-t border-gray-100 dark:border-dark-border/60 bg-gray-50/50 dark:bg-dark-300/30">
-        <div className="flex items-center justify-between gap-2 p-1.5 rounded-xl bg-white dark:bg-dark-card border border-gray-100 dark:border-dark-border shadow-sm">
-          <div className="flex items-center gap-2.5 min-w-0">
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-600 text-white font-black text-xs flex items-center justify-center shadow-sm flex-shrink-0">
-              {displayInitials}
-            </div>
-            <div className="min-w-0">
-              <div className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">
-                {displayName}
-              </div>
-              <div className="text-[10px] font-semibold text-brand-600 dark:text-brand-400 truncate">
-                {displayRole}
-              </div>
-            </div>
-          </div>
-
-          <button
-            type="button"
-            onClick={() => signOut()}
-            className="p-1.5 text-gray-400 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-lg transition-colors flex-shrink-0"
-            title="Sign Out"
-          >
-            <LogOut className="w-4 h-4" />
+            <Building2 className={`w-4 h-4 ${isSettingsActive ? 'text-white' : 'text-brand-500'}`} />
+            <span className="text-xs">Settings</span>
           </button>
         </div>
-      </div>
+      )}
 
       {/* Modals for Create & Duplicate Client */}
       <CreateClientModal

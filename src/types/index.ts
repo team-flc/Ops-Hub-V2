@@ -224,13 +224,24 @@ export interface UserProfile {
   workEmail?: string;
   fullName: string;
   phone?: string | null;
+  backupPhone?: string | null;
+  bio?: string | null;
+  avatarUrl?: string | null;
+  linkedinUrl?: string | null;
+  contactEmail?: string | null;
   role: UserRole;
   status: AccountStatus;
   designationId?: string | null;
+  designationName?: string;
   reportingManagerId?: string | null;
+  reportingManagerName?: string;
   startDate?: string;
   suspendedAt?: string | null;
   suspendedBy?: string | null;
+  archivedAt?: string | null;
+  archivedBy?: string | null;
+  archiveReason?: string | null;
+  previousStatus?: string | null;
   organizationId?: string | null;
   createdAt: string;
   updatedAt: string;
@@ -301,7 +312,11 @@ export type ViewMode =
   | 'directory' 
   | 'clients'
   | 'client_workspace'
-  | 'automations';
+  | 'automations'
+  | 'settings'
+  | 'profile';
+
+export type SettingsTab = 'team' | 'clients' | 'archive' | 'audit';
 
 export type GroupByOption = 'status' | 'priority' | 'assignee' | 'dueDate' | 'none';
 
@@ -368,11 +383,15 @@ export interface ClientRecord {
   id: string;
   companyName: string;
   clientName: string;
+  businessBio?: string | null;
+  industry?: string | null;
+  logoUrl?: string | null;
   package: ClientPackage;
   operationalManagerId: string;
   operationalManagerName?: string;
   activationDate: string;
   status: ClientStatus;
+  previousStatus?: string | null;
   pauseReason?: ClientPauseReason | null;
   requiredLinkedinProfileCount: number;
   linkedinProfiles?: ClientLinkedInProfile[];
@@ -384,6 +403,8 @@ export interface ClientRecord {
   createdAt: string;
   updatedAt: string;
   archivedAt?: string | null;
+  archivedBy?: string | null;
+  archiveReason?: string | null;
 }
 
 export interface ClientAuditEntry {
@@ -450,9 +471,84 @@ export interface ClientTaskEvent {
     | 'unblocked' 
     | 'submitted_for_review' 
     | 'review_returned' 
-    | 'archived';
+    | 'archived'
+    | 'restored';
   previousState?: any;
   newState?: any;
   notes?: string | null;
   createdAt: string;
 }
+
+// --- PHASE 3A.1: SYSTEM AUDIT & ARCHIVE TYPES ---
+export type AuditEntityType = 
+  | 'client' 
+  | 'team_member' 
+  | 'task' 
+  | 'profile' 
+  | 'client_link' 
+  | 'linkedin_profile' 
+  | 'department' 
+  | 'designation';
+
+export type AuditEventAction = 
+  | 'user_created' 
+  | 'user_updated' 
+  | 'user_suspended' 
+  | 'user_reactivated' 
+  | 'user_archived' 
+  | 'user_restored' 
+  | 'password_reset_requested' 
+  | 'password_reset_completed' 
+  | 'profile_updated' 
+  | 'avatar_updated' 
+  | 'client_access_granted' 
+  | 'client_access_revoked' 
+  | 'client_created' 
+  | 'client_updated' 
+  | 'client_paused' 
+  | 'client_resumed' 
+  | 'client_archived' 
+  | 'client_restored' 
+  | 'client_duplicated' 
+  | 'client_logo_updated' 
+  | 'client_links_updated' 
+  | 'task_created' 
+  | 'task_updated' 
+  | 'task_assigned' 
+  | 'task_reassigned' 
+  | 'task_status_changed' 
+  | 'task_archived' 
+  | 'task_restored';
+
+export interface SystemAuditEvent {
+  id: string;
+  actorId?: string | null;
+  actorName?: string | null;
+  actorRole?: string | null;
+  action: AuditEventAction | string;
+  entityType: AuditEntityType | string;
+  entityId: string;
+  entityName?: string | null;
+  clientId?: string | null;
+  clientName?: string | null;
+  previousState?: Record<string, any> | null;
+  newState?: Record<string, any> | null;
+  reason?: string | null;
+  metadata?: Record<string, any> | null;
+  createdAt: string;
+}
+
+export interface ArchivedRecord {
+  id: string;
+  entityType: 'client' | 'team_member' | 'task';
+  entityName: string;
+  clientId?: string | null;
+  clientName?: string | null;
+  archivedBy?: string | null;
+  archivedByName?: string | null;
+  archivedAt: string;
+  archiveReason: string;
+  previousStatus: string;
+  metadata?: Record<string, any> | null;
+}
+

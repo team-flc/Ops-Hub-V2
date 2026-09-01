@@ -29,12 +29,17 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
   eligibleManagers,
   onOpenDesignationManager
 }) => {
-  const clientsVendors = useOpsStore((state) => state.clientsVendors);
+  const clients = useOpsStore((state) => state.clients);
 
   // Form State
   const [fullName, setFullName] = useState('');
   const [workEmail, setWorkEmail] = useState('');
   const [phone, setPhone] = useState('');
+  const [backupPhone, setBackupPhone] = useState('');
+  const [contactEmail, setContactEmail] = useState('');
+  const [linkedinUrl, setLinkedinUrl] = useState('');
+  const [bio, setBio] = useState('');
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedDeptIds, setSelectedDeptIds] = useState<string[]>([]);
   const [selectedDesignationId, setSelectedDesignationId] = useState('');
@@ -485,12 +490,12 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
                   </h3>
                   <span className="text-[11px] text-slate-400">Default: 0 clients</span>
                 </div>
-                {clientsVendors.filter((c) => c.type === 'client').length === 0 ? (
-                  <p className="text-xs text-slate-400 italic">No active clients available.</p>
+                {clients.filter((c) => c.status !== 'Archived').length === 0 ? (
+                  <p className="text-xs text-slate-400 italic">No available clients.</p>
                 ) : (
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-36 overflow-y-auto p-1">
-                    {clientsVendors
-                      .filter((c) => c.type === 'client')
+                    {clients
+                      .filter((c) => c.status !== 'Archived')
                       .map((client) => {
                         const isSelected = selectedClientIds.includes(client.id);
                         return (
@@ -504,7 +509,15 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
                                 : 'bg-slate-50 dark:bg-dark-sidebar border-slate-200 dark:border-dark-border text-slate-700 dark:text-gray-300 hover:bg-slate-100'
                             }`}
                           >
-                            <span className="truncate">{client.name}</span>
+                            <div className="min-w-0 pr-1 truncate">
+                              <span className="truncate block font-bold">{client.companyName}</span>
+                              {client.status === 'Paused' && (
+                                <span className="text-[9px] text-amber-600 dark:text-amber-400 font-bold block">(Paused)</span>
+                              )}
+                              {client.status === 'Onboarding' && (
+                                <span className="text-[9px] text-indigo-600 dark:text-indigo-400 font-bold block">(Onboarding)</span>
+                              )}
+                            </div>
                             {isSelected && <Check className="w-3.5 h-3.5 text-brand-600 flex-shrink-0 ml-1" />}
                           </button>
                         );
