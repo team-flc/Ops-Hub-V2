@@ -377,7 +377,8 @@ describe('Phase 2B: Client Management & Dynamic LinkedIn Access Tests', () => {
   });
 
   // 10. 30-DAY WORKSPACE WITH ADD TASK PLACEHOLDER
-  it('10. ClientWorkspaceView renders Week 1-4 and + Add Task placeholder without DB mutation', () => {
+  // 10. 30-DAY WORKSPACE WITH ADD TASK ACTION
+  it('10. ClientWorkspaceView renders Week 1-4 and opens Create Task modal on + Add Task click', () => {
     render(
       <ClientWorkspaceView
         client={mockClients[0]}
@@ -392,11 +393,11 @@ describe('Phase 2B: Client Management & Dynamic LinkedIn Access Tests', () => {
     expect(screen.getByText('Week 3')).toBeInTheDocument();
     expect(screen.getByText('Week 4')).toBeInTheDocument();
 
-    const addTaskBtn = screen.getByRole('button', { name: /\+ add task/i });
-    expect(addTaskBtn).toBeInTheDocument();
+    const addTaskBtns = screen.getAllByRole('button', { name: /\+ add task/i });
+    expect(addTaskBtns.length).toBe(1);
 
-    fireEvent.click(addTaskBtn);
-    expect(screen.getByText('Task creation will be configured in the next phase.')).toBeInTheDocument();
+    fireEvent.click(addTaskBtns[0]);
+    expect(screen.getByText(/Create Operational Task/i)).toBeInTheDocument();
   });
 
   // 11. ROUTE PROTECTION
@@ -515,8 +516,8 @@ describe('Phase 2B: Client Management & Dynamic LinkedIn Access Tests', () => {
     expect(screen.queryByText(/Operations Checklist/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Initial 30-Day Setup Plan/i)).not.toBeInTheDocument();
 
-    // Centered + Add Task button exists
-    expect(screen.getByRole('button', { name: /\+ add task/i })).toBeInTheDocument();
+    // Exactly one + Add Task button exists
+    expect(screen.getAllByRole('button', { name: /\+ add task/i }).length).toBe(1);
   });
 });
 

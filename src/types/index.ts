@@ -400,4 +400,59 @@ export interface ClientAuditEntry {
   createdAt: string;
 }
 
+// --- PHASE 3A: OPERATIONAL TASK MANAGEMENT TYPES ---
+export type ClientTaskPriority = 'Low' | 'Normal' | 'High' | 'Urgent';
+export type ClientTaskStatus = 'Draft' | 'Assigned' | 'In Progress' | 'Blocked' | 'Team Review';
 
+export interface ClientTask {
+  id: string;
+  clientId: string;
+  weekNumber: 1 | 2 | 3 | 4;
+  title: string;
+  details?: string | null;
+  departmentId: string;
+  departmentName?: string;
+  assigneeId?: string | null;
+  assigneeName?: string | null;
+  assigneeAvatar?: string | null;
+  assigneeRole?: string | null;
+  isAssigneeEligible?: boolean;
+  priority: ClientTaskPriority;
+  plannedStart: string;
+  dueDate: string;
+  status: ClientTaskStatus;
+  blockedReason?: string | null;
+  sortOrder: number;
+  createdBy?: string | null;
+  createdByName?: string | null;
+  createdAt: string;
+  updatedBy?: string | null;
+  updatedAt: string;
+  archivedAt?: string | null;
+  archivedBy?: string | null;
+  archiveReason?: string | null;
+  isOverdue?: boolean;
+}
+
+export interface ClientTaskEvent {
+  id: string;
+  taskId: string;
+  clientId: string;
+  actorId?: string | null;
+  actorName?: string | null;
+  eventType: 
+    | 'created' 
+    | 'field_updated' 
+    | 'assigned' 
+    | 'reassigned' 
+    | 'status_changed' 
+    | 'blocked' 
+    | 'unblocked' 
+    | 'submitted_for_review' 
+    | 'review_returned' 
+    | 'archived';
+  previousState?: any;
+  newState?: any;
+  notes?: string | null;
+  createdAt: string;
+}
