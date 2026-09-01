@@ -342,13 +342,240 @@ describe('Phase 3A: Operational Task Management Core Unit & Security Tests', () 
     expect(screen.getByText('Week 3')).toBeInTheDocument();
     expect(screen.getByText('Week 4')).toBeInTheDocument();
 
-    // Owner has + Add Task button
+    // Owner has exactly ONE + Add Task button
     const addBtns = screen.getAllByRole('button', { name: /\+ add task/i });
-    expect(addBtns.length).toBeGreaterThan(0);
+    expect(addBtns.length).toBe(1);
   });
 
-  // 11. SECURITY & ZERO SERVICE ROLE KEY AUDIT
-  it('11. Frontend contains zero service-role keys or admin bypass tokens', () => {
+  // 11. EXACTLY ONE + ADD TASK BUTTON & CORRECT WEEK PROPS
+  it('11. Renders exactly one + Add Task button in Week 2, Week 3, Week 4 and passes correct week to modal', async () => {
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'departments') {
+        return {
+          select: () => ({
+            eq: () => ({
+              order: () => Promise.resolve({ data: mockDepartments, error: null })
+            })
+          })
+        };
+      }
+      if (table === 'client_team_access') {
+        return {
+          select: () => ({
+            eq: () => Promise.resolve({ data: [{ profile_id: 'tm-1' }], error: null })
+          })
+        };
+      }
+      if (table === 'profiles') {
+        return {
+          select: () => ({
+            eq: () => ({
+              order: () => Promise.resolve({ data: mockUsers, error: null })
+            })
+          })
+        };
+      }
+      if (table === 'client_tasks') {
+        return {
+          select: () => ({
+            eq: () => ({
+              is: () => ({
+                order: () => ({
+                  order: () => ({
+                    eq: () => Promise.resolve({ data: [], error: null })
+                  })
+                })
+              })
+            })
+          })
+        };
+      }
+      return {
+        select: () => ({ eq: () => Promise.resolve({ data: [], error: null }) })
+      };
+    });
+
+    render(
+      <ClientWorkspaceView
+        client={mockClient}
+        currentUserProfile={mockUsers[1]} // Manager
+        eligibleManagers={mockUsers.slice(0, 2)}
+        onClientUpdated={vi.fn()}
+      />
+    );
+
+    // Switch to Week 2
+    fireEvent.click(screen.getByRole('button', { name: /week 2/i }));
+    
+    // Exactly ONE + Add Task button must exist
+    const week2Btns = screen.getAllByRole('button', { name: /\+ add task/i });
+    expect(week2Btns.length).toBe(1);
+
+    // Click + Add Task in Week 2
+    fireEvent.click(week2Btns[0]);
+    expect(screen.getByText('Week 2 Setup')).toBeInTheDocument();
+    expect(screen.getByLabelText(/workspace week/i)).toHaveValue('2');
+
+    // Cancel modal
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+
+    // Switch to Week 3 and open
+    fireEvent.click(screen.getByRole('button', { name: /week 3/i }));
+    const week3Btns = screen.getAllByRole('button', { name: /\+ add task/i });
+    expect(week3Btns.length).toBe(1);
+    fireEvent.click(week3Btns[0]);
+    expect(screen.getByText('Week 3 Setup')).toBeInTheDocument();
+    expect(screen.getByLabelText(/workspace week/i)).toHaveValue('3');
+
+    // Cancel modal
+    fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+
+    // Switch to Week 4 and open
+    fireEvent.click(screen.getByRole('button', { name: /week 4/i }));
+    const week4Btns = screen.getAllByRole('button', { name: /\+ add task/i });
+    expect(week4Btns.length).toBe(1);
+    fireEvent.click(week4Btns[0]);
+    expect(screen.getByText('Week 4 Setup')).toBeInTheDocument();
+    expect(screen.getByLabelText(/workspace week/i)).toHaveValue('4');
+  });
+
+  // 12. CHANGING WORKSPACE WEEK DROPDOWN IN MODAL UPDATES BADGE AND SUBMISSION PAYLOAD
+  it('12. Changing Workspace Week inside CreateClientTaskModal updates badge and create payload', async () => {
+    const insertMock = vi.fn().mockReturnValue({
+      select: () => ({
+        single: () => Promise.resolve({
+          data: {
+            id: 'new-task-w3',
+            client_id: 'client-1',
+            week_number: 3,
+            title: 'Week 3 Deliverable',
+            department_id: 'dept-1',
+            assignee_id: null,
+            priority: 'Normal',
+            planned_start: '2026-09-02T09:00:00.000Z',
+            due_date: '2026-09-05T18:00:00.000Z',
+            status: 'Draft',
+            created_at: new Date().toISOString()
+          },
+          error: null
+        })
+      })
+    });
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'client_tasks') return { insert: insertMock };
+      if (table === 'client_task_events') return { insert: vi.fn().mockResolvedValue({ error: null }) };
+      return {};
+    });
+
+    const onClose = vi.fn();
+    const onSuccess = vi.fn();
+
+    render(
+      <CreateClientTaskModal
+        isOpen={true}
+        onClose={onClose}
+        onSuccess={onSuccess}
+        client={mockClient}
+        weekNumber={1}
+        departments={mockDepartments}
+        eligibleAssignees={mockUsers.slice(0, 3)}
+      />
+    );
+
+    // Initial badge: Week 1 Setup
+    expect(screen.getByText(/Week 1 Setup/i)).toBeInTheDocument();
+
+    // Change Workspace Week dropdown to Week 3
+    const weekSelect = screen.getByLabelText(/workspace week/i);
+    fireEvent.change(weekSelect, { target: { value: '3' } });
+
+    // Badge updates to Week 3 Setup
+    expect(screen.getByText(/Week 3 Setup/i)).toBeInTheDocument();
+
+    // Fill title and department
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Set up Apollo/i), { target: { value: 'Week 3 Deliverable' } });
+    fireEvent.change(screen.getByLabelText(/responsible department/i), { target: { value: 'dept-1' } });
+
+    // Submit form
+    const form = screen.getByRole('button', { name: /create task/i }).closest('form')!;
+    await act(async () => {
+      fireEvent.submit(form);
+    });
+
+    await waitFor(() => {
+      expect(onSuccess).toHaveBeenCalledWith(
+        expect.objectContaining({
+          weekNumber: 3,
+          title: 'Week 3 Deliverable'
+        })
+      );
+    });
+  });
+
+  // 13. SINGLE BUTTON REMAINS AVAILABLE AFTER TASKS EXIST
+  it('13. Exactly one + Add Task button remains available when tasks exist', () => {
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'departments') {
+        return {
+          select: () => ({
+            eq: () => ({
+              order: () => Promise.resolve({ data: mockDepartments, error: null })
+            })
+          })
+        };
+      }
+      if (table === 'client_team_access') {
+        return {
+          select: () => ({
+            eq: () => Promise.resolve({ data: [{ profile_id: 'tm-1' }], error: null })
+          })
+        };
+      }
+      if (table === 'profiles') {
+        return {
+          select: () => ({
+            eq: () => ({
+              order: () => Promise.resolve({ data: mockUsers, error: null })
+            })
+          })
+        };
+      }
+      if (table === 'client_tasks') {
+        return {
+          select: () => ({
+            eq: () => ({
+              is: () => ({
+                order: () => ({
+                  order: () => ({
+                    eq: () => Promise.resolve({ data: [mockTask], error: null })
+                  })
+                })
+              })
+            })
+          })
+        };
+      }
+      return {
+        select: () => ({ eq: () => Promise.resolve({ data: [], error: null }) })
+      };
+    });
+
+    render(
+      <ClientWorkspaceView
+        client={mockClient}
+        currentUserProfile={mockUsers[0]} // Owner
+        eligibleManagers={mockUsers.slice(0, 2)}
+        onClientUpdated={vi.fn()}
+      />
+    );
+
+    const addBtns = screen.getAllByRole('button', { name: /\+ add task/i });
+    expect(addBtns.length).toBe(1);
+  });
+
+  // 14. SECURITY & ZERO SERVICE ROLE KEY AUDIT
+  it('14. Frontend contains zero service-role keys or admin bypass tokens', () => {
     expect(import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY).toBeUndefined();
     expect(import.meta.env.SUPABASE_SERVICE_ROLE_KEY).toBeUndefined();
   });

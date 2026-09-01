@@ -394,7 +394,7 @@ describe('Phase 2B: Client Management & Dynamic LinkedIn Access Tests', () => {
     expect(screen.getByText('Week 4')).toBeInTheDocument();
 
     const addTaskBtns = screen.getAllByRole('button', { name: /\+ add task/i });
-    expect(addTaskBtns.length).toBeGreaterThan(0);
+    expect(addTaskBtns.length).toBe(1);
 
     fireEvent.click(addTaskBtns[0]);
     expect(screen.getByText(/Create Operational Task/i)).toBeInTheDocument();
@@ -516,8 +516,8 @@ describe('Phase 2B: Client Management & Dynamic LinkedIn Access Tests', () => {
     expect(screen.queryByText(/Operations Checklist/i)).not.toBeInTheDocument();
     expect(screen.queryByText(/Initial 30-Day Setup Plan/i)).not.toBeInTheDocument();
 
-    // + Add Task button exists
-    expect(screen.getAllByRole('button', { name: /\+ add task/i }).length).toBeGreaterThan(0);
+    // Exactly one + Add Task button exists
+    expect(screen.getAllByRole('button', { name: /\+ add task/i }).length).toBe(1);
   });
 });
 

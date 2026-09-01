@@ -255,8 +255,8 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                   ))}
                 </div>
               ) : (
-                /* Clean Empty State when no tasks exist */
-                <div className="bg-white dark:bg-dark-card rounded-2xl border border-gray-200 dark:border-dark-border p-12 shadow-sm min-h-[260px] flex flex-col items-center justify-center text-center space-y-4">
+                /* Clean Empty State when no tasks exist (single + Add Task button remains in top-right header) */
+                <div className="bg-white dark:bg-dark-card rounded-2xl border border-gray-200 dark:border-dark-border p-12 shadow-sm min-h-[240px] flex flex-col items-center justify-center text-center space-y-3">
                   <div className="w-12 h-12 rounded-2xl bg-brand-500/10 text-brand-500 flex items-center justify-center border border-brand-500/20">
                     <Layers className="w-6 h-6" />
                   </div>
@@ -265,20 +265,9 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                       No Operational Tasks in Week {currentWeekNum}
                     </h4>
                     <p className="text-xs text-gray-400 mt-1 max-w-sm">
-                      Create operational checklists and deliverables for Week {currentWeekNum} setup.
+                      Create operational checklists and deliverables for Week {currentWeekNum} setup using the + Add Task button above.
                     </p>
                   </div>
-
-                  {isOwnerOrManager && (
-                    <button
-                      type="button"
-                      onClick={() => setIsCreateModalOpen(true)}
-                      className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-dark-200 dark:hover:bg-dark-100 text-gray-800 dark:text-gray-200 text-xs font-bold border border-gray-200 dark:border-dark-border transition-all hover:scale-[1.02] active:scale-[0.98]"
-                    >
-                      <Plus className="w-4 h-4 text-brand-500" />
-                      <span>+ Add Task</span>
-                    </button>
-                  )}
                 </div>
               )}
             </div>
@@ -298,6 +287,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
 
       {/* Modals */}
       <CreateClientTaskModal
+        key={`create-modal-week-${currentWeekNum}`}
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onSuccess={handleTaskCreated}
