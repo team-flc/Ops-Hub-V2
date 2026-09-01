@@ -30,6 +30,7 @@ import { CommandPalette } from './components/layout/CommandPalette';
 import { NewSpaceModal } from './components/spaces/NewSpaceModal';
 import { NewListModal } from './components/spaces/NewListModal';
 import { AutomationsModal } from './components/automations/AutomationsModal';
+import { Building2 } from 'lucide-react';
 import { UserProfile, ClientRecord } from './types';
 
 /**
@@ -172,9 +173,9 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
         return <DocsView />;
       case 'directory':
         return isManagerOrOwner ? <TeamManagementView /> : <OperationsDirectory />;
-      case 'clients':
-        return <ClientsView />;
       case 'client_workspace':
+      case 'clients':
+      default:
         return selectedClient ? (
           <ClientWorkspaceView
             client={selectedClient}
@@ -183,17 +184,18 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
             onClientUpdated={updateClientRecord}
           />
         ) : (
-          <div className="p-12 text-center text-gray-500">
+          <div className="p-12 text-center text-gray-500 max-w-lg mx-auto mt-16 space-y-3">
+            <div className="w-12 h-12 rounded-2xl bg-brand-500/10 text-brand-500 flex items-center justify-center mx-auto border border-brand-500/20">
+              <Building2 className="w-6 h-6" />
+            </div>
             <h3 className="text-base font-bold text-gray-800 dark:text-gray-200">
-              No Client Selected
+              No Accessible Client Workspace
             </h3>
-            <p className="text-xs text-gray-400 mt-1">
-              Use the Client Switcher in the top of the left sidebar to select or create a client workspace.
+            <p className="text-xs text-gray-400">
+              Select an accessible client workspace from the Client Switcher in the left sidebar, or create a new client if authorized.
             </p>
           </div>
         );
-      default:
-        return <ListView />;
     }
   };
 

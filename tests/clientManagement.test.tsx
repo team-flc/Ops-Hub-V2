@@ -434,4 +434,89 @@ describe('Phase 2B: Client Management & Dynamic LinkedIn Access Tests', () => {
     expect(import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY).toBeUndefined();
     expect(import.meta.env.SUPABASE_SERVICE_ROLE_KEY).toBeUndefined();
   });
+
+  // 13. CLEAN STAFF SIDEBAR & SINGLE SIGN OUT
+  it('13. Clean staff sidebar contains only Client Management, Team Management, and Single Sign Out in profile', async () => {
+    const { Sidebar } = await import('../src/components/layout/Sidebar');
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'u-1', email: 'owner@flc.com' } }, error: null });
+
+    await act(async () => {
+      render(
+        <AuthProvider>
+          <Sidebar />
+        </AuthProvider>
+      );
+    });
+
+    // Approved features exist
+    expect(screen.getByText('Client Management')).toBeInTheDocument();
+    expect(screen.getByTitle('Switch Client Workspace')).toBeInTheDocument();
+
+    // Exactly one Sign Out exists
+    const signOutButtons = screen.getAllByTitle('Sign Out');
+    expect(signOutButtons.length).toBe(1);
+
+    // Unapproved placeholder navigation items are completely removed
+    expect(screen.queryByText(/Everything/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Executive Dashboard/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/SOPs & Playbooks/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Automations Engine/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Operations Spaces/i)).not.toBeInTheDocument();
+  });
+
+  // 14. CLEAN TOP HEADER
+  it('14. Top header contains only breadcrumb and theme toggle, and no unapproved task controls', async () => {
+    mockGetUser.mockResolvedValue({ data: { user: null }, error: null });
+
+    await act(async () => {
+      render(
+        <AuthProvider>
+          <Header />
+        </AuthProvider>
+      );
+    });
+
+    // Approved items
+    expect(screen.getByText('FASEEH LALL & CO.')).toBeInTheDocument();
+    expect(screen.getByText('Ops Hub')).toBeInTheDocument();
+    expect(screen.getByTitle('Toggle Dark / Light Theme')).toBeInTheDocument();
+
+    // Removed items
+    expect(screen.queryByPlaceholderText(/Search or jump to/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('Ctrl+K')).not.toBeInTheDocument();
+    expect(screen.queryByTitle(/Supabase/i)).not.toBeInTheDocument();
+    expect(screen.queryByText('New Task')).not.toBeInTheDocument();
+    expect(screen.queryByText('List')).not.toBeInTheDocument();
+    expect(screen.queryByText('Board')).not.toBeInTheDocument();
+    expect(screen.queryByText('Calendar')).not.toBeInTheDocument();
+  });
+
+  // 15. CLEAN 30-DAY SETUP WORKSPACE
+  it('15. ClientWorkspaceView hides Reporting tab and shows only Week 1-4 without subtitles', () => {
+    render(
+      <ClientWorkspaceView
+        client={mockClients[0]}
+        currentUserProfile={mockManagers[1]}
+        eligibleManagers={mockManagers}
+        onClientUpdated={vi.fn()}
+      />
+    );
+
+    // Only 30-Day Setup and Client Details tabs exist
+    expect(screen.getByText('30-Day Setup')).toBeInTheDocument();
+    expect(screen.getByText('Client Details')).toBeInTheDocument();
+    expect(screen.queryByText('Reporting')).not.toBeInTheDocument();
+
+    // Subtitles removed from week tabs
+    expect(screen.queryByText(/Kickoff & Foundation Setup/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Asset Gathering & Infrastructure/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Execution & Campaigns Staging/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Review, Optimization & Handover/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Operations Checklist/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Initial 30-Day Setup Plan/i)).not.toBeInTheDocument();
+
+    // Centered + Add Task button exists
+    expect(screen.getByRole('button', { name: /\+ add task/i })).toBeInTheDocument();
+  });
 });
+

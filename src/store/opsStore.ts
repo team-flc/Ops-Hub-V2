@@ -141,7 +141,7 @@ export const useOpsStore = create<OpsStore>()(
       selectedClientId: null,
       users: INITIAL_USERS,
       currentUser: INITIAL_USERS[0],
-      viewMode: 'list',
+      viewMode: 'client_workspace',
       filter: DEFAULT_FILTER,
       sidebarCollapsed: false,
       isCreateTaskModalOpen: false,
