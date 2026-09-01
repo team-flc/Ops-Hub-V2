@@ -1,8 +1,19 @@
-import React, { useState } from 'react';
-import { Calendar, Info, Plus, Sparkles } from 'lucide-react';
-import { ClientRecord, UserProfile } from '../../types';
+import React, { useState, useEffect } from 'react';
+import { Calendar, Info, Plus, Sparkles, Loader2, Layers } from 'lucide-react';
+import { 
+  ClientRecord, 
+  ClientTask, 
+  ClientTaskStatus, 
+  Department, 
+  UserProfile 
+} from '../../types';
 import { SelectedClientHeader } from './SelectedClientHeader';
 import { ClientDetailsTab } from './ClientDetailsTab';
+import { ClientTaskCard } from '../tasks/ClientTaskCard';
+import { CreateClientTaskModal } from '../tasks/CreateClientTaskModal';
+import { EditClientTaskModal } from '../tasks/EditClientTaskModal';
+import { ClientTaskDetailsModal } from '../tasks/ClientTaskDetailsModal';
+import { taskManagementService } from '../../lib/taskManagementService';
 
 interface ClientWorkspaceViewProps {
   client: ClientRecord;
@@ -24,17 +35,118 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
   const [activeWeek, setActiveWeek] = useState<WeekTab>('week1');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  const handleAddTaskClick = () => {
-    setToastMessage('Task creation will be configured in the next phase.');
+  // Phase 3A Tasks State
+  const [tasks, setTasks] = useState<ClientTask[]>([]);
+  const [isLoadingTasks, setIsLoadingTasks] = useState(false);
+  const [tasksError, setTasksError] = useState<string | null>(null);
+
+  // Departments & Eligible Assignees
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [eligibleAssignees, setEligibleAssignees] = useState<UserProfile[]>([]);
+
+  // Modals
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [editingTask, setEditingTask] = useState<ClientTask | null>(null);
+  const [selectedTaskDetails, setSelectedTaskDetails] = useState<ClientTask | null>(null);
+
+  const isOwnerOrManager = currentUserProfile?.role === 'owner' || currentUserProfile?.role === 'operational_manager';
+
+  const weekTabs: { id: WeekTab; weekNum: 1 | 2 | 3 | 4; label: string }[] = [
+    { id: 'week1', weekNum: 1, label: 'Week 1' },
+    { id: 'week2', weekNum: 2, label: 'Week 2' },
+    { id: 'week3', weekNum: 3, label: 'Week 3' },
+    { id: 'week4', weekNum: 4, label: 'Week 4' }
+  ];
+
+  const currentWeekNum = weekTabs.find((w) => w.id === activeWeek)?.weekNum || 1;
+
+  // Load Departments & Eligible Assignees on mount
+  useEffect(() => {
+    let isMounted = true;
+    async function loadMeta() {
+      try {
+        const [depts, assignees] = await Promise.all([
+          taskManagementService.fetchDepartments(),
+          taskManagementService.fetchEligibleAssignees(client.id)
+        ]);
+        if (isMounted) {
+          setDepartments(depts);
+          setEligibleAssignees(assignees);
+        }
+      } catch (err) {
+        console.warn('Failed to load task metadata:', err);
+      }
+    }
+    loadMeta();
+    return () => {
+      isMounted = false;
+    };
+  }, [client.id]);
+
+  // Fetch Tasks for the selected week
+  const loadTasks = async () => {
+    if (!client.id) return;
+    setIsLoadingTasks(true);
+    setTasksError(null);
+    try {
+      const res = await taskManagementService.fetchClientTasks(client.id, currentWeekNum);
+      if (res.error) {
+        setTasksError(res.error);
+      } else {
+        setTasks(res.data);
+      }
+    } catch (err: any) {
+      setTasksError(err?.message || 'Failed to load tasks.');
+    } finally {
+      setIsLoadingTasks(false);
+    }
+  };
+
+  useEffect(() => {
+    loadTasks();
+  }, [client.id, currentWeekNum]);
+
+  const showToast = (msg: string) => {
+    setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  const weekTabs: { id: WeekTab; label: string }[] = [
-    { id: 'week1', label: 'Week 1' },
-    { id: 'week2', label: 'Week 2' },
-    { id: 'week3', label: 'Week 3' },
-    { id: 'week4', label: 'Week 4' }
-  ];
+  const handleTaskCreated = (newTask: ClientTask) => {
+    setTasks((prev) => [newTask, ...prev]);
+    showToast(`Task "${newTask.title}" created successfully.`);
+  };
+
+  const handleTaskUpdated = (updatedTask: ClientTask) => {
+    setTasks((prev) => {
+      if (updatedTask.archivedAt) {
+        return prev.filter((t) => t.id !== updatedTask.id);
+      }
+      return prev.map((t) => (t.id === updatedTask.id ? updatedTask : t));
+    });
+
+    if (selectedTaskDetails?.id === updatedTask.id) {
+      setSelectedTaskDetails(updatedTask.archivedAt ? null : updatedTask);
+    }
+    showToast(`Task updated successfully.`);
+  };
+
+  const handleStatusChange = async (task: ClientTask, newStatus: ClientTaskStatus, reason?: string) => {
+    try {
+      const res = await taskManagementService.updateStatus(task.id, newStatus, reason);
+      if (res.error) {
+        showToast(`Status update failed: ${res.error}`);
+      } else {
+        const updated: ClientTask = {
+          ...task,
+          status: newStatus,
+          blockedReason: newStatus === 'Blocked' ? (reason || null) : null
+        };
+        handleTaskUpdated(updated);
+      }
+    } catch (err: any) {
+      showToast(err?.message || 'Failed to update status.');
+    }
+  };
 
   return (
     <div className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto bg-gray-50/50 dark:bg-dark-400 select-none">
@@ -105,16 +217,70 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
               ))}
             </div>
 
-            {/* Selected Week Tasks Card containing only one centered + Add Task placeholder */}
-            <div className="bg-white dark:bg-dark-card rounded-2xl border border-gray-200 dark:border-dark-border p-12 shadow-sm min-h-[260px] flex items-center justify-center">
-              <button
-                type="button"
-                onClick={handleAddTaskClick}
-                className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-dark-200 dark:hover:bg-dark-100 text-gray-800 dark:text-gray-200 text-xs font-bold border border-gray-200 dark:border-dark-border transition-all hover:scale-[1.02] active:scale-[0.98]"
-              >
-                <Plus className="w-4 h-4 text-brand-500" />
-                <span>+ Add Task</span>
-              </button>
+            {/* Selected Week Task List Area */}
+            <div className="space-y-4">
+              {/* Header Action Bar */}
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                    Week {currentWeekNum} Tasks ({tasks.length})
+                  </span>
+                  {isLoadingTasks && <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-500" />}
+                </div>
+
+                {isOwnerOrManager && (
+                  <button
+                    type="button"
+                    onClick={() => setIsCreateModalOpen(true)}
+                    className="flex items-center gap-1.5 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-xs font-bold shadow-md shadow-brand-500/25 hover:scale-[1.02] active:scale-[0.98] transition-all"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>+ Add Task</span>
+                  </button>
+                )}
+              </div>
+
+              {/* Tasks Content */}
+              {tasks.length > 0 ? (
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+                  {tasks.map((task) => (
+                    <ClientTaskCard
+                      key={task.id}
+                      task={task}
+                      currentUserProfile={currentUserProfile}
+                      onSelectTask={(t) => setSelectedTaskDetails(t)}
+                      onOpenEditModal={(t) => setEditingTask(t)}
+                      onStatusChange={handleStatusChange}
+                    />
+                  ))}
+                </div>
+              ) : (
+                /* Clean Empty State when no tasks exist */
+                <div className="bg-white dark:bg-dark-card rounded-2xl border border-gray-200 dark:border-dark-border p-12 shadow-sm min-h-[260px] flex flex-col items-center justify-center text-center space-y-4">
+                  <div className="w-12 h-12 rounded-2xl bg-brand-500/10 text-brand-500 flex items-center justify-center border border-brand-500/20">
+                    <Layers className="w-6 h-6" />
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-gray-800 dark:text-gray-200">
+                      No Operational Tasks in Week {currentWeekNum}
+                    </h4>
+                    <p className="text-xs text-gray-400 mt-1 max-w-sm">
+                      Create operational checklists and deliverables for Week {currentWeekNum} setup.
+                    </p>
+                  </div>
+
+                  {isOwnerOrManager && (
+                    <button
+                      type="button"
+                      onClick={() => setIsCreateModalOpen(true)}
+                      className="flex items-center gap-2 px-6 py-3 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-dark-200 dark:hover:bg-dark-100 text-gray-800 dark:text-gray-200 text-xs font-bold border border-gray-200 dark:border-dark-border transition-all hover:scale-[1.02] active:scale-[0.98]"
+                    >
+                      <Plus className="w-4 h-4 text-brand-500" />
+                      <span>+ Add Task</span>
+                    </button>
+                  )}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -129,6 +295,40 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
           />
         )}
       </div>
+
+      {/* Modals */}
+      <CreateClientTaskModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSuccess={handleTaskCreated}
+        client={client}
+        weekNumber={currentWeekNum}
+        departments={departments}
+        eligibleAssignees={eligibleAssignees}
+      />
+
+      {editingTask && (
+        <EditClientTaskModal
+          isOpen={Boolean(editingTask)}
+          onClose={() => setEditingTask(null)}
+          onSuccess={handleTaskUpdated}
+          task={editingTask}
+          departments={departments}
+        />
+      )}
+
+      {selectedTaskDetails && (
+        <ClientTaskDetailsModal
+          isOpen={Boolean(selectedTaskDetails)}
+          onClose={() => setSelectedTaskDetails(null)}
+          task={selectedTaskDetails}
+          currentUserProfile={currentUserProfile}
+          departments={departments}
+          eligibleAssignees={eligibleAssignees}
+          onTaskUpdated={handleTaskUpdated}
+          onOpenEditModal={(t) => setEditingTask(t)}
+        />
+      )}
     </div>
   );
 };
