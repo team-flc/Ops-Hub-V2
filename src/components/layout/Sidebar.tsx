@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useOpsStore } from '../../store/opsStore';
 import { 
-  Building2, Users, ChevronsLeft, ChevronsRight, LogOut 
+  Building2, Users, ChevronsLeft, ChevronsRight, LogOut, Briefcase 
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { ROLE_DISPLAY_NAMES, ClientRecord, UserProfile } from '../../types';
@@ -111,6 +111,20 @@ export const Sidebar: React.FC = () => {
         </div>
 
         <div className="flex flex-col items-center gap-3">
+          {/* Workspace icon button to return to client workspace */}
+          <button
+            type="button"
+            onClick={() => setViewMode('client_workspace')}
+            className={`p-2.5 rounded-xl transition-colors ${
+              viewMode === 'client_workspace'
+                ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
+                : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-100'
+            }`}
+            title="Client Workspace"
+          >
+            <Briefcase className="w-5 h-5" />
+          </button>
+
           {/* Settings icon for Owner and Manager */}
           {isManagerOrOwner && (
             <button

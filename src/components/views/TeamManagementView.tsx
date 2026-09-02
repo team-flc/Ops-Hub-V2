@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Users, UserPlus, Search, ShieldCheck, 
   Building2, Briefcase, UserCheck, Key, UserX, 
-  RotateCcw, MoreVertical, Loader2, Edit3 
+  RotateCcw, MoreVertical, Loader2, Edit3, Archive 
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { 
@@ -18,6 +18,7 @@ import { EditTeamMemberModal } from '../team/EditTeamMemberModal';
 import { ResetPasswordModal } from '../team/ResetPasswordModal';
 import { DesignationManagerModal } from '../team/DesignationManagerModal';
 import { SuspendUserModal } from '../team/SuspendUserModal';
+import { ArchiveTeamMemberModal } from '../team/ArchiveTeamMemberModal';
 
 export const TeamManagementView: React.FC = () => {
   const { profile: currentUserProfile } = useAuth();
@@ -41,6 +42,7 @@ export const TeamManagementView: React.FC = () => {
   const [editingMember, setEditingMember] = useState<TeamMemberRecord | null>(null);
   const [resetPasswordMember, setResetPasswordMember] = useState<TeamMemberRecord | null>(null);
   const [suspendingMember, setSuspendingMember] = useState<TeamMemberRecord | null>(null);
+  const [archivingMember, setArchivingMember] = useState<TeamMemberRecord | null>(null);
   const [isDesignationModalOpen, setIsDesignationModalOpen] = useState(false);
 
   // Action Menu State
@@ -401,6 +403,15 @@ export const TeamManagementView: React.FC = () => {
                               <RotateCcw className="w-4 h-4" />
                             </button>
                           )}
+
+                          <button
+                            type="button"
+                            onClick={() => setArchivingMember(member)}
+                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-dark-100 transition-colors"
+                            title="Archive Team Member"
+                          >
+                            <Archive className="w-4 h-4" />
+                          </button>
                         </div>
                       </td>
                     </tr>
@@ -450,6 +461,15 @@ export const TeamManagementView: React.FC = () => {
         onSuccess={loadData}
         member={suspendingMember}
         activeTeamMembers={teamMembers}
+        currentUserProfile={currentUserProfile}
+      />
+
+      {/* Archive Team Member Modal */}
+      <ArchiveTeamMemberModal
+        isOpen={!!archivingMember}
+        onClose={() => setArchivingMember(null)}
+        onSuccess={loadData}
+        member={archivingMember}
         currentUserProfile={currentUserProfile}
       />
 

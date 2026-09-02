@@ -148,12 +148,12 @@ serve(async (req: Request) => {
   async function checkAssigneeEligibility(assigneeId: string, clientId: string, departmentId?: string): Promise<{ valid: boolean; error?: string }> {
     const { data: assignee, error: aErr } = await supabaseAdmin
       .from('profiles')
-      .select('id, role, status')
+      .select('id, role, status, archived_at')
       .eq('id', assigneeId)
       .single();
 
-    if (aErr || !assignee || assignee.status !== 'active') {
-      return { valid: false, error: 'Assignee profile is not active.' };
+    if (aErr || !assignee || assignee.status !== 'active' || assignee.archived_at) {
+      return { valid: false, error: 'Assignee profile is not active or is archived.' };
     }
 
     if (assignee.role === 'client') {
@@ -170,6 +170,19 @@ serve(async (req: Request) => {
 
       if (!access) {
         return { valid: false, error: 'Assignee does not have explicit access to this client.' };
+      }
+
+      if (departmentId) {
+        const { data: deptMembership } = await supabaseAdmin
+          .from('profile_departments')
+          .select('profile_id')
+          .eq('profile_id', assigneeId)
+          .eq('department_id', departmentId)
+          .single();
+
+        if (!deptMembership) {
+          return { valid: false, error: 'Assignee does not belong to the responsible department for this task.' };
+        }
       }
     }
 
@@ -212,6 +225,20 @@ serve(async (req: Request) => {
         return new Response(
           JSON.stringify({ error: 'Forbidden: You do not have permission to create tasks for this client.' }),
           { status: 403, headers: corsHeaders }
+        );
+      }
+
+      // Check if client is paused
+      const { data: targetClient } = await supabaseAdmin
+        .from('clients')
+        .select('status')
+        .eq('id', client_id)
+        .single();
+
+      if (targetClient?.status === 'Paused') {
+        return new Response(
+          JSON.stringify({ error: 'Cannot create tasks for a paused client.' }),
+          { status: 400, headers: corsHeaders }
         );
       }
 

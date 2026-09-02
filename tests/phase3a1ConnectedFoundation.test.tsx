@@ -9,6 +9,9 @@ import { ArchiveCenterView } from '../src/components/archive/ArchiveCenterView';
 import { AuditLogView } from '../src/components/audit/AuditLogView';
 import { SettingsLayout } from '../src/components/settings/SettingsLayout';
 import { CreateTeamMemberModal } from '../src/components/team/CreateTeamMemberModal';
+import { ArchiveTeamMemberModal } from '../src/components/team/ArchiveTeamMemberModal';
+import { ClientDetailsTab } from '../src/components/clients/ClientDetailsTab';
+import { ClientWorkspaceView } from '../src/components/clients/ClientWorkspaceView';
 import { storageService } from '../src/lib/storageService';
 import { profileService } from '../src/lib/profileService';
 import { archiveService } from '../src/lib/archiveService';
@@ -391,5 +394,115 @@ describe('Phase 3A.1 Connected System Foundation, Settings, Profiles, Archive & 
   it('11. Frontend contains zero service-role keys or bypass tokens', () => {
     expect(import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY).toBeUndefined();
     expect(import.meta.env.SUPABASE_SERVICE_ROLE_KEY).toBeUndefined();
+  });
+
+  // 12. CLIENT DETAILS TAB BRAND IDENTITY & PERMISSIONS
+  it('12. ClientDetailsTab renders brand logo, industry, bio, and protects governance fields', () => {
+    const ownerProfile: UserProfile = {
+      id: 'user-1',
+      fullName: 'Faseeh Lall',
+      role: 'owner',
+      status: 'active',
+      workEmail: 'owner@faseehlall.com',
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z'
+    };
+
+    render(
+      <ClientDetailsTab
+        client={mockClients[0]}
+        currentUserProfile={ownerProfile}
+        eligibleManagers={[]}
+        onClientUpdated={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText(/Brand Identity/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/e.g. B2B SaaS, E-Commerce, Logistics/i)).toBeInTheDocument();
+    expect(screen.getByPlaceholderText(/Brief description of the client's business model/i)).toBeInTheDocument();
+  });
+
+  // 13. ARCHIVE TEAM MEMBER MODAL OPEN TASKS BLOCK
+  it('13. ArchiveTeamMemberModal blocks archive when open tasks exist', async () => {
+    vi.spyOn(archiveService, 'checkTeamMemberOpenTasks').mockResolvedValueOnce({
+      hasOpenTasks: true,
+      openTaskCount: 2,
+      tasks: [
+        { id: 't1', title: 'Task 1', clientId: 'c1', status: 'In Progress' },
+        { id: 't2', title: 'Task 2', clientId: 'c1', status: 'Assigned' }
+      ],
+      error: null
+    });
+
+    const memberToArchive = {
+      id: 'tm-open',
+      fullName: 'Assigned Member',
+      workEmail: 'assigned@faseehlall.com',
+      role: 'team_member' as const,
+      status: 'active' as const,
+      departmentNames: ['Ops'],
+      clientNames: ['UnizConnect'],
+      clientIds: ['client-1'],
+      departmentIds: ['dept-1'],
+      startDate: '2026-01-01',
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z'
+    };
+
+    render(
+      <ArchiveTeamMemberModal
+        isOpen={true}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+        member={memberToArchive}
+        currentUserProfile={mockCurrentProfile}
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByText(/Archive Blocked: Active Open Tasks/i)).toBeInTheDocument();
+    });
+
+    const archiveBtn = screen.getByRole('button', { name: /Archive Team Member/i });
+    expect(archiveBtn).toBeDisabled();
+  });
+
+  // 14. PAUSED CLIENT WORKSPACE BANNER AND TASK CREATION SAFEGUARD
+  it('14. ClientWorkspaceView displays Paused warning banner and blocks task creation', () => {
+    const pausedClient = mockClients[2]; // 'Paused Holdings'
+    const ownerProfile: UserProfile = {
+      id: 'user-1',
+      fullName: 'Faseeh Lall',
+      role: 'owner',
+      status: 'active',
+      workEmail: 'owner@faseehlall.com',
+      createdAt: '2026-01-01T00:00:00Z',
+      updatedAt: '2026-01-01T00:00:00Z'
+    };
+
+    render(
+      <ClientWorkspaceView
+        client={pausedClient}
+        currentUserProfile={ownerProfile}
+        eligibleManagers={[]}
+        onClientUpdated={vi.fn()}
+      />
+    );
+
+    expect(screen.getByText(/Workspace Paused/i)).toBeInTheDocument();
+    expect(screen.getByText(/Tasks Paused/i)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /\+ Add Task/i })).not.toBeInTheDocument();
+  });
+
+  // 15. CLICKABLE BREADCRUMBS RETURN NAVIGATION
+  it('15. Header breadcrumbs allow clicking Ops Hub to return to workspace', () => {
+    useOpsStore.setState({ viewMode: 'settings' });
+    expect(useOpsStore.getState().viewMode).toBe('settings');
+
+    render(<Header />);
+    const opsHubBtn = screen.getByRole('button', { name: /Ops Hub/i });
+    fireEvent.click(opsHubBtn);
+
+    expect(useOpsStore.getState().viewMode).toBe('client_workspace');
   });
 });

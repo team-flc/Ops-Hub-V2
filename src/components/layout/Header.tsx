@@ -42,13 +42,27 @@ export const Header: React.FC = () => {
     sectionName = profile?.role === 'owner' || profile?.role === 'operational_manager' ? 'Team Management' : 'Team Directory';
   }
 
+  const setViewMode = useOpsStore((state) => state.setViewMode);
+
   return (
     <header className="bg-white dark:bg-dark-card border-b border-gray-200 dark:border-dark-border px-6 py-3 flex items-center justify-between select-none">
       {/* Contextual Breadcrumb & Current Workspace Title */}
       <div className="flex items-center gap-2 text-xs">
-        <span className="text-brand-600 font-bold tracking-tight">FASEEH LALL & CO.</span>
+        <button
+          type="button"
+          onClick={() => setViewMode('client_workspace')}
+          className="text-brand-600 font-bold tracking-tight hover:underline focus:outline-none"
+        >
+          FASEEH LALL & CO.
+        </button>
         <span className="text-gray-300 dark:text-gray-600">/</span>
-        <span className="text-gray-500 font-medium">Ops Hub</span>
+        <button
+          type="button"
+          onClick={() => setViewMode('client_workspace')}
+          className="text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 font-medium transition-colors focus:outline-none"
+        >
+          Ops Hub
+        </button>
         <span className="text-gray-300 dark:text-gray-600">/</span>
         <div className="flex items-center gap-1.5 font-bold text-gray-800 dark:text-gray-200">
           <span>{sectionName}</span>

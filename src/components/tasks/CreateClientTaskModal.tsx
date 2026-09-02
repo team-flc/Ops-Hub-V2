@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { X, Calendar, AlertCircle, Loader2, CheckCircle2, UserCheck, ShieldAlert } from 'lucide-react';
 import { 
   ClientRecord, 
@@ -42,6 +42,25 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Filter assignees by selected department (Owners & Managers remain eligible across departments)
+  const departmentAssignees = useMemo(() => {
+    if (!departmentId) return eligibleAssignees;
+    return eligibleAssignees.filter((u) => {
+      if (u.role === 'owner' || u.role === 'operational_manager') return true;
+      return u.departmentIds && u.departmentIds.includes(departmentId);
+    });
+  }, [eligibleAssignees, departmentId]);
+
+  // Reset assignee if current assignee is not eligible for newly selected department
+  useEffect(() => {
+    if (assigneeId && departmentId) {
+      const isStillEligible = departmentAssignees.some((u) => u.id === assigneeId);
+      if (!isStillEligible) {
+        setAssigneeId('');
+      }
+    }
+  }, [departmentId, departmentAssignees, assigneeId]);
+
   // Sync week on modal open
   useEffect(() => {
     if (isOpen) {
@@ -56,27 +75,36 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
         setDepartmentId(departments[0].id);
       }
 
-      // Default start date = today (or next Monday if Sunday)
+      // Default start date = today (or next day if Sunday)
       const now = new Date();
-      if (now.getUTCDay() === 0) {
+      let yyyy = now.getFullYear();
+      let mm = String(now.getMonth() + 1).padStart(2, '0');
+      let dd = String(now.getDate()).padStart(2, '0');
+      let todayStr = `${yyyy}-${mm}-${dd}`;
+      while (isSunday(todayStr)) {
         now.setDate(now.getDate() + 1);
+        yyyy = now.getFullYear();
+        mm = String(now.getMonth() + 1).padStart(2, '0');
+        dd = String(now.getDate()).padStart(2, '0');
+        todayStr = `${yyyy}-${mm}-${dd}`;
       }
-      const yyyy = now.getFullYear();
-      const mm = String(now.getMonth() + 1).padStart(2, '0');
-      const dd = String(now.getDate()).padStart(2, '0');
-      const todayStr = `${yyyy}-${mm}-${dd}`;
       setPlannedStartDate(todayStr);
 
       // Default due date = 3 days later (skip Sunday)
       const due = new Date(now);
       due.setDate(due.getDate() + 3);
-      if (due.getUTCDay() === 0) {
+      let dYyyy = due.getFullYear();
+      let dMm = String(due.getMonth() + 1).padStart(2, '0');
+      let dDd = String(due.getDate()).padStart(2, '0');
+      let dueStr = `${dYyyy}-${dMm}-${dDd}`;
+      while (isSunday(dueStr)) {
         due.setDate(due.getDate() + 1);
+        dYyyy = due.getFullYear();
+        dMm = String(due.getMonth() + 1).padStart(2, '0');
+        dDd = String(due.getDate()).padStart(2, '0');
+        dueStr = `${dYyyy}-${dMm}-${dDd}`;
       }
-      const dYyyy = due.getFullYear();
-      const dMm = String(due.getMonth() + 1).padStart(2, '0');
-      const dDd = String(due.getDate()).padStart(2, '0');
-      setDueDate(`${dYyyy}-${dMm}-${dDd}`);
+      setDueDate(dueStr);
     }
   }, [isOpen, weekNumber, departments]);
 
@@ -276,7 +304,7 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
                 className="w-full px-3 py-2 rounded-xl bg-gray-50 dark:bg-dark-100 border border-gray-200 dark:border-dark-border focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-gray-900 dark:text-gray-100"
               >
                 <option value="">Leave Unassigned (Draft)</option>
-                {eligibleAssignees.map((u) => (
+                {departmentAssignees.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.fullName} ({u.role})
                   </option>

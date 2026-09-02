@@ -1,7 +1,7 @@
-﻿import React, { useState } from 'react';
+import React, { useState } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { 
-  Users, Building2, Archive, Activity, ShieldAlert 
+  Users, Building2, Archive, Activity, ShieldAlert, ArrowLeft 
 } from 'lucide-react';
 import { TeamManagementView } from '../views/TeamManagementView';
 import { ArchiveCenterView } from '../archive/ArchiveCenterView';
@@ -105,6 +105,15 @@ export const SettingsLayout: React.FC<{ initialTab?: SettingsTab }> = ({ initial
             );
           })}
         </div>
+
+        <button
+          type="button"
+          onClick={() => setViewMode('client_workspace')}
+          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          <span>Back to Workspace</span>
+        </button>
       </div>
 
       {/* Dynamic Tab Body */}

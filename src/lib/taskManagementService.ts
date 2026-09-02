@@ -121,7 +121,7 @@ export const taskManagementService = {
   /**
    * Fetch active assignees eligible for the selected client and department
    */
-  async fetchEligibleAssignees(clientId: string, _departmentId?: string): Promise<UserProfile[]> {
+  async fetchEligibleAssignees(clientId: string, departmentId?: string, currentUser?: UserProfile | null): Promise<UserProfile[]> {
     if (!isSupabaseConfigured || !supabase || !clientId) return [];
     try {
       // 1. Fetch team members with explicit access to this client
@@ -132,20 +132,52 @@ export const taskManagementService = {
 
       const permittedProfileIds = new Set<string>((grants || []).map((g: any) => g.profile_id));
 
-      // 2. Fetch all active profiles
+      // 2. Fetch all profile department memberships
+      const { data: profileDepts } = await supabase
+        .from('profile_departments')
+        .select('profile_id, department_id');
+
+      const userDeptsMap = new Map<string, string[]>();
+      (profileDepts || []).forEach((pd: any) => {
+        const list = userDeptsMap.get(pd.profile_id) || [];
+        list.push(pd.department_id);
+        userDeptsMap.set(pd.profile_id, list);
+      });
+
+      // 3. Fetch all active profiles
       const { data: profiles, error: pErr } = await supabase
         .from('profiles')
-        .select('id, full_name, role, status, work_email, designation_id, created_at, updated_at')
+        .select('id, full_name, role, status, work_email, designation_id, reporting_manager_id, archived_at, created_at, updated_at')
         .eq('status', 'active')
         .order('full_name', { ascending: true });
 
       if (pErr || !profiles) return [];
 
-      // Filter: owners and operational managers have client access, team members need explicit grant
+      // Filter:
+      // - No client users
+      // - Team members require explicit client access grant
+      // - Owners & Operational Managers have client access
+      // - If departmentId provided: team members MUST belong to that department (owners & managers exempt)
+      // - If currentUser is operational_manager: must be within their reporting hierarchy or self
       const eligible = profiles.filter((p: any) => {
+        if (p.archived_at) return false;
         if (p.role === 'client') return false;
-        if (p.role === 'owner' || p.role === 'operational_manager') return true;
-        return permittedProfileIds.has(p.id);
+        
+        const hasClientAccess = (p.role === 'owner' || p.role === 'operational_manager') || permittedProfileIds.has(p.id);
+        if (!hasClientAccess) return false;
+
+        const depts = userDeptsMap.get(p.id) || [];
+
+        if (departmentId && p.role === 'team_member') {
+          if (!depts.includes(departmentId)) return false;
+        }
+
+        if (currentUser?.role === 'operational_manager') {
+          const inScope = p.role === 'owner' || p.id === currentUser.id || p.reporting_manager_id === currentUser.id;
+          if (!inScope) return false;
+        }
+
+        return true;
       });
 
       return eligible.map((p: any) => ({
@@ -155,6 +187,8 @@ export const taskManagementService = {
         status: p.status,
         workEmail: p.work_email,
         designationId: p.designation_id,
+        reportingManagerId: p.reporting_manager_id,
+        departmentIds: userDeptsMap.get(p.id) || [],
         createdAt: p.created_at || new Date().toISOString(),
         updatedAt: p.updated_at || new Date().toISOString()
       }));
@@ -325,6 +359,22 @@ export const taskManagementService = {
     const dateValidation = validateTaskDates(params.plannedStart, params.dueDate);
     if (!dateValidation.valid) {
       return { data: null, error: dateValidation.error || 'Invalid task dates.' };
+    }
+
+    // Verify client is not paused
+    if (supabase) {
+      try {
+        const { data: clientRec } = await supabase
+          .from('clients')
+          .select('status')
+          .eq('id', params.clientId)
+          .single();
+        if (clientRec && clientRec.status === 'Paused') {
+          return { data: null, error: 'Cannot create tasks for a paused client.' };
+        }
+      } catch (err) {
+        // Continue if unable to query
+      }
     }
 
     // Try edge function first

@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Calendar, Info, Plus, Sparkles, Loader2, Layers } from 'lucide-react';
+import { Calendar, Info, Plus, Sparkles, Loader2, Layers, AlertTriangle } from 'lucide-react';
 import { 
   ClientRecord, 
   ClientTask, 
@@ -153,6 +153,16 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
       {/* 1. Selected Client Top Header */}
       <SelectedClientHeader client={client} />
 
+      {/* Paused Client Warning Banner */}
+      {client.status === 'Paused' && (
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-3 flex items-center gap-3 text-amber-800 dark:text-amber-300 text-xs font-semibold animate-fade-in">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+          <div className="flex-1">
+            <span>Workspace Paused: This client organization is currently paused ({client.pauseReason || 'Operational reason'}). Creating new tasks and active work mutations are blocked.</span>
+          </div>
+        </div>
+      )}
+
       {/* 2. Top-Level Tab Navigation (30-Day Setup and Client Details only) */}
       <div className="bg-white dark:bg-dark-card border-b border-gray-200 dark:border-dark-border px-6 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -229,14 +239,24 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                 </div>
 
                 {isOwnerOrManager && (
-                  <button
-                    type="button"
-                    onClick={() => setIsCreateModalOpen(true)}
-                    className="flex items-center gap-1.5 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-xs font-bold shadow-md shadow-brand-500/25 hover:scale-[1.02] active:scale-[0.98] transition-all"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>+ Add Task</span>
-                  </button>
+                  client.status === 'Paused' ? (
+                    <span 
+                      className="px-3.5 py-2 rounded-xl bg-amber-100 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 text-xs font-bold flex items-center gap-1.5 opacity-80 cursor-not-allowed"
+                      title="Task creation is blocked while client organization is paused."
+                    >
+                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                      <span>Tasks Paused</span>
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => setIsCreateModalOpen(true)}
+                      className="flex items-center gap-1.5 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-xs font-bold shadow-md shadow-brand-500/25 hover:scale-[1.02] active:scale-[0.98] transition-all"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>+ Add Task</span>
+                    </button>
+                  )
                 )}
               </div>
 

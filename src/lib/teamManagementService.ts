@@ -66,12 +66,14 @@ export const teamManagementService = {
         { data: allDesignations },
         { data: allProfDepts },
         { data: allProfClients },
+        { data: allClientTeamAccess },
         { data: allManagers }
       ] = await Promise.all([
         supabase.from('departments').select('*'),
         supabase.from('designations').select('*'),
         supabase.from('profile_departments').select('*'),
         supabase.from('profile_client_access').select('*'),
+        supabase.from('client_team_access').select('*'),
         supabase.from('profiles').select('id, full_name').in('role', ['owner', 'operational_manager'])
       ]);
 
@@ -97,15 +99,20 @@ export const teamManagementService = {
         }
       });
 
-      const profClientsMap = new Map<string, string[]>();
+      const profClientsMap = new Map<string, Set<string>>();
       (allProfClients || []).forEach((pc) => {
-        const list = profClientsMap.get(pc.profile_id) || [];
-        list.push(pc.client_id);
-        profClientsMap.set(pc.profile_id, list);
+        const set = profClientsMap.get(pc.profile_id) || new Set<string>();
+        set.add(pc.client_id);
+        profClientsMap.set(pc.profile_id, set);
+      });
+      (allClientTeamAccess || []).forEach((cta) => {
+        const set = profClientsMap.get(cta.profile_id) || new Set<string>();
+        set.add(cta.client_id);
+        profClientsMap.set(cta.profile_id, set);
       });
 
       return profiles.map((p) => {
-        const userClientIds = profClientsMap.get(p.id) || [];
+        const userClientIds = Array.from(profClientsMap.get(p.id) || []);
         return {
           id: p.id,
           fullName: p.full_name,
@@ -336,15 +343,27 @@ export const teamManagementService = {
         await supabase.from('profile_departments').insert(deptRows);
       }
 
-      // 3. Sync Client Access
-      await supabase.from('profile_client_access').delete().eq('profile_id', payload.id);
+      // 3. Sync Client Access (both client_team_access and profile_client_access)
+      await Promise.all([
+        supabase.from('profile_client_access').delete().eq('profile_id', payload.id),
+        supabase.from('client_team_access').delete().eq('profile_id', payload.id)
+      ]);
+
       if (payload.clientIds && payload.clientIds.length > 0) {
         const clientRows = payload.clientIds.map((clientId) => ({
           profile_id: payload.id,
           client_id: clientId,
           granted_by: callerId
         }));
-        await supabase.from('profile_client_access').insert(clientRows);
+        const ctaRows = payload.clientIds.map((clientId) => ({
+          profile_id: payload.id,
+          client_id: clientId
+        }));
+
+        await Promise.all([
+          supabase.from('profile_client_access').insert(clientRows),
+          supabase.from('client_team_access').insert(ctaRows)
+        ]);
       }
 
       // 4. Audit Log

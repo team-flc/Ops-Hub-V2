@@ -237,14 +237,21 @@ serve(async (req: Request) => {
         }));
         await supabaseAdmin.from('profile_departments').insert(deptRows);
 
-        // 4. Link Client Access
+        // 4. Link Client Access (both tables for backward and forward compatibility)
         if (Array.isArray(clientIds) && clientIds.length > 0) {
           const clientRows = clientIds.map((cId: string) => ({
             profile_id: newUserId,
             client_id: cId,
             granted_by: callerProfile.id
           }));
-          await supabaseAdmin.from('profile_client_access').insert(clientRows);
+          const ctaRows = clientIds.map((cId: string) => ({
+            profile_id: newUserId,
+            client_id: cId
+          }));
+          await Promise.all([
+            supabaseAdmin.from('profile_client_access').insert(clientRows),
+            supabaseAdmin.from('client_team_access').insert(ctaRows)
+          ]);
         }
 
         // 5. Audit Log Entry

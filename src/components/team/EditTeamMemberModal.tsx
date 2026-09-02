@@ -6,6 +6,7 @@ import {
 import { Department, Designation, TeamMemberRecord, UserProfile } from '../../types';
 import { useOpsStore } from '../../store/opsStore';
 import { teamManagementService } from '../../lib/teamManagementService';
+import { archiveService } from '../../lib/archiveService';
 
 interface EditTeamMemberModalProps {
   isOpen: boolean;
@@ -28,7 +29,7 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
   designations,
   eligibleManagers
 }) => {
-  const clientsVendors = useOpsStore((state) => state.clientsVendors);
+  const clients = useOpsStore((state) => state.clients);
 
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
@@ -37,6 +38,7 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
   const [selectedDesignationId, setSelectedDesignationId] = useState('');
   const [selectedManagerId, setSelectedManagerId] = useState('');
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
+  const [checkingTasksForClientId, setCheckingTasksForClientId] = useState<string | null>(null);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -62,10 +64,32 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
     );
   };
 
-  const handleClientToggle = (clientId: string) => {
-    setSelectedClientIds((prev) =>
-      prev.includes(clientId) ? prev.filter((id) => id !== clientId) : [...prev, clientId]
-    );
+  const handleClientToggle = async (clientId: string) => {
+    setErrorMessage(null);
+    if (selectedClientIds.includes(clientId)) {
+      // Trying to revoke client access
+      if (member.clientIds && member.clientIds.includes(clientId)) {
+        setCheckingTasksForClientId(clientId);
+        try {
+          const taskCheck = await archiveService.checkTeamMemberClientOpenTasks(member.id, clientId);
+          if (taskCheck.hasOpenTasks) {
+            const clientName = clients.find(c => c.id === clientId)?.companyName || 'this client';
+            setErrorMessage(
+              `Cannot revoke Client Access to "${clientName}": ${member.fullName} has ${taskCheck.openTaskCount} open task(s) for this client. Please reassign those open tasks before revoking client access.`
+            );
+            setCheckingTasksForClientId(null);
+            return;
+          }
+        } catch (err: any) {
+          console.warn('Error verifying open tasks:', err);
+        } finally {
+          setCheckingTasksForClientId(null);
+        }
+      }
+      setSelectedClientIds((prev) => prev.filter((id) => id !== clientId));
+    } else {
+      setSelectedClientIds((prev) => [...prev, clientId]);
+    }
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -88,6 +112,19 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
       return;
     }
 
+    // Safety check for any removed client IDs
+    const removedClientIds = (member.clientIds || []).filter((id) => !selectedClientIds.includes(id));
+    for (const removedId of removedClientIds) {
+      const taskCheck = await archiveService.checkTeamMemberClientOpenTasks(member.id, removedId);
+      if (taskCheck.hasOpenTasks) {
+        const clientName = clients.find(c => c.id === removedId)?.companyName || 'this client';
+        setErrorMessage(
+          `Cannot revoke Client Access to "${clientName}": ${member.fullName} has ${taskCheck.openTaskCount} open task(s). Please reassign those tasks before saving.`
+        );
+        return;
+      }
+    }
+
     setIsSubmitting(true);
 
     try {
@@ -108,13 +145,14 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
       if (result.error) {
         setErrorMessage(result.error);
         setIsSubmitting(false);
-      } else {
-        setIsSubmitting(false);
-        onSuccess();
-        onClose();
+        return;
       }
-    } catch {
-      setErrorMessage('Failed to update team member.');
+
+      setIsSubmitting(false);
+      onSuccess();
+      onClose();
+    } catch (err: any) {
+      setErrorMessage(err.message || 'An unexpected error occurred.');
       setIsSubmitting(false);
     }
   };
@@ -276,27 +314,38 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
               <Briefcase className="w-3.5 h-3.5 text-brand-600" />
               <span>Client Access</span>
             </h3>
-            {clientsVendors.filter((c) => c.type === 'client').length === 0 ? (
+            {clients.filter((c) => c.status !== 'Archived').length === 0 ? (
               <p className="text-xs text-slate-400 italic">No active clients available.</p>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-36 overflow-y-auto p-1">
-                {clientsVendors
-                  .filter((c) => c.type === 'client')
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto p-1">
+                {clients
+                  .filter((c) => c.status !== 'Archived')
                   .map((client) => {
                     const isSelected = selectedClientIds.includes(client.id);
+                    const isChecking = checkingTasksForClientId === client.id;
                     return (
                       <button
                         key={client.id}
                         type="button"
                         onClick={() => handleClientToggle(client.id)}
+                        disabled={isChecking || isSubmitting}
                         className={`flex items-center justify-between p-2.5 rounded-xl border text-xs font-medium transition-all text-left ${
                           isSelected
                             ? 'bg-brand-50/70 border-brand-300 text-brand-700 dark:bg-brand-900/20 dark:border-brand-700 dark:text-brand-300'
                             : 'bg-slate-50 dark:bg-dark-sidebar border-slate-200 dark:border-dark-border text-slate-700 dark:text-gray-300 hover:bg-slate-100'
                         }`}
                       >
-                        <span className="truncate">{client.name}</span>
-                        {isSelected && <Check className="w-3.5 h-3.5 text-brand-600 flex-shrink-0 ml-1" />}
+                        <div className="truncate flex items-center gap-2">
+                          <span className="truncate">{client.companyName}</span>
+                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-gray-200/60 dark:bg-dark-border text-gray-600 dark:text-gray-300">
+                            {client.package}
+                          </span>
+                        </div>
+                        {isChecking ? (
+                          <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-600 flex-shrink-0 ml-1" />
+                        ) : isSelected ? (
+                          <Check className="w-3.5 h-3.5 text-brand-600 flex-shrink-0 ml-1" />
+                        ) : null}
                       </button>
                     );
                   })}

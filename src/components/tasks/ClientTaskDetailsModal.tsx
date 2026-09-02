@@ -324,11 +324,13 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
                     className="px-2.5 py-1 rounded-lg bg-white dark:bg-dark-100 border border-gray-200 dark:border-dark-border text-xs font-semibold text-gray-800 dark:text-gray-200 outline-none"
                   >
                     <option value="">Unassigned (Draft)</option>
-                    {eligibleAssignees.map((u) => (
-                      <option key={u.id} value={u.id}>
-                        {u.fullName}
-                      </option>
-                    ))}
+                    {eligibleAssignees
+                      .filter((u) => u.role === 'owner' || u.role === 'operational_manager' || (u.departmentIds && u.departmentIds.includes(task.departmentId)))
+                      .map((u) => (
+                        <option key={u.id} value={u.id}>
+                          {u.fullName} ({u.role})
+                        </option>
+                      ))}
                   </select>
                   {isReassigning && <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-500" />}
                 </div>

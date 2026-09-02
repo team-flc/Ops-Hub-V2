@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { 
   User, Mail, Phone, Building2, Briefcase, 
-  Shield, Check, AlertCircle, Loader2, Upload, Camera, Link2 
+  Shield, Check, AlertCircle, Loader2, Upload, Camera, Link2, ArrowLeft 
 } from 'lucide-react';
 import { ROLE_DISPLAY_NAMES } from '../../types';
 import { profileService } from '../../lib/profileService';
 import { storageService } from '../../lib/storageService';
+import { useOpsStore } from '../../store/opsStore';
 
 const LinkedInIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" }) => (
   <svg className={className} viewBox="0 0 24 24" fill="currentColor">
@@ -104,8 +105,22 @@ export const MyProfileView: React.FC = () => {
     }
   };
 
+  const setViewMode = useOpsStore((state) => state.setViewMode);
+
   return (
     <div className="p-6 md:p-8 max-w-4xl mx-auto space-y-6 select-none animate-in fade-in duration-200">
+      {/* Top Return Action */}
+      <div className="flex items-center justify-between">
+        <button
+          type="button"
+          onClick={() => setViewMode('client_workspace')}
+          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-dark-card transition-colors shadow-sm"
+        >
+          <ArrowLeft className="w-3.5 h-3.5" />
+          <span>Back to Workspace</span>
+        </button>
+      </div>
+
       {/* Header Banner */}
       <div className="bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-3xl p-6 md:p-8 shadow-sm flex flex-col md:flex-row items-center md:items-start gap-6">
         {/* Avatar Upload Container */}

@@ -243,6 +243,7 @@ export interface UserProfile {
   archiveReason?: string | null;
   previousStatus?: string | null;
   organizationId?: string | null;
+  departmentIds?: string[];
   createdAt: string;
   updatedAt: string;
 }
