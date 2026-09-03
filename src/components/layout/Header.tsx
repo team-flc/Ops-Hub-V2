@@ -1,13 +1,16 @@
 import React, { useState, useEffect } from 'react';
+import { useSafeNavigate } from '../../lib/safeRouterHooks';
 import { useOpsStore } from '../../store/opsStore';
 import { Moon, Sun } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { ProfileDropdown } from '../profile/ProfileDropdown';
 
 export const Header: React.FC = () => {
+  const navigate = useSafeNavigate();
   const viewMode = useOpsStore((state) => state.viewMode);
   const clients = useOpsStore((state) => state.clients);
   const selectedClientId = useOpsStore((state) => state.selectedClientId);
+  const setViewMode = useOpsStore((state) => state.setViewMode);
   const { profile } = useAuth();
 
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -28,21 +31,24 @@ export const Header: React.FC = () => {
     }
   };
 
-  const selectedClient = clients.find((c) => c.id === selectedClientId) || clients[0] || null;
-  const isTeamManagement = viewMode === 'directory';
+  const selectedClient = clients.find((c) => c.id === selectedClientId) || null;
   const isSettings = viewMode === 'settings';
   const isProfile = viewMode === 'profile';
+  const isTeamManagement = viewMode === 'directory';
 
-  let sectionName = 'Client Management';
+  let sectionName = 'Client Workspace';
   if (isSettings) {
-    sectionName = 'Settings';
+    sectionName = 'Settings & Governance';
   } else if (isProfile) {
     sectionName = 'My Profile';
   } else if (isTeamManagement) {
     sectionName = profile?.role === 'owner' || profile?.role === 'operational_manager' ? 'Team Management' : 'Team Directory';
   }
 
-  const setViewMode = useOpsStore((state) => state.setViewMode);
+  const handleReturnToWorkspace = () => {
+    navigate(selectedClientId ? `/clients/${selectedClientId}` : '/');
+    setViewMode('client_workspace');
+  };
 
   return (
     <header className="bg-white dark:bg-dark-card border-b border-gray-200 dark:border-dark-border px-6 py-3 flex items-center justify-between select-none">
@@ -50,7 +56,7 @@ export const Header: React.FC = () => {
       <div className="flex items-center gap-2 text-xs">
         <button
           type="button"
-          onClick={() => setViewMode('client_workspace')}
+          onClick={handleReturnToWorkspace}
           className="text-brand-600 font-bold tracking-tight hover:underline focus:outline-none"
         >
           FASEEH LALL & CO.
@@ -58,7 +64,7 @@ export const Header: React.FC = () => {
         <span className="text-gray-300 dark:text-gray-600">/</span>
         <button
           type="button"
-          onClick={() => setViewMode('client_workspace')}
+          onClick={handleReturnToWorkspace}
           className="text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 font-medium transition-colors focus:outline-none"
         >
           Ops Hub

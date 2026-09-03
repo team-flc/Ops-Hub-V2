@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSafeNavigate } from '../../lib/safeRouterHooks';
 import { useOpsStore } from '../../store/opsStore';
 import { 
   Building2, Users, ChevronsLeft, ChevronsRight, LogOut, Briefcase 
@@ -11,6 +12,7 @@ import { DuplicateClientModal } from '../clients/DuplicateClientModal';
 import { clientManagementService } from '../../lib/clientManagementService';
 
 export const Sidebar: React.FC = () => {
+  const navigate = useSafeNavigate();
   const viewMode = useOpsStore((state) => state.viewMode);
   const setViewMode = useOpsStore((state) => state.setViewMode);
   const sidebarCollapsed = useOpsStore((state) => state.sidebarCollapsed);
@@ -75,6 +77,7 @@ export const Sidebar: React.FC = () => {
 
   const handleSelectClient = (client: ClientRecord) => {
     setSelectedClientId(client.id);
+    navigate(`/clients/${client.id}`);
     setViewMode('client_workspace');
   };
 
@@ -90,6 +93,7 @@ export const Sidebar: React.FC = () => {
   const handleClientCreated = (newClient: ClientRecord) => {
     addClientRecord(newClient);
     setSelectedClientId(newClient.id);
+    navigate(`/clients/${newClient.id}`);
     setViewMode('client_workspace');
   };
 
@@ -114,7 +118,10 @@ export const Sidebar: React.FC = () => {
           {/* Workspace icon button to return to client workspace */}
           <button
             type="button"
-            onClick={() => setViewMode('client_workspace')}
+            onClick={() => {
+              navigate(selectedClientId ? `/clients/${selectedClientId}` : '/');
+              setViewMode('client_workspace');
+            }}
             className={`p-2.5 rounded-xl transition-colors ${
               viewMode === 'client_workspace'
                 ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
@@ -129,7 +136,10 @@ export const Sidebar: React.FC = () => {
           {isManagerOrOwner && (
             <button
               type="button"
-              onClick={() => setViewMode('settings')}
+              onClick={() => {
+                navigate('/settings');
+                setViewMode('settings');
+              }}
               className={`p-2.5 rounded-xl transition-colors ${
                 isSettingsActive
                   ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
@@ -199,7 +209,10 @@ export const Sidebar: React.FC = () => {
         <div className="p-3 border-t border-gray-100 dark:border-dark-border/60 bg-gray-50/50 dark:bg-dark-300/30 flex-shrink-0">
           <button
             type="button"
-            onClick={() => setViewMode('settings')}
+            onClick={() => {
+              navigate('/settings');
+              setViewMode('settings');
+            }}
             className={`w-full flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl transition-all ${
               isSettingsActive
                 ? 'bg-brand-500 text-white font-bold shadow-md shadow-brand-500/25'

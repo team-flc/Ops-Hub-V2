@@ -16,9 +16,34 @@ import {
 
 export function isSunday(dateInput: string | Date): boolean {
   if (!dateInput) return false;
+  if (typeof dateInput === 'string') {
+    const trimmed = dateInput.trim();
+    // Standard YYYY-MM-DD format
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      const [y, m, d] = trimmed.split('-').map(Number);
+      const dt = new Date(Date.UTC(y, m - 1, d));
+      return dt.getUTCDay() === 0;
+    }
+  }
+
   const d = new Date(dateInput);
   if (isNaN(d.getTime())) return false;
-  return d.getUTCDay() === 0;
+
+  // Check UTC day
+  if (d.getUTCDay() === 0) return true;
+
+  // Check Asia/Karachi (PKT UTC+5) day
+  try {
+    const pktDay = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Karachi',
+      weekday: 'short'
+    }).format(d);
+    if (pktDay === 'Sun') return true;
+  } catch {
+    // Fallback if Intl timeZone unavailable
+  }
+
+  return false;
 }
 
 export function isTaskOverdue(task: { dueDate: string; status: ClientTaskStatus; archivedAt?: string | null }): boolean {
@@ -322,31 +347,18 @@ export const taskManagementService = {
   async invokeEdgeFunction(action: string, payload: Record<string, any>): Promise<{ data?: any; error?: string }> {
     if (!supabase) return { error: 'Supabase client not initialized' };
     try {
-      const sessionRes = await supabase.auth.getSession();
-      const token = sessionRes.data?.session?.access_token;
+      const { data, error } = await supabase.functions.invoke('manage-client-task', {
+        body: { action, ...payload }
+      });
 
-      if (!token) {
-        return { error: 'Authentication session expired. Please sign in again.' };
+      if (error) {
+        return { error: error.message || 'Edge function execution error' };
+      }
+      if (data?.error) {
+        return { error: data.error };
       }
 
-      const response = await fetch(
-        `${import.meta.env.VITE_SUPABASE_URL || 'https://jcaptlqenwmpfchjyipw.supabase.co'}/functions/v1/manage-client-task`,
-        {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-            'Authorization': `Bearer ${token}`
-          },
-          body: JSON.stringify({ action, ...payload })
-        }
-      );
-
-      const result = await response.json().catch(() => ({}));
-      if (!response.ok) {
-        return { error: result?.error || `Server error (${response.status})` };
-      }
-
-      return { data: result };
+      return { data };
     } catch (err: any) {
       return { error: err?.message || 'Network error calling task management service.' };
     }
@@ -377,7 +389,7 @@ export const taskManagementService = {
       }
     }
 
-    // Try edge function first
+    // Authoritative Edge Function execution
     const edgeRes = await this.invokeEdgeFunction('create', {
       client_id: params.clientId,
       week_number: params.weekNumber,
@@ -390,102 +402,38 @@ export const taskManagementService = {
       due_date: params.dueDate
     });
 
-    if (!edgeRes.error && edgeRes.data?.task) {
-      const t = edgeRes.data.task;
-      return {
-        data: {
-          id: t.id,
-          clientId: t.client_id,
-          weekNumber: t.week_number,
-          title: t.title,
-          details: t.details,
-          departmentId: t.department_id,
-          assigneeId: t.assignee_id,
-          priority: t.priority,
-          plannedStart: t.planned_start,
-          dueDate: t.due_date,
-          status: t.status,
-          blockedReason: t.blocked_reason,
-          sortOrder: t.sort_order || 0,
-          createdBy: t.created_by,
-          createdAt: t.created_at,
-          updatedBy: t.updated_by,
-          updatedAt: t.updated_at,
-          isOverdue: false
-        },
-        error: null
-      };
+    if (edgeRes.error || !edgeRes.data?.task) {
+      return { data: null, error: edgeRes.error || 'Failed to create task.' };
     }
 
-    // Direct Supabase fallback for offline / test environments
-    if (!supabase) return { data: null, error: edgeRes.error || 'Supabase not configured' };
-    try {
-      const userRes = await supabase.auth.getUser();
-      const currentUserId = userRes.data?.user?.id || null;
-      const initialStatus: ClientTaskStatus = params.assigneeId ? 'Assigned' : 'Draft';
-
-      const { data: inserted, error: iErr } = await supabase
-        .from('client_tasks')
-        .insert({
-          client_id: params.clientId,
-          week_number: params.weekNumber,
-          title: params.title.trim(),
-          details: params.details?.trim() || null,
-          department_id: params.departmentId,
-          assignee_id: params.assigneeId || null,
-          priority: params.priority || 'Normal',
-          planned_start: params.plannedStart,
-          due_date: params.dueDate,
-          status: initialStatus,
-          created_by: currentUserId,
-          updated_by: currentUserId
-        })
-        .select()
-        .single();
-
-      if (iErr || !inserted) {
-        return { data: null, error: edgeRes.error || iErr?.message || 'Failed to create task.' };
-      }
-
-      await supabase.from('client_task_events').insert({
-        task_id: inserted.id,
-        client_id: params.clientId,
-        actor_id: currentUserId,
-        event_type: 'created',
-        new_state: inserted,
-        notes: `Task created in ${initialStatus} status`
-      });
-
-      return {
-        data: {
-          id: inserted.id,
-          clientId: inserted.client_id,
-          weekNumber: inserted.week_number,
-          title: inserted.title,
-          details: inserted.details,
-          departmentId: inserted.department_id,
-          assigneeId: inserted.assignee_id,
-          priority: inserted.priority,
-          plannedStart: inserted.planned_start,
-          dueDate: inserted.due_date,
-          status: inserted.status,
-          blockedReason: inserted.blocked_reason,
-          sortOrder: inserted.sort_order || 0,
-          createdBy: inserted.created_by,
-          createdAt: inserted.created_at,
-          updatedBy: inserted.updated_by,
-          updatedAt: inserted.updated_at,
-          isOverdue: false
-        },
-        error: null
-      };
-    } catch (fallbackErr: any) {
-      return { data: null, error: edgeRes.error || fallbackErr?.message || 'Failed to create task.' };
-    }
+    const t = edgeRes.data.task;
+    return {
+      data: {
+        id: t.id,
+        clientId: t.client_id,
+        weekNumber: t.week_number,
+        title: t.title,
+        details: t.details,
+        departmentId: t.department_id,
+        assigneeId: t.assignee_id,
+        priority: t.priority,
+        plannedStart: t.planned_start,
+        dueDate: t.due_date,
+        status: t.status,
+        blockedReason: t.blocked_reason,
+        sortOrder: t.sort_order || 0,
+        createdBy: t.created_by,
+        createdAt: t.created_at,
+        updatedBy: t.updated_by,
+        updatedAt: t.updated_at,
+        isOverdue: false
+      },
+      error: null
+    };
   },
 
   /**
-   * Update Task Fields (Management only)
+   * Update Task Fields (Management only) - Strictly Edge-Function Authoritative
    */
   async updateTask(params: UpdateTaskParams): Promise<{ data: ClientTask | null; error: string | null }> {
     if (params.plannedStart && params.dueDate) {
@@ -509,85 +457,38 @@ export const taskManagementService = {
       due_date: params.dueDate
     });
 
-    if (!edgeRes.error && edgeRes.data?.task) {
-      const t = edgeRes.data.task;
-      return {
-        data: {
-          id: t.id,
-          clientId: t.client_id,
-          weekNumber: t.week_number,
-          title: t.title,
-          details: t.details,
-          departmentId: t.department_id,
-          assigneeId: t.assignee_id,
-          priority: t.priority,
-          plannedStart: t.planned_start,
-          dueDate: t.due_date,
-          status: t.status,
-          blockedReason: t.blocked_reason,
-          sortOrder: t.sort_order || 0,
-          createdBy: t.created_by,
-          createdAt: t.created_at,
-          updatedBy: t.updated_by,
-          updatedAt: t.updated_at,
-          isOverdue: isTaskOverdue({ dueDate: t.due_date, status: t.status, archivedAt: t.archived_at })
-        },
-        error: null
-      };
+    if (edgeRes.error || !edgeRes.data?.task) {
+      return { data: null, error: edgeRes.error || 'Failed to update task.' };
     }
 
-    // Direct Supabase fallback
-    if (!supabase) return { data: null, error: edgeRes.error || 'Supabase not configured' };
-    try {
-      const updates: any = {};
-      if (params.title !== undefined) updates.title = params.title.trim();
-      if (params.details !== undefined) updates.details = params.details ? params.details.trim() : null;
-      if (params.departmentId !== undefined) updates.department_id = params.departmentId;
-      if (params.priority !== undefined) updates.priority = params.priority;
-      if (params.plannedStart !== undefined) updates.planned_start = params.plannedStart;
-      if (params.dueDate !== undefined) updates.due_date = params.dueDate;
-
-      const { data: updated, error: uErr } = await supabase
-        .from('client_tasks')
-        .update(updates)
-        .eq('id', params.taskId)
-        .select()
-        .single();
-
-      if (uErr || !updated) {
-        return { data: null, error: edgeRes.error || uErr?.message || 'Failed to update task.' };
-      }
-
-      return {
-        data: {
-          id: updated.id,
-          clientId: updated.client_id,
-          weekNumber: updated.week_number,
-          title: updated.title,
-          details: updated.details,
-          departmentId: updated.department_id,
-          assigneeId: updated.assignee_id,
-          priority: updated.priority,
-          plannedStart: updated.planned_start,
-          dueDate: updated.due_date,
-          status: updated.status,
-          blockedReason: updated.blocked_reason,
-          sortOrder: updated.sort_order || 0,
-          createdBy: updated.created_by,
-          createdAt: updated.created_at,
-          updatedBy: updated.updated_by,
-          updatedAt: updated.updated_at,
-          isOverdue: isTaskOverdue({ dueDate: updated.due_date, status: updated.status, archivedAt: updated.archived_at })
-        },
-        error: null
-      };
-    } catch (fallbackErr: any) {
-      return { data: null, error: edgeRes.error || fallbackErr?.message || 'Failed to update task.' };
-    }
+    const t = edgeRes.data.task;
+    return {
+      data: {
+        id: t.id,
+        clientId: t.client_id,
+        weekNumber: t.week_number,
+        title: t.title,
+        details: t.details,
+        departmentId: t.department_id,
+        assigneeId: t.assignee_id,
+        priority: t.priority,
+        plannedStart: t.planned_start,
+        dueDate: t.due_date,
+        status: t.status,
+        blockedReason: t.blocked_reason,
+        sortOrder: t.sort_order || 0,
+        createdBy: t.created_by,
+        createdAt: t.created_at,
+        updatedBy: t.updated_by,
+        updatedAt: t.updated_at,
+        isOverdue: isTaskOverdue({ dueDate: t.due_date, status: t.status, archivedAt: t.archived_at })
+      },
+      error: null
+    };
   },
 
   /**
-   * Assign or Reassign Task
+   * Assign or Reassign Task - Strictly Edge-Function Authoritative
    */
   async assignTask(taskId: string, assigneeId: string | null): Promise<{ error: string | null }> {
     const edgeRes = await this.invokeEdgeFunction('assign', {
@@ -595,40 +496,15 @@ export const taskManagementService = {
       assignee_id: assigneeId
     });
 
-    if (!edgeRes.error) return { error: null };
-
-    // Fallback
-    if (!supabase) return { error: edgeRes.error || 'Supabase not configured' };
-    try {
-      const { data: current } = await supabase
-        .from('client_tasks')
-        .select('status')
-        .eq('id', taskId)
-        .single();
-
-      let newStatus = current?.status || 'Draft';
-      if (assigneeId && newStatus === 'Draft') {
-        newStatus = 'Assigned';
-      } else if (!assigneeId) {
-        newStatus = 'Draft';
-      }
-
-      const { error: uErr } = await supabase
-        .from('client_tasks')
-        .update({
-          assignee_id: assigneeId,
-          status: newStatus
-        })
-        .eq('id', taskId);
-
-      return { error: uErr ? uErr.message : null };
-    } catch (err: any) {
-      return { error: edgeRes.error || err?.message || 'Failed to assign task.' };
+    if (edgeRes.error) {
+      return { error: edgeRes.error };
     }
+
+    return { error: null };
   },
 
   /**
-   * Update Status
+   * Update Status - Strictly Edge-Function Authoritative
    */
   async updateStatus(taskId: string, status: ClientTaskStatus, reason?: string): Promise<{ error: string | null }> {
     if (status === 'Blocked' && (!reason || !reason.trim())) {
@@ -641,29 +517,15 @@ export const taskManagementService = {
       reason
     });
 
-    if (!edgeRes.error) return { error: null };
-
-    // Fallback
-    if (!supabase) return { error: edgeRes.error || 'Supabase not configured' };
-    try {
-      const updates: any = {
-        status,
-        blocked_reason: status === 'Blocked' ? reason?.trim() : null
-      };
-
-      const { error: uErr } = await supabase
-        .from('client_tasks')
-        .update(updates)
-        .eq('id', taskId);
-
-      return { error: uErr ? uErr.message : null };
-    } catch (err: any) {
-      return { error: edgeRes.error || err?.message || 'Failed to update task status.' };
+    if (edgeRes.error) {
+      return { error: edgeRes.error };
     }
+
+    return { error: null };
   },
 
   /**
-   * Archive Task (Requires mandatory reason)
+   * Archive Task (Requires mandatory reason) - Strictly Edge-Function Authoritative
    */
   async archiveTask(taskId: string, reason: string): Promise<{ error: string | null }> {
     if (!reason || !reason.trim()) {
@@ -675,22 +537,10 @@ export const taskManagementService = {
       reason
     });
 
-    if (!edgeRes.error) return { error: null };
-
-    // Fallback
-    if (!supabase) return { error: edgeRes.error || 'Supabase not configured' };
-    try {
-      const { error: uErr } = await supabase
-        .from('client_tasks')
-        .update({
-          archived_at: new Date().toISOString(),
-          archive_reason: reason.trim()
-        })
-        .eq('id', taskId);
-
-      return { error: uErr ? uErr.message : null };
-    } catch (err: any) {
-      return { error: edgeRes.error || err?.message || 'Failed to archive task.' };
+    if (edgeRes.error) {
+      return { error: edgeRes.error };
     }
+
+    return { error: null };
   }
 };

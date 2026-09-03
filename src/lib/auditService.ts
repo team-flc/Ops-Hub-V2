@@ -1,11 +1,38 @@
 import { supabase } from './supabase';
 import { SystemAuditEvent, AuditEntityType, AuditEventAction } from '../types';
 
+/**
+ * Redact sensitive security attributes from payloads before audit persistence or display
+ */
+export function redactAuditPayload(obj: any): any {
+  if (!obj || typeof obj !== 'object') return obj;
+  const copy = Array.isArray(obj) ? [...obj] : { ...obj };
+  const secretKeywords = [
+    'password', 'passwordhash', 'token', 'access_token', 'refresh_token', 
+    'servicerolekey', 'secret', 'apikey', 'cookie', 'authorization', 
+    'recoverycode', 'otp', 'signedurl'
+  ];
+  for (const key of Object.keys(copy)) {
+    const lowerKey = key.toLowerCase();
+    if (secretKeywords.some((s) => lowerKey.includes(s))) {
+      copy[key] = '[REDACTED]';
+    } else if (typeof copy[key] === 'object') {
+      copy[key] = redactAuditPayload(copy[key]);
+    }
+  }
+  return copy;
+}
+
 export const auditService = {
+  redactAuditPayload,
+
   /**
-   * Log an immutable system audit event
+   * Client-side direct audit insertion is disabled.
+   * All authoritative audit events are generated server-side by Edge Functions
+   * (manage-client-task, manage-team-member, manage-archive, manage-profile)
+   * to guarantee non-repudiation, tamper-resistance, and atomic mutation logging.
    */
-  async logAuditEvent(params: {
+  async logAuditEvent(_params: {
     action: AuditEventAction | string;
     entityType: AuditEntityType | string;
     entityId: string;
@@ -17,90 +44,14 @@ export const auditService = {
     reason?: string | null;
     metadata?: Record<string, any> | null;
   }): Promise<{ data: SystemAuditEvent | null; error: string | null }> {
-    if (!supabase) return { data: null, error: 'Database is not configured.' };
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        return { data: null, error: 'User must be authenticated to log audit events.' };
-      }
-
-      // Fetch actor profile snapshot
-      const { data: actorProfile } = await supabase
-        .from('profiles')
-        .select('full_name, role')
-        .eq('id', user.id)
-        .single();
-
-      // Redact sensitive keys from state payloads before logging
-      const redactSecrets = (obj: any): any => {
-        if (!obj || typeof obj !== 'object') return obj;
-        const copy = Array.isArray(obj) ? [...obj] : { ...obj };
-        const secretKeys = ['password', 'passwordHash', 'token', 'access_token', 'refresh_token', 'serviceRoleKey', 'secret'];
-        for (const key of Object.keys(copy)) {
-          if (secretKeys.some(s => key.toLowerCase().includes(s.toLowerCase()))) {
-            copy[key] = '[REDACTED]';
-          } else if (typeof copy[key] === 'object') {
-            copy[key] = redactSecrets(copy[key]);
-          }
-        }
-        return copy;
-      };
-
-      const payload = {
-        actor_id: user.id,
-        actor_name: actorProfile?.full_name || user.email?.split('@')[0] || 'Unknown',
-        actor_role: actorProfile?.role || 'team_member',
-        action: params.action,
-        entity_type: params.entityType,
-        entity_id: params.entityId,
-        entity_name: params.entityName || null,
-        client_id: params.clientId || null,
-        client_name: params.clientName || null,
-        previous_state: redactSecrets(params.previousState),
-        new_state: redactSecrets(params.newState),
-        reason: params.reason || null,
-        metadata: redactSecrets(params.metadata)
-      };
-
-      const { data, error } = await supabase
-        .from('system_audit_events')
-        .insert(payload)
-        .select()
-        .single();
-
-      if (error) {
-        console.error('Failed to log audit event:', error);
-        return { data: null, error: error.message };
-      }
-
-      return {
-        data: {
-          id: data.id,
-          actorId: data.actor_id,
-          actorName: data.actor_name,
-          actorRole: data.actor_role,
-          action: data.action,
-          entityType: data.entity_type,
-          entityId: data.entity_id,
-          entityName: data.entity_name,
-          clientId: data.client_id,
-          clientName: data.client_name,
-          previousState: data.previous_state,
-          newState: data.new_state,
-          reason: data.reason,
-          metadata: data.metadata,
-          createdAt: data.created_at
-        },
-        error: null
-      };
-    } catch (err: any) {
-      console.error('Audit service error:', err);
-      return { data: null, error: err?.message || 'Unexpected audit logging error' };
-    }
+    return {
+      data: null,
+      error: 'Direct client-side audit insertion is prohibited. Audit events are generated authoritatively by server-side Edge Functions.'
+    };
   },
 
   /**
-   * Fetch system audit events with scoped filters
+   * Fetch system audit events with scoped filters (read-only through database RLS)
    */
   async fetchAuditEvents(filters?: {
     actorId?: string;
@@ -153,10 +104,10 @@ export const auditService = {
         entityName: row.entity_name,
         clientId: row.client_id,
         clientName: row.client_name,
-        previousState: row.previous_state,
-        newState: row.new_state,
+        previousState: redactAuditPayload(row.previous_state),
+        newState: redactAuditPayload(row.new_state),
         reason: row.reason,
-        metadata: row.metadata,
+        metadata: redactAuditPayload(row.metadata),
         createdAt: row.created_at
       }));
 
@@ -190,10 +141,10 @@ export const auditService = {
               entityName: row.entity_name,
               clientId: row.client_id,
               clientName: row.client_name,
-              previousState: row.previous_state,
-              newState: row.new_state,
+              previousState: redactAuditPayload(row.previous_state),
+              newState: redactAuditPayload(row.new_state),
               reason: row.reason,
-              metadata: row.metadata,
+              metadata: redactAuditPayload(row.metadata),
               createdAt: row.created_at
             });
           }

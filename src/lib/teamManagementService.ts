@@ -13,6 +13,11 @@ export interface CreateTeamMemberPayload {
   fullName: string;
   workEmail: string;
   phone?: string;
+  backupPhone?: string;
+  contactEmail?: string;
+  linkedinUrl?: string;
+  bio?: string;
+  avatarUrl?: string | null;
   startDate: string;
   departmentIds: string[];
   designationId: string;
@@ -25,6 +30,11 @@ export interface UpdateTeamMemberPayload {
   id: string;
   fullName: string;
   phone?: string;
+  backupPhone?: string;
+  contactEmail?: string;
+  linkedinUrl?: string;
+  bio?: string;
+  avatarUrl?: string | null;
   startDate: string;
   departmentIds: string[];
   designationId: string;
@@ -309,80 +319,35 @@ export const teamManagementService = {
 
   /**
    * Update an existing Team Member's profile, departments, and client access
+   * Authoritatively enforced by manage-team-member Edge Function
    */
   async updateTeamMember(
     payload: UpdateTeamMemberPayload,
-    callerId: string
+    _callerId?: string
   ): Promise<{ error?: string }> {
     if (!supabase) return { error: 'Database service unconfigured.' };
 
     try {
-      // 1. Update Profile
-      const { error: profErr } = await supabase
-        .from('profiles')
-        .update({
-          full_name: payload.fullName.trim(),
-          phone: payload.phone?.trim() || null,
-          designation_id: payload.designationId,
-          reporting_manager_id: payload.reportingManagerId || null,
-          start_date: payload.startDate,
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', payload.id);
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) return { error: 'Your session has expired. Please sign in again.' };
 
-      if (profErr) return { error: profErr.message };
-
-      // 2. Sync Departments
-      await supabase.from('profile_departments').delete().eq('profile_id', payload.id);
-      if (payload.departmentIds.length > 0) {
-        const deptRows = payload.departmentIds.map((deptId) => ({
-          profile_id: payload.id,
-          department_id: deptId,
-          created_by: callerId
-        }));
-        await supabase.from('profile_departments').insert(deptRows);
-      }
-
-      // 3. Sync Client Access (both client_team_access and profile_client_access)
-      await Promise.all([
-        supabase.from('profile_client_access').delete().eq('profile_id', payload.id),
-        supabase.from('client_team_access').delete().eq('profile_id', payload.id)
-      ]);
-
-      if (payload.clientIds && payload.clientIds.length > 0) {
-        const clientRows = payload.clientIds.map((clientId) => ({
-          profile_id: payload.id,
-          client_id: clientId,
-          granted_by: callerId
-        }));
-        const ctaRows = payload.clientIds.map((clientId) => ({
-          profile_id: payload.id,
-          client_id: clientId
-        }));
-
-        await Promise.all([
-          supabase.from('profile_client_access').insert(clientRows),
-          supabase.from('client_team_access').insert(ctaRows)
-        ]);
-      }
-
-      // 4. Audit Log
-      await supabase.from('user_management_audit_log').insert({
-        actor_id: callerId,
-        target_user_id: payload.id,
-        action: 'team_member_updated',
-        safe_changes: {
-          fullName: payload.fullName,
-          designationId: payload.designationId,
-          reportingManagerId: payload.reportingManagerId,
-          departmentCount: payload.departmentIds.length,
-          clientAccessCount: payload.clientIds?.length || 0
-        }
+      const { data, error } = await supabase.functions.invoke('manage-team-member', {
+        body: { action: 'update', ...payload },
+        headers: { Authorization: `Bearer ${token}` }
       });
 
+      if (error) {
+        return { error: error.message || 'Failed to update team member.' };
+      }
+
+      if (data?.error) {
+        return { error: data.error };
+      }
+
       return {};
-    } catch {
-      return { error: 'Failed to update team member.' };
+    } catch (err: any) {
+      return { error: err?.message || 'Failed to update team member.' };
     }
   },
 

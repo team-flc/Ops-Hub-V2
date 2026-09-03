@@ -117,6 +117,11 @@ serve(async (req: Request) => {
         fullName,
         workEmail,
         phone,
+        backupPhone,
+        contactEmail,
+        linkedinUrl,
+        bio,
+        avatarUrl,
         startDate,
         departmentIds,
         designationId,
@@ -140,6 +145,27 @@ serve(async (req: Request) => {
           { status: 400, headers: corsHeaders }
         );
       }
+
+      // Optional fields validation
+      let cleanLinkedinUrl = linkedinUrl?.trim() || null;
+      if (cleanLinkedinUrl && !/^https?:\/\//i.test(cleanLinkedinUrl)) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid LinkedIn URL. Must start with http:// or https://' }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      let cleanContactEmail = contactEmail?.trim()?.toLowerCase() || null;
+      if (cleanContactEmail && !cleanContactEmail.includes('@')) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid Contact Email format.' }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      const cleanBio = bio?.trim() || null;
+      const cleanBackupPhone = backupPhone?.trim() || null;
+      const cleanAvatarUrl = avatarUrl?.trim() || null;
 
       if (!password || !PASSWORD_REGEX.test(password)) {
         return new Response(
@@ -216,6 +242,11 @@ serve(async (req: Request) => {
           full_name: fullName.trim(),
           work_email: cleanEmail,
           phone: phone?.trim() || null,
+          backup_phone: cleanBackupPhone,
+          contact_email: cleanContactEmail,
+          linkedin_url: cleanLinkedinUrl,
+          bio: cleanBio,
+          avatar_url: cleanAvatarUrl,
           role: 'team_member',
           status: 'active',
           designation_id: designationId,
@@ -292,6 +323,192 @@ serve(async (req: Request) => {
           { status: 500, headers: corsHeaders }
         );
       }
+    }
+
+    // =========================================================================
+    // ACTION: UPDATE TEAM MEMBER (Server-Authoritative Client Access Revocation Safeguard)
+    // =========================================================================
+    if (action === 'update') {
+      const {
+        id: targetUserId,
+        fullName,
+        phone,
+        backupPhone,
+        contactEmail,
+        linkedinUrl,
+        bio,
+        avatarUrl,
+        startDate,
+        departmentIds,
+        designationId,
+        reportingManagerId,
+        clientIds
+      } = payload;
+
+      if (!targetUserId) {
+        return new Response(
+          JSON.stringify({ error: 'Target user ID is required.' }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      // 1. Fetch Target Profile
+      const { data: targetProfile, error: targetErr } = await supabaseAdmin
+        .from('profiles')
+        .select('*')
+        .eq('id', targetUserId)
+        .single();
+
+      if (targetErr || !targetProfile) {
+        return new Response(
+          JSON.stringify({ error: 'Target team member profile not found.' }),
+          { status: 404, headers: corsHeaders }
+        );
+      }
+
+      // Operational Manager scope check
+      if (callerProfile.role === 'operational_manager' && targetProfile.reporting_manager_id !== callerProfile.id) {
+        return new Response(
+          JSON.stringify({ error: 'Forbidden: You can only edit team members reporting directly to you.' }),
+          { status: 403, headers: corsHeaders }
+        );
+      }
+
+      // 2. Authoritative Client-Access Revocation Protection
+      const { data: currentClientAccess } = await supabaseAdmin
+        .from('client_team_access')
+        .select('client_id')
+        .eq('profile_id', targetUserId);
+
+      const currentClientIds = (currentClientAccess || []).map((c: any) => c.client_id);
+      const newClientIdsSet = new Set(clientIds || []);
+      const removedClientIds = currentClientIds.filter((cid: string) => !newClientIdsSet.has(cid));
+
+      if (removedClientIds.length > 0) {
+        // Query open tasks assigned to this user under any removed client
+        const { data: openTasks } = await supabaseAdmin
+          .from('client_tasks')
+          .select('id, title, client_id')
+          .eq('assignee_id', targetUserId)
+          .in('client_id', removedClientIds)
+          .in('status', ['Assigned', 'In Progress', 'Blocked', 'Team Review'])
+          .is('archived_at', null);
+
+        if (openTasks && openTasks.length > 0) {
+          return new Response(
+            JSON.stringify({
+              error: `Cannot revoke client access: Team member has ${openTasks.length} open task(s) on clients being removed. Reassign all open tasks before revoking client access.`
+            }),
+            { status: 400, headers: corsHeaders }
+          );
+        }
+      }
+
+      // Validate optional fields if provided
+      let cleanLinkedinUrl = linkedinUrl !== undefined ? (linkedinUrl?.trim() || null) : targetProfile.linkedin_url;
+      if (cleanLinkedinUrl && !/^https?:\/\//i.test(cleanLinkedinUrl)) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid LinkedIn URL. Must start with http:// or https://' }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      let cleanContactEmail = contactEmail !== undefined ? (contactEmail?.trim()?.toLowerCase() || null) : targetProfile.contact_email;
+      if (cleanContactEmail && !cleanContactEmail.includes('@')) {
+        return new Response(
+          JSON.stringify({ error: 'Invalid Contact Email format.' }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      // 3. Update Profile
+      const updateData: Record<string, any> = {
+        updated_at: new Date().toISOString()
+      };
+      if (fullName) updateData.full_name = fullName.trim();
+      if (phone !== undefined) updateData.phone = phone?.trim() || null;
+      if (backupPhone !== undefined) updateData.backup_phone = backupPhone?.trim() || null;
+      if (contactEmail !== undefined) updateData.contact_email = cleanContactEmail;
+      if (linkedinUrl !== undefined) updateData.linkedin_url = cleanLinkedinUrl;
+      if (bio !== undefined) updateData.bio = bio?.trim() || null;
+      if (avatarUrl !== undefined) updateData.avatar_url = avatarUrl?.trim() || null;
+      if (designationId) updateData.designation_id = designationId;
+      if (reportingManagerId && callerProfile.role === 'owner') updateData.reporting_manager_id = reportingManagerId;
+      if (startDate) updateData.start_date = startDate;
+
+      const { error: updateProfErr } = await supabaseAdmin
+        .from('profiles')
+        .update(updateData)
+        .eq('id', targetUserId);
+
+      if (updateProfErr) {
+        return new Response(
+          JSON.stringify({ error: updateProfErr.message || 'Failed to update profile.' }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      // 4. Atomically sync departments
+      if (departmentIds && Array.isArray(departmentIds)) {
+        await supabaseAdmin.from('profile_departments').delete().eq('profile_id', targetUserId);
+        if (departmentIds.length > 0) {
+          const deptInserts = departmentIds.map((deptId: string) => ({
+            profile_id: targetUserId,
+            department_id: deptId,
+            created_by: callerProfile.id
+          }));
+          await supabaseAdmin.from('profile_departments').insert(deptInserts);
+        }
+      }
+
+      // 5. Atomically sync both client access tables
+      if (clientIds && Array.isArray(clientIds)) {
+        await Promise.all([
+          supabaseAdmin.from('profile_client_access').delete().eq('profile_id', targetUserId),
+          supabaseAdmin.from('client_team_access').delete().eq('profile_id', targetUserId)
+        ]);
+
+        if (clientIds.length > 0) {
+          const pcaRows = clientIds.map((clientId: string) => ({
+            profile_id: targetUserId,
+            client_id: clientId,
+            granted_by: callerProfile.id
+          }));
+          const ctaRows = clientIds.map((clientId: string) => ({
+            profile_id: targetUserId,
+            client_id: clientId
+          }));
+          await Promise.all([
+            supabaseAdmin.from('profile_client_access').insert(pcaRows),
+            supabaseAdmin.from('client_team_access').insert(ctaRows)
+          ]);
+        }
+      }
+
+      // 6. Authoritative Audit Event
+      await supabaseAdmin.from('system_audit_events').insert({
+        actor_id: callerUser.id,
+        actor_name: callerProfile.full_name,
+        actor_role: callerProfile.role,
+        action: 'team_member_updated',
+        entity_type: 'team_member',
+        entity_id: targetUserId,
+        entity_name: fullName?.trim() || targetProfile.full_name,
+        previous_state: {
+          phone: targetProfile.phone,
+          designation_id: targetProfile.designation_id,
+          client_ids: currentClientIds
+        },
+        new_state: {
+          ...updateData,
+          client_ids: clientIds
+        }
+      });
+
+      return new Response(
+        JSON.stringify({ success: true, message: 'Team member updated successfully.' }),
+        { status: 200, headers: corsHeaders }
+      );
     }
 
     // =========================================================================

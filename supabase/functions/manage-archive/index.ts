@@ -1,4 +1,4 @@
-﻿// Edge Function: manage-archive
+// Edge Function: manage-archive
 // Server-side governance for recoverable archiving and restoring of clients, team members, and tasks
 
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
@@ -167,6 +167,81 @@ serve(async (req) => {
         });
 
         return new Response(JSON.stringify({ success: true }), { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
+      }
+
+      if (entityType === 'task') {
+        const { data: task } = await supabaseAdmin
+          .from('client_tasks')
+          .select('*, client:client_id(status, company_name)')
+          .eq('id', entityId)
+          .single();
+
+        if (!task) {
+          return new Response(
+            JSON.stringify({ error: 'Task not found' }),
+            { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        if (task.archived_at) {
+          return new Response(
+            JSON.stringify({ error: 'Task is already archived.' }),
+            { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+          );
+        }
+
+        // Scope check: Operational Manager can only archive tasks for assigned clients
+        if (callerProfile.role === 'operational_manager') {
+          const { data: access } = await supabaseAdmin
+            .from('client_team_access')
+            .select('client_id')
+            .eq('profile_id', user.id)
+            .eq('client_id', task.client_id)
+            .single();
+
+          if (!access) {
+            return new Response(
+              JSON.stringify({ error: 'Forbidden: You do not have management access to this client\'s tasks.' }),
+              { status: 403, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+        }
+
+        await supabaseAdmin
+          .from('client_tasks')
+          .update({
+            archived_at: now,
+            archived_by: user.id,
+            archive_reason: reason.trim(),
+            updated_at: now
+          })
+          .eq('id', entityId);
+
+        await supabaseAdmin.from('client_task_events').insert({
+          task_id: entityId,
+          client_id: task.client_id,
+          actor_id: user.id,
+          event_type: 'archived',
+          notes: `Task archived: ${reason.trim()}`
+        });
+
+        await supabaseAdmin.from('system_audit_events').insert({
+          actor_id: user.id,
+          actor_name: callerProfile.full_name,
+          actor_role: callerProfile.role,
+          action: 'task_archived',
+          entity_type: 'task',
+          entity_id: entityId,
+          entity_name: task.title,
+          client_id: task.client_id,
+          client_name: task.client?.company_name,
+          reason: reason.trim()
+        });
+
+        return new Response(
+          JSON.stringify({ success: true }),
+          { status: 200, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+        );
       }
     }
 

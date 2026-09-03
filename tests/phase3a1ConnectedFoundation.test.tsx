@@ -10,12 +10,14 @@ import { AuditLogView } from '../src/components/audit/AuditLogView';
 import { SettingsLayout } from '../src/components/settings/SettingsLayout';
 import { CreateTeamMemberModal } from '../src/components/team/CreateTeamMemberModal';
 import { ArchiveTeamMemberModal } from '../src/components/team/ArchiveTeamMemberModal';
+import { CreateClientModal } from '../src/components/clients/CreateClientModal';
 import { ClientDetailsTab } from '../src/components/clients/ClientDetailsTab';
 import { ClientWorkspaceView } from '../src/components/clients/ClientWorkspaceView';
 import { storageService } from '../src/lib/storageService';
 import { profileService } from '../src/lib/profileService';
 import { archiveService } from '../src/lib/archiveService';
 import { auditService } from '../src/lib/auditService';
+import { teamManagementService } from '../src/lib/teamManagementService';
 import { UserProfile, ClientRecord, Department, Designation } from '../src/types';
 import { useOpsStore } from '../src/store/opsStore';
 
@@ -35,6 +37,7 @@ vi.mock('../src/context/AuthContext', () => ({
 const mockFrom = vi.fn();
 const mockUpload = vi.fn();
 const mockGetPublicUrl = vi.fn();
+const mockFunctionsInvoke = vi.fn();
 
 vi.mock('../src/lib/supabase', () => ({
   supabase: {
@@ -43,6 +46,9 @@ vi.mock('../src/lib/supabase', () => ({
       getSession: () => Promise.resolve({ data: { session: { access_token: 'fake-jwt' } } })
     },
     from: (table: string) => mockFrom(table),
+    functions: {
+      invoke: (...args: any[]) => mockFunctionsInvoke(...args)
+    },
     storage: {
       from: () => ({
         upload: mockUpload,
@@ -300,21 +306,11 @@ describe('Phase 3A.1 Connected System Foundation, Settings, Profiles, Archive & 
     });
   });
 
-  // 8. OPEN-TASK REASSIGNMENT SAFEGUARD BEFORE ARCHIVING TEAM MEMBER
+  // 8. ARCHIVE SERVICE BLOCKS TEAM MEMBER ARCHIVE IF USER HAS OPEN TASKS
   it('8. ArchiveService blocks team member archive if user has open assigned tasks', async () => {
-    mockFrom.mockReturnValue({
-      select: () => ({
-        eq: () => ({
-          in: () => ({
-            is: () => Promise.resolve({
-              data: [
-                { id: 'task-1', title: 'Open Deliverable', client_id: 'c1', status: 'In Progress' }
-              ],
-              error: null
-            })
-          })
-        })
-      })
+    mockFunctionsInvoke.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'Cannot archive team member who has active open tasks.' }
     });
 
     const res = await archiveService.archiveTeamMember('user-x', 'Resigned from company');
@@ -322,35 +318,9 @@ describe('Phase 3A.1 Connected System Foundation, Settings, Profiles, Archive & 
     expect(res.error).toMatch(/cannot archive team member.*open task/i);
   });
 
-  // 9. AUDIT LOGGING & SENSITIVE SECRET REDACTION
-  it('9. AuditService logs system audit events and redacts sensitive passwords/tokens', async () => {
-    let insertedPayload: any = null;
-
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'profiles') {
-        return {
-          select: () => ({
-            eq: () => ({
-              single: () => Promise.resolve({ data: { full_name: 'Faseeh Lall', role: 'owner' }, error: null })
-            })
-          })
-        };
-      }
-      if (table === 'system_audit_events') {
-        return {
-          insert: (payload: any) => {
-            insertedPayload = payload;
-            return {
-              select: () => ({
-                single: () => Promise.resolve({ data: { id: 'evt-1', ...payload, created_at: new Date().toISOString() }, error: null })
-              })
-            };
-          }
-        };
-      }
-      return {};
-    });
-
+  // 9. AUDIT LOGGING & SENSITIVE SECRET REDACTION (ITEM 9)
+  it('9. AuditService blocks direct client-side insertions and redacts sensitive passwords/tokens', async () => {
+    // 9.1 Direct client insertion is prohibited
     const res = await auditService.logAuditEvent({
       action: 'user_created',
       entityType: 'team_member',
@@ -366,11 +336,21 @@ describe('Phase 3A.1 Connected System Foundation, Settings, Profiles, Archive & 
       reason: 'Onboarding new staff member'
     });
 
-    expect(res.error).toBeNull();
-    expect(insertedPayload).toBeDefined();
-    expect(insertedPayload.new_state.password).toBe('[REDACTED]');
-    expect(insertedPayload.new_state.token).toBe('[REDACTED]');
-    expect(insertedPayload.new_state.phone).toBe('+92 300 0000000');
+    expect(res.error).toMatch(/prohibited/i);
+
+    // 9.2 Redact utility thoroughly scrubs passwords, tokens, hashes, and secrets
+    const redacted = auditService.redactAuditPayload({
+      fullName: 'New Member',
+      password: 'SuperSecretPassword123!',
+      token: 'auth-jwt-token',
+      apiKey: 'secret-key-xyz',
+      phone: '+92 300 0000000'
+    });
+
+    expect(redacted.password).toBe('[REDACTED]');
+    expect(redacted.token).toBe('[REDACTED]');
+    expect(redacted.apiKey).toBe('[REDACTED]');
+    expect(redacted.phone).toBe('+92 300 0000000');
   });
 
   // 10. SETTINGS ROUTE FAILS CLOSED FOR TEAM MEMBER
@@ -504,5 +484,110 @@ describe('Phase 3A.1 Connected System Foundation, Settings, Profiles, Archive & 
     fireEvent.click(opsHubBtn);
 
     expect(useOpsStore.getState().viewMode).toBe('client_workspace');
+  });
+
+  // 16. CREATE TEAM MEMBER RENDERS ALL 5 OPTIONAL FIELDS (ITEM 1)
+  it('16. CreateTeamMemberModal renders all 5 optional fields and submits them in payload', async () => {
+    let capturedPayload: any = null;
+    vi.spyOn(teamManagementService, 'createTeamMember').mockImplementation(async (payload) => {
+      capturedPayload = payload;
+      return { data: { id: 'tm-new' } as any, error: null };
+    });
+
+    const mgrProfile: UserProfile = {
+      id: 'mgr-1',
+      fullName: 'John Manager',
+      role: 'operational_manager',
+      status: 'active',
+      workEmail: 'mgr@faseehlall.com',
+      createdAt: '2026-01-01',
+      updatedAt: '2026-01-01'
+    };
+
+    render(
+      <CreateTeamMemberModal
+        isOpen={true}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+        currentUserProfile={mgrProfile}
+        departments={mockDepartments}
+        designations={mockDesignations}
+        eligibleManagers={[mgrProfile]}
+        onOpenDesignationManager={vi.fn()}
+      />
+    );
+
+    // 1. Avatar upload control
+    expect(screen.getByText(/Profile Avatar \(Optional\)/i)).toBeInTheDocument();
+
+    // 2. Backup phone input
+    expect(screen.getByPlaceholderText(/\+92 321 7654321/i)).toBeInTheDocument();
+
+    // 3. Contact Email input
+    expect(screen.getByPlaceholderText(/contact\.gmail@gmail\.com/i)).toBeInTheDocument();
+
+    // 4. LinkedIn Profile URL input
+    expect(screen.getByPlaceholderText(/https:\/\/linkedin\.com\/in\/username/i)).toBeInTheDocument();
+
+    // 5. Professional Bio textarea
+    expect(screen.getByPlaceholderText(/Brief summary of member's professional background/i)).toBeInTheDocument();
+
+    // Fill optional fields
+    fireEvent.change(screen.getByPlaceholderText(/\+92 321 7654321/i), { target: { value: '+92 321 9999999' } });
+    fireEvent.change(screen.getByPlaceholderText(/contact\.gmail@gmail\.com/i), { target: { value: 'contact@gmail.com' } });
+    fireEvent.change(screen.getByPlaceholderText(/https:\/\/linkedin\.com\/in\/username/i), { target: { value: 'https://linkedin.com/in/testmember' } });
+    fireEvent.change(screen.getByPlaceholderText(/Brief summary of member's professional background/i), { target: { value: 'Senior Operations Lead' } });
+
+    // Required fields
+    fireEvent.change(screen.getByPlaceholderText(/e\.g\. Zaid Khan/i), { target: { value: 'Test Member' } });
+    fireEvent.change(screen.getByPlaceholderText(/name@faseehlall\.com/i), { target: { value: 'test@faseehlall.com' } });
+    fireEvent.change(screen.getByDisplayValue(/Select Designation/i), { target: { value: mockDesignations[0].id } });
+    fireEvent.click(screen.getByText(mockDepartments[0].name));
+    fireEvent.click(screen.getByRole('button', { name: /Generate Strong Password/i }));
+
+    // Submit
+    const submitBtn = screen.getByRole('button', { name: /Create Team Member/i });
+    await act(async () => {
+      fireEvent.click(submitBtn);
+    });
+
+    expect(capturedPayload).toBeDefined();
+    expect(capturedPayload.backupPhone).toBe('+92 321 9999999');
+    expect(capturedPayload.contactEmail).toBe('contact@gmail.com');
+    expect(capturedPayload.linkedinUrl).toBe('https://linkedin.com/in/testmember');
+    expect(capturedPayload.bio).toBe('Senior Operations Lead');
+  });
+
+  // 17. ARCHIVE STATUS BYPASS REMOVAL (ITEM 3)
+  it('17. Client status selectors exclude Archived option from create and edit interfaces', () => {
+    render(
+      <CreateClientModal
+        isOpen={true}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+        eligibleManagers={[]}
+      />
+    );
+
+    const statusSelect = screen.getByLabelText(/Lifecycle Status/i) as HTMLSelectElement;
+    const optionValues = Array.from(statusSelect.options).map(o => o.value);
+    expect(optionValues).toContain('Onboarding');
+    expect(optionValues).toContain('Active');
+    expect(optionValues).not.toContain('Archived');
+  });
+
+  // 18. SERVER-SIDE CLIENT ACCESS REVOCATION PROTECTION (ITEM 5)
+  it('18. teamManagementService.updateTeamMember routes through edge function and blocks revocation on open tasks', async () => {
+    mockFunctionsInvoke.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'Cannot revoke client access: team member has 2 open assigned tasks on Acme Global.' }
+    });
+
+    const res = await teamManagementService.updateTeamMember('tm-1', {
+      fullName: 'Updated Name',
+      clientIds: []
+    });
+
+    expect(res.error).toMatch(/cannot revoke client access.*open.*task/i);
   });
 });

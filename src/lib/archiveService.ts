@@ -1,4 +1,4 @@
-﻿import { supabase } from './supabase';
+import { supabase } from './supabase';
 import { ArchivedRecord, ClientRecord, ClientTask, UserProfile } from '../types';
 import { auditService } from './auditService';
 
@@ -203,300 +203,109 @@ export const archiveService = {
   },
 
   /**
-   * Archive a Client
+   * Authoritative execution via manage-archive Edge Function
+   * Strictly server-enforced, zero direct frontend fallback mutations
+   */
+  async invokeManageArchive(body: Record<string, any>): Promise<{ success: boolean; error: string | null }> {
+    if (!supabase) return { success: false, error: 'Database service unconfigured.' };
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) return { success: false, error: 'Your session has expired. Please sign in again.' };
+
+      const { data, error } = await supabase.functions.invoke('manage-archive', {
+        body,
+        headers: { Authorization: `Bearer ${token}` }
+      });
+
+      if (error) {
+        return { success: false, error: error.message || 'Edge function error' };
+      }
+      if (data?.error) {
+        return { success: false, error: data.error };
+      }
+      return { success: true, error: null };
+    } catch (err: any) {
+      return { success: false, error: err?.message || 'Network error calling manage-archive' };
+    }
+  },
+
+  /**
+   * Archive a Client - Authoritatively executed by manage-archive
    */
   async archiveClient(clientId: string, reason: string): Promise<{ success: boolean; error: string | null }> {
     if (!reason?.trim()) {
       return { success: false, error: 'Mandatory archive reason is required.' };
     }
-    if (!supabase) return { success: false, error: 'Database is not configured.' };
-
-    try {
-      const { data: { user } } = await supabase.auth.getUser();
-      const { data: client, error: fetchErr } = await supabase
-        .from('clients')
-        .select('*')
-        .eq('id', clientId)
-        .single();
-
-      if (fetchErr || !client) {
-        return { success: false, error: 'Client not found.' };
-      }
-
-      const now = new Date().toISOString();
-      const { error: updateErr } = await supabase
-        .from('clients')
-        .update({
-          status: 'Archived',
-          previous_status: client.status,
-          archived_at: now,
-          archived_by: user?.id || null,
-          archive_reason: reason.trim(),
-          updated_at: now
-        })
-        .eq('id', clientId);
-
-      if (updateErr) {
-        return { success: false, error: updateErr.message };
-      }
-
-      await auditService.logAuditEvent({
-        action: 'client_archived',
-        entityType: 'client',
-        entityId: clientId,
-        entityName: client.company_name,
-        clientId: clientId,
-        clientName: client.company_name,
-        previousState: { status: client.status },
-        newState: { status: 'Archived', previous_status: client.status },
-        reason: reason.trim()
-      });
-
-      return { success: true, error: null };
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'Failed to archive client.' };
-    }
+    return this.invokeManageArchive({
+      action: 'archive',
+      entityType: 'client',
+      entityId: clientId,
+      reason: reason.trim()
+    });
   },
 
   /**
-   * Restore an Archived Client
+   * Restore an Archived Client - Authoritatively executed by manage-archive
    */
   async restoreClient(clientId: string): Promise<{ success: boolean; error: string | null }> {
-    if (!supabase) return { success: false, error: 'Database is not configured.' };
-    try {
-      const { data: client, error: fetchErr } = await supabase
-        .from('clients')
-        .select('*')
-        .eq('id', clientId)
-        .single();
-
-      if (fetchErr || !client) {
-        return { success: false, error: 'Client not found.' };
-      }
-
-      const restoreStatus = client.previous_status && client.previous_status !== 'Archived' 
-        ? client.previous_status 
-        : 'Active';
-
-      const now = new Date().toISOString();
-      const { error: updateErr } = await supabase
-        .from('clients')
-        .update({
-          status: restoreStatus,
-          archived_at: null,
-          archived_by: null,
-          archive_reason: null,
-          updated_at: now
-        })
-        .eq('id', clientId);
-
-      if (updateErr) {
-        return { success: false, error: updateErr.message };
-      }
-
-      await auditService.logAuditEvent({
-        action: 'client_restored',
-        entityType: 'client',
-        entityId: clientId,
-        entityName: client.company_name,
-        clientId: clientId,
-        clientName: client.company_name,
-        previousState: { status: 'Archived' },
-        newState: { status: restoreStatus },
-        reason: 'Restored from Archive Center'
-      });
-
-      return { success: true, error: null };
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'Failed to restore client.' };
-    }
+    return this.invokeManageArchive({
+      action: 'restore',
+      entityType: 'client',
+      entityId: clientId
+    });
   },
 
   /**
-   * Archive a Team Member
+   * Archive a Team Member - Authoritatively executed by manage-archive
    */
   async archiveTeamMember(profileId: string, reason: string): Promise<{ success: boolean; error: string | null }> {
     if (!reason?.trim()) {
       return { success: false, error: 'Mandatory archive reason is required.' };
     }
-    if (!supabase) return { success: false, error: 'Database is not configured.' };
-
-    try {
-      // 1. Verify open tasks
-      const openCheck = await this.checkTeamMemberOpenTasks(profileId);
-      if (openCheck.hasOpenTasks) {
-        return {
-          success: false,
-          error: `Cannot archive team member: User has ${openCheck.openTaskCount} open task(s). Reassign all open tasks before archiving.`
-        };
-      }
-
-      const { data: { user } } = await supabase.auth.getUser();
-      const { data: profile, error: fetchErr } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', profileId)
-        .single();
-
-      if (fetchErr || !profile) {
-        return { success: false, error: 'User profile not found.' };
-      }
-
-      const now = new Date().toISOString();
-      const { error: updateErr } = await supabase
-        .from('profiles')
-        .update({
-          status: 'suspended',
-          previous_status: profile.status,
-          archived_at: now,
-          archived_by: user?.id || null,
-          archive_reason: reason.trim(),
-          suspended_at: now,
-          suspended_by: user?.id || null,
-          updated_at: now
-        })
-        .eq('id', profileId);
-
-      if (updateErr) {
-        return { success: false, error: updateErr.message };
-      }
-
-      await auditService.logAuditEvent({
-        action: 'user_archived',
-        entityType: 'team_member',
-        entityId: profileId,
-        entityName: profile.full_name,
-        previousState: { status: profile.status },
-        newState: { status: 'suspended', archived_at: now },
-        reason: reason.trim()
-      });
-
-      return { success: true, error: null };
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'Failed to archive team member.' };
-    }
+    return this.invokeManageArchive({
+      action: 'archive',
+      entityType: 'team_member',
+      entityId: profileId,
+      reason: reason.trim()
+    });
   },
 
   /**
-   * Restore a Team Member (restores to Suspended status for safety)
+   * Restore a Team Member - Authoritatively executed by manage-archive
    */
   async restoreTeamMember(profileId: string): Promise<{ success: boolean; error: string | null }> {
-    if (!supabase) return { success: false, error: 'Database is not configured.' };
-    try {
-      const { data: profile, error: fetchErr } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', profileId)
-        .single();
-
-      if (fetchErr || !profile) {
-        return { success: false, error: 'User profile not found.' };
-      }
-
-      const now = new Date().toISOString();
-      // Restore strictly to 'suspended' status first
-      const { error: updateErr } = await supabase
-        .from('profiles')
-        .update({
-          status: 'suspended',
-          archived_at: null,
-          archived_by: null,
-          archive_reason: null,
-          updated_at: now
-        })
-        .eq('id', profileId);
-
-      if (updateErr) {
-        return { success: false, error: updateErr.message };
-      }
-
-      await auditService.logAuditEvent({
-        action: 'user_restored',
-        entityType: 'team_member',
-        entityId: profileId,
-        entityName: profile.full_name,
-        previousState: { status: 'archived' },
-        newState: { status: 'suspended' },
-        reason: 'Restored from Archive Center to Suspended status (awaiting explicit reactivation)'
-      });
-
-      return { success: true, error: null };
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'Failed to restore team member.' };
-    }
+    return this.invokeManageArchive({
+      action: 'restore',
+      entityType: 'team_member',
+      entityId: profileId
+    });
   },
 
   /**
-   * Restore an Archived Task
+   * Archive a Task - Authoritatively executed by manage-archive
+   */
+  async archiveTask(taskId: string, reason: string): Promise<{ success: boolean; error: string | null }> {
+    if (!reason?.trim()) {
+      return { success: false, error: 'Mandatory archive reason is required.' };
+    }
+    return this.invokeManageArchive({
+      action: 'archive',
+      entityType: 'task',
+      entityId: taskId,
+      reason: reason.trim()
+    });
+  },
+
+  /**
+   * Restore an Archived Task - Authoritatively executed by manage-archive
    */
   async restoreTask(taskId: string, newAssigneeId?: string): Promise<{ success: boolean; error: string | null }> {
-    if (!supabase) return { success: false, error: 'Database is not configured.' };
-    try {
-      const { data: task, error: fetchErr } = await supabase
-        .from('client_tasks')
-        .select('*, client:client_id(status, company_name)')
-        .eq('id', taskId)
-        .single();
-
-      if (fetchErr || !task) {
-        return { success: false, error: 'Task not found.' };
-      }
-
-      // Check if client is archived
-      if (task.client?.status === 'Archived') {
-        return {
-          success: false,
-          error: `Cannot restore task: Parent client "${task.client.company_name}" is archived. Please restore the client first.`
-        };
-      }
-
-      const now = new Date().toISOString();
-      const updatePayload: Record<string, any> = {
-        archived_at: null,
-        archived_by: null,
-        archive_reason: null,
-        updated_at: now
-      };
-
-      if (newAssigneeId) {
-        updatePayload.assignee_id = newAssigneeId;
-        if (task.status === 'Draft') {
-          updatePayload.status = 'Assigned';
-        }
-      }
-
-      const { error: updateErr } = await supabase
-        .from('client_tasks')
-        .update(updatePayload)
-        .eq('id', taskId);
-
-      if (updateErr) {
-        return { success: false, error: updateErr.message };
-      }
-
-      // Append task event
-      const { data: { user } } = await supabase.auth.getUser();
-      await supabase.from('client_task_events').insert({
-        task_id: taskId,
-        client_id: task.client_id,
-        actor_id: user?.id || null,
-        event_type: 'restored',
-        notes: 'Task restored from Archive Center'
-      });
-
-      await auditService.logAuditEvent({
-        action: 'task_restored',
-        entityType: 'task',
-        entityId: taskId,
-        entityName: task.title,
-        clientId: task.client_id,
-        clientName: task.client?.company_name,
-        reason: 'Restored from Archive Center'
-      });
-
-      return { success: true, error: null };
-    } catch (err: any) {
-      return { success: false, error: err?.message || 'Failed to restore task.' };
-    }
+    return this.invokeManageArchive({
+      action: 'restore',
+      entityType: 'task',
+      entityId: taskId,
+      newAssigneeId: newAssigneeId || undefined
+    });
   }
 };

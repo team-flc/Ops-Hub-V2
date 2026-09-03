@@ -4,6 +4,7 @@ import {
   Plus, Copy, Check, AlertCircle, RefreshCw, Loader2 
 } from 'lucide-react';
 import { ClientRecord } from '../../types';
+import { useSignedUrl } from '../../lib/storageService';
 
 interface ClientSwitcherProps {
   clients: ClientRecord[];
@@ -21,6 +22,45 @@ const PACKAGE_BADGE_STYLES: Record<string, string> = {
   Basic: 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20',
   Intermediate: 'bg-purple-500/10 text-purple-600 dark:text-purple-400 border-purple-500/20',
   Advanced: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+};
+
+const ClientLogoAvatar: React.FC<{
+  logoUrl?: string | null;
+  companyName: string;
+  sizeClass?: string;
+  isSelected?: boolean;
+}> = ({
+  logoUrl,
+  companyName,
+  sizeClass = 'w-8 h-8 rounded-xl',
+  isSelected = false
+}) => {
+  const displayUrl = useSignedUrl('client-logos', logoUrl);
+  const initials = companyName
+    ? companyName.split(' ').map((w) => w[0]).join('').substring(0, 2).toUpperCase()
+    : 'CL';
+
+  if (displayUrl) {
+    return (
+      <img
+        src={displayUrl}
+        alt={companyName}
+        className={`${sizeClass} object-contain border border-gray-200 dark:border-dark-border p-0.5 bg-white flex-shrink-0`}
+      />
+    );
+  }
+
+  return (
+    <div
+      className={`${sizeClass} ${
+        isSelected
+          ? 'bg-brand-500 text-white shadow-sm'
+          : 'bg-gradient-to-tr from-brand-600 to-indigo-600 text-white shadow-sm'
+      } font-black text-xs flex items-center justify-center flex-shrink-0`}
+    >
+      {initials}
+    </div>
+  );
 };
 
 export const ClientSwitcher: React.FC<ClientSwitcherProps> = ({
@@ -94,17 +134,11 @@ export const ClientSwitcher: React.FC<ClientSwitcherProps> = ({
         title="Switch Client Workspace"
       >
         <div className="flex items-center gap-2.5 min-w-0">
-          {selectedClient?.logoUrl ? (
-            <img
-              src={selectedClient.logoUrl}
-              alt={selectedClient.companyName}
-              className="w-8 h-8 rounded-xl object-contain border border-gray-200 dark:border-dark-border p-0.5 bg-white flex-shrink-0"
-            />
-          ) : (
-            <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-600 text-white font-black text-xs flex items-center justify-center shadow-sm flex-shrink-0">
-              {selectedClient ? getClientInitials(selectedClient.companyName) : 'FL'}
-            </div>
-          )}
+          <ClientLogoAvatar
+            logoUrl={selectedClient?.logoUrl}
+            companyName={selectedClient?.companyName || 'FL'}
+            sizeClass="w-8 h-8 rounded-xl"
+          />
 
           <div className="min-w-0 text-left">
             <span className="text-[10px] font-bold uppercase tracking-wider text-brand-600 dark:text-brand-400 block truncate">
@@ -221,21 +255,12 @@ export const ClientSwitcher: React.FC<ClientSwitcherProps> = ({
                     >
                       {/* Left: Logo/Initials + Company Name + Status */}
                       <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                        {client.logoUrl ? (
-                          <img
-                            src={client.logoUrl}
-                            alt={client.companyName}
-                            className="w-7 h-7 rounded-lg object-contain border border-gray-200 dark:border-dark-border p-0.5 bg-white flex-shrink-0"
-                          />
-                        ) : (
-                          <div className={`w-7 h-7 rounded-lg font-black text-xs flex items-center justify-center flex-shrink-0 ${
-                            isSelected
-                              ? 'bg-brand-500 text-white shadow-sm'
-                              : 'bg-gray-200 dark:bg-dark-200 text-gray-700 dark:text-gray-300'
-                          }`}>
-                            {getClientInitials(client.companyName)}
-                          </div>
-                        )}
+                        <ClientLogoAvatar
+                          logoUrl={client.logoUrl}
+                          companyName={client.companyName}
+                          sizeClass="w-7 h-7 rounded-lg"
+                          isSelected={isSelected}
+                        />
                         <div className="min-w-0">
                           <span className={`text-xs font-bold truncate block ${
                             isSelected ? 'text-brand-600 dark:text-brand-400' : 'text-gray-900 dark:text-gray-100'

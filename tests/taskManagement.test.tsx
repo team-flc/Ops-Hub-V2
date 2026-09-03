@@ -18,6 +18,7 @@ import { ClientWorkspaceView } from '../src/components/clients/ClientWorkspaceVi
 const mockGetUser = vi.fn();
 const mockGetSession = vi.fn();
 const mockFrom = vi.fn();
+const mockFunctionsInvoke = vi.fn();
 
 vi.mock('../src/lib/supabase', () => {
   return {
@@ -28,7 +29,10 @@ vi.mock('../src/lib/supabase', () => {
         getSession: () => mockGetSession(),
         signOut: vi.fn()
       },
-      from: (table: string) => mockFrom(table)
+      from: (table: string) => mockFrom(table),
+      functions: {
+        invoke: (...args: any[]) => mockFunctionsInvoke(...args)
+      }
     }
   };
 });
@@ -89,26 +93,67 @@ describe('Phase 3A: Operational Task Management Core Unit & Security Tests', () 
     mockGetSession.mockResolvedValue({ data: { session: { access_token: 'mock-token' } }, error: null });
   });
 
-  // 1. SUNDAY VALIDATION & DATE RULES
-  it('1. Rejects Sunday start and Sunday due dates', () => {
-    const sundayDate = '2026-09-06T10:00:00.000Z'; // Sunday
-    const mondayDate = '2026-09-07T10:00:00.000Z'; // Monday
-    const fridayDate = '2026-09-11T18:00:00.000Z'; // Friday
+  // 1. COMPREHENSIVE SUNDAY VALIDATION & DATE RULES (ITEM 12)
+  it('1. Thoroughly validates Sundays across all weekdays, month boundaries, leap years, and timezones', () => {
+    // 1.1 All days of the week: Monday through Saturday accepted, Sunday rejected
+    // 2026-09-07 (Mon) to 2026-09-13 (Sun)
+    expect(isSunday('2026-09-07T10:00:00.000Z')).toBe(false); // Monday
+    expect(isSunday('2026-09-08T10:00:00.000Z')).toBe(false); // Tuesday
+    expect(isSunday('2026-09-09T10:00:00.000Z')).toBe(false); // Wednesday
+    expect(isSunday('2026-09-10T10:00:00.000Z')).toBe(false); // Thursday
+    expect(isSunday('2026-09-11T10:00:00.000Z')).toBe(false); // Friday
+    expect(isSunday('2026-09-12T10:00:00.000Z')).toBe(false); // Saturday
+    expect(isSunday('2026-09-13T10:00:00.000Z')).toBe(true);  // Sunday
 
-    expect(isSunday(sundayDate)).toBe(true);
-    expect(isSunday(mondayDate)).toBe(false);
+    // 1.2 End-of-month boundaries
+    expect(isSunday('2026-05-31T12:00:00.000Z')).toBe(true);  // May 31, 2026 is Sunday
+    expect(isSunday('2026-06-30T12:00:00.000Z')).toBe(false); // June 30, 2026 is Tuesday
+    expect(isSunday('2026-08-31T12:00:00.000Z')).toBe(false); // August 31, 2026 is Monday
 
-    // Test validateTaskDates
+    // 1.3 Year-end rollover boundaries
+    expect(isSunday('2026-12-31T12:00:00.000Z')).toBe(false); // Dec 31, 2026 is Thursday
+    expect(isSunday('2027-01-01T12:00:00.000Z')).toBe(false); // Jan 1, 2027 is Friday
+    expect(isSunday('2027-01-03T12:00:00.000Z')).toBe(true);  // Jan 3, 2027 is Sunday
+
+    // 1.4 Leap year dates (e.g. Feb 29, 2024 was Thursday)
+    expect(isSunday('2024-02-29T12:00:00.000Z')).toBe(false); // Leap Day (Thursday)
+    expect(isSunday('2024-02-25T12:00:00.000Z')).toBe(true);  // Leap Year Sunday
+
+    // 1.5 Timezone boundary conditions (UTC midnight and Asia/Karachi PKT UTC+5)
+    expect(isSunday('2026-09-06T00:00:00.000Z')).toBe(true);  // UTC midnight Sunday
+    expect(isSunday('2026-09-06T12:00:00+05:00')).toBe(true); // PKT noon Sunday
+    expect(isSunday('2026-09-07T12:00:00+05:00')).toBe(false); // PKT noon Monday
+
+    // 1.6 Manual text input format (YYYY-MM-DD) vs date-picker ISO values
+    expect(isSunday('2026-09-06')).toBe(true);   // Sunday date string
+    expect(isSunday('2026-09-07')).toBe(false);  // Monday date string
+    expect(isSunday('2026-09-13')).toBe(true);   // Sunday date string
+
+    // 1.7 validateTaskDates rejection combinations
+    const mondayDate = '2026-09-07T10:00:00.000Z';
+    const fridayDate = '2026-09-11T18:00:00.000Z';
+    const sundayDate = '2026-09-06T10:00:00.000Z';
+    const sundayDue = '2026-09-13T18:00:00.000Z';
+
+    // planned_start on Sunday (rejected)
     const sundayStartRes = validateTaskDates(sundayDate, fridayDate);
     expect(sundayStartRes.valid).toBe(false);
-    expect(sundayStartRes.error).toMatch(/Sunday/i);
+    expect(sundayStartRes.error).toMatch(/Planned start date cannot fall on a Sunday/i);
 
-    const sundayDueRes = validateTaskDates(mondayDate, sundayDate);
+    // due_date on Sunday (rejected)
+    const sundayDueRes = validateTaskDates(mondayDate, sundayDue);
     expect(sundayDueRes.valid).toBe(false);
-    expect(sundayDueRes.error).toMatch(/Sunday/i);
+    expect(sundayDueRes.error).toMatch(/Due date cannot fall on a Sunday/i);
 
+    // Both on Sunday (rejected)
+    const bothSundayRes = validateTaskDates(sundayDate, sundayDue);
+    expect(bothSundayRes.valid).toBe(false);
+    expect(bothSundayRes.error).toMatch(/Sunday/i);
+
+    // Valid weekday pairs (accepted)
     const validRes = validateTaskDates(mondayDate, fridayDate);
     expect(validRes.valid).toBe(true);
+    expect(validRes.error).toBeUndefined();
   });
 
   // 2. DUE DATE MUST BE LATER THAN PLANNED START
@@ -144,31 +189,24 @@ describe('Phase 3A: Operational Task Management Core Unit & Security Tests', () 
 
   // 4. UNASSIGNED TASK DEFAULTS TO DRAFT & ASSIGNED BECOMES ASSIGNED
   it('4. Creates unassigned task as Draft and assigned task as Assigned', async () => {
-    const insertMock = vi.fn().mockReturnValue({
-      select: () => ({
-        single: () => Promise.resolve({
-          data: {
-            id: 'new-task-id',
-            client_id: 'client-1',
-            week_number: 1,
-            title: 'Draft Task Test',
-            department_id: 'dept-1',
-            assignee_id: null,
-            priority: 'Normal',
-            planned_start: '2026-09-02T09:00:00.000Z',
-            due_date: '2026-09-05T18:00:00.000Z',
-            status: 'Draft',
-            created_at: new Date().toISOString()
-          },
-          error: null
-        })
-      })
-    });
-
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'client_tasks') return { insert: insertMock };
-      if (table === 'client_task_events') return { insert: vi.fn().mockResolvedValue({ error: null }) };
-      return {};
+    mockFunctionsInvoke.mockResolvedValueOnce({
+      data: {
+        success: true,
+        task: {
+          id: 'new-task-id',
+          client_id: 'client-1',
+          week_number: 1,
+          title: 'Draft Task Test',
+          department_id: 'dept-1',
+          assignee_id: null,
+          priority: 'Normal',
+          planned_start: '2026-09-02T09:00:00.000Z',
+          due_date: '2026-09-05T18:00:00.000Z',
+          status: 'Draft',
+          created_at: new Date().toISOString()
+        }
+      },
+      error: null
     });
 
     // Create Draft
@@ -441,31 +479,23 @@ describe('Phase 3A: Operational Task Management Core Unit & Security Tests', () 
 
   // 12. CHANGING WORKSPACE WEEK DROPDOWN IN MODAL UPDATES BADGE AND SUBMISSION PAYLOAD
   it('12. Changing Workspace Week inside CreateClientTaskModal updates badge and create payload', async () => {
-    const insertMock = vi.fn().mockReturnValue({
-      select: () => ({
-        single: () => Promise.resolve({
-          data: {
-            id: 'new-task-w3',
-            client_id: 'client-1',
-            week_number: 3,
-            title: 'Week 3 Deliverable',
-            department_id: 'dept-1',
-            assignee_id: null,
-            priority: 'Normal',
-            planned_start: '2026-09-02T09:00:00.000Z',
-            due_date: '2026-09-05T18:00:00.000Z',
-            status: 'Draft',
-            created_at: new Date().toISOString()
-          },
-          error: null
-        })
-      })
-    });
-
-    mockFrom.mockImplementation((table: string) => {
-      if (table === 'client_tasks') return { insert: insertMock };
-      if (table === 'client_task_events') return { insert: vi.fn().mockResolvedValue({ error: null }) };
-      return {};
+    mockFunctionsInvoke.mockResolvedValueOnce({
+      data: {
+        success: true,
+        task: {
+          id: 'new-task-w3',
+          client_id: 'client-1',
+          week_number: 3,
+          title: 'Week 3 Deliverable',
+          department_id: 'dept-1',
+          priority: 'Normal',
+          planned_start: '2026-09-02T09:00:00.000Z',
+          due_date: '2026-09-05T18:00:00.000Z',
+          status: 'Draft',
+          created_at: new Date().toISOString()
+        }
+      },
+      error: null
     });
 
     const onClose = vi.fn();

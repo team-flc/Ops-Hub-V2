@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useSafeNavigate } from '../../lib/safeRouterHooks';
 import { useAuth } from '../../context/AuthContext';
 import { 
   User, Mail, Phone, Building2, Briefcase, 
@@ -6,7 +7,7 @@ import {
 } from 'lucide-react';
 import { ROLE_DISPLAY_NAMES } from '../../types';
 import { profileService } from '../../lib/profileService';
-import { storageService } from '../../lib/storageService';
+import { storageService, useSignedUrl } from '../../lib/storageService';
 import { useOpsStore } from '../../store/opsStore';
 
 const LinkedInIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" }) => (
@@ -16,7 +17,10 @@ const LinkedInIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" 
 );
 
 export const MyProfileView: React.FC = () => {
+  const navigate = useSafeNavigate();
   const { user, profile, refreshProfile } = useAuth();
+  const selectedClientId = useOpsStore((state) => state.selectedClientId);
+  const setViewMode = useOpsStore((state) => state.setViewMode);
 
   // Self-editable state
   const [fullName, setFullName] = useState('');
@@ -54,6 +58,8 @@ export const MyProfileView: React.FC = () => {
     .substring(0, 2)
     .toUpperCase() || 'FL';
 
+  const displayAvatarUrl = useSignedUrl('profile-avatars', avatarUrl);
+
   const handleAvatarFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file || !user) return;
@@ -65,10 +71,10 @@ export const MyProfileView: React.FC = () => {
     const res = await storageService.uploadAvatar(file, user.id);
     setIsUploading(false);
 
-    if (res.error || !res.url) {
+    if (res.error || !res.path) {
       setErrorMessage(res.error || 'Failed to upload image.');
     } else {
-      setAvatarUrl(res.url);
+      setAvatarUrl(res.path);
       setSuccessMessage('Avatar uploaded successfully! Click Save Changes to apply.');
     }
   };
@@ -105,15 +111,16 @@ export const MyProfileView: React.FC = () => {
     }
   };
 
-  const setViewMode = useOpsStore((state) => state.setViewMode);
-
   return (
     <div className="p-6 md:p-8 max-w-4xl mx-auto space-y-6 select-none animate-in fade-in duration-200">
       {/* Top Return Action */}
       <div className="flex items-center justify-between">
         <button
           type="button"
-          onClick={() => setViewMode('client_workspace')}
+          onClick={() => {
+            navigate(selectedClientId ? `/clients/${selectedClientId}` : '/');
+            setViewMode('client_workspace');
+          }}
           className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-white dark:hover:bg-dark-card transition-colors shadow-sm"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
@@ -125,9 +132,9 @@ export const MyProfileView: React.FC = () => {
       <div className="bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-3xl p-6 md:p-8 shadow-sm flex flex-col md:flex-row items-center md:items-start gap-6">
         {/* Avatar Upload Container */}
         <div className="relative group">
-          {avatarUrl ? (
+          {displayAvatarUrl ? (
             <img
-              src={avatarUrl}
+              src={displayAvatarUrl}
               alt={displayName}
               className="w-24 h-24 md:w-28 md:h-28 rounded-3xl object-cover border-2 border-brand-500/30 shadow-md"
             />

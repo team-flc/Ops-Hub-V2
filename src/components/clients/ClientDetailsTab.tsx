@@ -27,7 +27,7 @@ import {
   calculateLinkedInReadiness,
   LinkedInProfileInput 
 } from '../../lib/clientManagementService';
-import { storageService } from '../../lib/storageService';
+import { storageService, useSignedUrl } from '../../lib/storageService';
 import { archiveService } from '../../lib/archiveService';
 
 interface ClientDetailsTabProps {
@@ -38,7 +38,7 @@ interface ClientDetailsTabProps {
 }
 
 const PACKAGES: ClientPackage[] = ['Basic', 'Intermediate', 'Advanced'];
-const STATUSES: ClientStatus[] = ['Onboarding', 'Active', 'Paused', 'Archived'];
+const STATUSES: ClientStatus[] = ['Onboarding', 'Active', 'Paused'];
 const PAUSE_REASONS: ClientPauseReason[] = [
   'Payment overdue',
   'Client request',
@@ -127,6 +127,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
   const isTeamMember = currentUserProfile?.role === 'team_member';
   const isManagerOrOwner = currentUserProfile?.role === 'owner' || currentUserProfile?.role === 'operational_manager';
   const readiness = calculateLinkedInReadiness(requiredLinkedInCount, profiles);
+  const displayLogoUrl = useSignedUrl('client-logos', logoUrl);
 
   // Handle Logo Upload
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -141,10 +142,10 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     setErrorMsg(null);
     try {
       const res = await storageService.uploadClientLogo(file, client.id);
-      if (res.error || !res.url) {
+      if (res.error || !res.path) {
         setErrorMsg(res.error || 'Failed to upload client logo.');
       } else {
-        setLogoUrl(res.url);
+        setLogoUrl(res.path);
         setSuccessMsg('Logo uploaded successfully. Click "Save Changes" to apply.');
         setTimeout(() => setSuccessMsg(null), 3500);
       }
@@ -418,9 +419,9 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
           </div>
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
             <div className="relative group flex-shrink-0">
-              {logoUrl ? (
+              {displayLogoUrl ? (
                 <img
-                  src={logoUrl}
+                  src={displayLogoUrl}
                   alt={companyName}
                   className="w-16 h-16 rounded-2xl object-contain border border-gray-200 dark:border-dark-border p-1 bg-white shadow-sm"
                 />

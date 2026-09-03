@@ -1,10 +1,13 @@
-﻿import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
+import { useSafeNavigate } from '../../lib/safeRouterHooks';
 import { useAuth } from '../../context/AuthContext';
 import { ROLE_DISPLAY_NAMES } from '../../types';
 import { User, LogOut, Mail } from 'lucide-react';
 import { useOpsStore } from '../../store/opsStore';
+import { useSignedUrl } from '../../lib/storageService';
 
 export const ProfileDropdown: React.FC = () => {
+  const navigate = useSafeNavigate();
   const { user, profile, signOut } = useAuth();
   const setViewMode = useOpsStore((state) => state.setViewMode);
   const [isOpen, setIsOpen] = useState(false);
@@ -14,6 +17,7 @@ export const ProfileDropdown: React.FC = () => {
   const displayRole = profile?.role ? ROLE_DISPLAY_NAMES[profile.role] : 'Team Member';
   const displayEmail = profile?.workEmail || user?.email || 'N/A';
   const avatarUrl = profile?.avatarUrl;
+  const displayAvatarUrl = useSignedUrl('profile-avatars', avatarUrl);
 
   const initials = displayName
     .split(' ')
@@ -34,6 +38,7 @@ export const ProfileDropdown: React.FC = () => {
   }, []);
 
   const handleOpenMyProfile = () => {
+    navigate('/profile');
     setViewMode('profile');
     setIsOpen(false);
   };
@@ -47,9 +52,9 @@ export const ProfileDropdown: React.FC = () => {
         aria-label="Staff Profile Menu"
         className="flex items-center gap-2 p-1 rounded-xl hover:bg-gray-100 dark:hover:bg-dark-200 transition-all border border-transparent hover:border-gray-200 dark:border-dark-border"
       >
-        {avatarUrl ? (
+        {displayAvatarUrl ? (
           <img
-            src={avatarUrl}
+            src={displayAvatarUrl}
             alt={displayName}
             className="w-8 h-8 rounded-xl object-cover border border-gray-200 dark:border-dark-border shadow-sm"
           />
@@ -65,9 +70,9 @@ export const ProfileDropdown: React.FC = () => {
         <div className="absolute right-0 mt-2 w-64 bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-2xl shadow-xl z-50 p-2 text-xs animate-in fade-in zoom-in-95 duration-150 select-none">
           {/* User Header */}
           <div className="p-3 border-b border-gray-100 dark:border-dark-border/60 flex items-center gap-3">
-            {avatarUrl ? (
+            {displayAvatarUrl ? (
               <img
-                src={avatarUrl}
+                src={displayAvatarUrl}
                 alt={displayName}
                 className="w-10 h-10 rounded-xl object-cover border border-gray-200 dark:border-dark-border flex-shrink-0"
               />

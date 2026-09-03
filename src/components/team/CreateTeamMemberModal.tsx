@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, UserPlus, Shield, Building2, Briefcase, UserCheck, 
   Key, Eye, EyeOff, Sparkles, Check, Copy, AlertCircle, 
-  Loader2, CheckCircle2 
+  Loader2, CheckCircle2, Camera, Upload, Trash2 
 } from 'lucide-react';
 import { Department, Designation, UserProfile } from '../../types';
 import { useOpsStore } from '../../store/opsStore';
 import { teamManagementService } from '../../lib/teamManagementService';
+import { storageService, useSignedUrl } from '../../lib/storageService';
 
 interface CreateTeamMemberModalProps {
   isOpen: boolean;
@@ -40,6 +41,8 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
   const [linkedinUrl, setLinkedinUrl] = useState('');
   const [bio, setBio] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const displayAvatarUrl = useSignedUrl('profile-avatars', avatarUrl);
   const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
   const [selectedDeptIds, setSelectedDeptIds] = useState<string[]>([]);
   const [selectedDesignationId, setSelectedDesignationId] = useState('');
@@ -106,6 +109,34 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
     );
   };
 
+  const handleAvatarUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const validation = storageService.validateImage(file);
+    if (!validation.isValid) {
+      setErrorMessage(validation.error || 'Invalid avatar image.');
+      return;
+    }
+    setIsUploadingAvatar(true);
+    setErrorMessage(null);
+    try {
+      const res = await storageService.uploadAvatar(file, currentUserProfile?.id || 'pending');
+      if (res.error || !res.path) {
+        setErrorMessage(res.error || 'Failed to upload avatar image.');
+      } else {
+        setAvatarUrl(res.path);
+      }
+    } catch (err: any) {
+      setErrorMessage(err?.message || 'Failed to upload avatar image.');
+    } finally {
+      setIsUploadingAvatar(false);
+    }
+  };
+
+  const handleRemoveAvatar = () => {
+    setAvatarUrl(null);
+  };
+
   const validatePasswordRequirements = (pwd: string) => {
     const hasMinLen = pwd.length >= 12;
     const hasUpper = /[A-Z]/.test(pwd);
@@ -128,6 +159,16 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
 
     if (!workEmail.trim() || !workEmail.includes('@')) {
       setErrorMessage('A valid work email address is required.');
+      return;
+    }
+
+    if (linkedinUrl.trim() && !/^https?:\/\//i.test(linkedinUrl.trim())) {
+      setErrorMessage('Invalid LinkedIn URL. Must start with http:// or https://');
+      return;
+    }
+
+    if (contactEmail.trim() && !contactEmail.includes('@')) {
+      setErrorMessage('A valid Connected Contact Gmail/Email address is required.');
       return;
     }
 
@@ -163,6 +204,11 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
         fullName: fullName.trim(),
         workEmail: workEmail.trim().toLowerCase(),
         phone: phone.trim() || undefined,
+        backupPhone: backupPhone.trim() || undefined,
+        contactEmail: contactEmail.trim().toLowerCase() || undefined,
+        linkedinUrl: linkedinUrl.trim() || undefined,
+        bio: bio.trim() || undefined,
+        avatarUrl: avatarUrl || null,
         startDate,
         departmentIds: selectedDeptIds,
         designationId: selectedDesignationId,
@@ -207,6 +253,11 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
     setFullName('');
     setWorkEmail('');
     setPhone('');
+    setBackupPhone('');
+    setContactEmail('');
+    setLinkedinUrl('');
+    setBio('');
+    setAvatarUrl(null);
     setSelectedDeptIds([]);
     setErrorMessage(null);
     onClose();
@@ -316,11 +367,72 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
               )}
 
               {/* 1. PERSONAL INFORMATION */}
-              <div className="space-y-3">
+              <div className="space-y-4">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-gray-400 flex items-center gap-1.5">
                   <UserCheck className="w-3.5 h-3.5 text-brand-600" />
                   <span>1. Personal Information</span>
                 </h3>
+
+                {/* Profile Avatar Upload (Optional) */}
+                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border flex items-center gap-4">
+                  <div className="relative group flex-shrink-0">
+                    {displayAvatarUrl ? (
+                      <img
+                        src={displayAvatarUrl}
+                        alt="Avatar Preview"
+                        className="w-14 h-14 rounded-2xl object-cover border border-slate-200 dark:border-dark-border shadow-sm"
+                      />
+                    ) : (
+                      <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-brand-600 to-indigo-600 text-white font-bold text-sm flex items-center justify-center shadow-sm">
+                        {fullName
+                          ? fullName.split(' ').map((n) => n[0]).join('').substring(0, 2).toUpperCase()
+                          : 'FL'}
+                      </div>
+                    )}
+                    <label
+                      htmlFor="team-avatar-upload"
+                      className="absolute inset-0 bg-black/50 backdrop-blur-[1px] rounded-2xl opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white cursor-pointer transition-opacity text-[9px] font-bold"
+                    >
+                      {isUploadingAvatar ? (
+                        <Loader2 className="w-4 h-4 animate-spin" />
+                      ) : (
+                        <>
+                          <Camera className="w-4 h-4 mb-0.5" />
+                          <span>Change</span>
+                        </>
+                      )}
+                    </label>
+                    <input
+                      id="team-avatar-upload"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={handleAvatarUpload}
+                      className="hidden"
+                      disabled={isUploadingAvatar || isSubmitting}
+                    />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800 dark:text-gray-200">
+                        Profile Avatar (Optional)
+                      </span>
+                      {avatarUrl && (
+                        <button
+                          type="button"
+                          onClick={handleRemoveAvatar}
+                          className="text-[11px] text-rose-500 hover:text-rose-600 font-semibold flex items-center gap-1"
+                        >
+                          <Trash2 className="w-3 h-3" />
+                          <span>Remove</span>
+                        </button>
+                      )}
+                    </div>
+                    <p className="text-[11px] text-slate-400">
+                      Private storage. JPG, PNG or WebP up to 5 MB.
+                    </p>
+                  </div>
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   <div className="space-y-1">
                     <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
@@ -352,7 +464,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
 
                   <div className="space-y-1">
                     <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
-                      Phone Number (Optional)
+                      Primary Phone (Optional)
                     </label>
                     <input
                       type="tel"
@@ -360,6 +472,58 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
                       onChange={(e) => setPhone(e.target.value)}
                       placeholder="+92 300 1234567"
                       className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                      Backup Phone (Optional)
+                    </label>
+                    <input
+                      type="tel"
+                      value={backupPhone}
+                      onChange={(e) => setBackupPhone(e.target.value)}
+                      placeholder="+92 321 7654321"
+                      className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                      Connected Contact Gmail (Optional)
+                    </label>
+                    <input
+                      type="email"
+                      value={contactEmail}
+                      onChange={(e) => setContactEmail(e.target.value)}
+                      placeholder="contact.gmail@gmail.com"
+                      className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                      LinkedIn Profile URL (Optional)
+                    </label>
+                    <input
+                      type="url"
+                      value={linkedinUrl}
+                      onChange={(e) => setLinkedinUrl(e.target.value)}
+                      placeholder="https://linkedin.com/in/username"
+                      className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    />
+                  </div>
+
+                  <div className="col-span-1 sm:col-span-2 space-y-1">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                      Professional Bio (Optional)
+                    </label>
+                    <textarea
+                      rows={2}
+                      value={bio}
+                      onChange={(e) => setBio(e.target.value)}
+                      placeholder="Brief summary of member's professional background and skills..."
+                      className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
                     />
                   </div>
 

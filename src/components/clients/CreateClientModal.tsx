@@ -34,7 +34,7 @@ interface CreateClientModalProps {
 }
 
 const PACKAGES: ClientPackage[] = ['Basic', 'Intermediate', 'Advanced'];
-const STATUSES: ClientStatus[] = ['Onboarding', 'Active', 'Paused', 'Archived'];
+const STATUSES: ClientStatus[] = ['Onboarding', 'Active', 'Paused'];
 const PAUSE_REASONS: ClientPauseReason[] = [
   'Payment overdue',
   'Client request',

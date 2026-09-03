@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useSafeNavigate, useSafeParams } from '../../lib/safeRouterHooks';
 import { useAuth } from '../../context/AuthContext';
 import { 
   Users, Building2, Archive, Activity, ShieldAlert, ArrowLeft 
@@ -12,8 +13,10 @@ import { ClientDetailsTab } from '../clients/ClientDetailsTab';
 import { archiveService } from '../../lib/archiveService';
 
 export const SettingsLayout: React.FC<{ initialTab?: SettingsTab }> = ({ initialTab = 'team' }) => {
+  const navigate = useSafeNavigate();
+  const params = useSafeParams<{ tab?: string }>();
+  const activeTab: SettingsTab = (params.tab as SettingsTab) || initialTab || 'team';
   const { profile } = useAuth();
-  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
   const clients = useOpsStore((state) => state.clients);
   const selectedClientId = useOpsStore((state) => state.selectedClientId);
   const setSelectedClientId = useOpsStore((state) => state.setSelectedClientId);
@@ -92,7 +95,7 @@ export const SettingsLayout: React.FC<{ initialTab?: SettingsTab }> = ({ initial
               <button
                 key={tab.id}
                 type="button"
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => navigate(`/settings/${tab.id}`)}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
                   isActive
                     ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
@@ -108,7 +111,10 @@ export const SettingsLayout: React.FC<{ initialTab?: SettingsTab }> = ({ initial
 
         <button
           type="button"
-          onClick={() => setViewMode('client_workspace')}
+          onClick={() => {
+            navigate(selectedClientId ? `/clients/${selectedClientId}` : '/');
+            setViewMode('client_workspace');
+          }}
           className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors"
         >
           <ArrowLeft className="w-3.5 h-3.5" />

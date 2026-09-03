@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Routes, Route, useParams, useNavigate } from 'react-router-dom';
+import { Routes, Route, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useOpsStore } from './store/opsStore';
 import { supabaseService, mapDbTaskToTask } from './lib/supabaseService';
 import { clientManagementService } from './lib/clientManagementService';
@@ -51,6 +51,7 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
   const { user, profile } = useAuth();
   const params = useParams<{ clientId?: string; tab?: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [eligibleManagers, setEligibleManagers] = useState<UserProfile[]>([]);
 
@@ -61,6 +62,19 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
       setViewMode('client_workspace');
     }
   }, [params.clientId, setSelectedClientId, setViewMode]);
+
+  // Synchronize route pathname with viewMode
+  useEffect(() => {
+    if (location.pathname.startsWith('/settings')) {
+      setViewMode('settings');
+    } else if (location.pathname.startsWith('/profile')) {
+      setViewMode('profile');
+    } else if (location.pathname.startsWith('/team')) {
+      setViewMode('directory');
+    } else if (location.pathname.startsWith('/clients')) {
+      setViewMode('client_workspace');
+    }
+  }, [location.pathname, setViewMode]);
 
   useEffect(() => {
     if (initialView) {
@@ -158,11 +172,18 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
   const selectedClient = clients.find((c) => c.id === selectedClientId) || clients[0] || null;
 
   const renderActiveView = () => {
+    if (location.pathname.startsWith('/settings') || viewMode === 'settings') {
+      const tabParam = params.tab || location.pathname.split('/settings/')[1];
+      return <SettingsLayout initialTab={(tabParam as SettingsTab) || initialSettingsTab || 'team'} />;
+    }
+    if (location.pathname.startsWith('/profile') || viewMode === 'profile') {
+      return <MyProfileView />;
+    }
+    if (location.pathname.startsWith('/team') || viewMode === 'directory') {
+      return isManagerOrOwner ? <TeamManagementView /> : <OperationsDirectory />;
+    }
+
     switch (viewMode) {
-      case 'settings':
-        return <SettingsLayout initialTab={(params.tab as SettingsTab) || initialSettingsTab || 'team'} />;
-      case 'profile':
-        return <MyProfileView />;
       case 'list':
         return <ListView />;
       case 'board':
@@ -177,8 +198,6 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
         return <DashboardView />;
       case 'docs':
         return <DocsView />;
-      case 'directory':
-        return isManagerOrOwner ? <TeamManagementView /> : <OperationsDirectory />;
       case 'client_workspace':
       case 'clients':
       default:
