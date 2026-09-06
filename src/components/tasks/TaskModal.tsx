@@ -338,7 +338,7 @@ export const TaskModal: React.FC = () => {
             {activeTab === 'time' && (
               <div className="space-y-6">
                 {/* Stopwatch Card */}
-                <div className="p-5 rounded-2xl bg-gradient-to-br from-brand-500/10 to-indigo-500/5 dark:from-brand-500/20 dark:to-dark-200 border border-brand-500/20 flex flex-col sm:flex-row items-center justify-between gap-4">
+                <div className="p-5 rounded-2xl bg-gray-50/80 dark:bg-dark-200/50 border border-gray-200/80 dark:border-dark-border/60 flex flex-col sm:flex-row items-center justify-between gap-4">
                   <div>
                     <div className="text-xs font-semibold uppercase text-brand-600 dark:text-brand-400">
                       Live Operations Stopwatch

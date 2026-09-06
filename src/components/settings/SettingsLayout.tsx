@@ -95,8 +95,8 @@ export const SettingsLayout: React.FC<{ initialTab?: SettingsTab }> = ({ initial
   return (
     <div className="flex flex-col h-full bg-gray-50/50 dark:bg-dark-400 select-none">
       {/* Settings Navigation Sub-Header */}
-      <div className="bg-white dark:bg-dark-card border-b border-gray-200 dark:border-dark-border px-6 py-3 flex items-center justify-between">
-        <div className="flex items-center gap-2">
+      <div className="bg-white dark:bg-dark-card border-b border-gray-200 dark:border-dark-border px-3 sm:px-6 py-2.5 sm:py-3 flex flex-col md:flex-row md:items-center justify-between gap-2.5">
+        <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 md:pb-0 scrollbar-none no-scrollbar -mx-3 px-3 sm:mx-0 sm:px-0 flex-nowrap">
           {tabs.map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
@@ -105,14 +105,14 @@ export const SettingsLayout: React.FC<{ initialTab?: SettingsTab }> = ({ initial
                 key={tab.id}
                 type="button"
                 onClick={() => navigate(`/settings/${tab.id}`)}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 rounded-xl text-xs font-bold transition-all flex-shrink-0 min-h-[40px] sm:min-h-[36px] cursor-pointer ${
                   isActive
                     ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
                     : 'text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100 border border-transparent'
                 }`}
               >
-                <Icon className="w-4 h-4" />
-                <span>{tab.label}</span>
+                <Icon className="w-4 h-4 flex-shrink-0" />
+                <span className="whitespace-nowrap">{tab.label}</span>
               </button>
             );
           })}
@@ -124,10 +124,10 @@ export const SettingsLayout: React.FC<{ initialTab?: SettingsTab }> = ({ initial
             navigate(selectedClientId ? `/clients/${selectedClientId}` : '/');
             setViewMode('client_workspace');
           }}
-          className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors"
+          className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors flex-shrink-0 min-h-[40px] sm:min-h-[36px] cursor-pointer self-start md:self-auto"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
-          <span>Back to Workspace</span>
+          <span className="whitespace-nowrap">Back to Workspace</span>
         </button>
       </div>
 
@@ -187,7 +187,7 @@ export const SettingsLayout: React.FC<{ initialTab?: SettingsTab }> = ({ initial
                                   className="w-8 h-8 rounded-xl object-contain border border-gray-200 dark:border-dark-border p-0.5 bg-white"
                                 />
                               ) : (
-                                <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-600 text-white font-black text-xs flex items-center justify-center flex-shrink-0">
+                                <div className="w-8 h-8 rounded-xl bg-slate-700 text-white font-black text-xs flex items-center justify-center flex-shrink-0">
                                   {logoInitials}
                                 </div>
                               )}
@@ -212,7 +212,7 @@ export const SettingsLayout: React.FC<{ initialTab?: SettingsTab }> = ({ initial
                               client.status === 'Active'
                                 ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
                                 : client.status === 'Onboarding'
-                                ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20'
+                                ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/20'
                                 : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
                             }`}>
                               {client.status}

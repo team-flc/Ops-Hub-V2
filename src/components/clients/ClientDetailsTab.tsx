@@ -426,7 +426,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                   className="w-16 h-16 rounded-2xl object-contain border border-gray-200 dark:border-dark-border p-1 bg-white shadow-sm"
                 />
               ) : (
-                <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-brand-600 to-indigo-600 text-white font-black text-lg flex items-center justify-center shadow-sm">
+                <div className="w-16 h-16 rounded-2xl bg-slate-700 text-white font-black text-lg flex items-center justify-center shadow-sm">
                   {companyName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'CL'}
                 </div>
               )}

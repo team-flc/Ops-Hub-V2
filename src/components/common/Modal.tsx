@@ -45,29 +45,30 @@ export const Modal: React.FC<ModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 sm:p-6 overflow-y-auto">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
       <div
         className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity animate-fade-in"
         onClick={onClose}
       />
       <div
-        className={`relative w-full ${maxWidthClasses[maxWidth]} bg-white dark:bg-dark-200 rounded-2xl shadow-2xl border border-gray-200 dark:border-dark-border z-10 overflow-hidden animate-scale-up`}
+        className={`relative w-full ${maxWidthClasses[maxWidth]} max-h-[calc(100dvh-1.5rem)] sm:max-h-[calc(100dvh-3rem)] bg-white dark:bg-dark-200 rounded-2xl shadow-2xl border border-gray-200 dark:border-dark-border z-10 flex flex-col overflow-hidden animate-scale-up`}
       >
         {title && (
-          <div className="flex items-center justify-between px-6 py-4 border-b border-gray-100 dark:border-dark-border">
-            <div className="font-semibold text-lg text-gray-900 dark:text-gray-100">{title}</div>
+          <div className="flex items-center justify-between px-5 sm:px-6 py-3.5 sm:py-4 border-b border-gray-100 dark:border-dark-border flex-shrink-0">
+            <div className="font-semibold text-base sm:text-lg text-gray-900 dark:text-gray-100 min-w-0 pr-2">{title}</div>
             {showCloseButton && (
               <button
                 type="button"
                 onClick={onClose}
-                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors"
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-2 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors flex-shrink-0 cursor-pointer min-h-[44px] min-w-[44px] flex items-center justify-center"
+                aria-label="Close dialog"
               >
                 <X className="w-5 h-5" />
               </button>
             )}
           </div>
         )}
-        <div className="p-6">{children}</div>
+        <div className="p-4 sm:p-6 overflow-y-auto flex-1">{children}</div>
       </div>
     </div>
   );

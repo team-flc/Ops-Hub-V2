@@ -48,9 +48,9 @@ export const DashboardView: React.FC = () => {
     .slice(0, 8);
 
   return (
-    <div className="p-6 space-y-6 max-w-7xl mx-auto">
+    <div className="p-4 sm:p-6 space-y-6 max-w-7xl mx-auto">
       {/* Top Welcome & Health Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-gradient-to-r from-brand-900/40 via-dark-300 to-brand-900/20 p-6 rounded-3xl border border-brand-500/20 shadow-lg">
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900 dark:bg-dark-300 p-5 sm:p-6 rounded-3xl border border-slate-800 dark:border-dark-border shadow-lg">
         <div>
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-brand-400">
             <Zap className="w-4 h-4 fill-current" />

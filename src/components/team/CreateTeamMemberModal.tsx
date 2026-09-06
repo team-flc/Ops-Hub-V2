@@ -383,7 +383,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
                         className="w-14 h-14 rounded-2xl object-cover border border-slate-200 dark:border-dark-border shadow-sm"
                       />
                     ) : (
-                      <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-brand-600 to-indigo-600 text-white font-bold text-sm flex items-center justify-center shadow-sm">
+                      <div className="w-14 h-14 rounded-2xl bg-slate-700 text-white font-bold text-sm flex items-center justify-center shadow-sm">
                         {fullName
                           ? fullName.split(' ').map((n) => n[0]).join('').substring(0, 2).toUpperCase()
                           : 'FL'}
@@ -679,7 +679,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
                                 <span className="text-[9px] text-amber-600 dark:text-amber-400 font-bold block">(Paused)</span>
                               )}
                               {client.status === 'Onboarding' && (
-                                <span className="text-[9px] text-indigo-600 dark:text-indigo-400 font-bold block">(Onboarding)</span>
+                                <span className="text-[9px] text-amber-700 dark:text-amber-400 font-bold block">(Onboarding)</span>
                               )}
                             </div>
                             {isSelected && <Check className="w-3.5 h-3.5 text-brand-600 flex-shrink-0 ml-1" />}

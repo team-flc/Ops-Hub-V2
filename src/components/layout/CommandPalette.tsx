@@ -219,7 +219,7 @@ export const CommandPalette: React.FC = () => {
                     className="w-full flex items-center justify-between px-3 py-2 rounded-xl text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors text-left"
                   >
                     <div className="flex items-center gap-2 min-w-0">
-                      <BookOpen className="w-4 h-4 text-indigo-500 flex-shrink-0" />
+                      <BookOpen className="w-4 h-4 text-brand-500 flex-shrink-0" />
                       <span className="font-medium truncate">{d.title}</span>
                     </div>
                     <span className="text-[10px] text-gray-400">{d.category}</span>
