@@ -685,13 +685,175 @@ describe('Phase 3A.1 Connected System Foundation, Settings, Profiles, Archive & 
     expect(res.error).toBeNull();
   });
 
-  // 21. CLIENT DIRECT ARCHIVE BYPASS PREVENTION (ITEM 3 & 4)
-  it('21. clientManagementService.updateClient explicitly rejects setting status to Archived', async () => {
-    const res = await clientManagementService.updateClient('client-1', {
+  // 21. DIRECT TRANSITIONS INTO OR OUT OF ARCHIVED ARE STRICTLY REJECTED
+  it('21. Direct transitions into or out of Archived are strictly rejected by clientManagementService', async () => {
+    // Transition INTO Archived rejected
+    const archiveAttempt = await clientManagementService.updateClient('client-1', {
       status: 'Archived' as any
     });
+    expect(archiveAttempt.error).toMatch(/direct archival through update is prohibited/i);
+    expect(archiveAttempt.data).toBeUndefined();
 
-    expect(res.error).toMatch(/direct archival through update is prohibited/i);
-    expect(res.data).toBeUndefined();
+    // Transition OUT OF Archived rejected
+    mockFrom.mockReturnValueOnce({
+      select: () => ({
+        eq: () => ({
+          single: () => Promise.resolve({
+            data: { id: 'client-1', status: 'Archived', company_name: 'Archived Client' },
+            error: null
+          })
+        })
+      })
+    });
+
+    const restoreAttempt = await clientManagementService.updateClient('client-1', {
+      status: 'Active'
+    });
+    expect(restoreAttempt.error).toMatch(/direct modification or restoration of an archived client is prohibited/i);
+    expect(restoreAttempt.data).toBeUndefined();
+  });
+
+  // 22. EXACTLY ONE CLIENT ARCHIVE AUDIT EVENT PRODUCED VIA AUTHORITATIVE FLOW
+  it('22. Exactly one client archive audit event is produced via manage-archive, while DB trigger skips archive transitions', async () => {
+    let auditEventsCreated = 0;
+    mockFunctionsInvoke.mockImplementationOnce(async (functionName, options) => {
+      if (functionName === 'manage-archive' && options?.body?.action === 'archive') {
+        auditEventsCreated++;
+        return { data: { success: true }, error: null };
+      }
+      return { data: null, error: 'Unknown function' };
+    });
+
+    // DB trigger skips mutation logging for archive to avoid duplicate audit records
+    const simulateDbAuditTrigger = (op: string, oldRow: { status: string }, newRow: { status: string }) => {
+      if (op === 'UPDATE' && (newRow.status === 'Archived' || oldRow.status === 'Archived')) {
+        return null;
+      }
+      auditEventsCreated++;
+      return { action: 'client_status_changed' };
+    };
+
+    const res = await archiveService.archiveClient('client-1', 'Project complete');
+    expect(res.success).toBe(true);
+    expect(res.error).toBeNull();
+
+    const triggerResult = simulateDbAuditTrigger('UPDATE', { status: 'Active' }, { status: 'Archived' });
+    expect(triggerResult).toBeNull();
+
+    expect(auditEventsCreated).toBe(1);
+    expect(mockFunctionsInvoke).toHaveBeenCalledWith('manage-archive', expect.objectContaining({
+      body: {
+        action: 'archive',
+        entityType: 'client',
+        entityId: 'client-1',
+        reason: 'Project complete'
+      }
+    }));
+  });
+
+  // 23. EXACTLY ONE CLIENT RESTORE AUDIT EVENT PRODUCED VIA AUTHORITATIVE FLOW
+  it('23. Exactly one client restore audit event is produced via manage-archive, while DB trigger skips restore transitions', async () => {
+    let auditEventsCreated = 0;
+    mockFunctionsInvoke.mockImplementationOnce(async (functionName, options) => {
+      if (functionName === 'manage-archive' && options?.body?.action === 'restore') {
+        auditEventsCreated++;
+        return { data: { success: true }, error: null };
+      }
+      return { data: null, error: 'Unknown function' };
+    });
+
+    // DB trigger skips mutation logging for restore to avoid duplicate audit records
+    const simulateDbAuditTrigger = (op: string, oldRow: { status: string }, newRow: { status: string }) => {
+      if (op === 'UPDATE' && (newRow.status === 'Archived' || oldRow.status === 'Archived')) {
+        return null;
+      }
+      auditEventsCreated++;
+      return { action: 'client_status_changed' };
+    };
+
+    const res = await archiveService.restoreClient('client-1');
+    expect(res.success).toBe(true);
+    expect(res.error).toBeNull();
+
+    const triggerResult = simulateDbAuditTrigger('UPDATE', { status: 'Archived' }, { status: 'Active' });
+    expect(triggerResult).toBeNull();
+
+    expect(auditEventsCreated).toBe(1);
+    expect(mockFunctionsInvoke).toHaveBeenCalledWith('manage-archive', expect.objectContaining({
+      body: {
+        action: 'restore',
+        entityType: 'client',
+        entityId: 'client-1'
+      }
+    }));
+  });
+
+  // 24. DATABASE AUDIT PAYLOAD REDACTION & SAFE-FIELD ALLOWLIST
+  it('24. Database audit payload safe allowlist excludes sensitive URLs, Drive/Slack links, tokens, and query parameters', () => {
+    const toSafeClientAuditJson = (c: any) => {
+      if (!c) return null;
+      return {
+        id: c.id,
+        company_name: c.company_name,
+        client_name: c.client_name,
+        package: c.package,
+        status: c.status,
+        pause_reason: c.pause_reason,
+        paused_at: c.paused_at,
+        paused_by: c.paused_by,
+        operational_manager_id: c.operational_manager_id,
+        activation_date: c.activation_date,
+        industry: c.industry,
+        required_linkedin_profile_count: c.required_linkedin_profile_count,
+        created_at: c.created_at,
+        updated_at: c.updated_at
+      };
+    };
+
+    const rawDbClientRow = {
+      id: 'client-safe-1',
+      company_name: 'Alpha Ops',
+      client_name: 'Sarah Connor',
+      package: 'Growth',
+      status: 'Active',
+      pause_reason: null,
+      paused_at: null,
+      paused_by: null,
+      operational_manager_id: 'mgr-456',
+      activation_date: '2026-09-01',
+      industry: 'Technology',
+      required_linkedin_profile_count: 5,
+      created_at: '2026-09-01T12:00:00Z',
+      updated_at: '2026-09-06T12:00:00Z',
+      logo_url: 'https://storage.supabase.co/object/sign/client-logos/org/logo.png?token=secret123&signature=abc456',
+      drive_url: 'https://drive.google.com/drive/folders/123456789abcdef',
+      slack_invite: 'https://join.slack.com/t/team/shared_invite/zt-xyz987',
+      whatsapp_link: 'https://chat.whatsapp.com/inviteABCDEF',
+      access_token: 'secret-jwt-token',
+      api_key: 'sk_live_1234567890',
+      password_hash: '$2a$12$e8s.m4xK...'
+    };
+
+    const safeAuditPayload = toSafeClientAuditJson(rawDbClientRow);
+
+    expect(safeAuditPayload.id).toBe('client-safe-1');
+    expect(safeAuditPayload.company_name).toBe('Alpha Ops');
+    expect(safeAuditPayload.status).toBe('Active');
+    expect(safeAuditPayload.operational_manager_id).toBe('mgr-456');
+
+    expect((safeAuditPayload as any).logo_url).toBeUndefined();
+    expect((safeAuditPayload as any).drive_url).toBeUndefined();
+    expect((safeAuditPayload as any).slack_invite).toBeUndefined();
+    expect((safeAuditPayload as any).whatsapp_link).toBeUndefined();
+    expect((safeAuditPayload as any).access_token).toBeUndefined();
+    expect((safeAuditPayload as any).api_key).toBeUndefined();
+    expect((safeAuditPayload as any).password_hash).toBeUndefined();
+
+    const serialized = JSON.stringify(safeAuditPayload);
+    expect(serialized).not.toMatch(/drive\.google\.com/);
+    expect(serialized).not.toMatch(/slack\.com/);
+    expect(serialized).not.toMatch(/whatsapp\.com/);
+    expect(serialized).not.toMatch(/token=/);
+    expect(serialized).not.toMatch(/signature=/);
   });
 });

@@ -701,6 +701,10 @@ export const clientManagementService = {
         .eq('id', clientId)
         .single();
 
+      if (previousClient?.status === 'Archived') {
+        return { error: 'Direct modification or restoration of an Archived client is prohibited. Use the dedicated Restore flow.' };
+      }
+
       const updates: any = {
         updated_at: new Date().toISOString()
       };

@@ -308,9 +308,62 @@ $$;
 REVOKE EXECUTE ON FUNCTION public.sync_member_client_access_tx(UUID, UUID[], UUID) FROM public, anon;
 GRANT EXECUTE ON FUNCTION public.sync_member_client_access_tx(UUID, UUID[], UUID) TO service_role;
 
--- 9. SERVER-AUTHORITATIVE CLIENT MUTATION AUDIT TRIGGER
--- Ensures every client creation, status change (pause/resume), or modification is
--- automatically and immutably logged to system_audit_events on the database server.
+-- 9. SAFE AUDIT ALLOWLIST & ARCHIVE BOUNDARY SAFEGUARDS
+-- Helper: build explicit safe-field JSONB allowlist for client audit state.
+-- Never stores signed URLs, query parameters, external drive/communication links,
+-- tokens, signatures, cookies, passwords, or temporary access credentials.
+CREATE OR REPLACE FUNCTION public.to_safe_client_audit_json(c public.clients)
+RETURNS JSONB AS $$
+BEGIN
+  IF c IS NULL THEN
+    RETURN NULL;
+  END IF;
+  RETURN jsonb_build_object(
+    'id', c.id,
+    'company_name', c.company_name,
+    'client_name', c.client_name,
+    'package', c.package,
+    'status', c.status,
+    'pause_reason', c.pause_reason,
+    'paused_at', c.paused_at,
+    'paused_by', c.paused_by,
+    'operational_manager_id', c.operational_manager_id,
+    'activation_date', c.activation_date,
+    'industry', c.industry,
+    'required_linkedin_profile_count', c.required_linkedin_profile_count,
+    'created_at', c.created_at,
+    'updated_at', c.updated_at
+  );
+END;
+$$ LANGUAGE plpgsql IMMUTABLE
+SET search_path = public, pg_temp;
+
+-- Prevent direct authenticated database updates from moving a client into or out of Archived.
+-- Archive and restore must remain available exclusively through the authorized server-side manage-archive flow.
+CREATE OR REPLACE FUNCTION public.enforce_client_archive_boundary()
+RETURNS TRIGGER AS $$
+BEGIN
+  IF (OLD.status IS DISTINCT FROM NEW.status) AND (NEW.status = 'Archived' OR OLD.status = 'Archived') THEN
+    IF auth.role() = 'authenticated' THEN
+      RAISE EXCEPTION 'Direct transition into or out of Archived is prohibited. Use the authorized server-side archive flow.';
+    END IF;
+  END IF;
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER
+SET search_path = public, pg_temp;
+
+DROP TRIGGER IF EXISTS trg_enforce_client_archive_boundary ON public.clients;
+CREATE TRIGGER trg_enforce_client_archive_boundary
+  BEFORE UPDATE ON public.clients
+  FOR EACH ROW
+  EXECUTE FUNCTION public.enforce_client_archive_boundary();
+
+-- 10. SERVER-AUTHORITATIVE CLIENT MUTATION AUDIT TRIGGER
+-- Ensures client creation, update, pause, and resume are automatically logged to
+-- system_audit_events using the explicit safe-field allowlist.
+-- Explicitly skips archive/restore transitions to prevent duplicate audit events,
+-- as manage-archive is the authoritative issuer for archive/restore audit records.
 CREATE OR REPLACE FUNCTION public.audit_client_mutations()
 RETURNS TRIGGER AS $$
 DECLARE
@@ -320,6 +373,12 @@ DECLARE
   v_actor_name TEXT := 'System';
   v_actor_role TEXT := 'system';
 BEGIN
+  -- Skip client_archived and client_restored in trigger: manage-archive Edge Function
+  -- is the authoritative issuer for archive/restore audit events with caller context & reason.
+  IF TG_OP = 'UPDATE' AND (NEW.status = 'Archived' OR OLD.status = 'Archived') THEN
+    RETURN NEW;
+  END IF;
+
   v_actor_id := auth.uid();
   IF v_actor_id IS NOT NULL THEN
     SELECT full_name, role INTO v_actor_name, v_actor_role
@@ -337,9 +396,6 @@ BEGIN
       ELSIF OLD.status = 'Paused' THEN
         v_action := 'client_resumed';
         v_reason := 'Client resumed to active operations';
-      ELSIF NEW.status = 'Archived' THEN
-        v_action := 'client_archived';
-        v_reason := COALESCE(NEW.archive_reason, 'Client archived');
       ELSE
         v_action := 'client_status_changed';
         v_reason := 'Status updated to ' || NEW.status;
@@ -375,8 +431,8 @@ BEGIN
     COALESCE(NEW.company_name, OLD.company_name),
     COALESCE(NEW.id, OLD.id),
     COALESCE(NEW.company_name, OLD.company_name),
-    CASE WHEN TG_OP IN ('UPDATE', 'DELETE') THEN to_jsonb(OLD) ELSE NULL END,
-    CASE WHEN TG_OP IN ('INSERT', 'UPDATE') THEN to_jsonb(NEW) ELSE NULL END,
+    CASE WHEN TG_OP IN ('UPDATE', 'DELETE') THEN public.to_safe_client_audit_json(OLD) ELSE NULL END,
+    CASE WHEN TG_OP IN ('INSERT', 'UPDATE') THEN public.to_safe_client_audit_json(NEW) ELSE NULL END,
     v_reason,
     now()
   );

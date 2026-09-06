@@ -195,8 +195,8 @@ serve(async (req) => {
           entity_name: client.company_name,
           client_id: entityId,
           client_name: client.company_name,
-          previous_state: { status: client.status },
-          new_state: { status: 'Archived', previous_status: client.status },
+          previous_state: redactAuditPayload({ status: client.status }),
+          new_state: redactAuditPayload({ status: 'Archived', previous_status: client.status }),
           reason: reason.trim()
         });
 
