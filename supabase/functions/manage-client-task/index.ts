@@ -409,11 +409,14 @@ serve(async (req: Request) => {
       // Record audit event in system_audit_events if created from template
       if (resolvedSourceTemplateId) {
         await supabaseAdmin.from('system_audit_events').insert({
+          actor_id: callerProfile.id,
+          actor_name: callerProfile.full_name,
+          actor_role: callerProfile.role,
           action: 'task_created_from_template',
           entity_type: 'task_template',
           entity_id: resolvedSourceTemplateId,
-          actor_id: callerProfile.id,
-          details: {
+          client_id: newTask.client_id,
+          metadata: {
             task_id: newTask.id,
             task_title: newTask.title,
             client_id: newTask.client_id,

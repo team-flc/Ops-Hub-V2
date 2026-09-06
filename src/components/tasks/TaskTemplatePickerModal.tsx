@@ -171,23 +171,14 @@ export const TaskTemplatePickerModal: React.FC<TaskTemplatePickerModalProps> = (
           <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4">
             {/* Backend Unavailable Notice */}
             {isUnavailable && (
-              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 text-amber-700 dark:text-amber-300">
-                <div className="flex items-center gap-3">
-                  <AlertTriangle className="w-5 h-5 shrink-0 text-amber-500" />
-                  <div>
-                    <p className="text-xs font-bold">Template library is currently synchronizing or awaiting backend rollout.</p>
-                    <p className="text-[11px] text-amber-600/80 dark:text-amber-400/80">
-                      You can continue creating your operational task directly without delay.
-                    </p>
-                  </div>
+              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3 text-amber-700 dark:text-amber-300">
+                <AlertTriangle className="w-5 h-5 shrink-0 text-amber-500 mt-0.5" />
+                <div>
+                  <p className="text-xs font-bold">Template library is currently synchronizing or awaiting backend rollout.</p>
+                  <p className="text-[11px] text-amber-600/80 dark:text-amber-400/80 mt-0.5">
+                    You can continue creating your operational task directly without delay.
+                  </p>
                 </div>
-                <button
-                  type="button"
-                  onClick={onCreateBlankInstead}
-                  className="px-3 py-1.5 rounded-lg bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold shrink-0 transition-colors"
-                >
-                  Create Blank Task Instead
-                </button>
               </div>
             )}
 
@@ -207,21 +198,27 @@ export const TaskTemplatePickerModal: React.FC<TaskTemplatePickerModalProps> = (
             ) : filteredTemplates.length === 0 ? (
               <div className="py-12 text-center space-y-3">
                 <BookTemplate className="w-8 h-8 mx-auto text-gray-400 opacity-60" />
-                <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300">No matching templates found</h3>
+                <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300">
+                  {isUnavailable ? 'Template library unavailable' : 'No matching templates found'}
+                </h3>
                 <p className="text-xs text-gray-400 max-w-sm mx-auto">
-                  {searchQuery || selectedDepartmentId !== 'all'
+                  {isUnavailable
+                    ? 'Templates will be available following backend database deployment.'
+                    : searchQuery || selectedDepartmentId !== 'all'
                     ? 'Try adjusting your search query or department filter.'
                     : 'No active templates are currently configured in the library.'}
                 </p>
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    onClick={onCreateBlankInstead}
-                    className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-dark-100 dark:hover:bg-dark-200 text-gray-700 dark:text-gray-300 text-xs font-bold transition-colors"
-                  >
-                    Create Blank Task Instead
-                  </button>
-                </div>
+                {!isUnavailable && (
+                  <div className="pt-2">
+                    <button
+                      type="button"
+                      onClick={onCreateBlankInstead}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-dark-100 dark:hover:bg-dark-200 text-gray-700 dark:text-gray-300 text-xs font-bold transition-colors"
+                    >
+                      Create Blank Task Instead
+                    </button>
+                  </div>
+                )}
               </div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
@@ -298,21 +295,42 @@ export const TaskTemplatePickerModal: React.FC<TaskTemplatePickerModalProps> = (
 
           {/* Footer */}
           <div className="p-4 border-t border-gray-100 dark:border-dark-border bg-gray-50/50 dark:bg-dark-card/50 flex items-center justify-between">
-            <button
-              type="button"
-              onClick={onCreateBlankInstead}
-              className="text-xs font-bold text-gray-600 dark:text-gray-400 hover:text-brand-500 underline underline-offset-2 transition-colors"
-            >
-              Or create a blank task manually
-            </button>
+            {!isUnavailable ? (
+              <>
+                <button
+                  type="button"
+                  onClick={onCreateBlankInstead}
+                  className="text-xs font-bold text-gray-600 dark:text-gray-400 hover:text-brand-500 underline underline-offset-2 transition-colors"
+                >
+                  Or create a blank task manually
+                </button>
 
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors"
-            >
-              Cancel
-            </button>
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors"
+                >
+                  Cancel
+                </button>
+              </>
+            ) : (
+              <div className="flex items-center justify-end gap-2 w-full">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="px-4 py-2 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={onCreateBlankInstead}
+                  className="px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold transition-colors shadow-sm"
+                >
+                  Create Blank Task Instead
+                </button>
+              </div>
+            )}
           </div>
         </div>
       </div>

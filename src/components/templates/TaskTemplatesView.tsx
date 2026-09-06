@@ -6,9 +6,15 @@ import {
 import { TaskTemplate, Department, UserProfile } from '../../types';
 import { taskTemplateService } from '../../lib/taskTemplateService';
 import { taskManagementService } from '../../lib/taskManagementService';
-import { CreateEditTemplateModal } from './CreateEditTemplateModal';
-import { TemplatePreviewModal } from './TemplatePreviewModal';
-import { ArchiveTemplateModal } from './ArchiveTemplateModal';
+const CreateEditTemplateModal = React.lazy(() =>
+  import('./CreateEditTemplateModal').then((m) => ({ default: m.CreateEditTemplateModal }))
+);
+const TemplatePreviewModal = React.lazy(() =>
+  import('./TemplatePreviewModal').then((m) => ({ default: m.TemplatePreviewModal }))
+);
+const ArchiveTemplateModal = React.lazy(() =>
+  import('./ArchiveTemplateModal').then((m) => ({ default: m.ArchiveTemplateModal }))
+);
 
 interface TaskTemplatesViewProps {
   currentUserProfile?: UserProfile | null;
@@ -122,6 +128,7 @@ export const TaskTemplatesView: React.FC<TaskTemplatesViewProps> = ({ currentUse
 
   // Handlers
   const handleCreateNew = () => {
+    if (isUnavailable) return;
     setEditingTemplate(null);
     setIsCreateEditOpen(true);
   };
@@ -220,7 +227,13 @@ export const TaskTemplatesView: React.FC<TaskTemplatesViewProps> = ({ currentUse
           <button
             type="button"
             onClick={handleCreateNew}
-            className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-xs font-bold shadow-md shadow-brand-500/25 hover:scale-[1.02] active:scale-[0.98] transition-all"
+            disabled={isUnavailable}
+            title={isUnavailable ? 'Template management becomes available after backend rollout' : undefined}
+            className={`flex items-center justify-center gap-1.5 px-4 py-2.5 rounded-xl text-xs font-bold transition-all ${
+              isUnavailable
+                ? 'bg-gray-200 dark:bg-dark-100 text-gray-400 dark:text-gray-500 cursor-not-allowed opacity-60'
+                : 'bg-brand-500 hover:bg-brand-600 text-white shadow-md shadow-brand-500/25 hover:scale-[1.02] active:scale-[0.98]'
+            }`}
           >
             <Plus className="w-4 h-4" />
             <span>+ Create Template</span>
@@ -235,7 +248,7 @@ export const TaskTemplatesView: React.FC<TaskTemplatesViewProps> = ({ currentUse
           <div className="text-xs">
             <p className="font-bold">Template backend table is currently offline or awaiting database migration.</p>
             <p className="text-[11px] text-amber-600/80 dark:text-amber-400/80 mt-0.5">
-              Task creation in client workspaces will continue to function normally via blank manual entry.
+              Template management becomes available after backend rollout. Task creation in client workspaces continues to function normally via blank manual entry.
             </p>
           </div>
         </div>
@@ -323,7 +336,9 @@ export const TaskTemplatesView: React.FC<TaskTemplatesViewProps> = ({ currentUse
             {activeTab === 'archived' ? 'No archived templates' : 'No templates found'}
           </h3>
           <p className="text-xs text-gray-400 max-w-sm mx-auto">
-            {searchQuery || selectedDepartmentId !== 'all'
+            {isUnavailable
+              ? 'Template management becomes available after backend rollout.'
+              : searchQuery || selectedDepartmentId !== 'all'
               ? 'Try modifying your search keywords or department filter.'
               : activeTab === 'active' && isOwner
               ? 'Get started by creating your first standard operating procedure.'
@@ -333,7 +348,13 @@ export const TaskTemplatesView: React.FC<TaskTemplatesViewProps> = ({ currentUse
             <button
               type="button"
               onClick={handleCreateNew}
-              className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold shadow-md shadow-brand-500/20 transition-all"
+              disabled={isUnavailable}
+              title={isUnavailable ? 'Template management becomes available after backend rollout' : undefined}
+              className={`inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition-all ${
+                isUnavailable
+                  ? 'bg-gray-200 dark:bg-dark-100 text-gray-400 dark:text-gray-500 cursor-not-allowed opacity-60'
+                  : 'bg-brand-500 hover:bg-brand-600 text-white shadow-md shadow-brand-500/20'
+              }`}
             >
               <Plus className="w-4 h-4" />
               <span>Create First Template</span>
@@ -480,26 +501,38 @@ export const TaskTemplatesView: React.FC<TaskTemplatesViewProps> = ({ currentUse
       )}
 
       {/* Modals */}
-      <CreateEditTemplateModal
-        isOpen={isCreateEditOpen}
-        onClose={() => setIsCreateEditOpen(false)}
-        onSuccess={handleModalSuccess}
-        template={editingTemplate}
-        departments={departments}
-      />
+      {isCreateEditOpen && (
+        <React.Suspense fallback={null}>
+          <CreateEditTemplateModal
+            isOpen={isCreateEditOpen}
+            onClose={() => setIsCreateEditOpen(false)}
+            onSuccess={handleModalSuccess}
+            template={editingTemplate}
+            departments={departments}
+          />
+        </React.Suspense>
+      )}
 
-      <TemplatePreviewModal
-        isOpen={Boolean(previewTemplate)}
-        onClose={() => setPreviewTemplate(null)}
-        template={previewTemplate}
-      />
+      {previewTemplate && (
+        <React.Suspense fallback={null}>
+          <TemplatePreviewModal
+            isOpen={Boolean(previewTemplate)}
+            onClose={() => setPreviewTemplate(null)}
+            template={previewTemplate}
+          />
+        </React.Suspense>
+      )}
 
-      <ArchiveTemplateModal
-        isOpen={Boolean(archivingTemplate)}
-        onClose={() => setArchivingTemplate(null)}
-        onConfirm={handleConfirmArchive}
-        template={archivingTemplate}
-      />
+      {archivingTemplate && (
+        <React.Suspense fallback={null}>
+          <ArchiveTemplateModal
+            isOpen={Boolean(archivingTemplate)}
+            onClose={() => setArchivingTemplate(null)}
+            onConfirm={handleConfirmArchive}
+            template={archivingTemplate}
+          />
+        </React.Suspense>
+      )}
     </div>
   );
 };

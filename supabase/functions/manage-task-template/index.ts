@@ -115,6 +115,7 @@ serve(async (req: Request) => {
     );
   }
 
+  const idempotencyKey = body.idempotency_key || body.request_id || req.headers.get('x-idempotency-key') || null;
   const { action } = body;
   if (!action) {
     return new Response(
@@ -240,6 +241,52 @@ serve(async (req: Request) => {
       const durationNum = Number(suggested_duration_days);
       if (isNaN(durationNum) || durationNum < 1 || durationNum > 30) {
         return new Response(JSON.stringify({ error: 'Suggested duration must be between 1 and 30 business days.' }), { status: 400, headers: corsHeaders });
+      }
+
+      // Check for duplicate recent creation
+      const { data: existingDup } = await supabaseAdmin
+        .from('task_templates')
+        .select(`
+          id, name, description, department_id, default_task_title, task_details,
+          default_priority, default_approval_mode, suggested_duration_days, status,
+          sort_order, version, created_by, updated_by, created_at, updated_at,
+          department:departments!department_id(id, name, slug)
+        `)
+        .eq('name', name.trim())
+        .eq('department_id', department_id)
+        .eq('status', 'Active')
+        .order('created_at', { ascending: false })
+        .limit(1)
+        .maybeSingle();
+
+      if (existingDup) {
+        const createdMs = new Date(existingDup.created_at).getTime();
+        const nowMs = Date.now();
+        if (idempotencyKey || (nowMs - createdMs < 60000 && existingDup.created_by === callerProfile.id)) {
+          return new Response(
+            JSON.stringify({
+              success: true,
+              template: {
+                id: existingDup.id,
+                name: existingDup.name,
+                description: existingDup.description,
+                departmentId: existingDup.department_id,
+                departmentName: existingDup.department?.name,
+                defaultTaskTitle: existingDup.default_task_title,
+                taskDetails: existingDup.task_details,
+                defaultPriority: existingDup.default_priority,
+                defaultApprovalMode: existingDup.default_approval_mode,
+                suggestedDurationDays: existingDup.suggested_duration_days,
+                status: existingDup.status,
+                sortOrder: existingDup.sort_order,
+                version: existingDup.version,
+                createdAt: existingDup.created_at,
+                updatedAt: existingDup.updated_at
+              }
+            }),
+            { status: 200, headers: { ...corsHeaders, 'X-Idempotent-Replay': 'true' } }
+          );
+        }
       }
 
       const { data: newTemplate, error: insertError } = await supabaseAdmin
@@ -391,7 +438,7 @@ serve(async (req: Request) => {
         entity_id: updated.id,
         entity_name: updated.name,
         previous_state: existing,
-        newState: updated
+        new_state: updated
       });
 
       return new Response(
@@ -524,6 +571,35 @@ serve(async (req: Request) => {
         return new Response(JSON.stringify({ error: 'Template not found.' }), { status: 404, headers: corsHeaders });
       }
 
+      // Idempotency check: if already archived, return safely without duplicate audit event
+      if (existing.status === 'Archived') {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            template: {
+              id: existing.id,
+              name: existing.name,
+              description: existing.description,
+              departmentId: existing.department_id,
+              defaultTaskTitle: existing.default_task_title,
+              taskDetails: existing.task_details,
+              defaultPriority: existing.default_priority,
+              defaultApprovalMode: existing.default_approval_mode,
+              suggestedDurationDays: existing.suggested_duration_days,
+              status: existing.status,
+              sortOrder: existing.sort_order,
+              version: existing.version,
+              archivedAt: existing.archived_at,
+              archivedBy: existing.archived_by,
+              archiveReason: existing.archive_reason,
+              createdAt: existing.created_at,
+              updatedAt: existing.updated_at
+            }
+          }),
+          { status: 200, headers: { ...corsHeaders, 'X-Idempotent-Replay': 'true' } }
+        );
+      }
+
       const { data: archived, error: archErr } = await supabaseAdmin
         .from('task_templates')
         .update({
@@ -603,6 +679,32 @@ serve(async (req: Request) => {
 
       if (fetchErr || !existing) {
         return new Response(JSON.stringify({ error: 'Template not found.' }), { status: 404, headers: corsHeaders });
+      }
+
+      // Idempotency check: if already active, return safely without duplicate audit event
+      if (existing.status === 'Active') {
+        return new Response(
+          JSON.stringify({
+            success: true,
+            template: {
+              id: existing.id,
+              name: existing.name,
+              description: existing.description,
+              departmentId: existing.department_id,
+              defaultTaskTitle: existing.default_task_title,
+              taskDetails: existing.task_details,
+              defaultPriority: existing.default_priority,
+              defaultApprovalMode: existing.default_approval_mode,
+              suggestedDurationDays: existing.suggested_duration_days,
+              status: existing.status,
+              sortOrder: existing.sort_order,
+              version: existing.version,
+              createdAt: existing.created_at,
+              updatedAt: existing.updated_at
+            }
+          }),
+          { status: 200, headers: { ...corsHeaders, 'X-Idempotent-Replay': 'true' } }
+        );
       }
 
       const { data: restored, error: restErr } = await supabaseAdmin

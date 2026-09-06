@@ -4,12 +4,12 @@
 -- Database: PostgreSQL / Supabase
 -- ==============================================================================
 
--- 1. Create task_templates table
+-- 1. Create task_templates table (independently idempotent)
 CREATE TABLE IF NOT EXISTS public.task_templates (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name TEXT NOT NULL CHECK (length(trim(name)) > 0 AND length(name) <= 200),
     description TEXT,
-    department_id UUID NOT NULL REFERENCES public.departments(id),
+    department_id UUID NOT NULL REFERENCES public.departments(id) ON DELETE RESTRICT,
     default_task_title TEXT NOT NULL CHECK (length(trim(default_task_title)) > 0 AND length(default_task_title) <= 200),
     task_details TEXT,
     default_priority TEXT NOT NULL DEFAULT 'Normal' CHECK (default_priority IN ('Low', 'Normal', 'High', 'Urgent')),
@@ -18,6 +18,7 @@ CREATE TABLE IF NOT EXISTS public.task_templates (
     status TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Archived')),
     sort_order INTEGER NOT NULL DEFAULT 0,
     version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
+    seed_key TEXT,
     created_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
     updated_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
     archived_at TIMESTAMPTZ,
@@ -26,6 +27,58 @@ CREATE TABLE IF NOT EXISTS public.task_templates (
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
+
+-- Ensure all companion columns exist idempotently if table was pre-existing
+DO $$
+BEGIN
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'task_templates' AND column_name = 'description') THEN
+        ALTER TABLE public.task_templates ADD COLUMN description TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'task_templates' AND column_name = 'task_details') THEN
+        ALTER TABLE public.task_templates ADD COLUMN task_details TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'task_templates' AND column_name = 'default_priority') THEN
+        ALTER TABLE public.task_templates ADD COLUMN default_priority TEXT NOT NULL DEFAULT 'Normal' CHECK (default_priority IN ('Low', 'Normal', 'High', 'Urgent'));
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'task_templates' AND column_name = 'default_approval_mode') THEN
+        ALTER TABLE public.task_templates ADD COLUMN default_approval_mode TEXT NOT NULL DEFAULT 'Internal Only' CHECK (default_approval_mode IN ('Internal Only', 'Client Approval Required'));
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'task_templates' AND column_name = 'suggested_duration_days') THEN
+        ALTER TABLE public.task_templates ADD COLUMN suggested_duration_days INTEGER NOT NULL DEFAULT 3 CHECK (suggested_duration_days >= 1 AND suggested_duration_days <= 30);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'task_templates' AND column_name = 'status') THEN
+        ALTER TABLE public.task_templates ADD COLUMN status TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Archived'));
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'task_templates' AND column_name = 'sort_order') THEN
+        ALTER TABLE public.task_templates ADD COLUMN sort_order INTEGER NOT NULL DEFAULT 0;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'task_templates' AND column_name = 'version') THEN
+        ALTER TABLE public.task_templates ADD COLUMN version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1);
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'task_templates' AND column_name = 'seed_key') THEN
+        ALTER TABLE public.task_templates ADD COLUMN seed_key TEXT;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'task_templates' AND column_name = 'created_by') THEN
+        ALTER TABLE public.task_templates ADD COLUMN created_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'task_templates' AND column_name = 'updated_by') THEN
+        ALTER TABLE public.task_templates ADD COLUMN updated_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'task_templates' AND column_name = 'archived_at') THEN
+        ALTER TABLE public.task_templates ADD COLUMN archived_at TIMESTAMPTZ;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'task_templates' AND column_name = 'archived_by') THEN
+        ALTER TABLE public.task_templates ADD COLUMN archived_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL;
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM information_schema.columns WHERE table_schema = 'public' AND table_name = 'task_templates' AND column_name = 'archive_reason') THEN
+        ALTER TABLE public.task_templates ADD COLUMN archive_reason TEXT;
+    END IF;
+END $$;
+
+-- Unique constraint on seed_key for idempotent starter seeds even after rename
+CREATE UNIQUE INDEX IF NOT EXISTS uq_idx_task_templates_seed_key
+ON public.task_templates(seed_key)
+WHERE seed_key IS NOT NULL;
 
 -- Indexes for performance and filtering
 CREATE INDEX IF NOT EXISTS idx_task_templates_department
@@ -62,7 +115,7 @@ WHERE source_template_id IS NOT NULL;
 ALTER TABLE public.task_templates ENABLE ROW LEVEL SECURITY;
 
 -- 4. RLS Policies for task_templates
--- Deny direct authenticated writes (managed through backend Edge Function)
+-- Deny direct authenticated writes (strictly managed through backend Edge Function)
 DROP POLICY IF EXISTS task_templates_insert_deny ON public.task_templates;
 CREATE POLICY task_templates_insert_deny ON public.task_templates
 FOR INSERT TO authenticated WITH CHECK (false);
@@ -94,22 +147,7 @@ USING (
     )
 );
 
--- 5. Realtime Publication (Safely register task_templates)
-DO $$
-BEGIN
-    IF EXISTS (
-        SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime'
-    ) THEN
-        IF NOT EXISTS (
-            SELECT 1 FROM pg_publication_tables
-            WHERE pubname = 'supabase_realtime' AND schemaname = 'public' AND tablename = 'task_templates'
-        ) THEN
-            ALTER PUBLICATION supabase_realtime ADD TABLE public.task_templates;
-        END IF;
-    END IF;
-END $$;
-
--- 6. Idempotent Seed: Starter Media Buying template
+-- 5. Idempotent Seed: Starter Media Buying template
 DO $$
 DECLARE
     paid_ads_dept_id UUID;
@@ -127,10 +165,17 @@ BEGIN
     WHERE role = 'owner' AND status = 'active'
     LIMIT 1;
 
+    -- If the template was already seeded previously by name without seed_key, backfill its seed_key
+    UPDATE public.task_templates
+    SET seed_key = 'media_buying_campaign_setup_v1'
+    WHERE name = 'Media Buying Campaign Setup & Launch'
+      AND seed_key IS NULL;
+
+    -- Insert starter template using seed_key idempotency check (immune to rename)
     IF paid_ads_dept_id IS NOT NULL THEN
         IF NOT EXISTS (
             SELECT 1 FROM public.task_templates
-            WHERE name = 'Media Buying Campaign Setup & Launch'
+            WHERE seed_key = 'media_buying_campaign_setup_v1'
         ) THEN
             INSERT INTO public.task_templates (
                 name,
@@ -144,6 +189,7 @@ BEGIN
                 status,
                 sort_order,
                 version,
+                seed_key,
                 created_by,
                 updated_by
             ) VALUES (
@@ -167,6 +213,7 @@ BEGIN
                 'Active',
                 0,
                 1,
+                'media_buying_campaign_setup_v1',
                 system_owner_id,
                 system_owner_id
             );
