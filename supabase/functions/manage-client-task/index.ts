@@ -270,7 +270,8 @@ serve(async (req: Request) => {
     if (action === 'create') {
       const {
         client_id, week_number, title, details, department_id,
-        assignee_id, priority = 'Normal', approval_mode = 'Internal Only', planned_start, due_date
+        assignee_id, priority = 'Normal', approval_mode = 'Internal Only', planned_start, due_date,
+        source_template_id, source_template_version
       } = body;
 
       if (!client_id || !week_number || !title || !department_id || !planned_start || !due_date) {
@@ -306,6 +307,26 @@ serve(async (req: Request) => {
           JSON.stringify({ error: 'Cannot create tasks for a paused client.' }),
           { status: 400, headers: corsHeaders }
         );
+      }
+
+      // Template provenance validation if provided
+      let resolvedSourceTemplateId: string | null = null;
+      let resolvedSourceTemplateVersion: number | null = null;
+      if (source_template_id) {
+        const { data: templateRec, error: tErr } = await supabaseAdmin
+          .from('task_templates')
+          .select('id, version, status')
+          .eq('id', source_template_id)
+          .single();
+
+        if (tErr || !templateRec) {
+          return new Response(JSON.stringify({ error: 'Referenced task template does not exist.' }), { status: 400, headers: corsHeaders });
+        }
+        if (templateRec.status === 'Archived') {
+          return new Response(JSON.stringify({ error: 'Cannot create task from an archived template.' }), { status: 400, headers: corsHeaders });
+        }
+        resolvedSourceTemplateId = templateRec.id;
+        resolvedSourceTemplateVersion = source_template_version || templateRec.version || 1;
       }
 
       // Date validations (Sat/Sun rejection)
@@ -358,6 +379,8 @@ serve(async (req: Request) => {
           planned_start,
           due_date,
           status: initialStatus,
+          source_template_id: resolvedSourceTemplateId,
+          source_template_version: resolvedSourceTemplateVersion,
           created_by: callerProfile.id,
           updated_by: callerProfile.id
         })
@@ -378,8 +401,26 @@ serve(async (req: Request) => {
         actor_id: callerProfile.id,
         event_type: 'created',
         new_state: newTask,
-        notes: `Task created in ${initialStatus} status`
+        notes: resolvedSourceTemplateId
+          ? `Task created in ${initialStatus} status from template (${resolvedSourceTemplateId} v${resolvedSourceTemplateVersion})`
+          : `Task created in ${initialStatus} status`
       });
+
+      // Record audit event in system_audit_events if created from template
+      if (resolvedSourceTemplateId) {
+        await supabaseAdmin.from('system_audit_events').insert({
+          action: 'task_created_from_template',
+          entity_type: 'task_template',
+          entity_id: resolvedSourceTemplateId,
+          actor_id: callerProfile.id,
+          details: {
+            task_id: newTask.id,
+            task_title: newTask.title,
+            client_id: newTask.client_id,
+            template_version: resolvedSourceTemplateVersion
+          }
+        });
+      }
 
       return new Response(
         JSON.stringify({ success: true, task: newTask }),

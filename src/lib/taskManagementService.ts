@@ -208,6 +208,8 @@ export interface CreateTaskParams {
   approvalMode?: TaskApprovalMode;
   plannedStart: string;
   dueDate: string;
+  sourceTemplateId?: string | null;
+  sourceTemplateVersion?: number | null;
 }
 
 export interface UpdateTaskParams {
@@ -343,18 +345,21 @@ export const taskManagementService = {
     }
 
     try {
+      const selectFieldsWithTemplate = `
+        id, client_id, week_number, title, details, department_id,
+        assignee_id, priority, planned_start, due_date, status,
+        approval_mode, completed_at, completed_by, reopened_at, reopened_by, reopen_reason,
+        blocked_reason, sort_order, created_by, created_at,
+        updated_by, updated_at, archived_at, archived_by, archive_reason,
+        source_template_id, source_template_version,
+        departments(id, name),
+        assignee:profiles!assignee_id(id, full_name, role, status),
+        creator:profiles!created_by(id, full_name)
+      `;
+
       let query = supabase
         .from('client_tasks')
-        .select(`
-          id, client_id, week_number, title, details, department_id,
-          assignee_id, priority, planned_start, due_date, status,
-          approval_mode, completed_at, completed_by, reopened_at, reopened_by, reopen_reason,
-          blocked_reason, sort_order, created_by, created_at,
-          updated_by, updated_at, archived_at, archived_by, archive_reason,
-          departments(id, name),
-          assignee:profiles!assignee_id(id, full_name, role, status),
-          creator:profiles!created_by(id, full_name)
-        `)
+        .select(selectFieldsWithTemplate)
         .eq('client_id', clientId)
         .is('archived_at', null)
         .order('sort_order', { ascending: true })
@@ -364,7 +369,39 @@ export const taskManagementService = {
         query = query.eq('week_number', weekNumber);
       }
 
-      const { data, error } = await query;
+      let data: any[] | null = null;
+      let error: any = null;
+      const res = await query;
+      data = res.data;
+      error = res.error;
+
+      // Graceful fallback if source_template columns do not exist in database yet (e.g. on un-migrated preview)
+      if (error && (error.message?.includes('source_template') || error.code === 'PGRST204')) {
+        const fallbackFields = `
+          id, client_id, week_number, title, details, department_id,
+          assignee_id, priority, planned_start, due_date, status,
+          approval_mode, completed_at, completed_by, reopened_at, reopened_by, reopen_reason,
+          blocked_reason, sort_order, created_by, created_at,
+          updated_by, updated_at, archived_at, archived_by, archive_reason,
+          departments(id, name),
+          assignee:profiles!assignee_id(id, full_name, role, status),
+          creator:profiles!created_by(id, full_name)
+        `;
+        let fallbackQuery = supabase
+          .from('client_tasks')
+          .select(fallbackFields)
+          .eq('client_id', clientId)
+          .is('archived_at', null)
+          .order('sort_order', { ascending: true })
+          .order('created_at', { ascending: true });
+
+        if (weekNumber) {
+          fallbackQuery = fallbackQuery.eq('week_number', weekNumber);
+        }
+        const fallbackRes = await fallbackQuery;
+        data = fallbackRes.data;
+        error = fallbackRes.error;
+      }
 
       if (error) {
         return { data: [], error: error.message };
@@ -413,6 +450,8 @@ export const taskManagementService = {
           archivedAt: row.archived_at,
           archivedBy: row.archived_by,
           archiveReason: row.archive_reason,
+          sourceTemplateId: row.source_template_id || null,
+          sourceTemplateVersion: row.source_template_version || null,
           isOverdue
         };
       });
@@ -762,7 +801,9 @@ export const taskManagementService = {
       priority: params.priority || 'Normal',
       approval_mode: params.approvalMode || 'Internal Only',
       planned_start: params.plannedStart,
-      due_date: params.dueDate
+      due_date: params.dueDate,
+      source_template_id: params.sourceTemplateId || undefined,
+      source_template_version: params.sourceTemplateVersion || undefined
     });
 
     if (edgeRes.error || !edgeRes.data?.task) {
@@ -790,6 +831,8 @@ export const taskManagementService = {
         createdAt: t.created_at,
         updatedBy: t.updated_by,
         updatedAt: t.updated_at,
+        sourceTemplateId: t.source_template_id || null,
+        sourceTemplateVersion: t.source_template_version || null,
         isOverdue: false
       },
       error: null

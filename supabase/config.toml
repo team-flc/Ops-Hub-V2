@@ -12,3 +12,6 @@ verify_jwt = true
 
 [functions.manage-profile]
 verify_jwt = true
+
+[functions.manage-task-template]
+verify_jwt = true

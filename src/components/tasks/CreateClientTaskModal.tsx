@@ -1,14 +1,16 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Calendar, AlertCircle, Loader2, CheckCircle2, UserCheck, ShieldAlert } from 'lucide-react';
+import { X, Calendar, AlertCircle, Loader2, CheckCircle2, UserCheck, ShieldAlert, BookTemplate } from 'lucide-react';
 import {
   ClientRecord,
   ClientTask,
   ClientTaskPriority,
   Department,
   UserProfile,
-  TaskApprovalMode
+  TaskApprovalMode,
+  TaskTemplate
 } from '../../types';
 import { taskManagementService, isSunday, isSaturday, isWeekend } from '../../lib/taskManagementService';
+import { calculateDueDateFromDuration } from '../../lib/taskTemplateService';
 
 interface CreateClientTaskModalProps {
   isOpen: boolean;
@@ -18,6 +20,7 @@ interface CreateClientTaskModalProps {
   weekNumber: 1 | 2 | 3 | 4;
   departments: Department[];
   eligibleAssignees: UserProfile[];
+  initialTemplate?: TaskTemplate | null;
 }
 
 export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
@@ -27,7 +30,8 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
   client,
   weekNumber,
   departments,
-  eligibleAssignees
+  eligibleAssignees,
+  initialTemplate
 }) => {
   const [title, setTitle] = useState('');
   const [details, setDetails] = useState('');
@@ -67,16 +71,8 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setSelectedWeek(weekNumber);
-      setTitle('');
-      setDetails('');
       setAssigneeId('');
-      setPriority('Normal');
-      setApprovalMode('Internal Only');
       setErrorMessage(null);
-
-      if (departments.length > 0 && !departmentId) {
-        setDepartmentId(departments[0].id);
-      }
 
       // Default start date = today (or roll past weekend)
       const now = new Date();
@@ -93,23 +89,42 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
       }
       setPlannedStartDate(todayStr);
 
-      // Default due date = 3 days later (skip weekend)
-      const due = new Date(now);
-      due.setDate(due.getDate() + 3);
-      let dYyyy = due.getFullYear();
-      let dMm = String(due.getMonth() + 1).padStart(2, '0');
-      let dDd = String(due.getDate()).padStart(2, '0');
-      let dueStr = `${dYyyy}-${dMm}-${dDd}`;
-      while (isWeekend(dueStr)) {
-        due.setDate(due.getDate() + 1);
-        dYyyy = due.getFullYear();
-        dMm = String(due.getMonth() + 1).padStart(2, '0');
-        dDd = String(due.getDate()).padStart(2, '0');
-        dueStr = `${dYyyy}-${dMm}-${dDd}`;
+      if (initialTemplate) {
+        setTitle(initialTemplate.defaultTaskTitle || '');
+        setDetails(initialTemplate.taskDetails || '');
+        setDepartmentId(initialTemplate.departmentId || (departments[0]?.id || ''));
+        setPriority(initialTemplate.defaultPriority || 'Normal');
+        setApprovalMode(initialTemplate.defaultApprovalMode || 'Internal Only');
+        const calculatedDue = calculateDueDateFromDuration(todayStr, initialTemplate.suggestedDurationDays || 3);
+        setDueDate(calculatedDue);
+      } else {
+        setTitle('');
+        setDetails('');
+        setPriority('Normal');
+        setApprovalMode('Internal Only');
+
+        if (departments.length > 0 && !departmentId) {
+          setDepartmentId(departments[0].id);
+        }
+
+        // Default due date = 3 days later (skip weekend)
+        const due = new Date(now);
+        due.setDate(due.getDate() + 3);
+        let dYyyy = due.getFullYear();
+        let dMm = String(due.getMonth() + 1).padStart(2, '0');
+        let dDd = String(due.getDate()).padStart(2, '0');
+        let dueStr = `${dYyyy}-${dMm}-${dDd}`;
+        while (isWeekend(dueStr)) {
+          due.setDate(due.getDate() + 1);
+          dYyyy = due.getFullYear();
+          dMm = String(due.getMonth() + 1).padStart(2, '0');
+          dDd = String(due.getDate()).padStart(2, '0');
+          dueStr = `${dYyyy}-${dMm}-${dDd}`;
+        }
+        setDueDate(dueStr);
       }
-      setDueDate(dueStr);
     }
-  }, [isOpen, weekNumber, departments]);
+  }, [isOpen, weekNumber, departments, initialTemplate]);
 
   if (!isOpen) return null;
 
@@ -172,7 +187,9 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
         priority,
         approvalMode,
         plannedStart: startIso,
-        dueDate: dueIso
+        dueDate: dueIso,
+        sourceTemplateId: initialTemplate ? initialTemplate.id : null,
+        sourceTemplateVersion: initialTemplate ? initialTemplate.version : null
       });
 
       if (res.error || !res.data) {
@@ -220,6 +237,19 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
 
         {/* Modal Body */}
         <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
+          {/* Template Provenance Banner */}
+          {initialTemplate && (
+            <div className="p-3 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-start gap-2.5">
+              <BookTemplate className="w-4 h-4 text-brand-500 shrink-0 mt-0.5" />
+              <div className="text-xs text-brand-700 dark:text-brand-300">
+                <span className="font-bold">Template: {initialTemplate.name} (v{initialTemplate.version})</span>
+                <p className="text-[11px] text-brand-600/80 dark:text-brand-400/80 mt-0.5">
+                  Fields pre-filled from this SOP. All items and dates can be customized for this client without affecting the template.
+                </p>
+              </div>
+            </div>
+          )}
+
           {errorMessage && (
             <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl flex items-center gap-2.5 text-rose-600 dark:text-rose-400 font-semibold">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />

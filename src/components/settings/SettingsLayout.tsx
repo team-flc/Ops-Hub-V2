@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { useSafeNavigate, useSafeParams } from '../../lib/safeRouterHooks';
 import { useAuth } from '../../context/AuthContext';
-import { 
-  Users, Building2, Archive, Activity, ShieldAlert, ArrowLeft 
+import {
+  Users, Building2, Archive, Activity, ShieldAlert, ArrowLeft, BookTemplate
 } from 'lucide-react';
 import { TeamManagementView } from '../views/TeamManagementView';
 import { SettingsTab, ClientRecord } from '../../types';
@@ -10,6 +10,9 @@ import { useOpsStore } from '../../store/opsStore';
 import { ClientDetailsTab } from '../clients/ClientDetailsTab';
 import { archiveService } from '../../lib/archiveService';
 
+const TaskTemplatesView = React.lazy(() =>
+  import('../templates/TaskTemplatesView').then((m) => ({ default: m.TaskTemplatesView }))
+);
 const ArchiveCenterView = React.lazy(() =>
   import('../archive/ArchiveCenterView').then((m) => ({ default: m.ArchiveCenterView }))
 );
@@ -56,6 +59,7 @@ export const SettingsLayout: React.FC<{ initialTab?: SettingsTab }> = ({ initial
   const tabs: { id: SettingsTab; label: string; icon: any }[] = [
     { id: 'team', label: 'Team Management', icon: Users },
     { id: 'clients', label: 'Client Management', icon: Building2 },
+    { id: 'templates', label: 'Task Templates', icon: BookTemplate },
     { id: 'archive', label: 'Archive Center', icon: Archive },
     { id: 'audit', label: 'Audit Log', icon: Activity }
   ];
@@ -303,6 +307,18 @@ export const SettingsLayout: React.FC<{ initialTab?: SettingsTab }> = ({ initial
               </div>
             )}
           </div>
+        )}
+
+        {activeTab === 'templates' && (
+          <React.Suspense
+            fallback={
+              <div className="p-8 flex items-center justify-center text-gray-400 text-xs">
+                <span className="animate-pulse">Loading Task Templates...</span>
+              </div>
+            }
+          >
+            <TaskTemplatesView currentUserProfile={profile} />
+          </React.Suspense>
         )}
 
         {activeTab === 'archive' && (

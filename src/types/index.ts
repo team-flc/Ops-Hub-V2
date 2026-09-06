@@ -317,7 +317,7 @@ export type ViewMode =
   | 'settings'
   | 'profile';
 
-export type SettingsTab = 'team' | 'clients' | 'archive' | 'audit';
+export type SettingsTab = 'team' | 'clients' | 'templates' | 'archive' | 'audit';
 
 export type GroupByOption = 'status' | 'priority' | 'assignee' | 'dueDate' | 'none';
 
@@ -498,8 +498,61 @@ export interface ClientTask {
   archivedBy?: string | null;
   archiveReason?: string | null;
   isOverdue?: boolean;
+  sourceTemplateId?: string | null;
+  sourceTemplateVersion?: number | null;
   unreadCount?: number;
   hasUnread?: boolean;
+}
+
+// --- PHASE 3C: TASK TEMPLATES SYSTEM TYPES ---
+export type TaskTemplateStatus = 'Active' | 'Archived';
+
+export interface TaskTemplate {
+  id: string;
+  name: string;
+  description?: string | null;
+  departmentId: string;
+  departmentName?: string;
+  defaultTaskTitle: string;
+  taskDetails?: string | null;
+  defaultPriority: ClientTaskPriority;
+  defaultApprovalMode: TaskApprovalMode;
+  suggestedDurationDays: number;
+  status: TaskTemplateStatus;
+  sortOrder: number;
+  version: number;
+  createdBy?: string | null;
+  createdByName?: string | null;
+  updatedBy?: string | null;
+  archivedAt?: string | null;
+  archivedBy?: string | null;
+  archiveReason?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateTaskTemplateInput {
+  name: string;
+  description?: string;
+  departmentId: string;
+  defaultTaskTitle: string;
+  taskDetails?: string;
+  defaultPriority?: ClientTaskPriority;
+  defaultApprovalMode?: TaskApprovalMode;
+  suggestedDurationDays?: number;
+  sortOrder?: number;
+}
+
+export interface UpdateTaskTemplateInput {
+  name?: string;
+  description?: string;
+  departmentId?: string;
+  defaultTaskTitle?: string;
+  taskDetails?: string;
+  defaultPriority?: ClientTaskPriority;
+  defaultApprovalMode?: TaskApprovalMode;
+  suggestedDurationDays?: number;
+  sortOrder?: number;
 }
 
 export interface ClientTaskEvent {
@@ -541,7 +594,8 @@ export type AuditEntityType =
   | 'client_link'
   | 'linkedin_profile'
   | 'department'
-  | 'designation';
+  | 'designation'
+  | 'task_template';
 
 export type AuditEventAction =
   | 'user_created'
@@ -571,7 +625,13 @@ export type AuditEventAction =
   | 'task_reassigned'
   | 'task_status_changed'
   | 'task_archived'
-  | 'task_restored';
+  | 'task_restored'
+  | 'template_created'
+  | 'template_updated'
+  | 'template_duplicated'
+  | 'template_archived'
+  | 'template_restored'
+  | 'task_created_from_template';
 
 export interface SystemAuditEvent {
   id: string;
