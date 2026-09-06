@@ -3,8 +3,11 @@ import { useAuth } from '../../context/AuthContext';
 import { LogOut, Clock, ShieldCheck, CheckCircle2, AlertCircle, ChevronRight, MessageSquare, ArrowRight } from 'lucide-react';
 import { taskManagementService } from '../../lib/taskManagementService';
 import { ClientTask, ClientRecord } from '../../types';
-import { ClientTaskDetailsModal } from '../tasks/ClientTaskDetailsModal';
 import { supabase } from '../../lib/supabase';
+
+const ClientTaskDetailsModal = React.lazy(() =>
+  import('../tasks/ClientTaskDetailsModal').then((m) => ({ default: m.ClientTaskDetailsModal }))
+);
 
 export const ClientPortalHoldingPage: React.FC = () => {
   const { profile: userProfile, signOut } = useAuth();
@@ -130,10 +133,10 @@ export const ClientPortalHoldingPage: React.FC = () => {
               {reviewTasks.map((t) => (
                 <div
                   key={t.id}
-                  className="py-3.5 flex items-center justify-between gap-4 hover:bg-slate-50/80 px-2 rounded-xl transition-colors"
+                  className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/80 px-2 rounded-xl transition-colors"
                 >
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-wrap items-center gap-2">
                       <span className="text-xs font-bold text-slate-900 truncate">
                         {t.title}
                       </span>
@@ -151,7 +154,7 @@ export const ClientPortalHoldingPage: React.FC = () => {
                   <button
                     type="button"
                     onClick={() => setSelectedTask(t)}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-sm transition-colors"
+                    className="inline-flex items-center justify-center gap-1.5 w-full sm:w-auto px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-sm transition-colors min-h-[40px] sm:min-h-[36px] cursor-pointer"
                   >
                     <span>Review & Approve</span>
                     <ArrowRight className="w-3.5 h-3.5" />
@@ -205,27 +208,29 @@ export const ClientPortalHoldingPage: React.FC = () => {
 
       {/* Task Details & Conversation Feed Drawer */}
       {selectedTask && (
-        <ClientTaskDetailsModal
-          isOpen={true}
-          onClose={() => setSelectedTask(null)}
-          task={selectedTask}
-          client={clientRecord || {
-            id: userProfile?.organizationId || selectedTask.clientId,
-            companyName: 'Client Workspace',
-            clientName: 'Client',
-            package: 'Advanced',
-            status: 'Active',
-            activationDate: '',
-            requiredLinkedinProfileCount: 3,
-            operationalManagerId: '',
-            links: {},
-            createdAt: '',
-            updatedAt: ''
-          }}
-          currentUser={userProfile}
-          isClientPortal={true}
-          onTaskUpdated={handleTaskUpdated}
-        />
+        <React.Suspense fallback={null}>
+          <ClientTaskDetailsModal
+            isOpen={true}
+            onClose={() => setSelectedTask(null)}
+            task={selectedTask}
+            client={clientRecord || {
+              id: userProfile?.organizationId || selectedTask.clientId,
+              companyName: 'Client Workspace',
+              clientName: 'Client',
+              package: 'Advanced',
+              status: 'Active',
+              activationDate: '',
+              requiredLinkedinProfileCount: 3,
+              operationalManagerId: '',
+              links: {},
+              createdAt: '',
+              updatedAt: ''
+            }}
+            currentUser={userProfile}
+            isClientPortal={true}
+            onTaskUpdated={handleTaskUpdated}
+          />
+        </React.Suspense>
       )}
     </div>
   );

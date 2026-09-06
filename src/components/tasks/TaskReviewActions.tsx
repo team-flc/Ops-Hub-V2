@@ -52,7 +52,7 @@ export const TaskReviewActions: React.FC<TaskReviewActionsProps> = ({
                 type="button"
                 disabled={disabled}
                 onClick={() => onStatusChange('In Progress')}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-bold shadow-sm transition-all disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 min-h-[38px] cursor-pointer bg-brand-500 hover:bg-brand-600 text-white rounded-xl font-bold shadow-sm transition-all disabled:opacity-50"
               >
                 <Play className="w-3.5 h-3.5" />
                 <span>Start Work (In Progress)</span>
@@ -65,7 +65,7 @@ export const TaskReviewActions: React.FC<TaskReviewActionsProps> = ({
                   type="button"
                   disabled={disabled}
                   onClick={() => onRequestReasonModal({ targetStatus: 'Blocked', actionLabel: 'Mark as Blocked' })}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-500 hover:bg-rose-600 text-white rounded-xl font-bold shadow-sm transition-all disabled:opacity-50"
+                  className="flex items-center gap-1.5 px-3 py-1.5 min-h-[38px] cursor-pointer bg-rose-500 hover:bg-rose-600 text-white rounded-xl font-bold shadow-sm transition-all disabled:opacity-50"
                 >
                   <Ban className="w-3.5 h-3.5" />
                   <span>Mark Blocked</span>
@@ -75,7 +75,7 @@ export const TaskReviewActions: React.FC<TaskReviewActionsProps> = ({
                   type="button"
                   disabled={disabled}
                   onClick={() => onStatusChange('Team Review')}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold shadow-sm transition-all disabled:opacity-50"
+                  className="flex items-center gap-1.5 px-3 py-1.5 min-h-[38px] cursor-pointer bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold shadow-sm transition-all disabled:opacity-50"
                 >
                   <Send className="w-3.5 h-3.5" />
                   <span>Submit for Team Review</span>
@@ -88,7 +88,7 @@ export const TaskReviewActions: React.FC<TaskReviewActionsProps> = ({
                 type="button"
                 disabled={disabled}
                 onClick={() => onStatusChange('In Progress')}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow-sm transition-all disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 min-h-[38px] cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow-sm transition-all disabled:opacity-50"
               >
                 <CheckCircle2 className="w-3.5 h-3.5" />
                 <span>Resume Work (In Progress)</span>
@@ -106,7 +106,7 @@ export const TaskReviewActions: React.FC<TaskReviewActionsProps> = ({
                   type="button"
                   disabled={disabled}
                   onClick={() => onRequestReasonModal({ targetStatus: 'In Progress', actionLabel: 'Request Changes', isChangesRequested: true })}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold shadow-sm transition-all disabled:opacity-50"
+                  className="flex items-center gap-1.5 px-3 py-1.5 min-h-[38px] cursor-pointer bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold shadow-sm transition-all disabled:opacity-50"
                 >
                   <CornerUpLeft className="w-3.5 h-3.5" />
                   <span>Request Changes</span>
@@ -117,7 +117,7 @@ export const TaskReviewActions: React.FC<TaskReviewActionsProps> = ({
                     type="button"
                     disabled={disabled}
                     onClick={() => onStatusChange('Client Review')}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-sm transition-all disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-3 py-1.5 min-h-[38px] cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-bold shadow-sm transition-all disabled:opacity-50"
                   >
                     <Send className="w-3.5 h-3.5" />
                     <span>Send to Client Review</span>
@@ -127,7 +127,7 @@ export const TaskReviewActions: React.FC<TaskReviewActionsProps> = ({
                     type="button"
                     disabled={disabled}
                     onClick={() => onStatusChange('Completed')}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow-sm transition-all disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-3 py-1.5 min-h-[38px] cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow-sm transition-all disabled:opacity-50"
                   >
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     <span>Approve & Mark Completed</span>
@@ -148,7 +148,7 @@ export const TaskReviewActions: React.FC<TaskReviewActionsProps> = ({
                       actionLabel: 'Owner Override: Approve Deliverable',
                       isOwnerOverride: true
                     })}
-                    className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold shadow-sm transition-all disabled:opacity-50"
+                    className="flex items-center gap-1.5 px-3 py-1.5 min-h-[38px] cursor-pointer bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold shadow-sm transition-all disabled:opacity-50"
                     title="Owner emergency override (requires mandatory reason)"
                   >
                     <ShieldAlert className="w-3.5 h-3.5" />
@@ -160,7 +160,7 @@ export const TaskReviewActions: React.FC<TaskReviewActionsProps> = ({
                   type="button"
                   disabled={disabled}
                   onClick={() => onRequestReasonModal({ targetStatus: 'In Progress', actionLabel: 'Request Changes', isChangesRequested: true })}
-                  className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold shadow-sm transition-all disabled:opacity-50"
+                  className="flex items-center gap-1.5 px-3 py-1.5 min-h-[38px] cursor-pointer bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold shadow-sm transition-all disabled:opacity-50"
                 >
                   <CornerUpLeft className="w-3.5 h-3.5" />
                   <span>Request Changes</span>
@@ -173,7 +173,7 @@ export const TaskReviewActions: React.FC<TaskReviewActionsProps> = ({
                 type="button"
                 disabled={disabled}
                 onClick={() => onRequestReasonModal({ targetStatus: 'In Progress', actionLabel: 'Reopen Task', isReopen: true })}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold shadow-sm transition-all disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 min-h-[38px] cursor-pointer bg-purple-600 hover:bg-purple-700 text-white rounded-xl font-bold shadow-sm transition-all disabled:opacity-50"
               >
                 <CornerUpLeft className="w-3.5 h-3.5" />
                 <span>Reopen Task</span>
@@ -185,7 +185,7 @@ export const TaskReviewActions: React.FC<TaskReviewActionsProps> = ({
                 type="button"
                 disabled={disabled}
                 onClick={() => onStatusChange('Assigned')}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-sm transition-all disabled:opacity-50"
+                className="flex items-center gap-1.5 px-3 py-1.5 min-h-[38px] cursor-pointer bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-bold shadow-sm transition-all disabled:opacity-50"
               >
                 <User className="w-3.5 h-3.5" />
                 <span>Set Status to Assigned</span>
@@ -201,7 +201,7 @@ export const TaskReviewActions: React.FC<TaskReviewActionsProps> = ({
               type="button"
               disabled={disabled}
               onClick={() => onStatusChange('Completed')}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 min-h-[38px] cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow-sm transition-all disabled:opacity-50 cursor-pointer"
             >
               <CheckCircle2 className="w-3.5 h-3.5" />
               <span>Approve Deliverables</span>
@@ -211,7 +211,7 @@ export const TaskReviewActions: React.FC<TaskReviewActionsProps> = ({
               type="button"
               disabled={disabled}
               onClick={() => onRequestReasonModal({ targetStatus: 'In Progress', actionLabel: 'Request Changes', isChangesRequested: true })}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold shadow-sm transition-all disabled:opacity-50 cursor-pointer"
+              className="flex items-center gap-1.5 px-3 py-1.5 min-h-[38px] cursor-pointer bg-amber-600 hover:bg-amber-700 text-white rounded-xl font-bold shadow-sm transition-all disabled:opacity-50 cursor-pointer"
             >
               <CornerUpLeft className="w-3.5 h-3.5" />
               <span>Request Changes</span>

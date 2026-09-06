@@ -369,6 +369,8 @@ FOR DELETE TO authenticated
 USING (false);
 
 -- 15. RLS Policies for client_task_events (Client users only see client-facing events)
+-- PostgreSQL permissive policies combine with OR. Explicitly drop all historical policies from Phase 3A to eliminate policy overlap.
+DROP POLICY IF EXISTS "client_task_events_select" ON public.client_task_events;
 DROP POLICY IF EXISTS client_task_events_select ON public.client_task_events;
 CREATE POLICY client_task_events_select ON public.client_task_events
 FOR SELECT TO authenticated
@@ -385,10 +387,26 @@ USING (
     )
 );
 
-DROP POLICY IF EXISTS client_task_events_insert_deny ON public.client_task_events;
+DROP POLICY IF EXISTS "client_task_events_insert" ON public.client_task_events;
 DROP POLICY IF EXISTS client_task_events_insert ON public.client_task_events;
+DROP POLICY IF EXISTS "client_task_events_insert_deny" ON public.client_task_events;
+DROP POLICY IF EXISTS client_task_events_insert_deny ON public.client_task_events;
 CREATE POLICY client_task_events_insert_deny ON public.client_task_events
 FOR INSERT TO authenticated WITH CHECK (false);
+
+DROP POLICY IF EXISTS "client_task_events_update_deny" ON public.client_task_events;
+DROP POLICY IF EXISTS client_task_events_update_deny ON public.client_task_events;
+DROP POLICY IF EXISTS "client_task_events_update" ON public.client_task_events;
+DROP POLICY IF EXISTS client_task_events_update ON public.client_task_events;
+CREATE POLICY client_task_events_update_deny ON public.client_task_events
+FOR UPDATE TO authenticated USING (false);
+
+DROP POLICY IF EXISTS "client_task_events_delete_deny" ON public.client_task_events;
+DROP POLICY IF EXISTS client_task_events_delete_deny ON public.client_task_events;
+DROP POLICY IF EXISTS "client_task_events_delete" ON public.client_task_events;
+DROP POLICY IF EXISTS client_task_events_delete ON public.client_task_events;
+CREATE POLICY client_task_events_delete_deny ON public.client_task_events
+FOR DELETE TO authenticated USING (false);
 
 -- 16. RLS for task_action_idempotency (Service-role only; deny direct authenticated writes/reads)
 DROP POLICY IF EXISTS task_action_idempotency_authenticated_deny ON public.task_action_idempotency;

@@ -225,44 +225,46 @@ export const TaskMessageComposer: React.FC<TaskMessageComposerProps> = ({
 
             {/* Link Inputs and Send Button */}
             <div className="space-y-2">
-              <div className="flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2">
                 <input
                   type="url"
                   value={linkUrlInput}
                   onChange={(e) => setLinkUrlInput(e.target.value)}
                   placeholder="https://drive.google.com/..."
                   disabled={links.length >= 5}
-                  className="flex-1 px-2.5 py-1 rounded-lg bg-white dark:bg-dark-100 border border-gray-200 dark:border-dark-border text-xs text-gray-800 dark:text-gray-200 placeholder:text-gray-400 outline-none focus:ring-1 focus:ring-brand-500"
+                  className="flex-1 min-w-0 px-2.5 py-2 sm:py-1 rounded-lg bg-white dark:bg-dark-100 border border-gray-200 dark:border-dark-border text-xs text-gray-800 dark:text-gray-200 placeholder:text-gray-400 outline-none focus:ring-1 focus:ring-brand-500"
                 />
-                <input
-                  type="text"
-                  value={linkTitleInput}
-                  onChange={(e) => setLinkTitleInput(e.target.value)}
-                  placeholder="Link Title (optional)"
-                  disabled={links.length >= 5}
-                  className="w-36 px-2.5 py-1 rounded-lg bg-white dark:bg-dark-100 border border-gray-200 dark:border-dark-border text-xs text-gray-800 dark:text-gray-200 placeholder:text-gray-400 outline-none focus:ring-1 focus:ring-brand-500"
-                />
-                <button
-                  type="button"
-                  onClick={handleAddLink}
-                  disabled={links.length >= 5}
-                  className="px-2.5 py-1 bg-gray-200 dark:bg-dark-200 hover:bg-gray-300 dark:hover:bg-dark-100 text-gray-700 dark:text-gray-300 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors disabled:opacity-50"
-                  title="Add Link"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Link</span>
-                </button>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={linkTitleInput}
+                    onChange={(e) => setLinkTitleInput(e.target.value)}
+                    placeholder="Link Title (optional)"
+                    disabled={links.length >= 5}
+                    className="flex-1 sm:w-36 min-w-0 px-2.5 py-2 sm:py-1 rounded-lg bg-white dark:bg-dark-100 border border-gray-200 dark:border-dark-border text-xs text-gray-800 dark:text-gray-200 placeholder:text-gray-400 outline-none focus:ring-1 focus:ring-brand-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleAddLink}
+                    disabled={links.length >= 5}
+                    className="px-3 py-2 sm:py-1 bg-gray-200 dark:bg-dark-200 hover:bg-gray-300 dark:hover:bg-dark-100 text-gray-700 dark:text-gray-300 rounded-lg text-xs font-bold flex items-center gap-1 transition-colors disabled:opacity-50 flex-shrink-0 cursor-pointer min-h-[36px]"
+                    title="Add Link"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Link</span>
+                  </button>
+                </div>
               </div>
 
               {linkError && (
                 <p className="text-[11px] text-rose-500 font-semibold">{linkError}</p>
               )}
 
-              <div className="flex justify-end">
+              <div className="flex justify-end pt-1">
                 <button
                   type="submit"
                   disabled={isSending || !content.trim()}
-                  className="flex items-center gap-1.5 px-4 py-1.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-xs font-bold shadow-sm transition-all disabled:opacity-50"
+                  className="flex items-center justify-center gap-1.5 w-full sm:w-auto px-5 py-2.5 sm:py-1.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-xs font-bold shadow-sm transition-all disabled:opacity-50 min-h-[44px] sm:min-h-[36px] cursor-pointer"
                 >
                   {isSending ? (
                     <>

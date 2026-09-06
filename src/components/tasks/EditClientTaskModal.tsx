@@ -253,6 +253,7 @@ export const EditClientTaskModal: React.FC<EditClientTaskModalProps> = ({
                 required
                 className="w-full px-3 py-2 rounded-xl bg-white dark:bg-dark-100 border border-gray-200 dark:border-dark-border focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-gray-900 dark:text-gray-100"
               />
+              <span className="text-[10px] text-gray-400 mt-0.5 block">Cannot fall on Saturday or Sunday</span>
             </div>
 
             <div>
@@ -280,6 +281,7 @@ export const EditClientTaskModal: React.FC<EditClientTaskModalProps> = ({
                 required
                 className="w-full px-3 py-2 rounded-xl bg-white dark:bg-dark-100 border border-gray-200 dark:border-dark-border focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-gray-900 dark:text-gray-100"
               />
+              <span className="text-[10px] text-gray-400 mt-0.5 block">Cannot fall on Saturday or Sunday</span>
             </div>
 
             <div>
@@ -312,14 +314,14 @@ export const EditClientTaskModal: React.FC<EditClientTaskModalProps> = ({
               type="button"
               onClick={onClose}
               disabled={isSubmitting}
-              className="px-4 py-2 rounded-xl border border-gray-200 dark:border-dark-border text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors"
+              className="px-4 py-2 rounded-xl border border-gray-200 dark:border-dark-border text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors min-h-[40px] sm:min-h-[36px] cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex items-center gap-2 px-5 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-bold shadow-md shadow-brand-500/25 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+              className="flex items-center gap-2 px-5 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-bold shadow-md shadow-brand-500/25 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 min-h-[40px] sm:min-h-[36px] cursor-pointer"
             >
               {isSubmitting ? (
                 <>

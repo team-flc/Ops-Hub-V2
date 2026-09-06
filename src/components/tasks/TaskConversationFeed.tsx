@@ -89,7 +89,7 @@ export const TaskConversationFeed: React.FC<TaskConversationFeedProps> = ({
                   </span>
                 </div>
 
-                <p className="text-xs text-gray-800 dark:text-gray-200 whitespace-pre-wrap leading-relaxed">
+                <p className="text-xs text-gray-800 dark:text-gray-200 whitespace-pre-wrap break-words leading-relaxed">
                   {msg.content}
                 </p>
 
@@ -106,7 +106,7 @@ export const TaskConversationFeed: React.FC<TaskConversationFeedProps> = ({
                           href={link.url}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-gray-100 dark:bg-dark-100 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950/40 text-xs font-semibold text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-dark-border transition-colors max-w-xs truncate"
+                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-gray-100 dark:bg-dark-100 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950/40 text-xs font-semibold text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-dark-border transition-colors max-w-full sm:max-w-xs truncate"
                         >
                           <LinkIcon className="w-3 h-3 flex-shrink-0" />
                           <span className="truncate">{link.title || link.url}</span>
@@ -133,7 +133,7 @@ export const TaskConversationFeed: React.FC<TaskConversationFeedProps> = ({
                   <span className="text-[10px] text-gray-400">{formatDatetime(evt.createdAt)}</span>
                 </div>
                 {evt.notes && (
-                  <p className="text-[10px] text-gray-500 italic mt-0.5">{evt.notes}</p>
+                  <p className="text-[10px] text-gray-500 italic mt-0.5 break-words">{evt.notes}</p>
                 )}
               </div>
             </div>

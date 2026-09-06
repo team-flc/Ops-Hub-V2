@@ -232,7 +232,7 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs transition-opacity animate-in fade-in duration-200">
-      <div className="w-full max-w-2xl bg-white dark:bg-dark-card h-full shadow-2xl flex flex-col border-l border-gray-200 dark:border-dark-border">
+      <div className="w-full max-w-full sm:max-w-2xl bg-white dark:bg-dark-card h-full shadow-2xl flex flex-col border-l border-gray-200 dark:border-dark-border">
         {/* DRAWER HEADER */}
         <div className="p-4 sm:p-5 border-b border-gray-200 dark:border-dark-border flex items-start justify-between gap-4 flex-shrink-0 bg-gray-50/50 dark:bg-dark-card/50">
           <div className="space-y-1.5 flex-1 min-w-0">

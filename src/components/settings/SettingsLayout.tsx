@@ -5,12 +5,17 @@ import {
   Users, Building2, Archive, Activity, ShieldAlert, ArrowLeft 
 } from 'lucide-react';
 import { TeamManagementView } from '../views/TeamManagementView';
-import { ArchiveCenterView } from '../archive/ArchiveCenterView';
-import { AuditLogView } from '../audit/AuditLogView';
 import { SettingsTab, ClientRecord } from '../../types';
 import { useOpsStore } from '../../store/opsStore';
 import { ClientDetailsTab } from '../clients/ClientDetailsTab';
 import { archiveService } from '../../lib/archiveService';
+
+const ArchiveCenterView = React.lazy(() =>
+  import('../archive/ArchiveCenterView').then((m) => ({ default: m.ArchiveCenterView }))
+);
+const AuditLogView = React.lazy(() =>
+  import('../audit/AuditLogView').then((m) => ({ default: m.AuditLogView }))
+);
 
 export const SettingsLayout: React.FC<{ initialTab?: SettingsTab }> = ({ initialTab = 'team' }) => {
   const navigate = useSafeNavigate();
@@ -300,9 +305,29 @@ export const SettingsLayout: React.FC<{ initialTab?: SettingsTab }> = ({ initial
           </div>
         )}
 
-        {activeTab === 'archive' && <ArchiveCenterView />}
+        {activeTab === 'archive' && (
+          <React.Suspense
+            fallback={
+              <div className="p-8 flex items-center justify-center text-gray-400 text-xs">
+                <span className="animate-pulse">Loading Archive Center...</span>
+              </div>
+            }
+          >
+            <ArchiveCenterView />
+          </React.Suspense>
+        )}
 
-        {activeTab === 'audit' && <AuditLogView />}
+        {activeTab === 'audit' && (
+          <React.Suspense
+            fallback={
+              <div className="p-8 flex items-center justify-center text-gray-400 text-xs">
+                <span className="animate-pulse">Loading Audit Log...</span>
+              </div>
+            }
+          >
+            <AuditLogView />
+          </React.Suspense>
+        )}
       </div>
     </div>
   );

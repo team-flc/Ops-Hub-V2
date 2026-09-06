@@ -36,25 +36,33 @@
 
 ---
 
-## Unabridged Rollback Procedure
+## Rollback Procedures
 
-In the event of an unexpected anomaly during deployment or verification:
+### Architecture-Aware Rollback Strategy
+Rollback procedures are strictly differentiated based on whether user data has been recorded in production.
 
-### 1. Frontend Rollback
-- Revert the Cloudflare Pages deployment to the previous production deployment hash from `main` commit `4958ecb`.
-- Time to restore: < 60 seconds via Cloudflare dashboard or Wrangler.
+---
 
-### 2. Edge Function Rollback
-- Redeploy the previous production version of `manage-client-task` from commit `4958ecb`:
+### Scenario A: Pre-Data Rollback (Deployment Window Only — Zero Production Data)
+Use this procedure **ONLY** if an anomaly occurs immediately during the deployment window before any production user activity has occurred and no messages, approvals, or review transitions have been created.
+
+#### 1. Frontend Rollback
+- Revert Cloudflare Pages deployment to commit `4958ecb`.
+- Restore time: < 60 seconds.
+
+#### 2. Edge Function Rollback
+- Redeploy previous production version of `manage-client-task` from commit `4958ecb`:
   ```bash
   git checkout 4958ecb -- supabase/functions/manage-client-task/index.ts
   supabase functions deploy manage-client-task
   ```
 
-### 3. Database Rollback SQL (Non-Destructive)
-If database rollback is required, execute the following non-destructive rollback script:
+#### 3. Database Rollback SQL (Pre-Data Only)
+> [!CAUTION]
+> Execute this script ONLY if 0 rows exist in `client_task_messages`, `client_task_read_states`, and `task_action_idempotency`, and NO tasks are in `'Client Review'` or `'Completed'` status.
+
 ```sql
--- Remove tables from realtime publication
+-- 1. Remove tables from realtime publication
 DO $$
 BEGIN
     IF EXISTS (SELECT 1 FROM pg_publication WHERE pubname = 'supabase_realtime') THEN
@@ -63,7 +71,7 @@ BEGIN
     END IF;
 END $$;
 
--- Drop RLS policies
+-- 2. Drop RLS policies on Phase 3B tables
 DROP POLICY IF EXISTS client_task_messages_select ON public.client_task_messages;
 DROP POLICY IF EXISTS client_task_messages_insert_deny ON public.client_task_messages;
 DROP POLICY IF EXISTS client_task_messages_update_deny ON public.client_task_messages;
@@ -76,7 +84,29 @@ DROP POLICY IF EXISTS client_task_read_states_delete_deny ON public.client_task_
 
 DROP POLICY IF EXISTS task_action_idempotency_authenticated_deny ON public.task_action_idempotency;
 
--- Drop triggers and functions
+-- 3. Restore previous client_task_events RLS policies
+DROP POLICY IF EXISTS "client_task_events_select" ON public.client_task_events;
+DROP POLICY IF EXISTS client_task_events_select ON public.client_task_events;
+CREATE POLICY "client_task_events_select" ON public.client_task_events
+FOR SELECT TO authenticated
+USING (app_private.can_access_client(client_id));
+
+DROP POLICY IF EXISTS "client_task_events_insert" ON public.client_task_events;
+DROP POLICY IF EXISTS client_task_events_insert ON public.client_task_events;
+DROP POLICY IF EXISTS client_task_events_insert_deny ON public.client_task_events;
+CREATE POLICY "client_task_events_insert" ON public.client_task_events
+FOR INSERT TO authenticated
+WITH CHECK (app_private.can_access_client(client_id));
+
+DROP POLICY IF EXISTS client_task_events_update_deny ON public.client_task_events;
+CREATE POLICY "client_task_events_update_deny" ON public.client_task_events
+FOR UPDATE TO authenticated USING (false);
+
+DROP POLICY IF EXISTS client_task_events_delete_deny ON public.client_task_events;
+CREATE POLICY "client_task_events_delete_deny" ON public.client_task_events
+FOR DELETE TO authenticated USING (false);
+
+-- 4. Drop Phase 3B triggers and functions
 DROP TRIGGER IF EXISTS trg_enforce_task_message_client_id ON public.client_task_messages;
 DROP FUNCTION IF EXISTS public.enforce_task_message_client_id();
 
@@ -85,13 +115,98 @@ DROP FUNCTION IF EXISTS public.prevent_task_message_tampering();
 
 DROP FUNCTION IF EXISTS public.validate_task_message_links(jsonb);
 
--- Drop new Phase 3B tables
+-- 5. Restore previous can_access_client and can_manage_client definitions (with created_by)
+CREATE OR REPLACE FUNCTION app_private.can_access_client(target_client_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = ''
+STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.profiles p
+    WHERE p.id = (SELECT auth.uid()) AND p.status = 'active' AND (
+      p.role = 'owner'
+      OR (
+        p.role = 'operational_manager' AND EXISTS (
+          SELECT 1 FROM public.clients c
+          WHERE c.id = target_client_id
+            AND (c.operational_manager_id = p.id OR c.created_by = p.id)
+        )
+      )
+      OR (
+        p.role = 'team_member' AND EXISTS (
+          SELECT 1 FROM public.client_team_access cta
+          WHERE cta.client_id = target_client_id AND cta.profile_id = p.id
+        )
+      )
+      OR (
+        p.role = 'client' AND (p.organization_id = target_client_id::text)
+      )
+    )
+  );
+$$;
+
+CREATE OR REPLACE FUNCTION app_private.can_manage_client(target_client_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+SET search_path = ''
+STABLE
+AS $$
+  SELECT EXISTS (
+    SELECT 1 FROM public.profiles p
+    WHERE p.id = (SELECT auth.uid()) AND p.status = 'active' AND (
+      p.role = 'owner'
+      OR (
+        p.role = 'operational_manager' AND EXISTS (
+          SELECT 1 FROM public.clients c
+          WHERE c.id = target_client_id
+            AND (c.operational_manager_id = p.id OR c.created_by = p.id)
+        )
+      )
+    )
+  );
+$$;
+
+-- 6. Drop Phase 3B tables (pre-data only)
 DROP TABLE IF EXISTS public.task_action_idempotency;
 DROP TABLE IF EXISTS public.client_task_read_states;
 DROP TABLE IF EXISTS public.client_task_messages;
 
--- Reset client_tasks status check constraint
+-- 7. Reset client_tasks status check constraint (pre-data only)
 ALTER TABLE public.client_tasks DROP CONSTRAINT IF EXISTS client_tasks_status_check;
 ALTER TABLE public.client_tasks ADD CONSTRAINT client_tasks_status_check
 CHECK (status IN ('Draft', 'Assigned', 'In Progress', 'Blocked', 'Team Review'));
+
+-- 8. Reset client_task_events event_type constraint (pre-data only)
+ALTER TABLE public.client_task_events DROP CONSTRAINT IF EXISTS client_task_events_event_type_check;
+ALTER TABLE public.client_task_events ADD CONSTRAINT client_task_events_event_type_check
+CHECK (event_type IN ('created', 'status_changed', 'assigned', 'dates_updated', 'priority_updated', 'blocked_reason_updated'));
 ```
+
+---
+
+### Scenario B: Forward-Safe Production Rollback (Post-Data Active Production)
+Use this procedure whenever Phase 3B has been live and real data exists (e.g. task messages, client reviews, approvals, or completed tasks).
+
+> [!IMPORTANT]
+> **DO NOT DROP Phase 3B TABLES OR COLUMNS ONCE REAL DATA EXISTS.**
+> Dropping tables destroys authentic conversation feeds and review history. Dropping check constraints or columns (`approval_mode`, `completed_at`, `completed_by`, `reopened_at`, `reopened_by`, `reopen_reason`) will cause immediate database exceptions if rows hold those values.
+
+#### 1. Forward-Safe Rollback Strategy
+The preferred post-launch rollback preserves additive database schemas while reverting executable logic:
+1. **Frontend**: Roll back Cloudflare Pages to commit `4958ecb` (or deploy a safe patch branch). The Phase 3A frontend will safely ignore Phase 3B columns.
+2. **Edge Function**: Revert `manage-client-task` logic or deploy an Edge Function hotfix that gracefully handles legacy actions while preventing new Phase 3B conversation feed operations.
+3. **Database Schema Remains Intact**:
+   - `client_task_messages`, `client_task_read_states`, and `task_action_idempotency` are preserved without loss of records.
+   - Statuses `'Client Review'` and `'Completed'` remain valid in `client_tasks_status_check` constraint so existing tasks do not violate constraints.
+   - Columns `approval_mode`, `completed_at`, `completed_by`, `reopened_at`, `reopened_by`, `reopen_reason` remain in `client_tasks`.
+   - Realtime publication remains registered or can be temporarily suspended without schema destruction:
+     ```sql
+     -- Optional: suspend realtime replication without dropping tables
+     ALTER PUBLICATION supabase_realtime DROP TABLE IF EXISTS public.client_task_messages;
+     ALTER PUBLICATION supabase_realtime DROP TABLE IF EXISTS public.client_task_read_states;
+     ```
+4. **Subsequent Resolution**:
+   - Any database adjustments must be delivered as a forward-moving reviewed migration (e.g., `20260908_phase3b_maintenance_hotfix.sql`), never by ad-hoc dropping of tables.
