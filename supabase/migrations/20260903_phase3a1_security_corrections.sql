@@ -21,12 +21,21 @@ ON CONFLICT (id) DO UPDATE SET public = false;
 -- 2. DROP PERMISSIVE / PUBLIC STORAGE POLICIES
 DROP POLICY IF EXISTS "Public Avatar Access" ON storage.objects;
 DROP POLICY IF EXISTS "Public Client Logo Access" ON storage.objects;
+DROP POLICY IF EXISTS "Public avatar access" ON storage.objects;
+DROP POLICY IF EXISTS "Authenticated user avatar upload" ON storage.objects;
+DROP POLICY IF EXISTS "Authorized client logo upload" ON storage.objects;
 DROP POLICY IF EXISTS "Avatar Upload Policy" ON storage.objects;
 DROP POLICY IF EXISTS "Avatar Update/Delete Policy" ON storage.objects;
 DROP POLICY IF EXISTS "Client Logo Upload Policy" ON storage.objects;
 DROP POLICY IF EXISTS "Client Logo Update/Delete Policy" ON storage.objects;
-DROP POLICY IF EXISTS "Authenticated Avatar Read" ON storage.objects;
-DROP POLICY IF EXISTS "Authenticated Logo Read" ON storage.objects;
+DROP POLICY IF EXISTS "Private Avatar Read" ON storage.objects;
+DROP POLICY IF EXISTS "Private Avatar Upload" ON storage.objects;
+DROP POLICY IF EXISTS "Private Avatar Modify" ON storage.objects;
+DROP POLICY IF EXISTS "Private Avatar Delete" ON storage.objects;
+DROP POLICY IF EXISTS "Private Logo Read" ON storage.objects;
+DROP POLICY IF EXISTS "Private Logo Upload" ON storage.objects;
+DROP POLICY IF EXISTS "Private Logo Modify" ON storage.objects;
+DROP POLICY IF EXISTS "Private Logo Delete" ON storage.objects;
 
 -- 3. RE-CREATE AUTHORIZED PRIVATE STORAGE POLICIES FOR PROFILE-AVATARS
 -- Read: Authenticated staff can read avatars via signed URL / authorized download
@@ -158,6 +167,11 @@ REVOKE INSERT, UPDATE, DELETE ON public.system_audit_events FROM anon, authentic
 
 DROP POLICY IF EXISTS "system_audit_events_insert" ON public.system_audit_events;
 DROP POLICY IF EXISTS "system_audit_events_select" ON public.system_audit_events;
+DROP POLICY IF EXISTS "system_audit_events_scoped_select" ON public.system_audit_events;
+DROP POLICY IF EXISTS "Audit events insert policy" ON public.system_audit_events;
+DROP POLICY IF EXISTS "Audit events read policy" ON public.system_audit_events;
+DROP POLICY IF EXISTS "Audit events no update" ON public.system_audit_events;
+DROP POLICY IF EXISTS "Audit events no delete" ON public.system_audit_events;
 
 -- Re-create strictly scoped SELECT policy:
 -- Owner: Full access
