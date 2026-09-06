@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   X, UserPlus, Shield, Building2, Briefcase, UserCheck, 
   Key, Eye, EyeOff, Sparkles, Check, Copy, AlertCircle, 
@@ -263,9 +264,9 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+  const modalContent = (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+      <div className="bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border rounded-3xl shadow-2xl w-full max-w-2xl max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
         
         {/* Modal Header */}
         <div className="px-6 py-5 border-b border-slate-100 dark:border-dark-border flex items-center justify-between bg-slate-50/50 dark:bg-dark-sidebar">
@@ -794,4 +795,6 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 };

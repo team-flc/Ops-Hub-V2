@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X, Calendar, Clock, AlertCircle,
   Archive, Edit3, AlertTriangle, Loader2
@@ -230,7 +231,7 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
     }
   };
 
-  return (
+  const drawerContent = (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs transition-opacity animate-in fade-in duration-200">
       <div className="w-full max-w-full sm:max-w-2xl bg-white dark:bg-dark-card h-[100dvh] shadow-2xl flex flex-col border-l border-gray-200 dark:border-dark-border">
         {/* DRAWER HEADER */}
@@ -588,4 +589,6 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(drawerContent, document.body) : drawerContent;
 };

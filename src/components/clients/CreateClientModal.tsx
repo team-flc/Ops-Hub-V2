@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Building2, User, Package, Calendar, Activity, 
   Link2, Check, AlertCircle, X, Loader2, Plus, 
@@ -96,7 +97,19 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
     }
   }, [currentUserProfile, eligibleManagers]);
 
-  if (!isOpen) return null;
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isSubmitting) onClose();
+    };
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, isSubmitting, onClose]);
 
   const handleAddProfileRow = () => {
     const nextNum = profileRows.length + 1;
@@ -235,14 +248,16 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+  if (!isOpen) return null;
+
+  const modalContent = (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
       <div 
-        className="relative w-full max-w-3xl bg-white dark:bg-dark-card rounded-2xl shadow-2xl border border-gray-200 dark:border-dark-border overflow-hidden animate-scale-up max-h-[90vh] flex flex-col"
+        className="relative w-full max-w-3xl bg-white dark:bg-dark-card rounded-2xl shadow-2xl border border-gray-200 dark:border-dark-border overflow-hidden animate-scale-up max-h-[calc(100dvh-2rem)] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="px-6 py-4 border-b border-gray-100 dark:border-dark-border flex items-center justify-between bg-gray-50/50 dark:bg-dark-300/30">
+        <div className="px-5 sm:px-6 py-4 border-b border-gray-100 dark:border-dark-border flex items-center justify-between bg-gray-50/50 dark:bg-dark-300/30">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-400 flex items-center justify-center border border-brand-500/20">
               <Building2 className="w-5 h-5" />
@@ -660,4 +675,6 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 };

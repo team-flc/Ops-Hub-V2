@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   Copy, Building2, User, Package, Calendar, Activity, 
   Link2, Check, AlertCircle, X, Loader2 
@@ -68,6 +69,20 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && !isSubmitting) onClose();
+    };
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+      window.addEventListener('keydown', handleKeyDown);
+    }
+    return () => {
+      document.body.style.overflow = 'unset';
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isOpen, isSubmitting, onClose]);
 
   if (!isOpen) return null;
 
@@ -143,7 +158,7 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
     }
   };
 
-  return (
+  const modalContent = (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
       <div 
         className="relative w-full max-w-3xl bg-white dark:bg-dark-card rounded-2xl shadow-2xl border border-gray-200 dark:border-dark-border overflow-hidden animate-scale-up max-h-[calc(100dvh-2rem)] flex flex-col"
@@ -463,4 +478,6 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 };

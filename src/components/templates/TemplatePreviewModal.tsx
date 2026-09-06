@@ -1,4 +1,5 @@
 import React from 'react';
+import { createPortal } from 'react-dom';
 import { X, Clock, ShieldCheck, Tag, CheckSquare, Layers, ArrowRight } from 'lucide-react';
 import { TaskTemplate } from '../../types';
 
@@ -17,7 +18,7 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
 }) => {
   if (!isOpen || !template) return null;
 
-  return (
+  const modalContent = (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
       role="dialog"
@@ -156,4 +157,6 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 };

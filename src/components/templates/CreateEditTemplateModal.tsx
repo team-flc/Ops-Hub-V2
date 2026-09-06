@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, BookTemplate, AlertCircle, Loader2, Clock, ShieldCheck, Tag, Building2 } from 'lucide-react';
 import {
   Department,
@@ -132,7 +133,7 @@ export const CreateEditTemplateModal: React.FC<CreateEditTemplateModalProps> = (
     }
   };
 
-  return (
+  const modalContent = (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
       role="dialog"
@@ -340,4 +341,6 @@ export const CreateEditTemplateModal: React.FC<CreateEditTemplateModalProps> = (
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 };

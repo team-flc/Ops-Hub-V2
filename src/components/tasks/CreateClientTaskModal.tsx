@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Calendar, AlertCircle, Loader2, CheckCircle2, UserCheck, ShieldAlert, BookTemplate } from 'lucide-react';
 import {
   ClientRecord,
@@ -205,7 +206,7 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
     }
   };
 
-  return (
+  const modalContent = (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
       <div
         className="bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[calc(100dvh-2rem)]"
@@ -474,4 +475,6 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 };

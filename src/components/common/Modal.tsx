@@ -1,4 +1,5 @@
 import React, { useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X } from 'lucide-react';
 
 interface ModalProps {
@@ -44,7 +45,7 @@ export const Modal: React.FC<ModalProps> = ({
     full: 'max-w-6xl'
   };
 
-  return (
+  const modalContent = (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 overflow-y-auto">
       <div
         className="fixed inset-0 bg-black/60 backdrop-blur-sm transition-opacity animate-fade-in"
@@ -72,4 +73,6 @@ export const Modal: React.FC<ModalProps> = ({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 };
