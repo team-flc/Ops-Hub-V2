@@ -229,7 +229,7 @@ export const BoardView: React.FC = () => {
                                   {/* Custom fields / Client badge */}
                                   {task.customFields?.clientName && (
                                     <div className="mb-2">
-                                      <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-600 dark:text-indigo-400">
+                                      <span className="text-[10px] font-medium px-2 py-0.5 rounded bg-brand-500/10 text-brand-600 dark:text-brand-400">
                                         🏢 {task.customFields.clientName}
                                       </span>
                                     </div>

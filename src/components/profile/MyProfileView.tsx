@@ -139,7 +139,7 @@ export const MyProfileView: React.FC = () => {
               className="w-24 h-24 md:w-28 md:h-28 rounded-3xl object-cover border-2 border-brand-500/30 shadow-md"
             />
           ) : (
-            <div className="w-24 h-24 md:w-28 md:h-28 rounded-3xl bg-gradient-to-tr from-brand-600 to-indigo-600 text-white font-black text-2xl flex items-center justify-center shadow-md">
+            <div className="w-24 h-24 md:w-28 md:h-28 rounded-3xl bg-slate-700 text-white font-black text-2xl flex items-center justify-center shadow-md">
               {initials}
             </div>
           )}

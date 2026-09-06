@@ -195,7 +195,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
 
       {/* Paused Client Warning Banner */}
       {client.status === 'Paused' && (
-        <div className="bg-amber-500/10 border-b border-amber-500/20 px-6 py-3 flex items-center gap-3 text-amber-800 dark:text-amber-300 text-xs font-semibold animate-fade-in">
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 sm:px-6 py-3 flex items-center gap-3 text-amber-800 dark:text-amber-300 text-xs font-semibold animate-fade-in">
           <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
           <div className="flex-1">
             <span>Workspace Paused: This client organization is currently paused ({client.pauseReason || 'Operational reason'}). Creating new tasks and active work mutations are blocked.</span>
@@ -204,12 +204,12 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
       )}
 
       {/* 2. Top-Level Tab Navigation (30-Day Setup and Client Details only) */}
-      <div className="bg-white dark:bg-dark-card border-b border-gray-200 dark:border-dark-border px-6 flex items-center justify-between">
+      <div className="bg-white dark:bg-dark-card border-b border-gray-200 dark:border-dark-border px-4 sm:px-6 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={() => setActiveTab('setup')}
-            className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition-all ${
+            className={`flex items-center gap-2 px-4 py-3 min-h-[44px] text-xs font-bold border-b-2 transition-all cursor-pointer ${
               activeTab === 'setup'
                 ? 'border-brand-500 text-brand-600 dark:text-brand-400'
                 : 'border-transparent text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'
@@ -222,7 +222,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
           <button
             type="button"
             onClick={() => setActiveTab('details')}
-            className={`flex items-center gap-2 px-4 py-3 text-xs font-bold border-b-2 transition-all ${
+            className={`flex items-center gap-2 px-4 py-3 min-h-[44px] text-xs font-bold border-b-2 transition-all cursor-pointer ${
               activeTab === 'details'
                 ? 'border-brand-500 text-brand-600 dark:text-brand-400'
                 : 'border-transparent text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'
@@ -236,10 +236,10 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
 
       {/* Toast Notification Container */}
       {toastMessage && (
-        <div className="fixed bottom-6 right-6 z-50 animate-bounce">
+        <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 max-w-[calc(100vw-2rem)] animate-bounce">
           <div className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-xs font-bold shadow-2xl border border-gray-700/30">
-            <Sparkles className="w-4 h-4 text-amber-400" />
-            <span>{toastMessage}</span>
+            <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+            <span className="truncate">{toastMessage}</span>
           </div>
         </div>
       )}
@@ -250,13 +250,13 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
         {activeTab === 'setup' && (
           <div className="p-3.5 sm:p-6 max-w-6xl mx-auto space-y-6">
             {/* 4 Clean Weekly Tabs (Week 1, Week 2, Week 3, Week 4) */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
               {weekTabs.map((w) => (
                 <button
                   key={w.id}
                   type="button"
                   onClick={() => setActiveWeek(w.id)}
-                  className={`py-3 px-4 rounded-xl text-center border transition-all ${
+                  className={`py-3 px-4 min-h-[44px] rounded-xl text-center border transition-all cursor-pointer ${
                     activeWeek === w.id
                       ? 'bg-brand-500/10 border-brand-500/40 text-brand-600 dark:text-brand-400 font-bold shadow-sm'
                       : 'bg-white dark:bg-dark-card border-gray-200 dark:border-dark-border text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-50 dark:hover:bg-dark-200'
@@ -281,7 +281,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                 {isOwnerOrManager && (
                   client.status === 'Paused' ? (
                     <span 
-                      className="px-3.5 py-2 rounded-xl bg-amber-100 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 text-xs font-bold flex items-center gap-1.5 opacity-80 cursor-not-allowed"
+                      className="px-3.5 py-2 min-h-[44px] rounded-xl bg-amber-100 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 text-xs font-bold flex items-center gap-1.5 opacity-80 cursor-not-allowed"
                       title="Task creation is blocked while client organization is paused."
                     >
                       <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
@@ -291,7 +291,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                     <button
                       type="button"
                       onClick={handleOpenCreateTaskFlow}
-                      className="flex items-center gap-1.5 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-xs font-bold shadow-md shadow-brand-500/25 hover:scale-[1.02] active:scale-[0.98] transition-all"
+                      className="flex items-center gap-1.5 px-4 py-2 min-h-[44px] bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-xs font-bold shadow-md shadow-brand-500/25 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
                     >
                       <Plus className="w-4 h-4" />
                       <span>+ Add Task</span>

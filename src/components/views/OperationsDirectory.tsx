@@ -206,7 +206,7 @@ export const OperationsDirectory: React.FC = () => {
                           cv.type === 'client'
                             ? 'bg-blue-500/10 text-blue-500'
                             : cv.type === 'vendor'
-                            ? 'bg-purple-500/10 text-purple-500'
+                            ? 'bg-slate-500/10 text-slate-600 dark:text-slate-400'
                             : 'bg-emerald-500/10 text-emerald-500'
                         }`}
                       >

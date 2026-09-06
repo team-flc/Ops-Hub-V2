@@ -46,13 +46,13 @@ export const ClientTaskCard: React.FC<ClientTaskCardProps> = ({
       case 'Draft':
         return 'bg-gray-100 text-gray-700 dark:bg-dark-100 dark:text-gray-300 border-gray-200 dark:border-dark-border';
       case 'Assigned':
-        return 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 border-blue-200 dark:border-blue-900';
+        return 'bg-slate-100 text-slate-700 dark:bg-dark-100 dark:text-slate-300 border-slate-200 dark:border-dark-border';
       case 'In Progress':
         return 'bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400 border-amber-200 dark:border-amber-900';
       case 'Blocked':
         return 'bg-rose-50 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400 border-rose-200 dark:border-rose-900';
       case 'Team Review':
-        return 'bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-400 border-purple-200 dark:border-purple-900';
+        return 'bg-blue-50 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400 border-blue-200 dark:border-blue-900';
       default:
         return 'bg-gray-100 text-gray-700';
     }
@@ -63,9 +63,9 @@ export const ClientTaskCard: React.FC<ClientTaskCardProps> = ({
       case 'Urgent':
         return 'text-red-600 bg-red-50 dark:bg-red-950/30 border-red-200 dark:border-red-900/40';
       case 'High':
-        return 'text-orange-600 bg-orange-50 dark:bg-orange-950/30 border-orange-200 dark:border-orange-900/40';
+        return 'text-amber-700 bg-amber-50 dark:bg-amber-950/30 border-amber-200 dark:border-amber-900/40';
       case 'Normal':
-        return 'text-blue-600 bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900/40';
+        return 'text-slate-700 bg-slate-50 dark:bg-dark-100 border-slate-200 dark:border-dark-border';
       case 'Low':
       default:
         return 'text-gray-600 bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-dark-border';
@@ -154,7 +154,7 @@ export const ClientTaskCard: React.FC<ClientTaskCardProps> = ({
             <button
               type="button"
               onClick={() => onStatusChange(task, 'Team Review')}
-              className="p-1.5 min-h-[32px] min-w-[32px] flex items-center justify-center rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 hover:bg-purple-600 hover:text-white transition-colors cursor-pointer"
+              className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg bg-blue-500/10 text-blue-600 dark:text-blue-400 hover:bg-blue-600 hover:text-white transition-colors cursor-pointer"
               title="Submit for Team Review"
             >
               <Send className="w-3.5 h-3.5" />
@@ -165,7 +165,7 @@ export const ClientTaskCard: React.FC<ClientTaskCardProps> = ({
             <button
               type="button"
               onClick={() => onStatusChange(task, 'In Progress')}
-              className="p-1.5 min-h-[32px] min-w-[32px] flex items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-600 hover:text-white transition-colors cursor-pointer"
+              className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-600 hover:text-white transition-colors cursor-pointer"
               title="Resume Work"
             >
               <CheckCircle2 className="w-3.5 h-3.5" />
@@ -176,7 +176,7 @@ export const ClientTaskCard: React.FC<ClientTaskCardProps> = ({
             <button
               type="button"
               onClick={() => onOpenEditModal(task)}
-              className="p-1.5 min-h-[32px] min-w-[32px] flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors cursor-pointer"
+              className="p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors cursor-pointer"
               title="Edit Task"
             >
               <Edit3 className="w-3.5 h-3.5" />

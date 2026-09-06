@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { 
   X, UserPlus, Shield, Building2, Briefcase, UserCheck, 
   Key, Eye, EyeOff, Sparkles, Check, Copy, AlertCircle, 
@@ -263,9 +264,9 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
     onClose();
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
+  const modalContent = (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
+      <div className="bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border rounded-3xl shadow-2xl w-full max-w-2xl max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
         
         {/* Modal Header */}
         <div className="px-6 py-5 border-b border-slate-100 dark:border-dark-border flex items-center justify-between bg-slate-50/50 dark:bg-dark-sidebar">
@@ -383,7 +384,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
                         className="w-14 h-14 rounded-2xl object-cover border border-slate-200 dark:border-dark-border shadow-sm"
                       />
                     ) : (
-                      <div className="w-14 h-14 rounded-2xl bg-gradient-to-tr from-brand-600 to-indigo-600 text-white font-bold text-sm flex items-center justify-center shadow-sm">
+                      <div className="w-14 h-14 rounded-2xl bg-slate-700 text-white font-bold text-sm flex items-center justify-center shadow-sm">
                         {fullName
                           ? fullName.split(' ').map((n) => n[0]).join('').substring(0, 2).toUpperCase()
                           : 'FL'}
@@ -679,7 +680,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
                                 <span className="text-[9px] text-amber-600 dark:text-amber-400 font-bold block">(Paused)</span>
                               )}
                               {client.status === 'Onboarding' && (
-                                <span className="text-[9px] text-indigo-600 dark:text-indigo-400 font-bold block">(Onboarding)</span>
+                                <span className="text-[9px] text-amber-700 dark:text-amber-400 font-bold block">(Onboarding)</span>
                               )}
                             </div>
                             {isSelected && <Check className="w-3.5 h-3.5 text-brand-600 flex-shrink-0 ml-1" />}
@@ -794,4 +795,6 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 };

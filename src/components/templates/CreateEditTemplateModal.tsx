@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, BookTemplate, AlertCircle, Loader2, Clock, ShieldCheck, Tag, Building2 } from 'lucide-react';
 import {
   Department,
@@ -132,29 +133,29 @@ export const CreateEditTemplateModal: React.FC<CreateEditTemplateModalProps> = (
     }
   };
 
-  return (
+  const modalContent = (
     <div
       className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
       role="dialog"
       aria-modal="true"
-      aria-labelledby="create-edit-template-title"
+      aria-labelledby="tpl-modal-title"
     >
       <div
-        className="bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh]"
+        className="bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border w-full max-w-2xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[calc(100dvh-2rem)]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
         <div className="p-4 sm:p-5 border-b border-gray-100 dark:border-dark-border flex items-center justify-between bg-gray-50/50 dark:bg-dark-card/50">
-          <div className="flex items-center gap-3">
-            <div className="p-2 rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-400">
-              <BookTemplate className="w-5 h-5" />
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-brand-500/10 text-brand-600 dark:text-brand-400 flex items-center justify-center">
+              <BookTemplate className="w-4 h-4" />
             </div>
             <div>
-              <h2 id="create-edit-template-title" className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100">
-                {isEditing ? `Edit Template: ${template?.name}` : 'Create SOP Task Template'}
+              <h2 id="tpl-modal-title" className="text-base font-bold text-gray-900 dark:text-gray-100">
+                {isEditing ? 'Edit Task Template' : 'Create Task Template'}
               </h2>
-              <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-                {isEditing ? `Updating v${template?.version} • Version will automatically increment` : 'Standard operating procedure for repeatable deliverables'}
+              <p className="text-xs text-gray-500">
+                {isEditing ? `Editing SOP v${template?.version}` : 'Configure a reusable operational SOP'}
               </p>
             </div>
           </div>
@@ -162,7 +163,7 @@ export const CreateEditTemplateModal: React.FC<CreateEditTemplateModalProps> = (
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors"
+            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer"
             aria-label="Close dialog"
           >
             <X className="w-5 h-5" />
@@ -319,18 +320,18 @@ export const CreateEditTemplateModal: React.FC<CreateEditTemplateModalProps> = (
           </div>
 
           {/* Actions */}
-          <div className="pt-2 flex items-center justify-end gap-2.5 border-t border-gray-100 dark:border-dark-border">
+          <div className="pt-3 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 border-t border-gray-100 dark:border-dark-border">
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors"
+              className="px-4 py-2.5 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors min-h-[44px] flex items-center justify-center cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="px-4 py-2 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-md shadow-brand-500/25 flex items-center gap-1.5 transition-all"
+              className="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-md shadow-brand-500/25 flex items-center justify-center gap-1.5 transition-all min-h-[44px] cursor-pointer"
             >
               {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
               <span>{isEditing ? 'Save Changes' : 'Create Template'}</span>
@@ -340,4 +341,6 @@ export const CreateEditTemplateModal: React.FC<CreateEditTemplateModalProps> = (
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 };

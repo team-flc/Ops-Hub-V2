@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   FileText, Search, Filter, Calendar, User, Building2, 
   Eye, RefreshCw, X, Shield, Activity, Loader2, AlertCircle 
@@ -65,13 +65,13 @@ export const AuditLogView: React.FC = () => {
       <div className="bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-3xl p-6 md:p-8 shadow-sm flex items-center justify-between">
         <div className="space-y-1">
           <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-md bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 text-[10px] font-black uppercase">
+            <span className="px-2.5 py-0.5 rounded-md bg-brand-500/10 text-brand-600 dark:text-brand-400 text-[10px] font-black uppercase">
               System Audit
             </span>
             <span className="text-xs text-gray-400 font-bold">• Append-Only Immutability</span>
           </div>
           <h1 className="text-2xl font-black text-gray-900 dark:text-gray-100 tracking-tight flex items-center gap-2.5">
-            <Activity className="w-6 h-6 text-indigo-500" />
+            <Activity className="w-6 h-6 text-brand-500" />
             <span>Global Audit Log</span>
           </h1>
           <p className="text-xs text-gray-500 dark:text-gray-400 max-w-xl">

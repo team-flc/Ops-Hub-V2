@@ -59,7 +59,7 @@ export const ProfileDropdown: React.FC = () => {
             className="w-8 h-8 rounded-xl object-cover border border-gray-200 dark:border-dark-border shadow-sm"
           />
         ) : (
-          <div className="w-8 h-8 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-600 text-white font-bold text-xs flex items-center justify-center shadow-sm">
+          <div className="w-8 h-8 rounded-xl bg-slate-700 text-white font-bold text-xs flex items-center justify-center shadow-sm">
             {initials}
           </div>
         )}
@@ -77,7 +77,7 @@ export const ProfileDropdown: React.FC = () => {
                 className="w-10 h-10 rounded-xl object-cover border border-gray-200 dark:border-dark-border flex-shrink-0"
               />
             ) : (
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-brand-600 to-indigo-600 text-white font-black text-sm flex items-center justify-center flex-shrink-0">
+              <div className="w-10 h-10 rounded-xl bg-slate-700 text-white font-black text-sm flex items-center justify-center flex-shrink-0">
                 {initials}
               </div>
             )}

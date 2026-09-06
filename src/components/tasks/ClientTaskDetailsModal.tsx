@@ -1,4 +1,5 @@
 import React, { useState, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import {
   X, Calendar, Clock, AlertCircle,
   Archive, Edit3, AlertTriangle, Loader2
@@ -230,9 +231,9 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
     }
   };
 
-  return (
+  const drawerContent = (
     <div className="fixed inset-0 z-50 flex justify-end bg-black/40 backdrop-blur-xs transition-opacity animate-in fade-in duration-200">
-      <div className="w-full max-w-full sm:max-w-2xl bg-white dark:bg-dark-card h-full shadow-2xl flex flex-col border-l border-gray-200 dark:border-dark-border">
+      <div className="w-full max-w-full sm:max-w-2xl bg-white dark:bg-dark-card h-[100dvh] shadow-2xl flex flex-col border-l border-gray-200 dark:border-dark-border">
         {/* DRAWER HEADER */}
         <div className="p-4 sm:p-5 border-b border-gray-200 dark:border-dark-border flex items-start justify-between gap-4 flex-shrink-0 bg-gray-50/50 dark:bg-dark-card/50">
           <div className="space-y-1.5 flex-1 min-w-0">
@@ -247,7 +248,7 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
               {/* Approval Mode Badge */}
               <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border ${
                 task.approvalMode === 'Client Approval Required'
-                  ? 'bg-purple-100 text-purple-700 border-purple-300 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800'
+                  ? 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'
                   : 'bg-gray-100 text-gray-600 border-gray-200 dark:bg-dark-100 dark:text-gray-400 dark:border-dark-border'
               }`}>
                 {task.approvalMode || 'Internal Only'}
@@ -259,7 +260,7 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
                   ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400'
                   : task.priority === 'High'
                   ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400'
-                  : 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-400'
+                  : 'bg-slate-100 text-slate-700 dark:bg-dark-100 dark:text-slate-300'
               }`}>
                 {task.priority} Priority
               </span>
@@ -269,9 +270,9 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
                 task.status === 'Completed'
                   ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300'
                   : task.status === 'Client Review'
-                  ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/50 dark:text-indigo-300'
+                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300'
                   : task.status === 'Team Review'
-                  ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/50 dark:text-purple-300'
+                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300'
                   : task.status === 'Blocked'
                   ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300'
                   : task.status === 'In Progress'
@@ -588,4 +589,6 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(drawerContent, document.body) : drawerContent;
 };

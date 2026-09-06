@@ -79,7 +79,7 @@ export const TaskConversationFeed: React.FC<TaskConversationFeedProps> = ({
                     <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold border ${
                       isInternal
                         ? 'bg-amber-100 text-amber-800 border-amber-300 dark:bg-amber-950/50 dark:text-amber-300'
-                        : 'bg-cyan-100 text-cyan-800 border-cyan-300 dark:bg-cyan-950/50 dark:text-cyan-300'
+                        : 'bg-blue-100 text-blue-800 border-blue-200 dark:bg-blue-950/50 dark:text-blue-300'
                     }`}>
                       {isInternal ? 'Internal Note' : 'Shared with Client'}
                     </span>

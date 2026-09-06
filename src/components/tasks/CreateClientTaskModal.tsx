@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { X, Calendar, AlertCircle, Loader2, CheckCircle2, UserCheck, ShieldAlert, BookTemplate } from 'lucide-react';
 import {
   ClientRecord,
@@ -205,10 +206,10 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
     }
   };
 
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
+  const modalContent = (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
       <div
-        className="bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
+        className="bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[calc(100dvh-2rem)]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
@@ -229,14 +230,15 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-1.5 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors"
+            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors min-h-[44px] min-w-[44px] flex items-center justify-center cursor-pointer"
+            aria-label="Close dialog"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Modal Body */}
-        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-5 space-y-4 text-xs">
+        <form onSubmit={handleSubmit} className="flex-1 overflow-y-auto p-4 sm:p-5 space-y-4 text-xs">
           {/* Template Provenance Banner */}
           {initialTemplate && (
             <div className="p-3 rounded-xl bg-brand-500/10 border border-brand-500/20 flex items-start gap-2.5">
@@ -273,7 +275,7 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
           </div>
 
           {/* Week & Priority Selection */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label htmlFor="task-week-select" className="block text-gray-700 dark:text-gray-300 font-bold mb-1">
                 Workspace Week <span className="text-rose-500">*</span>
@@ -329,7 +331,7 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
           </div>
 
           {/* Department & Primary Assignee */}
-          <div className="grid grid-cols-2 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label htmlFor="task-dept-select" className="block text-gray-700 dark:text-gray-300 font-bold mb-1">
                 Responsible Department <span className="text-rose-500">*</span>
@@ -340,7 +342,7 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
                 value={departmentId}
                 onChange={(e) => setDepartmentId(e.target.value)}
                 required
-                className="w-full px-3 py-2 rounded-xl bg-gray-50 dark:bg-dark-100 border border-gray-200 dark:border-dark-border focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-gray-900 dark:text-gray-100"
+                className="w-full px-3 py-2 rounded-xl bg-gray-50 dark:bg-dark-100 border border-gray-200 dark:border-dark-border focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-gray-900 dark:text-gray-100 min-h-[44px]"
               >
                 <option value="">Select Department...</option>
                 {departments.map((d) => (
@@ -360,7 +362,7 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
                 aria-label="Primary Assignee"
                 value={assigneeId}
                 onChange={(e) => setAssigneeId(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-gray-50 dark:bg-dark-100 border border-gray-200 dark:border-dark-border focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-gray-900 dark:text-gray-100"
+                className="w-full px-3 py-2 rounded-xl bg-gray-50 dark:bg-dark-100 border border-gray-200 dark:border-dark-border focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-gray-900 dark:text-gray-100 min-h-[44px]"
               >
                 <option value="">Leave Unassigned (Draft)</option>
                 {departmentAssignees.map((u) => (
@@ -445,19 +447,19 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
           </div>
 
           {/* Form Actions */}
-          <div className="pt-2 flex items-center justify-end gap-2 border-t border-gray-100 dark:border-dark-border">
+          <div className="pt-3 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 border-t border-gray-100 dark:border-dark-border">
             <button
               type="button"
               onClick={onClose}
               disabled={isSubmitting}
-              className="px-4 py-2 rounded-xl border border-gray-200 dark:border-dark-border text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors min-h-[40px] sm:min-h-[36px] cursor-pointer"
+              className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors min-h-[44px] sm:min-h-[38px] flex items-center justify-center cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex items-center gap-2 px-5 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-bold shadow-md shadow-brand-500/25 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 min-h-[40px] sm:min-h-[36px] cursor-pointer"
+              className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-bold shadow-md shadow-brand-500/25 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 min-h-[44px] sm:min-h-[38px] cursor-pointer"
             >
               {isSubmitting ? (
                 <>
@@ -473,4 +475,6 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 };

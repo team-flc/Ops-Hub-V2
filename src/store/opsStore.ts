@@ -95,6 +95,9 @@ interface OpsStore {
   // UI Modals & Sidebar
   sidebarCollapsed: boolean;
   toggleSidebar: () => void;
+  mobileSidebarOpen: boolean;
+  setMobileSidebarOpen: (open: boolean) => void;
+  toggleMobileSidebar: () => void;
   isCreateTaskModalOpen: boolean;
   setCreateTaskModalOpen: (open: boolean) => void;
   isCommandPaletteOpen: boolean;
@@ -144,6 +147,9 @@ export const useOpsStore = create<OpsStore>()(
       viewMode: 'client_workspace',
       filter: DEFAULT_FILTER,
       sidebarCollapsed: false,
+      mobileSidebarOpen: false,
+      setMobileSidebarOpen: (open) => set({ mobileSidebarOpen: open }),
+      toggleMobileSidebar: () => set((state) => ({ mobileSidebarOpen: !state.mobileSidebarOpen })),
       isCreateTaskModalOpen: false,
       isCommandPaletteOpen: false,
       isNewSpaceModalOpen: false,
