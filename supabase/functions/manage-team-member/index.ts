@@ -28,6 +28,40 @@ const getCorsHeaders = (origin: string | null) => {
 
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{12,}$/;
 
+function redactAuditPayload(obj: any): any {
+  if (obj === null || obj === undefined) return obj;
+  if (typeof obj === 'string') {
+    if (/[?&](?:token|access_token|refresh_token|signature|apikey|x-amz-signature|secret)=/i.test(obj)) {
+      return obj.replace(
+        /([?&](?:token|access_token|refresh_token|signature|apikey|x-amz-signature|secret)=)[^&]+/gi,
+        '$1[REDACTED]'
+      );
+    }
+    return obj;
+  }
+  if (typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(redactAuditPayload);
+  const copy: Record<string, any> = {};
+  const secretKeywords = [
+    'password', 'passwordhash', 'token', 'access_token', 'refresh_token',
+    'servicerolekey', 'secret', 'apikey', 'cookie', 'authorization',
+    'recoverycode', 'otp', 'signedurl', 'signature', 'x-amz-signature'
+  ];
+  for (const [key, value] of Object.entries(obj)) {
+    const lower = key.toLowerCase();
+    if (secretKeywords.some((k) => lower.includes(k))) {
+      copy[key] = '[REDACTED]';
+    } else if (typeof value === 'object' && value !== null) {
+      copy[key] = redactAuditPayload(value);
+    } else if (typeof value === 'string') {
+      copy[key] = redactAuditPayload(value);
+    } else {
+      copy[key] = value;
+    }
+  }
+  return copy;
+}
+
 serve(async (req: Request) => {
   const origin = req.headers.get('origin');
   const corsHeaders = getCorsHeaders(origin);
@@ -461,27 +495,19 @@ serve(async (req: Request) => {
         }
       }
 
-      // 5. Atomically sync both client access tables
+      // 5. Transactional synchronization of client access tables via database RPC
       if (clientIds && Array.isArray(clientIds)) {
-        await Promise.all([
-          supabaseAdmin.from('profile_client_access').delete().eq('profile_id', targetUserId),
-          supabaseAdmin.from('client_team_access').delete().eq('profile_id', targetUserId)
-        ]);
+        const { error: syncErr } = await supabaseAdmin.rpc('sync_member_client_access_tx', {
+          p_profile_id: targetUserId,
+          p_new_client_ids: clientIds,
+          p_actor_id: callerProfile.id
+        });
 
-        if (clientIds.length > 0) {
-          const pcaRows = clientIds.map((clientId: string) => ({
-            profile_id: targetUserId,
-            client_id: clientId,
-            granted_by: callerProfile.id
-          }));
-          const ctaRows = clientIds.map((clientId: string) => ({
-            profile_id: targetUserId,
-            client_id: clientId
-          }));
-          await Promise.all([
-            supabaseAdmin.from('profile_client_access').insert(pcaRows),
-            supabaseAdmin.from('client_team_access').insert(ctaRows)
-          ]);
+        if (syncErr) {
+          return new Response(
+            JSON.stringify({ error: syncErr.message || 'Failed to update client access transactions.' }),
+            { status: 400, headers: corsHeaders }
+          );
         }
       }
 
@@ -494,15 +520,16 @@ serve(async (req: Request) => {
         entity_type: 'team_member',
         entity_id: targetUserId,
         entity_name: fullName?.trim() || targetProfile.full_name,
-        previous_state: {
+        previous_state: redactAuditPayload({
           phone: targetProfile.phone,
           designation_id: targetProfile.designation_id,
           client_ids: currentClientIds
-        },
-        new_state: {
+        }),
+        new_state: redactAuditPayload({
           ...updateData,
           client_ids: clientIds
-        }
+        }),
+        reason: 'Administrative team member update'
       });
 
       return new Response(

@@ -2,22 +2,46 @@ import { supabase } from './supabase';
 import { SystemAuditEvent, AuditEntityType, AuditEventAction } from '../types';
 
 /**
- * Redact sensitive security attributes from payloads before audit persistence or display
+ * Redact sensitive security attributes and signed URL credentials from payloads before audit persistence or display.
+ * Recursively inspects nested objects, arrays, and string URLs.
  */
 export function redactAuditPayload(obj: any): any {
-  if (!obj || typeof obj !== 'object') return obj;
-  const copy = Array.isArray(obj) ? [...obj] : { ...obj };
+  if (obj === null || obj === undefined) return obj;
+
+  if (typeof obj === 'string') {
+    // Redact signed URL query parameters / signatures embedded within URL strings
+    if (/[?&](?:token|access_token|refresh_token|signature|apikey|x-amz-signature|secret)=/i.test(obj)) {
+      return obj.replace(
+        /([?&](?:token|access_token|refresh_token|signature|apikey|x-amz-signature|secret)=)[^&]+/gi,
+        '$1[REDACTED]'
+      );
+    }
+    return obj;
+  }
+
+  if (typeof obj !== 'object') return obj;
+
+  if (Array.isArray(obj)) {
+    return obj.map((item) => redactAuditPayload(item));
+  }
+
+  const copy: Record<string, any> = {};
   const secretKeywords = [
-    'password', 'passwordhash', 'token', 'access_token', 'refresh_token', 
-    'servicerolekey', 'secret', 'apikey', 'cookie', 'authorization', 
-    'recoverycode', 'otp', 'signedurl'
+    'password', 'passwordhash', 'token', 'access_token', 'refresh_token',
+    'servicerolekey', 'secret', 'apikey', 'cookie', 'authorization',
+    'recoverycode', 'otp', 'signedurl', 'signature', 'x-amz-signature'
   ];
-  for (const key of Object.keys(copy)) {
+
+  for (const [key, value] of Object.entries(obj)) {
     const lowerKey = key.toLowerCase();
     if (secretKeywords.some((s) => lowerKey.includes(s))) {
       copy[key] = '[REDACTED]';
-    } else if (typeof copy[key] === 'object') {
-      copy[key] = redactAuditPayload(copy[key]);
+    } else if (typeof value === 'object' && value !== null) {
+      copy[key] = redactAuditPayload(value);
+    } else if (typeof value === 'string') {
+      copy[key] = redactAuditPayload(value);
+    } else {
+      copy[key] = value;
     }
   }
   return copy;

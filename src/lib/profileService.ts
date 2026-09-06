@@ -77,7 +77,8 @@ export const profileService = {
   },
 
   /**
-   * Update self profile (allowed self-editable fields only)
+   * Update self profile via server-authoritative Edge Function (manage-profile)
+   * Enforces server-side validation and generates immutable system audit events.
    */
   async updateSelfProfile(params: {
     fullName: string;
@@ -90,99 +91,59 @@ export const profileService = {
   }): Promise<{ data: UserProfile | null; error: string | null }> {
     if (!supabase) return { data: null, error: 'Database is not configured.' };
     try {
-      const { data: { user } } = await supabase.auth.getUser();
-      if (!user) {
-        return { data: null, error: 'User is not authenticated.' };
-      }
-
       if (!params.fullName.trim()) {
         return { data: null, error: 'Full name cannot be blank.' };
       }
 
-      // Fetch previous profile for audit
-      const { data: prev } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
-        .single();
-
-      const updatePayload: Record<string, any> = {
-        full_name: params.fullName.trim(),
-        bio: params.bio?.trim() || null,
-        linkedin_url: params.linkedinUrl?.trim() || null,
-        contact_email: params.contactEmail?.trim() || null,
-        phone: params.phone?.trim() || null,
-        backup_phone: params.backupPhone?.trim() || null,
-        updated_at: new Date().toISOString()
-      };
-
-      if (params.avatarUrl !== undefined) {
-        updatePayload.avatar_url = params.avatarUrl;
+      const { data: sessionData } = await supabase.auth.getSession();
+      const token = sessionData.session?.access_token;
+      if (!token) {
+        return { data: null, error: 'User is not authenticated.' };
       }
 
-      const { data, error } = await supabase
-        .from('profiles')
-        .update(updatePayload)
-        .eq('id', user.id)
-        .select()
-        .single();
-
-      if (error) {
-        return { data: null, error: error.message };
-      }
-
-      // Log system audit event
-      await auditService.logAuditEvent({
-        action: 'profile_updated',
-        entityType: 'profile',
-        entityId: user.id,
-        entityName: data.full_name,
-        previousState: {
-          full_name: prev?.full_name,
-          bio: prev?.bio,
-          linkedin_url: prev?.linkedin_url,
-          contact_email: prev?.contact_email,
-          phone: prev?.phone,
-          backup_phone: prev?.backup_phone,
-          avatar_url: prev?.avatar_url
-        },
-        newState: {
-          full_name: data.full_name,
-          bio: data.bio,
-          linkedin_url: data.linkedin_url,
-          contact_email: data.contact_email,
-          phone: data.phone,
-          backup_phone: data.backup_phone,
-          avatar_url: data.avatar_url
-        },
-        reason: 'User updated personal profile details'
+      const { data, error } = await supabase.functions.invoke('manage-profile', {
+        body: params,
+        headers: { Authorization: `Bearer ${token}` }
       });
 
+      if (error) {
+        return { data: null, error: error.message || 'Failed to update profile.' };
+      }
+
+      if (data?.error) {
+        return { data: null, error: data.error };
+      }
+
+      const raw = data?.profile;
+      if (!raw) {
+        return { data: null, error: 'No profile data returned.' };
+      }
+
       const updatedProfile: UserProfile = {
-        id: data.id,
-        fullName: data.full_name,
-        workEmail: data.work_email,
-        email: data.work_email,
-        phone: data.phone,
-        backupPhone: data.backup_phone,
-        bio: data.bio,
-        avatarUrl: data.avatar_url,
-        linkedinUrl: data.linkedin_url,
-        contactEmail: data.contact_email,
-        role: data.role,
-        status: data.status,
-        designationId: data.designation_id,
-        reportingManagerId: data.reporting_manager_id,
-        startDate: data.start_date,
-        suspendedAt: data.suspended_at,
-        suspendedBy: data.suspended_by,
-        archivedAt: data.archived_at,
-        archivedBy: data.archived_by,
-        archiveReason: data.archive_reason,
-        previousStatus: data.previous_status,
-        organizationId: data.organization_id,
-        createdAt: data.created_at,
-        updatedAt: data.updated_at
+        id: raw.id,
+        fullName: raw.full_name,
+        workEmail: raw.work_email,
+        email: raw.work_email,
+        phone: raw.phone,
+        backupPhone: raw.backup_phone,
+        bio: raw.bio,
+        avatarUrl: raw.avatar_url,
+        linkedinUrl: raw.linkedin_url,
+        contactEmail: raw.contact_email,
+        role: raw.role,
+        status: raw.status,
+        designationId: raw.designation_id,
+        reportingManagerId: raw.reporting_manager_id,
+        startDate: raw.start_date,
+        suspendedAt: raw.suspended_at,
+        suspendedBy: raw.suspended_by,
+        archivedAt: raw.archived_at,
+        archivedBy: raw.archived_by,
+        archiveReason: raw.archive_reason,
+        previousStatus: raw.previous_status,
+        organizationId: raw.organization_id,
+        createdAt: raw.created_at,
+        updatedAt: raw.updated_at
       };
 
       return { data: updatedProfile, error: null };

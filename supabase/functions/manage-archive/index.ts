@@ -9,6 +9,40 @@ const corsHeaders = {
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+function redactAuditPayload(obj: any): any {
+  if (obj === null || obj === undefined) return obj;
+  if (typeof obj === 'string') {
+    if (/[?&](?:token|access_token|refresh_token|signature|apikey|x-amz-signature|secret)=/i.test(obj)) {
+      return obj.replace(
+        /([?&](?:token|access_token|refresh_token|signature|apikey|x-amz-signature|secret)=)[^&]+/gi,
+        '$1[REDACTED]'
+      );
+    }
+    return obj;
+  }
+  if (typeof obj !== 'object') return obj;
+  if (Array.isArray(obj)) return obj.map(redactAuditPayload);
+  const copy: Record<string, any> = {};
+  const secretKeywords = [
+    'password', 'passwordhash', 'token', 'access_token', 'refresh_token',
+    'servicerolekey', 'secret', 'apikey', 'cookie', 'authorization',
+    'recoverycode', 'otp', 'signedurl', 'signature', 'x-amz-signature'
+  ];
+  for (const [key, value] of Object.entries(obj)) {
+    const lower = key.toLowerCase();
+    if (secretKeywords.some((k) => lower.includes(k))) {
+      copy[key] = '[REDACTED]';
+    } else if (typeof value === 'object' && value !== null) {
+      copy[key] = redactAuditPayload(value);
+    } else if (typeof value === 'string') {
+      copy[key] = redactAuditPayload(value);
+    } else {
+      copy[key] = value;
+    }
+  }
+  return copy;
+}
+
 serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response('ok', { headers: corsHeaders });
@@ -287,6 +321,24 @@ serve(async (req) => {
           return new Response(JSON.stringify({ error: 'Client not found' }), { status: 404, headers: { ...corsHeaders, 'Content-Type': 'application/json' } });
         }
 
+        // Validate that assigned operational manager is active
+        if (client.operational_manager_id) {
+          const { data: mgr } = await supabaseAdmin
+            .from('profiles')
+            .select('id, status')
+            .eq('id', client.operational_manager_id)
+            .single();
+
+          if (!mgr || mgr.status !== 'active') {
+            return new Response(
+              JSON.stringify({ 
+                error: 'Cannot restore client: Assigned operational manager is inactive, suspended, or archived. Please assign an active operational manager before restoring.' 
+              }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
+        }
+
         const restoreStatus = client.previous_status && client.previous_status !== 'Archived' 
           ? client.previous_status 
           : 'Active';
@@ -312,6 +364,8 @@ serve(async (req) => {
           entity_name: client.company_name,
           client_id: entityId,
           client_name: client.company_name,
+          previous_state: redactAuditPayload({ status: client.status }),
+          new_state: redactAuditPayload({ status: restoreStatus, archived_at: null }),
           reason: 'Restored from Archive Center'
         });
 
@@ -334,6 +388,23 @@ serve(async (req) => {
             JSON.stringify({ error: `Cannot restore task: Parent client "${task.client.company_name}" is archived. Please restore the client first.` }),
             { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
           );
+        }
+
+        if (task.assignee_id && !newAssigneeId) {
+          const { data: assignee } = await supabaseAdmin
+            .from('profiles')
+            .select('id, status')
+            .eq('id', task.assignee_id)
+            .single();
+
+          if (assignee && assignee.status !== 'active') {
+            return new Response(
+              JSON.stringify({ 
+                error: 'Cannot restore task: Currently assigned team member is inactive or suspended. Please specify an active assignee when restoring.' 
+              }),
+              { status: 400, headers: { ...corsHeaders, 'Content-Type': 'application/json' } }
+            );
+          }
         }
 
         const taskUpdates: Record<string, any> = {

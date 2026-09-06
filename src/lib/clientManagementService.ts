@@ -690,6 +690,10 @@ export const clientManagementService = {
       return { error: 'Database connection is not configured.' };
     }
 
+    if ((input.status as string) === 'Archived') {
+      return { error: 'Direct archival through update is prohibited. Use the dedicated Archive flow with a mandatory reason.' };
+    }
+
     try {
       const { data: previousClient } = await supabase
         .from('clients')
@@ -716,11 +720,12 @@ export const clientManagementService = {
         updates.status = input.status;
         if (input.status === 'Paused') {
           updates.pause_reason = input.pauseReason || 'Operational reason';
-        } else {
+          updates.paused_at = new Date().toISOString();
+          updates.paused_by = actorId || null;
+        } else if (previousClient?.status === 'Paused') {
           updates.pause_reason = null;
-        }
-        if (input.status === 'Archived') {
-          updates.archived_at = new Date().toISOString();
+          updates.paused_at = null;
+          updates.paused_by = null;
         }
       }
 

@@ -18,6 +18,7 @@ import { profileService } from '../src/lib/profileService';
 import { archiveService } from '../src/lib/archiveService';
 import { auditService } from '../src/lib/auditService';
 import { teamManagementService } from '../src/lib/teamManagementService';
+import { clientManagementService } from '../src/lib/clientManagementService';
 import { UserProfile, ClientRecord, Department, Designation } from '../src/types';
 import { useOpsStore } from '../src/store/opsStore';
 
@@ -589,5 +590,108 @@ describe('Phase 3A.1 Connected System Foundation, Settings, Profiles, Archive & 
     });
 
     expect(res.error).toMatch(/cannot revoke client access.*open.*task/i);
+  });
+
+  // 19. RECURSIVE CASE-INSENSITIVE AUDIT REDACTION (ITEM 6)
+  it('19. auditService.redactAuditPayload recursively redacts sensitive credentials and signed URL query tokens', () => {
+    const payload = {
+      id: 'task-123',
+      fullName: 'John Doe',
+      companyName: 'Acme Corp',
+      status: 'Active',
+      role: 'team_member',
+      Password: 'SuperSecretPassword!',
+      access_token: 'jwt.token.here',
+      REFRESH_TOKEN: 'refresh.token.here',
+      apiKey: 'ak_1234567890',
+      serviceRoleKey: 'srk_secret_key',
+      cookie: 'session_id=abcdef',
+      Authorization: 'Bearer secret_token',
+      recoveryCode: 'REC-999-111',
+      otp: '123456',
+      signedUrl: 'https://storage.supabase.co/object/sign/client-logos/org/logo.png?token=secret123',
+      nested: {
+        SECRET: 'hidden-deeply',
+        safeKey: 'keep-me',
+        urls: [
+          'https://storage.supabase.co/object/sign/avatars/u1.png?token=tokenABC&signature=sigXYZ',
+          'https://clean.example.com/image.png'
+        ]
+      }
+    };
+
+    const redacted = auditService.redactAuditPayload(payload);
+
+    // Non-sensitive data preserved
+    expect(redacted.id).toBe('task-123');
+    expect(redacted.fullName).toBe('John Doe');
+    expect(redacted.companyName).toBe('Acme Corp');
+    expect(redacted.status).toBe('Active');
+    expect(redacted.role).toBe('team_member');
+    expect(redacted.nested.safeKey).toBe('keep-me');
+
+    // Sensitive keys redacted
+    expect(redacted.Password).toBe('[REDACTED]');
+    expect(redacted.access_token).toBe('[REDACTED]');
+    expect(redacted.REFRESH_TOKEN).toBe('[REDACTED]');
+    expect(redacted.apiKey).toBe('[REDACTED]');
+    expect(redacted.serviceRoleKey).toBe('[REDACTED]');
+    expect(redacted.cookie).toBe('[REDACTED]');
+    expect(redacted.Authorization).toBe('[REDACTED]');
+    expect(redacted.recoveryCode).toBe('[REDACTED]');
+    expect(redacted.otp).toBe('[REDACTED]');
+    expect(redacted.signedUrl).toBe('[REDACTED]');
+    expect(redacted.nested.SECRET).toBe('[REDACTED]');
+
+    // String URL query parameters redacted in array
+    expect(redacted.nested.urls[0]).toBe('https://storage.supabase.co/object/sign/avatars/u1.png?token=[REDACTED]&signature=[REDACTED]');
+    expect(redacted.nested.urls[1]).toBe('https://clean.example.com/image.png');
+  });
+
+  // 20. PROFILE SELF-UPDATE VIA MANAGE-PROFILE EDGE FUNCTION (ITEM 4)
+  it('20. profileService.updateSelfProfile invokes manage-profile edge function with authorization token', async () => {
+    mockFunctionsInvoke.mockResolvedValueOnce({
+      data: {
+        success: true,
+        profile: {
+          id: 'user-1',
+          full_name: 'Updated Name',
+          work_email: 'owner@faseehlall.com',
+          role: 'owner',
+          status: 'active',
+          bio: 'Senior Operations Executive',
+          created_at: '2026-01-01',
+          updated_at: '2026-09-03'
+        }
+      },
+      error: null
+    });
+
+    const res = await profileService.updateSelfProfile({
+      fullName: 'Updated Name',
+      bio: 'Senior Operations Executive'
+    });
+
+    expect(mockFunctionsInvoke).toHaveBeenCalledWith('manage-profile', expect.objectContaining({
+      body: expect.objectContaining({
+        fullName: 'Updated Name',
+        bio: 'Senior Operations Executive'
+      })
+    }));
+
+    expect(res.data).toBeDefined();
+    expect(res.data?.fullName).toBe('Updated Name');
+    expect(res.data?.bio).toBe('Senior Operations Executive');
+    expect(res.error).toBeNull();
+  });
+
+  // 21. CLIENT DIRECT ARCHIVE BYPASS PREVENTION (ITEM 3 & 4)
+  it('21. clientManagementService.updateClient explicitly rejects setting status to Archived', async () => {
+    const res = await clientManagementService.updateClient('client-1', {
+      status: 'Archived' as any
+    });
+
+    expect(res.error).toMatch(/direct archival through update is prohibited/i);
+    expect(res.data).toBeUndefined();
   });
 });
