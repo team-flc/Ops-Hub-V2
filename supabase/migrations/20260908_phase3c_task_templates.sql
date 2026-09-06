@@ -339,6 +339,8 @@ AS $$
 DECLARE
     v_actor_profile RECORD;
     v_existing_claim RECORD;
+    v_claim_id UUID;
+    v_claim_inserted BOOLEAN := FALSE;
     v_template RECORD;
     v_old_template RECORD;
     v_source_template RECORD;
@@ -388,52 +390,62 @@ BEGIN
         );
     END IF;
 
-    -- 2. Check / Claim Idempotency Record (Atomic Lock)
-    SELECT status, response_payload
-    INTO v_existing_claim
-    FROM public.template_mutation_requests
-    WHERE actor_id = p_actor_id
-      AND action = p_action
-      AND idempotency_key = p_idempotency_key
-    FOR UPDATE;
+    -- 2. Race-Safe Idempotency Claim (Atomic INSERT ... ON CONFLICT DO NOTHING RETURNING id)
+    v_claim_inserted := FALSE;
 
-    IF v_existing_claim.status = 'completed' AND v_existing_claim.response_payload IS NOT NULL THEN
-        -- Replay: Return cached response immediately without repeating mutation or audit event
-        RETURN jsonb_set(v_existing_claim.response_payload, '{is_replay}', 'true'::jsonb);
+    INSERT INTO public.template_mutation_requests (
+        actor_id,
+        action,
+        idempotency_key,
+        status
+    ) VALUES (
+        p_actor_id,
+        p_action,
+        p_idempotency_key,
+        'processing'
+    )
+    ON CONFLICT (actor_id, action, idempotency_key) DO NOTHING
+    RETURNING id INTO v_claim_id;
+
+    IF v_claim_id IS NOT NULL THEN
+        v_claim_inserted := TRUE;
     END IF;
 
-    IF v_existing_claim.status = 'processing' THEN
-        -- Concurrent duplicate request in progress
-        RETURN jsonb_build_object(
-            'success', false,
-            'error', 'Conflict: Mutation already in progress for this request. Please wait.',
-            'code', '409_CONCURRENT'
-        );
-    END IF;
-
-    IF v_existing_claim.status IS NULL THEN
-        -- First time claim: insert with status 'processing'
-        INSERT INTO public.template_mutation_requests (
-            actor_id,
-            action,
-            idempotency_key,
-            status
-        ) VALUES (
-            p_actor_id,
-            p_action,
-            p_idempotency_key,
-            'processing'
-        );
-    ELSE
-        -- Previous claim was 'failed': retry by setting status to 'processing'
-        UPDATE public.template_mutation_requests
-        SET status = 'processing',
-            response_payload = NULL,
-            completed_at = NULL,
-            created_at = timezone('utc'::text, now())
+    IF NOT v_claim_inserted THEN
+        -- Row already exists: lock and read existing claim row
+        SELECT id, status, response_payload
+        INTO v_existing_claim
+        FROM public.template_mutation_requests
         WHERE actor_id = p_actor_id
           AND action = p_action
-          AND idempotency_key = p_idempotency_key;
+          AND idempotency_key = p_idempotency_key
+        FOR UPDATE;
+
+        IF v_existing_claim.status = 'completed' AND v_existing_claim.response_payload IS NOT NULL THEN
+            -- Cached replay: Return immediately with is_replay = true without repeating mutation or audit event
+            RETURN jsonb_set(v_existing_claim.response_payload, '{is_replay}', 'true'::jsonb);
+        ELSIF v_existing_claim.status = 'processing' THEN
+            -- In-flight concurrency: Another worker is currently processing this exact mutation
+            RETURN jsonb_build_object(
+                'success', false,
+                'error', 'Conflict: Mutation already in progress for this request. Please wait.',
+                'code', '409_CONCURRENT'
+            );
+        ELSIF v_existing_claim.status = 'failed' THEN
+            -- Previous attempt failed: allow controlled retry by flipping back to 'processing'
+            UPDATE public.template_mutation_requests
+            SET status = 'processing',
+                response_payload = NULL,
+                completed_at = NULL,
+                created_at = timezone('utc'::text, now())
+            WHERE id = v_existing_claim.id;
+        ELSE
+            RETURN jsonb_build_object(
+                'success', false,
+                'error', 'Conflict: Request in unexpected state.',
+                'code', '409_CONFLICT'
+            );
+        END IF;
     END IF;
 
     -- 3. Execute Mutation Action
@@ -535,6 +547,11 @@ BEGIN
             RETURN jsonb_build_object('success', false, 'error', 'Missing required parameter: template_id.', 'code', '400_BAD_REQUEST');
         END IF;
 
+        IF NOT (p_payload ? 'expected_version') OR (p_payload->>'expected_version') IS NULL OR length(trim(p_payload->>'expected_version')) = 0 THEN
+            UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
+            RETURN jsonb_build_object('success', false, 'error', 'Missing required parameter: expected_version (atomic version locking required).', 'code', '400_BAD_REQUEST');
+        END IF;
+
         v_expected_version := (p_payload->>'expected_version')::INTEGER;
 
         -- Lock existing template
@@ -545,7 +562,7 @@ BEGIN
         END IF;
 
         -- Atomic version check
-        IF v_expected_version IS NOT NULL AND v_old_template.version != v_expected_version THEN
+        IF v_old_template.version != v_expected_version THEN
             UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
             RETURN jsonb_build_object(
                 'success', false,

@@ -125,14 +125,17 @@ ALTER TABLE public.client_tasks
 ### 4.1 Transactional RPC: `public.fn_manage_task_template_mutation`
 To ensure genuine database atomicity across mutation execution, audit event generation, and idempotency status tracking, all template mutations run inside a single PostgreSQL function (`public.fn_manage_task_template_mutation`):
 1. **Actor & Owner Validation**: Confirms actor exists, is active, and holds the `owner` role.
-2. **Idempotency Claim & Replay Lock**:
-   - Checks `template_mutation_requests` with row-level locking (`FOR UPDATE`).
+2. **Race-Safe Idempotency Claim & Replay Lock**:
+   - Executes atomic `INSERT INTO template_mutation_requests ... ON CONFLICT (actor_id, action, idempotency_key) DO NOTHING RETURNING id`.
+   - If row was newly inserted, worker proceeds with the mutation.
+   - If row already existed, locks and reads the existing record with `SELECT ... FOR UPDATE`.
    - If `completed`, returns the cached response payload immediately with `is_replay: true`.
-   - If `processing`, returns `409 Conflict` (`409_CONCURRENT`).
-   - Otherwise, claims the request with `status = 'processing'`.
+   - If `processing`, returns controlled `409 Conflict` (`409_CONCURRENT`).
+   - If `failed`, allows controlled retry by flipping status back to `processing`.
+   - Eliminates unhandled unique constraint race conditions between simultaneous first requests.
 3. **Atomic Mutation Execution**:
    - `create`: Inserts template with initial `version = 1`.
-   - `update`: Enforces `WHERE id = template_id AND version = expected_version`. Rejects stale updates with `409 Conflict` (`409_VERSION_CONFLICT`).
+   - `update`: Requires mandatory `expected_version` (rejects missing/null version with HTTP 400). Enforces `WHERE id = template_id AND version = expected_version`. Rejects stale updates with `409 Conflict` (`409_VERSION_CONFLICT`).
    - `duplicate`: Inserts copy with `name = name || ' (Copy)'` and `version = 1`.
    - `archive`: Enforces `WHERE id = template_id AND status = 'Active'`. Requires mandatory non-empty reason. Rejects non-active status with `409 Conflict` (`409_STATUS_CONFLICT`).
    - `restore`: Enforces `WHERE id = template_id AND status = 'Archived'`. Rejects non-archived status with `409 Conflict` (`409_STATUS_CONFLICT`).

@@ -274,6 +274,15 @@ serve(async (req: Request) => {
     }
     const idempotencyKey = rawIdempotencyKey.trim();
 
+    if (action === 'update') {
+      if (body.expected_version === undefined || body.expected_version === null || body.expected_version === '') {
+        return new Response(
+          JSON.stringify({ error: 'Missing required field: expected_version (atomic version locking required).' }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+    }
+
     // Invoke privileged PostgreSQL RPC: atomically executes claim, mutation, audit log, and result storage
     const { data: rpcResult, error: rpcError } = await supabaseAdmin.rpc('fn_manage_task_template_mutation', {
       p_actor_id: callerProfile.id,
@@ -290,14 +299,14 @@ serve(async (req: Request) => {
     }
 
     if (!rpcResult || !rpcResult.success) {
-      const code = rpcResult?.code || '';
+      const code = String(rpcResult?.code || '');
       let statusCode = 400;
-      if (code.startsWith('403')) statusCode = 403;
-      else if (code.startsWith('404')) statusCode = 404;
-      else if (code.startsWith('409')) statusCode = 409;
+      if (code.startsWith('403') || code.includes('FORBIDDEN')) statusCode = 403;
+      else if (code.startsWith('404') || code.includes('NOT_FOUND')) statusCode = 404;
+      else if (code.startsWith('409') || code.includes('CONFLICT') || code.includes('CONCURRENT')) statusCode = 409;
 
       return new Response(
-        JSON.stringify({ error: rpcResult?.error || 'Failed to process template mutation.' }),
+        JSON.stringify({ error: rpcResult?.error || 'Failed to process template mutation.', code: rpcResult?.code }),
         { status: statusCode, headers: corsHeaders }
       );
     }
