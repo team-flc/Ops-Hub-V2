@@ -1,11 +1,11 @@
 import React, { act } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { 
-  taskManagementService, 
-  isSunday, 
-  isTaskOverdue, 
-  validateTaskDates 
+import {
+  taskManagementService,
+  isSunday,
+  isTaskOverdue,
+  validateTaskDates
 } from '../src/lib/taskManagementService';
 import { ClientTask, ClientRecord, Department, UserProfile } from '../src/types';
 import { CreateClientTaskModal } from '../src/components/tasks/CreateClientTaskModal';
@@ -201,7 +201,7 @@ describe('Phase 3A: Operational Task Management Core Unit & Security Tests', () 
           assignee_id: null,
           priority: 'Normal',
           planned_start: '2026-09-02T09:00:00.000Z',
-          due_date: '2026-09-05T18:00:00.000Z',
+          due_date: '2026-09-04T18:00:00.000Z',
           status: 'Draft',
           created_at: new Date().toISOString()
         }
@@ -216,7 +216,7 @@ describe('Phase 3A: Operational Task Management Core Unit & Security Tests', () 
       title: 'Draft Task Test',
       departmentId: 'dept-1',
       plannedStart: '2026-09-02T09:00:00.000Z',
-      dueDate: '2026-09-05T18:00:00.000Z'
+      dueDate: '2026-09-04T18:00:00.000Z'
     });
 
     expect(resDraft.data?.status).toBe('Draft');
@@ -444,7 +444,7 @@ describe('Phase 3A: Operational Task Management Core Unit & Security Tests', () 
 
     // Switch to Week 2
     fireEvent.click(screen.getByRole('button', { name: /week 2/i }));
-    
+
     // Exactly ONE + Add Task button must exist
     const week2Btns = screen.getAllByRole('button', { name: /\+ add task/i });
     expect(week2Btns.length).toBe(1);

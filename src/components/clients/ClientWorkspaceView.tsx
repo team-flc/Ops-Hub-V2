@@ -12,8 +12,11 @@ import { ClientDetailsTab } from './ClientDetailsTab';
 import { ClientTaskCard } from '../tasks/ClientTaskCard';
 import { CreateClientTaskModal } from '../tasks/CreateClientTaskModal';
 import { EditClientTaskModal } from '../tasks/EditClientTaskModal';
-import { ClientTaskDetailsModal } from '../tasks/ClientTaskDetailsModal';
 import { taskManagementService } from '../../lib/taskManagementService';
+
+const ClientTaskDetailsModal = React.lazy(() =>
+  import('../tasks/ClientTaskDetailsModal').then((m) => ({ default: m.ClientTaskDetailsModal }))
+);
 
 interface ClientWorkspaceViewProps {
   client: ClientRecord;
@@ -208,7 +211,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
       <div className="flex-1 min-w-0">
         {/* TAB 1: 30-DAY SETUP WORKSPACE */}
         {activeTab === 'setup' && (
-          <div className="p-6 max-w-6xl mx-auto space-y-6">
+          <div className="p-3.5 sm:p-6 max-w-6xl mx-auto space-y-6">
             {/* 4 Clean Weekly Tabs (Week 1, Week 2, Week 3, Week 4) */}
             <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
               {weekTabs.map((w) => (
@@ -328,16 +331,18 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
       )}
 
       {selectedTaskDetails && (
-        <ClientTaskDetailsModal
-          isOpen={Boolean(selectedTaskDetails)}
-          onClose={() => setSelectedTaskDetails(null)}
-          task={selectedTaskDetails}
-          currentUserProfile={currentUserProfile}
-          departments={departments}
-          eligibleAssignees={eligibleAssignees}
-          onTaskUpdated={handleTaskUpdated}
-          onOpenEditModal={(t) => setEditingTask(t)}
-        />
+        <React.Suspense fallback={null}>
+          <ClientTaskDetailsModal
+            isOpen={Boolean(selectedTaskDetails)}
+            onClose={() => setSelectedTaskDetails(null)}
+            task={selectedTaskDetails}
+            currentUserProfile={currentUserProfile}
+            departments={departments}
+            eligibleAssignees={eligibleAssignees}
+            onTaskUpdated={handleTaskUpdated}
+            onOpenEditModal={(t) => setEditingTask(t)}
+          />
+        </React.Suspense>
       )}
     </div>
   );

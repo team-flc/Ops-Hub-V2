@@ -108,11 +108,11 @@ export const ClientTaskCard: React.FC<ClientTaskCardProps> = ({
 
       {/* Title & Details Snippet */}
       <div>
-        <h4 className="text-xs sm:text-sm font-bold text-gray-900 dark:text-gray-100 group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors line-clamp-2">
+        <h4 className="text-xs sm:text-sm font-bold text-gray-900 dark:text-gray-100 group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors line-clamp-2 break-words">
           {task.title}
         </h4>
         {task.details && (
-          <p className="text-[11px] text-gray-400 mt-1 line-clamp-1">
+          <p className="text-[11px] text-gray-400 mt-1 line-clamp-1 break-words">
             {task.details}
           </p>
         )}
@@ -143,7 +143,7 @@ export const ClientTaskCard: React.FC<ClientTaskCardProps> = ({
             <button
               type="button"
               onClick={() => onStatusChange(task, 'In Progress')}
-              className="p-1 rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400 hover:bg-brand-500 hover:text-white transition-colors"
+              className="p-1.5 min-h-[32px] min-w-[32px] flex items-center justify-center rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400 hover:bg-brand-500 hover:text-white transition-colors cursor-pointer"
               title="Start Work"
             >
               <Play className="w-3.5 h-3.5" />
@@ -154,7 +154,7 @@ export const ClientTaskCard: React.FC<ClientTaskCardProps> = ({
             <button
               type="button"
               onClick={() => onStatusChange(task, 'Team Review')}
-              className="p-1 rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 hover:bg-purple-600 hover:text-white transition-colors"
+              className="p-1.5 min-h-[32px] min-w-[32px] flex items-center justify-center rounded-lg bg-purple-500/10 text-purple-600 dark:text-purple-400 hover:bg-purple-600 hover:text-white transition-colors cursor-pointer"
               title="Submit for Team Review"
             >
               <Send className="w-3.5 h-3.5" />
@@ -165,7 +165,7 @@ export const ClientTaskCard: React.FC<ClientTaskCardProps> = ({
             <button
               type="button"
               onClick={() => onStatusChange(task, 'In Progress')}
-              className="p-1 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-600 hover:text-white transition-colors"
+              className="p-1.5 min-h-[32px] min-w-[32px] flex items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-600 hover:text-white transition-colors cursor-pointer"
               title="Resume Work"
             >
               <CheckCircle2 className="w-3.5 h-3.5" />
@@ -176,7 +176,7 @@ export const ClientTaskCard: React.FC<ClientTaskCardProps> = ({
             <button
               type="button"
               onClick={() => onOpenEditModal(task)}
-              className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors"
+              className="p-1.5 min-h-[32px] min-w-[32px] flex items-center justify-center rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors cursor-pointer"
               title="Edit Task"
             >
               <Edit3 className="w-3.5 h-3.5" />

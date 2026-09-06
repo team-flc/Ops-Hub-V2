@@ -302,15 +302,15 @@ export interface ClientVendor {
   notes: string;
 }
 
-export type ViewMode = 
-  | 'list' 
-  | 'board' 
-  | 'calendar' 
-  | 'timeline' 
-  | 'table' 
-  | 'dashboard' 
-  | 'docs' 
-  | 'directory' 
+export type ViewMode =
+  | 'list'
+  | 'board'
+  | 'calendar'
+  | 'timeline'
+  | 'table'
+  | 'dashboard'
+  | 'docs'
+  | 'directory'
   | 'clients'
   | 'client_workspace'
   | 'automations'
@@ -335,13 +335,13 @@ export interface FilterState {
 export type ClientPackage = 'Basic' | 'Intermediate' | 'Advanced';
 export type ClientStatus = 'Onboarding' | 'Active' | 'Paused' | 'Archived';
 export type ClientPauseReason = 'Payment overdue' | 'Client request' | 'Operational reason' | 'Other';
-export type ClientLinkType = 
-  | 'website' 
-  | 'google_drive' 
-  | 'facebook' 
-  | 'instagram' 
-  | 'linkedin_company_page' 
-  | 'slack_channel' 
+export type ClientLinkType =
+  | 'website'
+  | 'google_drive'
+  | 'facebook'
+  | 'instagram'
+  | 'linkedin_company_page'
+  | 'slack_channel'
   | 'whatsapp_group';
 
 export interface ClientLink {
@@ -422,9 +422,45 @@ export interface ClientAuditEntry {
   createdAt: string;
 }
 
-// --- PHASE 3A: OPERATIONAL TASK MANAGEMENT TYPES ---
+// --- PHASE 3A & 3B: OPERATIONAL TASK MANAGEMENT & REVIEW TYPES ---
 export type ClientTaskPriority = 'Low' | 'Normal' | 'High' | 'Urgent';
-export type ClientTaskStatus = 'Draft' | 'Assigned' | 'In Progress' | 'Blocked' | 'Team Review';
+export type ClientTaskStatus =
+  | 'Draft'
+  | 'Assigned'
+  | 'In Progress'
+  | 'Blocked'
+  | 'Team Review'
+  | 'Client Review'
+  | 'Completed';
+
+export type TaskApprovalMode = 'Internal Only' | 'Client Approval Required';
+export type TaskMessageVisibility = 'internal_note' | 'shared_with_client';
+
+export interface TaskExternalLink {
+  url: string;
+  title?: string;
+}
+
+export interface TaskMessage {
+  id: string;
+  taskId: string;
+  clientId: string;
+  authorId: string;
+  authorName?: string;
+  authorRole?: string;
+  visibility: TaskMessageVisibility;
+  content: string;
+  links: TaskExternalLink[];
+  createdAt: string;
+}
+
+export interface TaskReadState {
+  id: string;
+  taskId: string;
+  profileId: string;
+  lastReadAt: string;
+  updatedAt: string;
+}
 
 export interface ClientTask {
   id: string;
@@ -443,6 +479,14 @@ export interface ClientTask {
   plannedStart: string;
   dueDate: string;
   status: ClientTaskStatus;
+  approvalMode?: TaskApprovalMode;
+  completedAt?: string | null;
+  completedBy?: string | null;
+  completedByName?: string | null;
+  reopenedAt?: string | null;
+  reopenedBy?: string | null;
+  reopenedByName?: string | null;
+  reopenReason?: string | null;
   blockedReason?: string | null;
   sortOrder: number;
   createdBy?: string | null;
@@ -454,6 +498,8 @@ export interface ClientTask {
   archivedBy?: string | null;
   archiveReason?: string | null;
   isOverdue?: boolean;
+  unreadCount?: number;
+  hasUnread?: boolean;
 }
 
 export interface ClientTaskEvent {
@@ -462,16 +508,22 @@ export interface ClientTaskEvent {
   clientId: string;
   actorId?: string | null;
   actorName?: string | null;
-  eventType: 
-    | 'created' 
-    | 'field_updated' 
-    | 'assigned' 
-    | 'reassigned' 
-    | 'status_changed' 
-    | 'blocked' 
-    | 'unblocked' 
-    | 'submitted_for_review' 
-    | 'review_returned' 
+  eventType:
+    | 'created'
+    | 'field_updated'
+    | 'assigned'
+    | 'reassigned'
+    | 'status_changed'
+    | 'blocked'
+    | 'unblocked'
+    | 'submitted_for_review'
+    | 'review_returned'
+    | 'changes_requested'
+    | 'client_review_submitted'
+    | 'client_approved'
+    | 'client_changes_requested'
+    | 'completed'
+    | 'reopened'
     | 'archived'
     | 'restored';
   previousState?: any;
@@ -481,44 +533,44 @@ export interface ClientTaskEvent {
 }
 
 // --- PHASE 3A.1: SYSTEM AUDIT & ARCHIVE TYPES ---
-export type AuditEntityType = 
-  | 'client' 
-  | 'team_member' 
-  | 'task' 
-  | 'profile' 
-  | 'client_link' 
-  | 'linkedin_profile' 
-  | 'department' 
+export type AuditEntityType =
+  | 'client'
+  | 'team_member'
+  | 'task'
+  | 'profile'
+  | 'client_link'
+  | 'linkedin_profile'
+  | 'department'
   | 'designation';
 
-export type AuditEventAction = 
-  | 'user_created' 
-  | 'user_updated' 
-  | 'user_suspended' 
-  | 'user_reactivated' 
-  | 'user_archived' 
-  | 'user_restored' 
-  | 'password_reset_requested' 
-  | 'password_reset_completed' 
-  | 'profile_updated' 
-  | 'avatar_updated' 
-  | 'client_access_granted' 
-  | 'client_access_revoked' 
-  | 'client_created' 
-  | 'client_updated' 
-  | 'client_paused' 
-  | 'client_resumed' 
-  | 'client_archived' 
-  | 'client_restored' 
-  | 'client_duplicated' 
-  | 'client_logo_updated' 
-  | 'client_links_updated' 
-  | 'task_created' 
-  | 'task_updated' 
-  | 'task_assigned' 
-  | 'task_reassigned' 
-  | 'task_status_changed' 
-  | 'task_archived' 
+export type AuditEventAction =
+  | 'user_created'
+  | 'user_updated'
+  | 'user_suspended'
+  | 'user_reactivated'
+  | 'user_archived'
+  | 'user_restored'
+  | 'password_reset_requested'
+  | 'password_reset_completed'
+  | 'profile_updated'
+  | 'avatar_updated'
+  | 'client_access_granted'
+  | 'client_access_revoked'
+  | 'client_created'
+  | 'client_updated'
+  | 'client_paused'
+  | 'client_resumed'
+  | 'client_archived'
+  | 'client_restored'
+  | 'client_duplicated'
+  | 'client_logo_updated'
+  | 'client_links_updated'
+  | 'task_created'
+  | 'task_updated'
+  | 'task_assigned'
+  | 'task_reassigned'
+  | 'task_status_changed'
+  | 'task_archived'
   | 'task_restored';
 
 export interface SystemAuditEvent {
@@ -552,4 +604,3 @@ export interface ArchivedRecord {
   previousStatus: string;
   metadata?: Record<string, any> | null;
 }
-

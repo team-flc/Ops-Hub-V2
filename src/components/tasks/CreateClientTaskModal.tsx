@@ -1,13 +1,14 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { X, Calendar, AlertCircle, Loader2, CheckCircle2, UserCheck, ShieldAlert } from 'lucide-react';
-import { 
-  ClientRecord, 
-  ClientTask, 
-  ClientTaskPriority, 
-  Department, 
-  UserProfile 
+import {
+  ClientRecord,
+  ClientTask,
+  ClientTaskPriority,
+  Department,
+  UserProfile,
+  TaskApprovalMode
 } from '../../types';
-import { taskManagementService, isSunday } from '../../lib/taskManagementService';
+import { taskManagementService, isSunday, isSaturday, isWeekend } from '../../lib/taskManagementService';
 
 interface CreateClientTaskModalProps {
   isOpen: boolean;
@@ -34,6 +35,7 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
   const [departmentId, setDepartmentId] = useState('');
   const [assigneeId, setAssigneeId] = useState('');
   const [priority, setPriority] = useState<ClientTaskPriority>('Normal');
+  const [approvalMode, setApprovalMode] = useState<TaskApprovalMode>('Internal Only');
   const [plannedStartDate, setPlannedStartDate] = useState('');
   const [plannedStartTime, setPlannedStartTime] = useState('09:00');
   const [dueDate, setDueDate] = useState('');
@@ -69,19 +71,20 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
       setDetails('');
       setAssigneeId('');
       setPriority('Normal');
+      setApprovalMode('Internal Only');
       setErrorMessage(null);
 
       if (departments.length > 0 && !departmentId) {
         setDepartmentId(departments[0].id);
       }
 
-      // Default start date = today (or next day if Sunday)
+      // Default start date = today (or roll past weekend)
       const now = new Date();
       let yyyy = now.getFullYear();
       let mm = String(now.getMonth() + 1).padStart(2, '0');
       let dd = String(now.getDate()).padStart(2, '0');
       let todayStr = `${yyyy}-${mm}-${dd}`;
-      while (isSunday(todayStr)) {
+      while (isWeekend(todayStr)) {
         now.setDate(now.getDate() + 1);
         yyyy = now.getFullYear();
         mm = String(now.getMonth() + 1).padStart(2, '0');
@@ -90,14 +93,14 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
       }
       setPlannedStartDate(todayStr);
 
-      // Default due date = 3 days later (skip Sunday)
+      // Default due date = 3 days later (skip weekend)
       const due = new Date(now);
       due.setDate(due.getDate() + 3);
       let dYyyy = due.getFullYear();
       let dMm = String(due.getMonth() + 1).padStart(2, '0');
       let dDd = String(due.getDate()).padStart(2, '0');
       let dueStr = `${dYyyy}-${dMm}-${dDd}`;
-      while (isSunday(dueStr)) {
+      while (isWeekend(dueStr)) {
         due.setDate(due.getDate() + 1);
         dYyyy = due.getFullYear();
         dMm = String(due.getMonth() + 1).padStart(2, '0');
@@ -131,13 +134,21 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
       return;
     }
 
-    // Sunday checks
+    // Weekend checks
     if (isSunday(plannedStartDate)) {
       setErrorMessage('Planned start date cannot fall on a Sunday.');
       return;
     }
+    if (isSaturday(plannedStartDate)) {
+      setErrorMessage('Planned start date cannot fall on a Saturday.');
+      return;
+    }
     if (isSunday(dueDate)) {
       setErrorMessage('Due date cannot fall on a Sunday.');
+      return;
+    }
+    if (isSaturday(dueDate)) {
+      setErrorMessage('Due date cannot fall on a Saturday.');
       return;
     }
 
@@ -159,18 +170,19 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
         departmentId,
         assigneeId: assigneeId || undefined,
         priority,
+        approvalMode,
         plannedStart: startIso,
         dueDate: dueIso
       });
 
       if (res.error || !res.data) {
-        setErrorMessage(res.error || 'Failed to create task.');
+        setErrorMessage(res.error || 'Failed to create operational task.');
       } else {
         onSuccess(res.data);
         onClose();
       }
     } catch (err: any) {
-      setErrorMessage(err?.message || 'An error occurred creating task.');
+      setErrorMessage(err?.message || 'Failed to submit task form.');
     } finally {
       setIsSubmitting(false);
     }
@@ -178,7 +190,7 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div 
+      <div
         className="bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
@@ -269,6 +281,23 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
             </div>
           </div>
 
+          {/* Approval Mode Selection */}
+          <div>
+            <label htmlFor="task-approval-mode-select" className="block text-gray-700 dark:text-gray-300 font-bold mb-1">
+              Approval Mode <span className="text-rose-500">*</span>
+            </label>
+            <select
+              id="task-approval-mode-select"
+              aria-label="Approval Mode"
+              value={approvalMode}
+              onChange={(e) => setApprovalMode(e.target.value as TaskApprovalMode)}
+              className="w-full px-3 py-2 rounded-xl bg-gray-50 dark:bg-dark-100 border border-gray-200 dark:border-dark-border focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-gray-900 dark:text-gray-100"
+            >
+              <option value="Internal Only">Internal Only (Team Review → Completed)</option>
+              <option value="Client Approval Required">Client Approval Required (Team Review → Client Review → Completed)</option>
+            </select>
+          </div>
+
           {/* Department & Primary Assignee */}
           <div className="grid grid-cols-2 gap-3">
             <div>
@@ -326,7 +355,7 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
                 required
                 className="w-full px-3 py-2 rounded-xl bg-white dark:bg-dark-100 border border-gray-200 dark:border-dark-border focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-gray-900 dark:text-gray-100"
               />
-              <span className="text-[10px] text-gray-400 mt-0.5 block">Cannot fall on Sunday</span>
+              <span className="text-[10px] text-gray-400 mt-0.5 block">Cannot fall on Saturday or Sunday</span>
             </div>
 
             <div>
@@ -355,7 +384,7 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
                 required
                 className="w-full px-3 py-2 rounded-xl bg-white dark:bg-dark-100 border border-gray-200 dark:border-dark-border focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-gray-900 dark:text-gray-100"
               />
-              <span className="text-[10px] text-gray-400 mt-0.5 block">Cannot fall on Sunday</span>
+              <span className="text-[10px] text-gray-400 mt-0.5 block">Cannot fall on Saturday or Sunday</span>
             </div>
 
             <div>
@@ -391,14 +420,14 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
               type="button"
               onClick={onClose}
               disabled={isSubmitting}
-              className="px-4 py-2 rounded-xl border border-gray-200 dark:border-dark-border text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors"
+              className="px-4 py-2 rounded-xl border border-gray-200 dark:border-dark-border text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors min-h-[40px] sm:min-h-[36px] cursor-pointer"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex items-center gap-2 px-5 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-bold shadow-md shadow-brand-500/25 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50"
+              className="flex items-center gap-2 px-5 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-bold shadow-md shadow-brand-500/25 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 min-h-[40px] sm:min-h-[36px] cursor-pointer"
             >
               {isSubmitting ? (
                 <>
