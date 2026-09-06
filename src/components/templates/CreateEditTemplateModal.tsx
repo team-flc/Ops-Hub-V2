@@ -96,7 +96,8 @@ export const CreateEditTemplateModal: React.FC<CreateEditTemplateModalProps> = (
           taskDetails: taskDetails.trim() || undefined,
           defaultPriority,
           defaultApprovalMode,
-          suggestedDurationDays
+          suggestedDurationDays,
+          expectedVersion: template.version
         });
 
         if (res.error || !res.data) {

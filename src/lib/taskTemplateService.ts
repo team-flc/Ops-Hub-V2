@@ -44,6 +44,7 @@ export function calculateDueDateFromDuration(startDateStr: string, durationDays:
 function mapTemplateRow(row: any): TaskTemplate {
   return {
     id: row.id,
+    organizationId: row.organization_id || row.organizationId || undefined,
     name: row.name,
     description: row.description || undefined,
     departmentId: row.department_id || row.departmentId,
@@ -79,7 +80,7 @@ export const taskTemplateService = {
       });
 
       if (error) {
-        return { error: error.message || 'Edge function execution error' };
+        return { error: typeof error === 'string' ? error : (error.message || 'Edge function execution error') };
       }
       if (data?.error) {
         return { error: data.error };
@@ -185,7 +186,8 @@ export const taskTemplateService = {
       default_priority: input.defaultPriority,
       default_approval_mode: input.defaultApprovalMode,
       suggested_duration_days: input.suggestedDurationDays,
-      sort_order: input.sortOrder
+      sort_order: input.sortOrder,
+      expected_version: input.expectedVersion
     });
 
     if (edgeRes.error || !edgeRes.data?.template) {
@@ -211,14 +213,15 @@ export const taskTemplateService = {
   /**
    * Archive a template (Owner only, requires mandatory reason)
    */
-  async archiveTemplate(id: string, reason: string): Promise<{ data: TaskTemplate | null; error: string | null }> {
+  async archiveTemplate(id: string, reason: string, expectedStatus = 'Active'): Promise<{ data: TaskTemplate | null; error: string | null }> {
     if (!reason || !reason.trim()) {
       return { data: null, error: 'A mandatory reason is required to archive a template.' };
     }
 
     const edgeRes = await this.invokeEdgeFunction('archive', {
       template_id: id,
-      archive_reason: reason.trim()
+      archive_reason: reason.trim(),
+      expected_status: expectedStatus
     });
 
     if (edgeRes.error || !edgeRes.data?.template) {
@@ -231,8 +234,11 @@ export const taskTemplateService = {
   /**
    * Restore an archived template (Owner only)
    */
-  async restoreTemplate(id: string): Promise<{ data: TaskTemplate | null; error: string | null }> {
-    const edgeRes = await this.invokeEdgeFunction('restore', { template_id: id });
+  async restoreTemplate(id: string, expectedStatus = 'Archived'): Promise<{ data: TaskTemplate | null; error: string | null }> {
+    const edgeRes = await this.invokeEdgeFunction('restore', {
+      template_id: id,
+      expected_status: expectedStatus
+    });
 
     if (edgeRes.error || !edgeRes.data?.template) {
       return { data: null, error: edgeRes.error || 'Failed to restore template.' };

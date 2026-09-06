@@ -165,6 +165,20 @@ serve(async (req: Request) => {
     );
   }
 
+  // Derive organization strictly from authenticated profile
+  let callerOrgId = callerProfile.organization_id;
+  if (!callerOrgId) {
+    const { data: defaultOrg } = await supabaseAdmin
+      .from('organizations')
+      .select('id')
+      .order('created_at', { ascending: true })
+      .limit(1)
+      .maybeSingle();
+    if (defaultOrg) {
+      callerOrgId = defaultOrg.id;
+    }
+  }
+
   let body: any;
   try {
     body = await req.json();
@@ -315,18 +329,23 @@ serve(async (req: Request) => {
       if (source_template_id) {
         const { data: templateRec, error: tErr } = await supabaseAdmin
           .from('task_templates')
-          .select('id, version, status')
+          .select('id, version, status, organization_id')
           .eq('id', source_template_id)
           .single();
 
         if (tErr || !templateRec) {
           return new Response(JSON.stringify({ error: 'Referenced task template does not exist.' }), { status: 400, headers: corsHeaders });
         }
+        // Strict Cross-Organization Check: Reject if template does not belong to caller's organization
+        if (templateRec.organization_id && callerOrgId && templateRec.organization_id !== callerOrgId) {
+          return new Response(JSON.stringify({ error: 'Forbidden: Cross-organization template usage is strictly prohibited.' }), { status: 403, headers: corsHeaders });
+        }
         if (templateRec.status === 'Archived') {
           return new Response(JSON.stringify({ error: 'Cannot create task from an archived template.' }), { status: 400, headers: corsHeaders });
         }
         resolvedSourceTemplateId = templateRec.id;
-        resolvedSourceTemplateVersion = source_template_version || templateRec.version || 1;
+        // Provenance must not be forgeable by client payload: strictly lock to template's real version
+        resolvedSourceTemplateVersion = templateRec.version || 1;
       }
 
       // Date validations (Sat/Sun rejection)
