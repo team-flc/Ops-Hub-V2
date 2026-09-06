@@ -437,9 +437,18 @@ describe('Phase 2B: Client Management & Dynamic LinkedIn Access Tests', () => {
   });
 
   // 13. CLEAN STAFF SIDEBAR & SINGLE SIGN OUT
-  it('13. Clean staff sidebar contains only Client Management, Team Management, and Single Sign Out in profile', async () => {
+  it('13. Clean staff sidebar contains only FLC branding, Client Switcher, and Settings', async () => {
     const { Sidebar } = await import('../src/components/layout/Sidebar');
     mockGetUser.mockResolvedValue({ data: { user: { id: 'u-1', email: 'owner@flc.com' } }, error: null });
+    mockFromSelect.mockImplementation((table: string) => {
+      if (table === 'profiles') {
+        return Promise.resolve({
+          data: { id: 'u-1', full_name: 'Faseeh Lall', role: 'owner', status: 'active', work_email: 'owner@flc.com' },
+          error: null
+        });
+      }
+      return Promise.resolve({ data: null, error: null });
+    });
 
     await act(async () => {
       render(
@@ -449,13 +458,10 @@ describe('Phase 2B: Client Management & Dynamic LinkedIn Access Tests', () => {
       );
     });
 
-    // Approved features exist
-    expect(screen.getByText('Client Management')).toBeInTheDocument();
-    expect(screen.getByTitle('Switch Client Workspace')).toBeInTheDocument();
-
-    // Exactly one Sign Out exists
-    const signOutButtons = screen.getAllByTitle('Sign Out');
-    expect(signOutButtons.length).toBe(1);
+    await waitFor(() => {
+      expect(screen.getByTitle('Switch Client Workspace')).toBeInTheDocument();
+      expect(screen.getByText('Settings')).toBeInTheDocument();
+    });
 
     // Unapproved placeholder navigation items are completely removed
     expect(screen.queryByText(/Everything/i)).not.toBeInTheDocument();

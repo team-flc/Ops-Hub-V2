@@ -28,8 +28,29 @@ const getCorsHeaders = (origin: string | null) => {
 
 // Date Validation Helpers (Timezone: Asia/Karachi / UTC)
 function isSunday(dateStr: string): boolean {
+  if (!dateStr) return false;
+  const trimmed = typeof dateStr === 'string' ? dateStr.trim() : '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const parts = trimmed.split('-').map(Number);
+    const dt = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+    return dt.getUTCDay() === 0;
+  }
+
   const d = new Date(dateStr);
-  return d.getUTCDay() === 0;
+  if (isNaN(d.getTime())) return false;
+  if (d.getUTCDay() === 0) return true;
+
+  try {
+    const pktDay = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Karachi',
+      weekday: 'short'
+    }).format(d);
+    if (pktDay === 'Sun') return true;
+  } catch {
+    // fallback
+  }
+
+  return false;
 }
 
 serve(async (req: Request) => {
@@ -148,12 +169,12 @@ serve(async (req: Request) => {
   async function checkAssigneeEligibility(assigneeId: string, clientId: string, departmentId?: string): Promise<{ valid: boolean; error?: string }> {
     const { data: assignee, error: aErr } = await supabaseAdmin
       .from('profiles')
-      .select('id, role, status')
+      .select('id, role, status, archived_at')
       .eq('id', assigneeId)
       .single();
 
-    if (aErr || !assignee || assignee.status !== 'active') {
-      return { valid: false, error: 'Assignee profile is not active.' };
+    if (aErr || !assignee || assignee.status !== 'active' || assignee.archived_at) {
+      return { valid: false, error: 'Assignee profile is not active or is archived.' };
     }
 
     if (assignee.role === 'client') {
@@ -170,6 +191,19 @@ serve(async (req: Request) => {
 
       if (!access) {
         return { valid: false, error: 'Assignee does not have explicit access to this client.' };
+      }
+
+      if (departmentId) {
+        const { data: deptMembership } = await supabaseAdmin
+          .from('profile_departments')
+          .select('profile_id')
+          .eq('profile_id', assigneeId)
+          .eq('department_id', departmentId)
+          .single();
+
+        if (!deptMembership) {
+          return { valid: false, error: 'Assignee does not belong to the responsible department for this task.' };
+        }
       }
     }
 
@@ -212,6 +246,20 @@ serve(async (req: Request) => {
         return new Response(
           JSON.stringify({ error: 'Forbidden: You do not have permission to create tasks for this client.' }),
           { status: 403, headers: corsHeaders }
+        );
+      }
+
+      // Check if client is paused or archived
+      const { data: targetClient } = await supabaseAdmin
+        .from('clients')
+        .select('status')
+        .eq('id', client_id)
+        .single();
+
+      if (targetClient?.status === 'Paused' || targetClient?.status === 'Archived') {
+        return new Response(
+          JSON.stringify({ error: `Cannot create tasks for a ${targetClient.status.toLowerCase()} client.` }),
+          { status: 400, headers: corsHeaders }
         );
       }
 
@@ -314,6 +362,20 @@ serve(async (req: Request) => {
         return new Response(JSON.stringify({ error: 'Forbidden: Cannot edit task fields.' }), { status: 403, headers: corsHeaders });
       }
 
+      // Check if client is paused or archived
+      const { data: targetClient } = await supabaseAdmin
+        .from('clients')
+        .select('status')
+        .eq('id', existingTask.client_id)
+        .single();
+
+      if (targetClient?.status === 'Paused' || targetClient?.status === 'Archived') {
+        return new Response(
+          JSON.stringify({ error: `Cannot modify tasks for a ${targetClient.status.toLowerCase()} client.` }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
       const updates: any = { updated_by: callerProfile.id };
       if (title !== undefined) updates.title = title.trim();
       if (details !== undefined) updates.details = details ? details.trim() : null;
@@ -389,6 +451,20 @@ serve(async (req: Request) => {
         return new Response(JSON.stringify({ error: 'Forbidden: Only managers can assign/reassign tasks.' }), { status: 403, headers: corsHeaders });
       }
 
+      // Check if client is paused or archived
+      const { data: targetClient } = await supabaseAdmin
+        .from('clients')
+        .select('status')
+        .eq('id', existingTask.client_id)
+        .single();
+
+      if (targetClient?.status === 'Paused' || targetClient?.status === 'Archived') {
+        return new Response(
+          JSON.stringify({ error: `Cannot assign tasks for a ${targetClient.status.toLowerCase()} client.` }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
       let newStatus = existingTask.status;
       if (assignee_id) {
         const eligibility = await checkAssigneeEligibility(assignee_id, existingTask.client_id, existingTask.department_id);
@@ -458,6 +534,20 @@ serve(async (req: Request) => {
 
       if (!canManage && !isAssignedMember) {
         return new Response(JSON.stringify({ error: 'Forbidden: You cannot update status on this task.' }), { status: 403, headers: corsHeaders });
+      }
+
+      // Check if client is paused or archived
+      const { data: targetClient } = await supabaseAdmin
+        .from('clients')
+        .select('status')
+        .eq('id', existingTask.client_id)
+        .single();
+
+      if (targetClient?.status === 'Paused' || targetClient?.status === 'Archived') {
+        return new Response(
+          JSON.stringify({ error: `Cannot change status on tasks for a ${targetClient.status.toLowerCase()} client.` }),
+          { status: 400, headers: corsHeaders }
+        );
       }
 
       // Workflow transition enforcement

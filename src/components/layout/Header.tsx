@@ -1,12 +1,16 @@
 import React, { useState, useEffect } from 'react';
+import { useSafeNavigate } from '../../lib/safeRouterHooks';
 import { useOpsStore } from '../../store/opsStore';
 import { Moon, Sun } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
+import { ProfileDropdown } from '../profile/ProfileDropdown';
 
 export const Header: React.FC = () => {
+  const navigate = useSafeNavigate();
   const viewMode = useOpsStore((state) => state.viewMode);
   const clients = useOpsStore((state) => state.clients);
   const selectedClientId = useOpsStore((state) => state.selectedClientId);
+  const setViewMode = useOpsStore((state) => state.setViewMode);
   const { profile } = useAuth();
 
   const [isDarkMode, setIsDarkMode] = useState(false);
@@ -27,24 +31,48 @@ export const Header: React.FC = () => {
     }
   };
 
-  const selectedClient = clients.find((c) => c.id === selectedClientId) || clients[0] || null;
+  const selectedClient = clients.find((c) => c.id === selectedClientId) || null;
+  const isSettings = viewMode === 'settings';
+  const isProfile = viewMode === 'profile';
   const isTeamManagement = viewMode === 'directory';
 
-  const sectionName = isTeamManagement 
-    ? (profile?.role === 'owner' || profile?.role === 'operational_manager' ? 'Team Management' : 'Team Directory')
-    : 'Client Management';
+  let sectionName = 'Client Workspace';
+  if (isSettings) {
+    sectionName = 'Settings & Governance';
+  } else if (isProfile) {
+    sectionName = 'My Profile';
+  } else if (isTeamManagement) {
+    sectionName = profile?.role === 'owner' || profile?.role === 'operational_manager' ? 'Team Management' : 'Team Directory';
+  }
+
+  const handleReturnToWorkspace = () => {
+    navigate(selectedClientId ? `/clients/${selectedClientId}` : '/');
+    setViewMode('client_workspace');
+  };
 
   return (
     <header className="bg-white dark:bg-dark-card border-b border-gray-200 dark:border-dark-border px-6 py-3 flex items-center justify-between select-none">
       {/* Contextual Breadcrumb & Current Workspace Title */}
       <div className="flex items-center gap-2 text-xs">
-        <span className="text-brand-600 font-bold tracking-tight">FASEEH LALL & CO.</span>
+        <button
+          type="button"
+          onClick={handleReturnToWorkspace}
+          className="text-brand-600 font-bold tracking-tight hover:underline focus:outline-none"
+        >
+          FASEEH LALL & CO.
+        </button>
         <span className="text-gray-300 dark:text-gray-600">/</span>
-        <span className="text-gray-500 font-medium">Ops Hub</span>
+        <button
+          type="button"
+          onClick={handleReturnToWorkspace}
+          className="text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 font-medium transition-colors focus:outline-none"
+        >
+          Ops Hub
+        </button>
         <span className="text-gray-300 dark:text-gray-600">/</span>
         <div className="flex items-center gap-1.5 font-bold text-gray-800 dark:text-gray-200">
           <span>{sectionName}</span>
-          {!isTeamManagement && selectedClient && (
+          {!isTeamManagement && !isSettings && !isProfile && selectedClient && (
             <>
               <span className="text-gray-300 dark:text-gray-600">/</span>
               <span className="text-brand-600 dark:text-brand-400 font-bold">{selectedClient.companyName}</span>
@@ -53,8 +81,8 @@ export const Header: React.FC = () => {
         </div>
       </div>
 
-      {/* Right Controls: Theme Toggle Only */}
-      <div className="flex items-center gap-2">
+      {/* Right Controls: Theme Toggle & Top-Right Profile Menu */}
+      <div className="flex items-center gap-3">
         <button
           type="button"
           onClick={toggleTheme}
@@ -63,7 +91,11 @@ export const Header: React.FC = () => {
         >
           {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-600" />}
         </button>
+
+        {/* Authenticated Staff Profile Menu with Single Sign Out */}
+        <ProfileDropdown />
       </div>
     </header>
   );
 };
+

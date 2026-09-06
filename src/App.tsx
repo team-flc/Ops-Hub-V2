@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Routes, Route, useParams, useNavigate } from 'react-router-dom';
+import { Routes, Route, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useOpsStore } from './store/opsStore';
 import { supabaseService, mapDbTaskToTask } from './lib/supabaseService';
 import { clientManagementService } from './lib/clientManagementService';
@@ -24,6 +24,8 @@ import { OperationsDirectory } from './components/views/OperationsDirectory';
 import { TeamManagementView } from './components/views/TeamManagementView';
 import { ClientsView } from './components/views/ClientsView';
 import { ClientWorkspaceView } from './components/clients/ClientWorkspaceView';
+import { SettingsLayout } from './components/settings/SettingsLayout';
+import { MyProfileView } from './components/profile/MyProfileView';
 import { TaskModal } from './components/tasks/TaskModal';
 import { CreateTaskModal } from './components/tasks/CreateTaskModal';
 import { CommandPalette } from './components/layout/CommandPalette';
@@ -31,13 +33,13 @@ import { NewSpaceModal } from './components/spaces/NewSpaceModal';
 import { NewListModal } from './components/spaces/NewListModal';
 import { AutomationsModal } from './components/automations/AutomationsModal';
 import { Building2 } from 'lucide-react';
-import { UserProfile, ClientRecord } from './types';
+import { UserProfile, ClientRecord, SettingsTab } from './types';
 
 /**
  * Existing Internal FLC Ops Hub Workspace
  * Strictly accessible only by authenticated staff (owner, operational_manager, team_member).
  */
-export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard' | 'list' | 'client_workspace' }> = ({ initialView }) => {
+export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard' | 'list' | 'client_workspace' | 'settings' | 'profile'; initialSettingsTab?: SettingsTab }> = ({ initialView, initialSettingsTab }) => {
   const viewMode = useOpsStore((state) => state.viewMode);
   const setViewMode = useOpsStore((state) => state.setViewMode);
   const clients = useOpsStore((state) => state.clients);
@@ -47,8 +49,9 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
   const updateClientRecord = useOpsStore((state) => state.updateClientRecord);
 
   const { user, profile } = useAuth();
-  const params = useParams<{ clientId?: string }>();
+  const params = useParams<{ clientId?: string; tab?: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [eligibleManagers, setEligibleManagers] = useState<UserProfile[]>([]);
 
@@ -59,6 +62,19 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
       setViewMode('client_workspace');
     }
   }, [params.clientId, setSelectedClientId, setViewMode]);
+
+  // Synchronize route pathname with viewMode
+  useEffect(() => {
+    if (location.pathname.startsWith('/settings')) {
+      setViewMode('settings');
+    } else if (location.pathname.startsWith('/profile')) {
+      setViewMode('profile');
+    } else if (location.pathname.startsWith('/team')) {
+      setViewMode('directory');
+    } else if (location.pathname.startsWith('/clients')) {
+      setViewMode('client_workspace');
+    }
+  }, [location.pathname, setViewMode]);
 
   useEffect(() => {
     if (initialView) {
@@ -156,6 +172,17 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
   const selectedClient = clients.find((c) => c.id === selectedClientId) || clients[0] || null;
 
   const renderActiveView = () => {
+    if (location.pathname.startsWith('/settings') || viewMode === 'settings') {
+      const tabParam = params.tab || location.pathname.split('/settings/')[1];
+      return <SettingsLayout initialTab={(tabParam as SettingsTab) || initialSettingsTab || 'team'} />;
+    }
+    if (location.pathname.startsWith('/profile') || viewMode === 'profile') {
+      return <MyProfileView />;
+    }
+    if (location.pathname.startsWith('/team') || viewMode === 'directory') {
+      return isManagerOrOwner ? <TeamManagementView /> : <OperationsDirectory />;
+    }
+
     switch (viewMode) {
       case 'list':
         return <ListView />;
@@ -171,8 +198,6 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
         return <DashboardView />;
       case 'docs':
         return <DocsView />;
-      case 'directory':
-        return isManagerOrOwner ? <TeamManagementView /> : <OperationsDirectory />;
       case 'client_workspace':
       case 'clients':
       default:
@@ -253,6 +278,34 @@ export const App: React.FC = () => {
         element={
           <ProtectedRoute allowedRoles={['owner', 'operational_manager']}>
             <OpsHubWorkspace initialView="directory" />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Dedicated Settings Route for Owner and Operational Manager */}
+      <Route
+        path="/settings/:tab"
+        element={
+          <ProtectedRoute allowedRoles={['owner', 'operational_manager']}>
+            <OpsHubWorkspace initialView="settings" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/settings"
+        element={
+          <ProtectedRoute allowedRoles={['owner', 'operational_manager']}>
+            <OpsHubWorkspace initialView="settings" />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Dedicated My Profile Route for all Staff Members */}
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute allowedRoles={['owner', 'operational_manager', 'team_member']}>
+            <OpsHubWorkspace initialView="profile" />
           </ProtectedRoute>
         }
       />

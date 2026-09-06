@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { 
   Building2, User, Package, Calendar, Activity, 
   Link2, Check, AlertCircle, Save, Loader2, Plus, 
-  Trash2, Globe, ShieldCheck, ExternalLink, RefreshCw 
+  Trash2, Globe, ShieldCheck, ExternalLink, RefreshCw,
+  Camera, Upload, Archive, Briefcase, X
 } from 'lucide-react';
 
 const LinkedInIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" }) => (
@@ -26,6 +27,8 @@ import {
   calculateLinkedInReadiness,
   LinkedInProfileInput 
 } from '../../lib/clientManagementService';
+import { storageService, useSignedUrl } from '../../lib/storageService';
+import { archiveService } from '../../lib/archiveService';
 
 interface ClientDetailsTabProps {
   client: ClientRecord;
@@ -35,7 +38,7 @@ interface ClientDetailsTabProps {
 }
 
 const PACKAGES: ClientPackage[] = ['Basic', 'Intermediate', 'Advanced'];
-const STATUSES: ClientStatus[] = ['Onboarding', 'Active', 'Paused', 'Archived'];
+const STATUSES: ClientStatus[] = ['Onboarding', 'Active', 'Paused'];
 const PAUSE_REASONS: ClientPauseReason[] = [
   'Payment overdue',
   'Client request',
@@ -51,6 +54,9 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
 }) => {
   const [companyName, setCompanyName] = useState(client.companyName);
   const [clientName, setClientName] = useState(client.clientName);
+  const [businessBio, setBusinessBio] = useState(client.businessBio || '');
+  const [industry, setIndustry] = useState(client.industry || '');
+  const [logoUrl, setLogoUrl] = useState<string | null>(client.logoUrl || null);
   const [pkg, setPkg] = useState<ClientPackage>(client.package);
   const [managerId, setManagerId] = useState(client.operationalManagerId);
   const [activationDate, setActivationDate] = useState(client.activationDate);
@@ -61,6 +67,15 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
   const [requiredLinkedInCount, setRequiredLinkedInCount] = useState<number>(
     client.requiredLinkedinProfileCount || 3
   );
+
+  // Logo Upload State
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+
+  // Archive Modal State
+  const [showArchiveModal, setShowArchiveModal] = useState(false);
+  const [archiveReason, setArchiveReason] = useState('');
+  const [isArchiving, setIsArchiving] = useState(false);
+  const [archiveError, setArchiveError] = useState<string | null>(null);
 
   // Links
   const [websiteUrl, setWebsiteUrl] = useState(client.links?.website || '');
@@ -90,6 +105,9 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
   useEffect(() => {
     setCompanyName(client.companyName);
     setClientName(client.clientName);
+    setBusinessBio(client.businessBio || '');
+    setIndustry(client.industry || '');
+    setLogoUrl(client.logoUrl || null);
     setPkg(client.package);
     setManagerId(client.operationalManagerId);
     setActivationDate(client.activationDate);
@@ -107,7 +125,64 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
   }, [client]);
 
   const isTeamMember = currentUserProfile?.role === 'team_member';
+  const isManagerOrOwner = currentUserProfile?.role === 'owner' || currentUserProfile?.role === 'operational_manager';
   const readiness = calculateLinkedInReadiness(requiredLinkedInCount, profiles);
+  const displayLogoUrl = useSignedUrl('client-logos', logoUrl);
+
+  // Handle Logo Upload
+  const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const validation = storageService.validateImage(file);
+    if (!validation.isValid) {
+      setErrorMsg(validation.error || 'Invalid logo image.');
+      return;
+    }
+    setIsUploadingLogo(true);
+    setErrorMsg(null);
+    try {
+      const res = await storageService.uploadClientLogo(file, client.id);
+      if (res.error || !res.path) {
+        setErrorMsg(res.error || 'Failed to upload client logo.');
+      } else {
+        setLogoUrl(res.path);
+        setSuccessMsg('Logo uploaded successfully. Click "Save Changes" to apply.');
+        setTimeout(() => setSuccessMsg(null), 3500);
+      }
+    } catch (err: any) {
+      setErrorMsg(err?.message || 'Error uploading logo.');
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
+
+  // Archive Client Handler
+  const handleArchiveClient = async () => {
+    if (!archiveReason.trim()) {
+      setArchiveError('Mandatory archive reason is required.');
+      return;
+    }
+    setIsArchiving(true);
+    setArchiveError(null);
+    try {
+      const res = await archiveService.archiveClient(client.id, archiveReason.trim());
+      if (res.error || !res.success) {
+        setArchiveError(res.error || 'Failed to archive client.');
+      } else {
+        setShowArchiveModal(false);
+        onClientUpdated({
+          ...client,
+          status: 'Archived',
+          archivedAt: new Date().toISOString(),
+          archiveReason: archiveReason.trim()
+        });
+      }
+    } catch (err: any) {
+      setArchiveError(err?.message || 'Error archiving client.');
+    } finally {
+      setIsArchiving(false);
+    }
+  };
 
   // Save Core Client Details and Workspace Links
   const handleSaveDetails = async (e: React.FormEvent) => {
@@ -152,6 +227,9 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
         {
           companyName: companyName.trim(),
           clientName: clientName.trim(),
+          businessBio: businessBio.trim() || null,
+          industry: industry.trim() || null,
+          logoUrl: logoUrl || null,
           package: pkg,
           operationalManagerId: managerId,
           activationDate,
@@ -333,6 +411,68 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
           </button>
         </div>
 
+        {/* Client Brand Identity & Logo */}
+        <div className="p-4 rounded-xl bg-gray-50 dark:bg-dark-100 border border-gray-200 dark:border-dark-border space-y-3">
+          <div className="text-[11px] font-bold uppercase tracking-wider text-brand-600 dark:text-brand-400 flex items-center gap-1.5">
+            <Building2 className="w-3.5 h-3.5" />
+            <span>Brand Identity & Organization Logo</span>
+          </div>
+          <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
+            <div className="relative group flex-shrink-0">
+              {displayLogoUrl ? (
+                <img
+                  src={displayLogoUrl}
+                  alt={companyName}
+                  className="w-16 h-16 rounded-2xl object-contain border border-gray-200 dark:border-dark-border p-1 bg-white shadow-sm"
+                />
+              ) : (
+                <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-brand-600 to-indigo-600 text-white font-black text-lg flex items-center justify-center shadow-sm">
+                  {companyName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'CL'}
+                </div>
+              )}
+              <label
+                htmlFor="client-logo-upload"
+                className="absolute inset-0 bg-black/60 backdrop-blur-[1px] rounded-2xl opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white cursor-pointer transition-all duration-200 text-center p-1"
+              >
+                {isUploadingLogo ? (
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                ) : (
+                  <>
+                    <Camera className="w-4 h-4 mb-0.5" />
+                    <span className="text-[8px] font-bold leading-tight">Change</span>
+                  </>
+                )}
+              </label>
+              <input
+                id="client-logo-upload"
+                type="file"
+                accept="image/jpeg,image/png,image/webp"
+                onChange={handleLogoUpload}
+                className="hidden"
+                disabled={isUploadingLogo || isSaving}
+              />
+            </div>
+            <div className="flex-1 space-y-1 text-center sm:text-left">
+              <h4 className="text-xs font-bold text-gray-900 dark:text-gray-100">
+                Client Brand Logo
+              </h4>
+              <p className="text-[11px] text-gray-500 dark:text-gray-400 max-w-md">
+                Displayed in the Client Switcher, header breadcrumbs, and task workspaces. Allowed: JPG, PNG, WebP up to 5MB.
+              </p>
+              {logoUrl && (
+                <button
+                  type="button"
+                  onClick={() => setLogoUrl(null)}
+                  className="text-[11px] text-rose-500 hover:text-rose-600 font-semibold inline-flex items-center gap-1 mt-1"
+                >
+                  <Trash2 className="w-3 h-3" />
+                  <span>Remove Logo</span>
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* Section 1: Core Client Information */}
         <div className="space-y-4">
           <div className="text-[11px] font-bold uppercase tracking-wider text-brand-600 dark:text-brand-400 flex items-center gap-1.5">
@@ -371,6 +511,22 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
               />
             </div>
 
+            {/* Industry / Category */}
+            <div>
+              <label htmlFor="detail-industry" className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
+                Industry / Category
+              </label>
+              <input
+                id="detail-industry"
+                type="text"
+                value={industry}
+                onChange={(e) => setIndustry(e.target.value)}
+                placeholder="e.g. B2B SaaS, E-Commerce, Logistics"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+              />
+            </div>
+
+            {/* Service Package */}
             <div>
               <label htmlFor="detail-package" className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
                 Service Package <span className="text-rose-500">*</span>
@@ -453,6 +609,21 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 onChange={(e) => setRequiredLinkedInCount(Math.max(1, parseInt(e.target.value) || 1))}
                 disabled={isTeamMember}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60"
+              />
+            </div>
+
+            {/* Business Bio / Description */}
+            <div className="sm:col-span-2">
+              <label htmlFor="detail-business-bio" className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
+                Business Bio / "What the client does"
+              </label>
+              <textarea
+                id="detail-business-bio"
+                rows={3}
+                value={businessBio}
+                onChange={(e) => setBusinessBio(e.target.value)}
+                placeholder="Brief description of the client's business model, target audience, and primary service offerings..."
+                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 resize-y"
               />
             </div>
           </div>
@@ -787,6 +958,99 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
           </div>
         </div>
       </div>
+
+      {/* Archive Client Danger Zone (Owner & Operational Manager Only) */}
+      {isManagerOrOwner && client.status !== 'Archived' && (
+        <div className="bg-rose-50/60 dark:bg-rose-950/20 border border-rose-200 dark:border-rose-900/40 rounded-2xl p-6 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <h4 className="text-sm font-bold text-rose-700 dark:text-rose-400 flex items-center gap-2">
+              <Archive className="w-4 h-4" />
+              <span>Archive Client Workspace</span>
+            </h4>
+            <p className="text-xs text-rose-600/80 dark:text-rose-400/70 max-w-xl">
+              Soft-archive this client. All historical tasks, access history, and links will be preserved, and the workspace can be safely restored from Settings → Archive Center.
+            </p>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setArchiveReason('');
+              setArchiveError(null);
+              setShowArchiveModal(true);
+            }}
+            className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shadow-sm transition-all flex-shrink-0 flex items-center gap-1.5"
+          >
+            <Archive className="w-3.5 h-3.5" />
+            <span>Archive Client</span>
+          </button>
+        </div>
+      )}
+
+      {/* Archive Client Confirmation Modal */}
+      {showArchiveModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div className="bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4 animate-scale-up">
+            <div className="flex items-center justify-between border-b border-gray-100 dark:border-dark-border pb-3">
+              <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400 font-bold text-sm">
+                <Archive className="w-4 h-4" />
+                <span>Confirm Archive Client</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowArchiveModal(false)}
+                className="p-1 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-200"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-600 dark:text-gray-300">
+              You are archiving <strong className="text-gray-900 dark:text-gray-100">{client.companyName}</strong>. This client will be hidden from the active switcher and task creation will be suspended.
+            </p>
+
+            {archiveError && (
+              <div className="p-3 rounded-xl bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-600 dark:text-rose-400 text-xs font-medium flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{archiveError}</span>
+              </div>
+            )}
+
+            <div>
+              <label htmlFor="modal-archive-reason" className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1">
+                Mandatory Archive Reason <span className="text-rose-500">*</span>
+              </label>
+              <textarea
+                id="modal-archive-reason"
+                rows={3}
+                value={archiveReason}
+                onChange={(e) => setArchiveReason(e.target.value)}
+                placeholder="e.g. Contract ended, client churned, or service paused indefinitely..."
+                className="w-full px-3 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-gray-50 dark:bg-dark-100 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-rose-500/30"
+              />
+            </div>
+
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-gray-100 dark:border-dark-border">
+              <button
+                type="button"
+                onClick={() => setShowArchiveModal(false)}
+                disabled={isArchiving}
+                className="px-4 py-2 rounded-xl border border-gray-200 dark:border-dark-border text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-dark-100"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={handleArchiveClient}
+                disabled={isArchiving || !archiveReason.trim()}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold flex items-center gap-1.5 disabled:opacity-50"
+              >
+                {isArchiving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
+                <span>Confirm Archive</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

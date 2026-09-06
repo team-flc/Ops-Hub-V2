@@ -136,6 +136,9 @@ export interface DuplicateClientInput {
 export interface UpdateClientInput {
   companyName?: string;
   clientName?: string;
+  businessBio?: string | null;
+  industry?: string | null;
+  logoUrl?: string | null;
   package?: ClientPackage;
   operationalManagerId?: string;
   activationDate?: string;
@@ -162,10 +165,14 @@ export const clientManagementService = {
           id,
           company_name,
           client_name,
+          business_bio,
+          industry,
+          logo_url,
           package,
           operational_manager_id,
           activation_date,
           status,
+          previous_status,
           pause_reason,
           required_linkedin_profile_count,
           source_client_id,
@@ -173,6 +180,8 @@ export const clientManagementService = {
           created_at,
           updated_at,
           archived_at,
+          archived_by,
+          archive_reason,
           manager:operational_manager_id (
             id,
             full_name
@@ -239,11 +248,15 @@ export const clientManagementService = {
           id: c.id,
           companyName: c.company_name,
           clientName: c.client_name,
+          businessBio: c.business_bio,
+          industry: c.industry,
+          logoUrl: c.logo_url,
           package: c.package as ClientPackage,
           operationalManagerId: c.operational_manager_id,
           operationalManagerName: mgr?.full_name || 'Assigned Manager',
           activationDate: c.activation_date,
           status: c.status as ClientStatus,
+          previousStatus: c.previous_status,
           pauseReason: c.pause_reason as ClientPauseReason | null,
           requiredLinkedinProfileCount: c.required_linkedin_profile_count || 3,
           linkedinProfiles: linkedinMap[c.id] || [],
@@ -252,7 +265,9 @@ export const clientManagementService = {
           createdBy: c.created_by,
           createdAt: c.created_at,
           updatedAt: c.updated_at,
-          archivedAt: c.archived_at
+          archivedAt: c.archived_at,
+          archivedBy: c.archived_by,
+          archiveReason: c.archive_reason
         };
       });
 
@@ -276,10 +291,14 @@ export const clientManagementService = {
           id,
           company_name,
           client_name,
+          business_bio,
+          industry,
+          logo_url,
           package,
           operational_manager_id,
           activation_date,
           status,
+          previous_status,
           pause_reason,
           required_linkedin_profile_count,
           source_client_id,
@@ -287,6 +306,8 @@ export const clientManagementService = {
           created_at,
           updated_at,
           archived_at,
+          archived_by,
+          archive_reason,
           manager:operational_manager_id (
             id,
             full_name
@@ -338,11 +359,15 @@ export const clientManagementService = {
         id: c.id,
         companyName: c.company_name,
         clientName: c.client_name,
+        businessBio: c.business_bio,
+        industry: c.industry,
+        logoUrl: c.logo_url,
         package: c.package as ClientPackage,
         operationalManagerId: c.operational_manager_id,
         operationalManagerName: clientMgr?.full_name || 'Assigned Manager',
         activationDate: c.activation_date,
         status: c.status as ClientStatus,
+        previousStatus: c.previous_status,
         pauseReason: c.pause_reason as ClientPauseReason | null,
         requiredLinkedinProfileCount: c.required_linkedin_profile_count || 3,
         linkedinProfiles,
@@ -351,7 +376,9 @@ export const clientManagementService = {
         createdBy: c.created_by,
         createdAt: c.created_at,
         updatedAt: c.updated_at,
-        archivedAt: c.archived_at
+        archivedAt: c.archived_at,
+        archivedBy: c.archived_by,
+        archiveReason: c.archive_reason
       };
     } catch (err) {
       console.error('Error fetching client by ID:', err);
@@ -663,6 +690,10 @@ export const clientManagementService = {
       return { error: 'Database connection is not configured.' };
     }
 
+    if ((input.status as string) === 'Archived') {
+      return { error: 'Direct archival through update is prohibited. Use the dedicated Archive flow with a mandatory reason.' };
+    }
+
     try {
       const { data: previousClient } = await supabase
         .from('clients')
@@ -670,12 +701,19 @@ export const clientManagementService = {
         .eq('id', clientId)
         .single();
 
+      if (previousClient?.status === 'Archived') {
+        return { error: 'Direct modification or restoration of an Archived client is prohibited. Use the dedicated Restore flow.' };
+      }
+
       const updates: any = {
         updated_at: new Date().toISOString()
       };
 
       if (input.companyName !== undefined) updates.company_name = input.companyName.trim();
       if (input.clientName !== undefined) updates.client_name = input.clientName.trim();
+      if (input.businessBio !== undefined) updates.business_bio = input.businessBio?.trim() || null;
+      if (input.industry !== undefined) updates.industry = input.industry?.trim() || null;
+      if (input.logoUrl !== undefined) updates.logo_url = input.logoUrl;
       if (input.package !== undefined) updates.package = input.package;
       if (input.operationalManagerId !== undefined) updates.operational_manager_id = input.operationalManagerId;
       if (input.activationDate !== undefined) updates.activation_date = input.activationDate;
@@ -686,11 +724,12 @@ export const clientManagementService = {
         updates.status = input.status;
         if (input.status === 'Paused') {
           updates.pause_reason = input.pauseReason || 'Operational reason';
-        } else {
+          updates.paused_at = new Date().toISOString();
+          updates.paused_by = actorId || null;
+        } else if (previousClient?.status === 'Paused') {
           updates.pause_reason = null;
-        }
-        if (input.status === 'Archived') {
-          updates.archived_at = new Date().toISOString();
+          updates.paused_at = null;
+          updates.paused_by = null;
         }
       }
 

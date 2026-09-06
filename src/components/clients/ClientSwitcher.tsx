@@ -4,10 +4,12 @@ import {
   Plus, Copy, Check, AlertCircle, RefreshCw, Loader2 
 } from 'lucide-react';
 import { ClientRecord } from '../../types';
+import { useSignedUrl } from '../../lib/storageService';
 
 interface ClientSwitcherProps {
   clients: ClientRecord[];
   selectedClient: ClientRecord | null;
+  currentUserRole?: string;
   isLoading?: boolean;
   fetchError?: string | null;
   onRetry?: () => void;
@@ -22,9 +24,49 @@ const PACKAGE_BADGE_STYLES: Record<string, string> = {
   Advanced: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
 };
 
+const ClientLogoAvatar: React.FC<{
+  logoUrl?: string | null;
+  companyName: string;
+  sizeClass?: string;
+  isSelected?: boolean;
+}> = ({
+  logoUrl,
+  companyName,
+  sizeClass = 'w-8 h-8 rounded-xl',
+  isSelected = false
+}) => {
+  const displayUrl = useSignedUrl('client-logos', logoUrl);
+  const initials = companyName
+    ? companyName.split(' ').map((w) => w[0]).join('').substring(0, 2).toUpperCase()
+    : 'CL';
+
+  if (displayUrl) {
+    return (
+      <img
+        src={displayUrl}
+        alt={companyName}
+        className={`${sizeClass} object-contain border border-gray-200 dark:border-dark-border p-0.5 bg-white flex-shrink-0`}
+      />
+    );
+  }
+
+  return (
+    <div
+      className={`${sizeClass} ${
+        isSelected
+          ? 'bg-brand-500 text-white shadow-sm'
+          : 'bg-gradient-to-tr from-brand-600 to-indigo-600 text-white shadow-sm'
+      } font-black text-xs flex items-center justify-center flex-shrink-0`}
+    >
+      {initials}
+    </div>
+  );
+};
+
 export const ClientSwitcher: React.FC<ClientSwitcherProps> = ({
   clients,
   selectedClient,
+  currentUserRole,
   isLoading = false,
   fetchError = null,
   onRetry,
@@ -32,6 +74,7 @@ export const ClientSwitcher: React.FC<ClientSwitcherProps> = ({
   onOpenCreateModal,
   onOpenDuplicateModal
 }) => {
+  const isManagerOrOwner = currentUserRole ? (currentUserRole === 'owner' || currentUserRole === 'operational_manager') : true;
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const popoverRef = useRef<HTMLDivElement>(null);
@@ -91,11 +134,14 @@ export const ClientSwitcher: React.FC<ClientSwitcherProps> = ({
         title="Switch Client Workspace"
       >
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-7 h-7 rounded-lg bg-brand-500 text-white font-black text-xs flex items-center justify-center flex-shrink-0 shadow-sm">
-            {selectedClient ? getClientInitials(selectedClient.companyName) : <Building2 className="w-4 h-4" />}
-          </div>
-          <div className="min-w-0">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-gray-400 block leading-tight">
+          <ClientLogoAvatar
+            logoUrl={selectedClient?.logoUrl}
+            companyName={selectedClient?.companyName || 'FL'}
+            sizeClass="w-8 h-8 rounded-xl"
+          />
+
+          <div className="min-w-0 text-left">
+            <span className="text-[10px] font-bold uppercase tracking-wider text-brand-600 dark:text-brand-400 block truncate">
               Client Workspace
             </span>
             <span className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate block">
@@ -207,41 +253,53 @@ export const ClientSwitcher: React.FC<ClientSwitcherProps> = ({
                           : 'hover:bg-gray-100 dark:hover:bg-dark-100 border border-transparent'
                       }`}
                     >
-                      {/* Left: Initials + Company Name */}
+                      {/* Left: Logo/Initials + Company Name + Status */}
                       <div className="flex items-center gap-2.5 min-w-0 pr-2">
-                        <div className={`w-7 h-7 rounded-lg font-black text-xs flex items-center justify-center flex-shrink-0 ${
-                          isSelected
-                            ? 'bg-brand-500 text-white shadow-sm'
-                            : 'bg-gray-200 dark:bg-dark-200 text-gray-700 dark:text-gray-300'
-                        }`}>
-                          {getClientInitials(client.companyName)}
-                        </div>
+                        <ClientLogoAvatar
+                          logoUrl={client.logoUrl}
+                          companyName={client.companyName}
+                          sizeClass="w-7 h-7 rounded-lg"
+                          isSelected={isSelected}
+                        />
                         <div className="min-w-0">
                           <span className={`text-xs font-bold truncate block ${
                             isSelected ? 'text-brand-600 dark:text-brand-400' : 'text-gray-900 dark:text-gray-100'
                           }`}>
                             {client.companyName}
                           </span>
-                          <span className="text-[10px] text-gray-400 truncate block">
-                            {client.clientName}
-                          </span>
+                          <div className="flex items-center gap-1.5 mt-0.5">
+                            <span className="text-[10px] text-gray-400 truncate">
+                              {client.clientName}
+                            </span>
+                            <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full border ${
+                              client.status === 'Active'
+                                ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
+                                : client.status === 'Onboarding'
+                                ? 'bg-indigo-500/10 text-indigo-600 dark:text-indigo-400 border-indigo-500/20'
+                                : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                            }`}>
+                              {client.status}
+                            </span>
+                          </div>
                         </div>
                       </div>
 
                       {/* Right: Small Duplicate Icon + Package Label */}
                       <div className="flex items-center gap-1.5 flex-shrink-0">
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setIsOpen(false);
-                            onOpenDuplicateModal(client);
-                          }}
-                          className="p-1 rounded-md text-gray-400 hover:text-purple-600 hover:bg-purple-500/10 transition-colors"
-                          title={`Duplicate Client: ${client.companyName}`}
-                        >
-                          <Copy className="w-3.5 h-3.5" />
-                        </button>
+                        {isManagerOrOwner && (
+                          <button
+                            type="button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setIsOpen(false);
+                              onOpenDuplicateModal(client);
+                            }}
+                            className="p-1 rounded-md text-gray-400 hover:text-purple-600 hover:bg-purple-500/10 transition-colors"
+                            title={`Duplicate Client: ${client.companyName}`}
+                          >
+                            <Copy className="w-3.5 h-3.5" />
+                          </button>
+                        )}
 
                         <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badgeStyle}`}>
                           {client.package}
