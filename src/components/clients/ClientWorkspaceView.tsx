@@ -12,8 +12,13 @@ import { ClientDetailsTab } from './ClientDetailsTab';
 import { ClientTaskCard } from '../tasks/ClientTaskCard';
 import { CreateClientTaskModal } from '../tasks/CreateClientTaskModal';
 import { EditClientTaskModal } from '../tasks/EditClientTaskModal';
+import { TaskTemplate } from '../../types';
 import { taskManagementService } from '../../lib/taskManagementService';
 
+import { TaskCreationModeModal } from '../tasks/TaskCreationModeModal';
+const TaskTemplatePickerModal = React.lazy(() =>
+  import('../tasks/TaskTemplatePickerModal').then((m) => ({ default: m.TaskTemplatePickerModal }))
+);
 const ClientTaskDetailsModal = React.lazy(() =>
   import('../tasks/ClientTaskDetailsModal').then((m) => ({ default: m.ClientTaskDetailsModal }))
 );
@@ -48,9 +53,41 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
   const [eligibleAssignees, setEligibleAssignees] = useState<UserProfile[]>([]);
 
   // Modals
+  const [isModeModalOpen, setIsModeModalOpen] = useState(false);
+  const [isTemplatePickerOpen, setIsTemplatePickerOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [selectedTemplateForCreation, setSelectedTemplateForCreation] = useState<TaskTemplate | null>(null);
+  const [modalWeekNumber, setModalWeekNumber] = useState<1 | 2 | 3 | 4>(1);
   const [editingTask, setEditingTask] = useState<ClientTask | null>(null);
   const [selectedTaskDetails, setSelectedTaskDetails] = useState<ClientTask | null>(null);
+
+  const handleOpenCreateTaskFlow = () => {
+    setModalWeekNumber(currentWeekNum);
+    setIsModeModalOpen(true);
+  };
+
+  const handleSelectMode = (mode: 'template' | 'blank', week: 1 | 2 | 3 | 4) => {
+    setModalWeekNumber(week);
+    setIsModeModalOpen(false);
+    if (mode === 'template') {
+      setIsTemplatePickerOpen(true);
+    } else {
+      setSelectedTemplateForCreation(null);
+      setIsCreateModalOpen(true);
+    }
+  };
+
+  const handleSelectTemplate = (template: TaskTemplate) => {
+    setSelectedTemplateForCreation(template);
+    setIsTemplatePickerOpen(false);
+    setIsCreateModalOpen(true);
+  };
+
+  const handleCreateBlankFromPicker = () => {
+    setSelectedTemplateForCreation(null);
+    setIsTemplatePickerOpen(false);
+    setIsCreateModalOpen(true);
+  };
 
   const isOwnerOrManager = currentUserProfile?.role === 'owner' || currentUserProfile?.role === 'operational_manager';
 
@@ -253,7 +290,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                   ) : (
                     <button
                       type="button"
-                      onClick={() => setIsCreateModalOpen(true)}
+                      onClick={handleOpenCreateTaskFlow}
                       className="flex items-center gap-1.5 px-4 py-2 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-xs font-bold shadow-md shadow-brand-500/25 hover:scale-[1.02] active:scale-[0.98] transition-all"
                     >
                       <Plus className="w-4 h-4" />
@@ -308,16 +345,51 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
         )}
       </div>
 
-      {/* Modals */}
+      {/* Task Creation Entry Flow Modals */}
+      {isModeModalOpen && (
+        <React.Suspense fallback={null}>
+          <TaskCreationModeModal
+            key={`mode-modal-week-${modalWeekNumber}`}
+            isOpen={isModeModalOpen}
+            onClose={() => setIsModeModalOpen(false)}
+            onSelectMode={handleSelectMode}
+            client={client}
+            weekNumber={modalWeekNumber}
+          />
+        </React.Suspense>
+      )}
+
+      {isTemplatePickerOpen && (
+        <React.Suspense fallback={null}>
+          <TaskTemplatePickerModal
+            key={`template-picker-week-${modalWeekNumber}`}
+            isOpen={isTemplatePickerOpen}
+            onClose={() => setIsTemplatePickerOpen(false)}
+            onSelectTemplate={handleSelectTemplate}
+            onCreateBlankInstead={handleCreateBlankFromPicker}
+            client={client}
+            weekNumber={modalWeekNumber}
+            departments={departments}
+          />
+        </React.Suspense>
+      )}
+
       <CreateClientTaskModal
-        key={`create-modal-week-${currentWeekNum}`}
+        key={`create-modal-week-${modalWeekNumber}-${selectedTemplateForCreation?.id || 'blank'}`}
         isOpen={isCreateModalOpen}
-        onClose={() => setIsCreateModalOpen(false)}
-        onSuccess={handleTaskCreated}
+        onClose={() => {
+          setIsCreateModalOpen(false);
+          setSelectedTemplateForCreation(null);
+        }}
+        onSuccess={(newTask) => {
+          handleTaskCreated(newTask);
+          setSelectedTemplateForCreation(null);
+        }}
         client={client}
-        weekNumber={currentWeekNum}
+        weekNumber={modalWeekNumber}
         departments={departments}
         eligibleAssignees={eligibleAssignees}
+        initialTemplate={selectedTemplateForCreation}
       />
 
       {editingTask && (
