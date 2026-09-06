@@ -5,13 +5,18 @@
 // ==============================================================================
 
 import { supabase, isSupabaseConfigured } from './supabase';
-import { 
-  ClientTask, 
-  ClientTaskEvent, 
-  ClientTaskPriority, 
-  ClientTaskStatus, 
-  Department, 
-  UserProfile 
+import {
+  ClientTask,
+  ClientTaskEvent,
+  ClientTaskPriority,
+  ClientTaskStatus,
+  Department,
+  UserProfile,
+  TaskApprovalMode,
+  TaskExternalLink,
+  TaskMessage,
+  TaskMessageVisibility,
+  TaskReadState
 } from '../types';
 
 export function isSunday(dateInput: string | Date): boolean {
@@ -46,11 +51,109 @@ export function isSunday(dateInput: string | Date): boolean {
   return false;
 }
 
+export function isSaturday(dateInput: string | Date): boolean {
+  if (!dateInput) return false;
+  if (typeof dateInput === 'string') {
+    const trimmed = dateInput.trim();
+    if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+      const [y, m, d] = trimmed.split('-').map(Number);
+      const dt = new Date(Date.UTC(y, m - 1, d));
+      return dt.getUTCDay() === 6;
+    }
+  }
+
+  const d = new Date(dateInput);
+  if (isNaN(d.getTime())) return false;
+  if (d.getUTCDay() === 6) return true;
+
+  try {
+    const pktDay = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Karachi',
+      weekday: 'short'
+    }).format(d);
+    if (pktDay === 'Sat') return true;
+  } catch {
+    // Fallback
+  }
+
+  return false;
+}
+
+export function isWeekend(dateInput: string | Date): boolean {
+  return isSunday(dateInput) || isSaturday(dateInput);
+}
+
+export function rollForwardToNextMonday(dateInput: string | Date): string {
+  let d: Date;
+  if (typeof dateInput === 'string' && /^\d{4}-\d{2}-\d{2}$/.test(dateInput.trim())) {
+    const [y, m, day] = dateInput.trim().split('-').map(Number);
+    d = new Date(Date.UTC(y, m - 1, day));
+  } else {
+    d = new Date(dateInput);
+  }
+  if (isNaN(d.getTime())) return '';
+
+  while (d.getUTCDay() === 0 || d.getUTCDay() === 6) {
+    d.setUTCDate(d.getUTCDate() + 1);
+  }
+
+  const yyyy = d.getUTCFullYear();
+  const mm = String(d.getUTCMonth() + 1).padStart(2, '0');
+  const dd = String(d.getUTCDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+export function validateHttpsLink(urlStr: string): { valid: boolean; error?: string; sanitized?: string } {
+  if (!urlStr || typeof urlStr !== 'string') {
+    return { valid: false, error: 'URL is required.' };
+  }
+  const trimmed = urlStr.trim();
+  if (trimmed.length > 2048) {
+    return { valid: false, error: 'URL exceeds maximum length of 2,048 characters.' };
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return { valid: false, error: 'Invalid URL format.' };
+  }
+  if (parsed.protocol.toLowerCase() !== 'https:') {
+    return { valid: false, error: 'Only HTTPS links are permitted.' };
+  }
+  if (parsed.username || parsed.password) {
+    return { valid: false, error: 'URLs with embedded credentials are not permitted.' };
+  }
+  return { valid: true, sanitized: parsed.href };
+}
+
+export function validateMessageLinks(links: any[]): { valid: boolean; error?: string; validatedLinks?: TaskExternalLink[] } {
+  if (!Array.isArray(links)) {
+    return { valid: true, validatedLinks: [] };
+  }
+  if (links.length > 5) {
+    return { valid: false, error: 'Maximum of 5 external links per item.' };
+  }
+  const validatedLinks: TaskExternalLink[] = [];
+  for (const item of links) {
+    const rawUrl = typeof item === 'string' ? item : item?.url;
+    const rawTitle = typeof item === 'object' ? item?.title : undefined;
+    const res = validateHttpsLink(rawUrl);
+    if (!res.valid) {
+      return { valid: false, error: res.error };
+    }
+    validatedLinks.push({
+      url: res.sanitized!,
+      title: rawTitle && typeof rawTitle === 'string' ? rawTitle.trim().slice(0, 100) : undefined
+    });
+  }
+  return { valid: true, validatedLinks };
+}
+
 export function isTaskOverdue(task: { dueDate: string; status: ClientTaskStatus; archivedAt?: string | null }): boolean {
   if (task.archivedAt) return false;
-  if (task.status === 'Team Review') return false; // In internal review, not overdue in Phase 3A
+  if (task.status === 'Team Review' || task.status === 'Client Review' || task.status === 'Completed') return false;
   if (!['Draft', 'Assigned', 'In Progress', 'Blocked'].includes(task.status)) return false;
-  
+
   const due = new Date(task.dueDate).getTime();
   if (isNaN(due)) return false;
   return Date.now() > due;
@@ -77,8 +180,14 @@ export function validateTaskDates(plannedStart: string, dueDate: string): { vali
   if (isSunday(plannedStart)) {
     return { valid: false, error: 'Planned start date cannot fall on a Sunday.' };
   }
+  if (isSaturday(plannedStart)) {
+    return { valid: false, error: 'Planned start date cannot fall on a Saturday.' };
+  }
   if (isSunday(dueDate)) {
     return { valid: false, error: 'Due date cannot fall on a Sunday.' };
+  }
+  if (isSaturday(dueDate)) {
+    return { valid: false, error: 'Due date cannot fall on a Saturday.' };
   }
 
   if (dueTime <= startTime) {
@@ -96,6 +205,7 @@ export interface CreateTaskParams {
   departmentId: string;
   assigneeId?: string;
   priority?: ClientTaskPriority;
+  approvalMode?: TaskApprovalMode;
   plannedStart: string;
   dueDate: string;
 }
@@ -106,6 +216,7 @@ export interface UpdateTaskParams {
   details?: string;
   departmentId?: string;
   priority?: ClientTaskPriority;
+  approvalMode?: TaskApprovalMode;
   plannedStart?: string;
   dueDate?: string;
 }
@@ -187,7 +298,7 @@ export const taskManagementService = {
       const eligible = profiles.filter((p: any) => {
         if (p.archived_at) return false;
         if (p.role === 'client') return false;
-        
+
         const hasClientAccess = (p.role === 'owner' || p.role === 'operational_manager') || permittedProfileIds.has(p.id);
         if (!hasClientAccess) return false;
 
@@ -237,6 +348,7 @@ export const taskManagementService = {
         .select(`
           id, client_id, week_number, title, details, department_id,
           assignee_id, priority, planned_start, due_date, status,
+          approval_mode, completed_at, completed_by, reopened_at, reopened_by, reopen_reason,
           blocked_reason, sort_order, created_by, created_at,
           updated_by, updated_at, archived_at, archived_by, archive_reason,
           departments(id, name),
@@ -265,7 +377,7 @@ export const taskManagementService = {
           archivedAt: row.archived_at
         });
 
-        const isAssigneeEligible = row.assignee 
+        const isAssigneeEligible = row.assignee
           ? row.assignee.status === 'active' && row.assignee.role !== 'client'
           : true;
 
@@ -285,6 +397,12 @@ export const taskManagementService = {
           plannedStart: row.planned_start,
           dueDate: row.due_date,
           status: row.status,
+          approvalMode: (row.approval_mode as TaskApprovalMode) || 'Internal Only',
+          completedAt: row.completed_at || null,
+          completedBy: row.completed_by || null,
+          reopenedAt: row.reopened_at || null,
+          reopenedBy: row.reopened_by || null,
+          reopenReason: row.reopen_reason || null,
           blockedReason: row.blocked_reason,
           sortOrder: row.sort_order || 0,
           createdBy: row.created_by,
@@ -338,6 +456,211 @@ export const taskManagementService = {
     } catch (err: any) {
       console.warn('Exception loading task events:', err?.message);
       return [];
+    }
+  },
+
+  /**
+   * Fetch Task Conversation Feed (combines human messages and system lifecycle events)
+   * Supports cursor pagination with newest 30 items initially.
+   */
+  async fetchTaskFeed(taskId: string, beforeTimestamp?: string, limit = 30): Promise<{
+    messages: TaskMessage[];
+    events: ClientTaskEvent[];
+    combinedFeed: Array<{ type: 'message' | 'event'; data: TaskMessage | ClientTaskEvent; timestamp: string }>;
+    nextCursor: string | null;
+    hasMore: boolean;
+  }> {
+    if (!isSupabaseConfigured || !supabase || !taskId) {
+      return { messages: [], events: [], combinedFeed: [], nextCursor: null, hasMore: false };
+    }
+
+    try {
+      // 1. Fetch messages
+      let msgQuery = supabase
+        .from('client_task_messages')
+        .select(`
+          id, task_id, client_id, author_id, visibility, content, links, created_at,
+          author:profiles!author_id(id, full_name, role)
+        `)
+        .eq('task_id', taskId)
+        .order('created_at', { ascending: false })
+        .limit(limit + 1);
+
+      if (beforeTimestamp) {
+        msgQuery = msgQuery.lt('created_at', beforeTimestamp);
+      }
+
+      // 2. Fetch events
+      let evtQuery = supabase
+        .from('client_task_events')
+        .select(`
+          id, task_id, client_id, actor_id, event_type,
+          previous_state, new_state, notes, created_at,
+          actor:profiles!actor_id(id, full_name)
+        `)
+        .eq('task_id', taskId)
+        .order('created_at', { ascending: false })
+        .limit(limit + 1);
+
+      if (beforeTimestamp) {
+        evtQuery = evtQuery.lt('created_at', beforeTimestamp);
+      }
+
+      const [msgRes, evtRes] = await Promise.all([msgQuery, evtQuery]);
+
+      const rawMsgs = msgRes.data || [];
+      const rawEvts = evtRes.data || [];
+
+      const messages: TaskMessage[] = rawMsgs.slice(0, limit).map((m: any) => ({
+        id: m.id,
+        taskId: m.task_id,
+        clientId: m.client_id,
+        authorId: m.author_id,
+        authorName: m.author?.full_name || 'Staff Member',
+        authorRole: m.author?.role || 'team_member',
+        visibility: m.visibility,
+        content: m.content,
+        links: Array.isArray(m.links) ? m.links : [],
+        createdAt: m.created_at
+      }));
+
+      const events: ClientTaskEvent[] = rawEvts.slice(0, limit).map((e: any) => ({
+        id: e.id,
+        taskId: e.task_id,
+        clientId: e.client_id,
+        actorId: e.actor_id,
+        actorName: e.actor?.full_name || 'System / Staff',
+        eventType: e.event_type,
+        previousState: e.previous_state,
+        newState: e.new_state,
+        notes: e.notes,
+        createdAt: e.created_at
+      }));
+
+      const combined: Array<{ type: 'message' | 'event'; data: TaskMessage | ClientTaskEvent; timestamp: string }> = [
+        ...messages.map((m) => ({ type: 'message' as const, data: m, timestamp: m.createdAt })),
+        ...events.map((e) => ({ type: 'event' as const, data: e, timestamp: e.createdAt }))
+      ];
+
+      // Sort chronologically ascending for display in chat feed
+      combined.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+      const hasMore = rawMsgs.length > limit || rawEvts.length > limit;
+      const earliestTimestamp = combined.length > 0 ? combined[0].timestamp : null;
+
+      return {
+        messages,
+        events,
+        combinedFeed: combined,
+        nextCursor: hasMore ? earliestTimestamp : null,
+        hasMore
+      };
+    } catch (err: any) {
+      console.warn('Exception loading task feed:', err?.message);
+      return { messages: [], events: [], combinedFeed: [], nextCursor: null, hasMore: false };
+    }
+  },
+
+  /**
+   * Subscribe to single Realtime channel for currently open task feed
+   */
+  subscribeToTaskFeed(taskId: string, onUpdate: (payload: any) => void): () => void {
+    if (!isSupabaseConfigured || !supabase || !taskId) {
+      return () => {};
+    }
+
+    const channel = supabase.channel(`task-feed-${taskId}`)
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'client_task_messages', filter: `task_id=eq.${taskId}` },
+        (payload) => onUpdate(payload)
+      )
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'client_task_events', filter: `task_id=eq.${taskId}` },
+        (payload) => onUpdate(payload)
+      )
+      .subscribe();
+
+    return () => {
+      if (supabase) {
+        supabase.removeChannel(channel);
+      }
+    };
+  },
+
+  /**
+   * Post human comment + HTTPS external links (Append-only)
+   */
+  async createTaskMessage(params: {
+    taskId: string;
+    clientId: string;
+    visibility: TaskMessageVisibility;
+    content: string;
+    links?: TaskExternalLink[];
+  }): Promise<{ data: TaskMessage | null; error: string | null }> {
+    if (!params.content || !params.content.trim()) {
+      return { data: null, error: 'Message content cannot be empty.' };
+    }
+    if (params.content.length > 5000) {
+      return { data: null, error: 'Message content cannot exceed 5,000 characters.' };
+    }
+    const linkValidation = validateMessageLinks(params.links || []);
+    if (!linkValidation.valid) {
+      return { data: null, error: linkValidation.error || 'Invalid links.' };
+    }
+
+    const edgeRes = await this.invokeEdgeFunction('create_message', {
+      task_id: params.taskId,
+      client_id: params.clientId,
+      visibility: params.visibility,
+      content: params.content.trim(),
+      links: linkValidation.validatedLinks || []
+    });
+
+    if (edgeRes.error || !edgeRes.data?.message) {
+      return { data: null, error: edgeRes.error || 'Failed to post message.' };
+    }
+
+    return { data: edgeRes.data.message, error: null };
+  },
+
+  /**
+   * Mark task as read (one row per user/task)
+   */
+  async markTaskRead(taskId: string, profileId?: string): Promise<void> {
+    if (!isSupabaseConfigured || !supabase || !taskId) return;
+    try {
+      const user = profileId ? { id: profileId } : (await supabase.auth.getUser()).data.user;
+      if (!user) return;
+      await supabase.from('client_task_read_states').upsert({
+        task_id: taskId,
+        profile_id: user.id,
+        last_read_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'task_id,profile_id' });
+    } catch {
+      // Non-blocking
+    }
+  },
+
+  /**
+   * Fetch task read state for current user
+   */
+  async fetchTaskReadState(taskId: string): Promise<TaskReadState | null> {
+    if (!isSupabaseConfigured || !supabase || !taskId) return null;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return null;
+      const { data } = await supabase
+        .from('client_task_read_states')
+        .select('*')
+        .eq('task_id', taskId)
+        .eq('profile_id', user.id)
+        .maybeSingle();
+      return (data as TaskReadState) || null;
+    } catch {
+      return null;
     }
   },
 
@@ -398,6 +721,7 @@ export const taskManagementService = {
       department_id: params.departmentId,
       assignee_id: params.assigneeId,
       priority: params.priority || 'Normal',
+      approval_mode: params.approvalMode || 'Internal Only',
       planned_start: params.plannedStart,
       due_date: params.dueDate
     });
@@ -417,6 +741,7 @@ export const taskManagementService = {
         departmentId: t.department_id,
         assigneeId: t.assignee_id,
         priority: t.priority,
+        approvalMode: t.approval_mode || 'Internal Only',
         plannedStart: t.planned_start,
         dueDate: t.due_date,
         status: t.status,
@@ -441,10 +766,10 @@ export const taskManagementService = {
       if (!dateValidation.valid) {
         return { data: null, error: dateValidation.error || 'Invalid task dates.' };
       }
-    } else if (params.plannedStart && isSunday(params.plannedStart)) {
-      return { data: null, error: 'Planned start date cannot fall on a Sunday.' };
-    } else if (params.dueDate && isSunday(params.dueDate)) {
-      return { data: null, error: 'Due date cannot fall on a Sunday.' };
+    } else if (params.plannedStart && (isSunday(params.plannedStart) || isSaturday(params.plannedStart))) {
+      return { data: null, error: isSunday(params.plannedStart) ? 'Planned start date cannot fall on a Sunday.' : 'Planned start date cannot fall on a Saturday.' };
+    } else if (params.dueDate && (isSunday(params.dueDate) || isSaturday(params.dueDate))) {
+      return { data: null, error: isSunday(params.dueDate) ? 'Due date cannot fall on a Sunday.' : 'Due date cannot fall on a Saturday.' };
     }
 
     const edgeRes = await this.invokeEdgeFunction('update', {
@@ -453,6 +778,7 @@ export const taskManagementService = {
       details: params.details,
       department_id: params.departmentId,
       priority: params.priority,
+      approval_mode: params.approvalMode,
       planned_start: params.plannedStart,
       due_date: params.dueDate
     });
@@ -472,6 +798,7 @@ export const taskManagementService = {
         departmentId: t.department_id,
         assigneeId: t.assignee_id,
         priority: t.priority,
+        approvalMode: t.approval_mode || 'Internal Only',
         plannedStart: t.planned_start,
         dueDate: t.due_date,
         status: t.status,
@@ -506,22 +833,58 @@ export const taskManagementService = {
   /**
    * Update Status - Strictly Edge-Function Authoritative
    */
-  async updateStatus(taskId: string, status: ClientTaskStatus, reason?: string): Promise<{ error: string | null }> {
+  async updateStatus(
+    taskId: string,
+    status: ClientTaskStatus,
+    reason?: string,
+    currentStatus?: ClientTaskStatus
+  ): Promise<{ error: string | null; task?: ClientTask }> {
     if (status === 'Blocked' && (!reason || !reason.trim())) {
       return { error: 'A reason is required when marking a task as Blocked.' };
+    }
+    if (status === 'In Progress' && (currentStatus === 'Team Review' || currentStatus === 'Client Review') && (!reason || !reason.trim())) {
+      return { error: 'A reason is required when returning a task for changes.' };
     }
 
     const edgeRes = await this.invokeEdgeFunction('update_status', {
       task_id: taskId,
       status,
-      reason
+      reason,
+      current_status: currentStatus
     });
 
     if (edgeRes.error) {
       return { error: edgeRes.error };
     }
 
-    return { error: null };
+    return { error: null, task: edgeRes.data?.task };
+  },
+
+  /**
+   * Client / Management approves Client Review deliverable -> moves to Completed
+   */
+  async approveClientReview(taskId: string, currentStatus = 'Client Review' as ClientTaskStatus): Promise<{ error: string | null; task?: ClientTask }> {
+    return this.updateStatus(taskId, 'Completed', undefined, currentStatus);
+  },
+
+  /**
+   * Client / Management requests changes on Client Review -> returns to In Progress with mandatory feedback
+   */
+  async requestClientChanges(taskId: string, reason: string, currentStatus = 'Client Review' as ClientTaskStatus): Promise<{ error: string | null; task?: ClientTask }> {
+    if (!reason || !reason.trim()) {
+      return { error: 'A reason is mandatory when requesting changes.' };
+    }
+    return this.updateStatus(taskId, 'In Progress', reason.trim(), currentStatus);
+  },
+
+  /**
+   * Reopen Completed Task (Management only, requires mandatory reason)
+   */
+  async reopenTask(taskId: string, reason: string, currentStatus = 'Completed' as ClientTaskStatus): Promise<{ error: string | null; task?: ClientTask }> {
+    if (!reason || !reason.trim()) {
+      return { error: 'A reason is mandatory to reopen a completed task.' };
+    }
+    return this.updateStatus(taskId, 'In Progress', reason.trim(), currentStatus);
   },
 
   /**

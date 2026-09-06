@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { X, AlertCircle, Loader2 } from 'lucide-react';
-import { 
-  ClientTask, 
-  ClientTaskPriority, 
-  Department 
+import {
+  ClientTask,
+  ClientTaskPriority,
+  Department,
+  TaskApprovalMode
 } from '../../types';
-import { taskManagementService, isSunday } from '../../lib/taskManagementService';
+import { taskManagementService, isSunday, isSaturday } from '../../lib/taskManagementService';
 
 interface EditClientTaskModalProps {
   isOpen: boolean;
@@ -26,7 +27,8 @@ export const EditClientTaskModal: React.FC<EditClientTaskModalProps> = ({
   const [details, setDetails] = useState(task.details || '');
   const [departmentId, setDepartmentId] = useState(task.departmentId);
   const [priority, setPriority] = useState<ClientTaskPriority>(task.priority);
-  
+  const [approvalMode, setApprovalMode] = useState<TaskApprovalMode>(task.approvalMode || 'Internal Only');
+
   const [plannedStartDate, setPlannedStartDate] = useState('');
   const [plannedStartTime, setPlannedStartTime] = useState('09:00');
   const [dueDate, setDueDate] = useState('');
@@ -41,6 +43,7 @@ export const EditClientTaskModal: React.FC<EditClientTaskModalProps> = ({
       setDetails(task.details || '');
       setDepartmentId(task.departmentId);
       setPriority(task.priority);
+      setApprovalMode(task.approvalMode || 'Internal Only');
       setErrorMessage(null);
 
       if (task.plannedStart) {
@@ -94,8 +97,16 @@ export const EditClientTaskModal: React.FC<EditClientTaskModalProps> = ({
       setErrorMessage('Planned start date cannot fall on a Sunday.');
       return;
     }
+    if (isSaturday(plannedStartDate)) {
+      setErrorMessage('Planned start date cannot fall on a Saturday.');
+      return;
+    }
     if (isSunday(dueDate)) {
       setErrorMessage('Due date cannot fall on a Sunday.');
+      return;
+    }
+    if (isSaturday(dueDate)) {
+      setErrorMessage('Due date cannot fall on a Saturday.');
       return;
     }
 
@@ -115,6 +126,7 @@ export const EditClientTaskModal: React.FC<EditClientTaskModalProps> = ({
         details: details.trim() || undefined,
         departmentId,
         priority,
+        approvalMode,
         plannedStart: startIso,
         dueDate: dueIso
       });
@@ -126,7 +138,7 @@ export const EditClientTaskModal: React.FC<EditClientTaskModalProps> = ({
         onClose();
       }
     } catch (err: any) {
-      setErrorMessage(err?.message || 'An error occurred updating task.');
+      setErrorMessage(err?.message || 'Failed to update task.');
     } finally {
       setIsSubmitting(false);
     }
@@ -134,7 +146,7 @@ export const EditClientTaskModal: React.FC<EditClientTaskModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200">
-      <div 
+      <div
         className="bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border w-full max-w-xl rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]"
         onClick={(e) => e.stopPropagation()}
       >
@@ -212,6 +224,21 @@ export const EditClientTaskModal: React.FC<EditClientTaskModalProps> = ({
                 <option value="Urgent">Urgent</option>
               </select>
             </div>
+          </div>
+
+          {/* Approval Mode */}
+          <div>
+            <label className="block text-gray-700 dark:text-gray-300 font-bold mb-1">
+              Approval Mode <span className="text-rose-500">*</span>
+            </label>
+            <select
+              value={approvalMode}
+              onChange={(e) => setApprovalMode(e.target.value as TaskApprovalMode)}
+              className="w-full px-3 py-2 rounded-xl bg-gray-50 dark:bg-dark-100 border border-gray-200 dark:border-dark-border focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-gray-900 dark:text-gray-100"
+            >
+              <option value="Internal Only">Internal Only (Team Review → Completed)</option>
+              <option value="Client Approval Required">Client Approval Required (Team Review → Client Review → Completed)</option>
+            </select>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-gray-50/70 dark:bg-dark-200/50 rounded-xl border border-gray-200/60 dark:border-dark-border/60">

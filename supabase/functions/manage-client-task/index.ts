@@ -53,6 +53,55 @@ function isSunday(dateStr: string): boolean {
   return false;
 }
 
+function isSaturday(dateStr: string): boolean {
+  if (!dateStr) return false;
+  const trimmed = typeof dateStr === 'string' ? dateStr.trim() : '';
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    const parts = trimmed.split('-').map(Number);
+    const dt = new Date(Date.UTC(parts[0], parts[1] - 1, parts[2]));
+    return dt.getUTCDay() === 6;
+  }
+
+  const d = new Date(dateStr);
+  if (isNaN(d.getTime())) return false;
+  if (d.getUTCDay() === 6) return true;
+
+  try {
+    const pktDay = new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Karachi',
+      weekday: 'short'
+    }).format(d);
+    if (pktDay === 'Sat') return true;
+  } catch {
+    // fallback
+  }
+
+  return false;
+}
+
+function validateHttpsLink(urlStr: string): { valid: boolean; error?: string; sanitized?: string } {
+  if (!urlStr || typeof urlStr !== 'string') {
+    return { valid: false, error: 'URL is required.' };
+  }
+  const trimmed = urlStr.trim();
+  if (trimmed.length > 2048) {
+    return { valid: false, error: 'URL exceeds maximum length of 2,048 characters.' };
+  }
+  let parsed: URL;
+  try {
+    parsed = new URL(trimmed);
+  } catch {
+    return { valid: false, error: 'Invalid URL format.' };
+  }
+  if (parsed.protocol.toLowerCase() !== 'https:') {
+    return { valid: false, error: 'Only HTTPS links are permitted.' };
+  }
+  if (parsed.username || parsed.password) {
+    return { valid: false, error: 'URLs with embedded credentials are not permitted.' };
+  }
+  return { valid: true, sanitized: parsed.href };
+}
+
 serve(async (req: Request) => {
   const origin = req.headers.get('origin');
   const corsHeaders = getCorsHeaders(origin);
@@ -104,7 +153,7 @@ serve(async (req: Request) => {
   // Load Caller Profile
   const { data: callerProfile, error: profileError } = await supabaseAdmin
     .from('profiles')
-    .select('id, full_name, role, status')
+    .select('id, full_name, role, status, organization_id')
     .eq('id', callerUser.id)
     .single();
 
@@ -147,7 +196,7 @@ serve(async (req: Request) => {
     return false;
   }
 
-  // Helper: Verify Client Access for Team Member
+  // Helper: Verify Client Access for Team Member or Client
   async function checkCanAccessClient(clientId: string): Promise<boolean> {
     if (callerProfile.role === 'owner') return true;
     if (callerProfile.role === 'operational_manager') {
@@ -161,6 +210,9 @@ serve(async (req: Request) => {
         .eq('profile_id', callerProfile.id)
         .single();
       return Boolean(grant);
+    }
+    if (callerProfile.role === 'client') {
+      return callerProfile.organization_id === clientId;
     }
     return false;
   }
@@ -215,9 +267,9 @@ serve(async (req: Request) => {
     // ACTION: create
     // --------------------------------------------------------------------------
     if (action === 'create') {
-      const { 
-        client_id, week_number, title, details, department_id, 
-        assignee_id, priority = 'Normal', planned_start, due_date 
+      const {
+        client_id, week_number, title, details, department_id,
+        assignee_id, priority = 'Normal', approval_mode = 'Internal Only', planned_start, due_date
       } = body;
 
       if (!client_id || !week_number || !title || !department_id || !planned_start || !due_date) {
@@ -237,6 +289,13 @@ serve(async (req: Request) => {
       if (!['Low', 'Normal', 'High', 'Urgent'].includes(priority)) {
         return new Response(
           JSON.stringify({ error: 'Priority must be Low, Normal, High, or Urgent.' }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
+      if (!['Internal Only', 'Client Approval Required'].includes(approval_mode)) {
+        return new Response(
+          JSON.stringify({ error: 'approval_mode must be "Internal Only" or "Client Approval Required".' }),
           { status: 400, headers: corsHeaders }
         );
       }
@@ -270,9 +329,21 @@ serve(async (req: Request) => {
           { status: 400, headers: corsHeaders }
         );
       }
+      if (isSaturday(planned_start)) {
+        return new Response(
+          JSON.stringify({ error: 'Planned start date cannot fall on a Saturday.' }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
       if (isSunday(due_date)) {
         return new Response(
           JSON.stringify({ error: 'Due date cannot fall on a Sunday.' }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+      if (isSaturday(due_date)) {
+        return new Response(
+          JSON.stringify({ error: 'Due date cannot fall on a Saturday.' }),
           { status: 400, headers: corsHeaders }
         );
       }
@@ -306,6 +377,7 @@ serve(async (req: Request) => {
           department_id,
           assignee_id: assignee_id || null,
           priority,
+          approval_mode,
           planned_start,
           due_date,
           status: initialStatus,
@@ -342,7 +414,7 @@ serve(async (req: Request) => {
     // ACTION: update
     // --------------------------------------------------------------------------
     if (action === 'update') {
-      const { task_id, title, details, department_id, priority, planned_start, due_date } = body;
+      const { task_id, title, details, department_id, priority, approval_mode, planned_start, due_date } = body;
       if (!task_id) {
         return new Response(JSON.stringify({ error: 'Missing task_id' }), { status: 400, headers: corsHeaders });
       }
@@ -386,6 +458,12 @@ serve(async (req: Request) => {
         }
         updates.priority = priority;
       }
+      if (approval_mode !== undefined) {
+        if (!['Internal Only', 'Client Approval Required'].includes(approval_mode)) {
+          return new Response(JSON.stringify({ error: 'Invalid approval_mode value.' }), { status: 400, headers: corsHeaders });
+        }
+        updates.approval_mode = approval_mode;
+      }
 
       const checkStart = planned_start || existingTask.planned_start;
       const checkDue = due_date || existingTask.due_date;
@@ -393,8 +471,14 @@ serve(async (req: Request) => {
       if (planned_start && isSunday(planned_start)) {
         return new Response(JSON.stringify({ error: 'Planned start date cannot fall on a Sunday.' }), { status: 400, headers: corsHeaders });
       }
+      if (planned_start && isSaturday(planned_start)) {
+        return new Response(JSON.stringify({ error: 'Planned start date cannot fall on a Saturday.' }), { status: 400, headers: corsHeaders });
+      }
       if (due_date && isSunday(due_date)) {
         return new Response(JSON.stringify({ error: 'Due date cannot fall on a Sunday.' }), { status: 400, headers: corsHeaders });
+      }
+      if (due_date && isSaturday(due_date)) {
+        return new Response(JSON.stringify({ error: 'Due date cannot fall on a Saturday.' }), { status: 400, headers: corsHeaders });
       }
       if (new Date(checkDue).getTime() <= new Date(checkStart).getTime()) {
         return new Response(JSON.stringify({ error: 'Due date/time must be strictly later than planned start date/time.' }), { status: 400, headers: corsHeaders });
@@ -510,12 +594,13 @@ serve(async (req: Request) => {
     // ACTION: update_status
     // --------------------------------------------------------------------------
     if (action === 'update_status') {
-      const { task_id, status: targetStatus, reason } = body;
+      const { task_id, status: targetStatus, reason, current_status } = body;
       if (!task_id || !targetStatus) {
         return new Response(JSON.stringify({ error: 'Missing task_id or target status.' }), { status: 400, headers: corsHeaders });
       }
 
-      if (!['Draft', 'Assigned', 'In Progress', 'Blocked', 'Team Review'].includes(targetStatus)) {
+      const validStatuses = ['Draft', 'Assigned', 'In Progress', 'Blocked', 'Team Review', 'Client Review', 'Completed'];
+      if (!validStatuses.includes(targetStatus)) {
         return new Response(JSON.stringify({ error: 'Invalid target status.' }), { status: 400, headers: corsHeaders });
       }
 
@@ -529,11 +614,12 @@ serve(async (req: Request) => {
         return new Response(JSON.stringify({ error: 'Task not found or archived.' }), { status: 404, headers: corsHeaders });
       }
 
-      const canManage = await checkCanManageClient(existingTask.client_id);
-      const isAssignedMember = existingTask.assignee_id === callerProfile.id;
-
-      if (!canManage && !isAssignedMember) {
-        return new Response(JSON.stringify({ error: 'Forbidden: You cannot update status on this task.' }), { status: 403, headers: corsHeaders });
+      // Concurrency / Stale State Guard
+      if (current_status && existingTask.status !== current_status) {
+        return new Response(
+          JSON.stringify({ error: `Conflict: Task status was concurrently modified to ${existingTask.status}. Please refresh.` }),
+          { status: 409, headers: corsHeaders }
+        );
       }
 
       // Check if client is paused or archived
@@ -550,40 +636,134 @@ serve(async (req: Request) => {
         );
       }
 
-      // Workflow transition enforcement
+      const canManage = await checkCanManageClient(existingTask.client_id);
+      const isAssignedMember = existingTask.assignee_id === callerProfile.id;
       const current = existingTask.status;
+
       let eventType = 'status_changed';
       let blockedReasonValue = existingTask.blocked_reason;
+      let completedAtValue = existingTask.completed_at;
+      let completedByValue = existingTask.completed_by;
+      let reopenedAtValue = existingTask.reopened_at;
+      let reopenedByValue = existingTask.reopened_by;
+      let reopenReasonValue = existingTask.reopen_reason;
 
-      if (targetStatus === 'Blocked') {
-        if (!reason || !reason.trim()) {
-          return new Response(JSON.stringify({ error: 'Blocked status requires a non-empty reason.' }), { status: 400, headers: corsHeaders });
+      // ------------------------------------------------------------------------
+      // Role-Based Transition Guards
+      // ------------------------------------------------------------------------
+      if (callerProfile.role === 'client') {
+        if (callerProfile.organization_id !== existingTask.client_id) {
+          return new Response(JSON.stringify({ error: 'Forbidden: Access to this client is not permitted.' }), { status: 403, headers: corsHeaders });
         }
-        if (current !== 'In Progress' && !canManage) {
-          return new Response(JSON.stringify({ error: 'Only In Progress tasks can be moved to Blocked.' }), { status: 400, headers: corsHeaders });
+        if (current !== 'Client Review') {
+          return new Response(JSON.stringify({ error: 'Clients can only review tasks in Client Review status.' }), { status: 403, headers: corsHeaders });
         }
-        eventType = 'blocked';
-        blockedReasonValue = reason.trim();
-      } else if (current === 'Blocked' && targetStatus === 'In Progress') {
-        eventType = 'unblocked';
-        blockedReasonValue = null;
-      } else if (targetStatus === 'Team Review') {
-        if (current !== 'In Progress' && !canManage) {
-          return new Response(JSON.stringify({ error: 'Only In Progress tasks can be submitted for Team Review.' }), { status: 400, headers: corsHeaders });
+        if (targetStatus === 'Completed') {
+          eventType = 'client_approved';
+          completedAtValue = new Date().toISOString();
+          completedByValue = callerProfile.id;
+        } else if (targetStatus === 'In Progress') {
+          if (!reason || !reason.trim()) {
+            return new Response(JSON.stringify({ error: 'A mandatory reason is required when requesting changes.' }), { status: 400, headers: corsHeaders });
+          }
+          eventType = 'client_changes_requested';
+        } else {
+          return new Response(JSON.stringify({ error: 'Forbidden: Clients can only approve or request changes.' }), { status: 403, headers: corsHeaders });
         }
-        eventType = 'submitted_for_review';
-      } else if (current === 'Team Review' && targetStatus === 'In Progress') {
-        if (!canManage) {
-          return new Response(JSON.stringify({ error: 'Only management can return a Team Review task to In Progress.' }), { status: 403, headers: corsHeaders });
+      } else if (callerProfile.role === 'team_member') {
+        if (!isAssignedMember && !(await checkCanAccessClient(existingTask.client_id))) {
+          return new Response(JSON.stringify({ error: 'Forbidden: You cannot update status on this task.' }), { status: 403, headers: corsHeaders });
         }
-        if (!reason || !reason.trim()) {
-          return new Response(JSON.stringify({ error: 'Returning a Team Review task to In Progress requires a reason.' }), { status: 400, headers: corsHeaders });
+
+        // Team members cannot approve, send to client review, complete, or reopen
+        if (['Client Review', 'Completed'].includes(targetStatus) || current === 'Completed') {
+          return new Response(JSON.stringify({ error: 'Forbidden: Team members cannot approve, complete, or reopen tasks.' }), { status: 403, headers: corsHeaders });
         }
-        eventType = 'review_returned';
-      } else if (targetStatus === 'In Progress') {
-        if (current !== 'Assigned' && current !== 'Blocked' && !canManage) {
-          return new Response(JSON.stringify({ error: 'Invalid transition to In Progress.' }), { status: 400, headers: corsHeaders });
+
+        if (targetStatus === 'Blocked') {
+          if (!reason || !reason.trim()) {
+            return new Response(JSON.stringify({ error: 'Blocked status requires a non-empty reason.' }), { status: 400, headers: corsHeaders });
+          }
+          if (current !== 'In Progress') {
+            return new Response(JSON.stringify({ error: 'Only In Progress tasks can be marked as Blocked.' }), { status: 400, headers: corsHeaders });
+          }
+          eventType = 'blocked';
+          blockedReasonValue = reason.trim();
+        } else if (current === 'Blocked' && targetStatus === 'In Progress') {
+          eventType = 'unblocked';
+          blockedReasonValue = null;
+        } else if (targetStatus === 'Team Review') {
+          if (current !== 'In Progress') {
+            return new Response(JSON.stringify({ error: 'Only In Progress tasks can be submitted for Team Review.' }), { status: 400, headers: corsHeaders });
+          }
+          eventType = 'submitted_for_review';
+        } else if (targetStatus === 'In Progress') {
+          if (current !== 'Assigned' && current !== 'Blocked') {
+            return new Response(JSON.stringify({ error: 'Invalid transition to In Progress.' }), { status: 400, headers: corsHeaders });
+          }
+        } else {
+          return new Response(JSON.stringify({ error: 'Forbidden: Unauthorized transition for team member.' }), { status: 403, headers: corsHeaders });
         }
+      } else if (canManage) {
+        // Operational Manager or Owner
+        if (targetStatus === 'Blocked') {
+          if (!reason || !reason.trim()) {
+            return new Response(JSON.stringify({ error: 'Blocked status requires a non-empty reason.' }), { status: 400, headers: corsHeaders });
+          }
+          eventType = 'blocked';
+          blockedReasonValue = reason.trim();
+        } else if (current === 'Blocked' && targetStatus === 'In Progress') {
+          eventType = 'unblocked';
+          blockedReasonValue = null;
+        } else if (targetStatus === 'Team Review') {
+          eventType = 'submitted_for_review';
+        } else if (current === 'Team Review' && targetStatus === 'In Progress') {
+          if (!reason || !reason.trim()) {
+            return new Response(JSON.stringify({ error: 'Returning a Team Review task to In Progress requires a reason.' }), { status: 400, headers: corsHeaders });
+          }
+          eventType = 'review_returned';
+        } else if (current === 'Team Review' && targetStatus === 'Completed') {
+          if (existingTask.approval_mode === 'Client Approval Required') {
+            return new Response(
+              JSON.stringify({ error: 'This task requires Client Approval and must be submitted for Client Review first.' }),
+              { status: 400, headers: corsHeaders }
+            );
+          }
+          eventType = 'completed';
+          completedAtValue = new Date().toISOString();
+          completedByValue = callerProfile.id;
+        } else if (current === 'Team Review' && targetStatus === 'Client Review') {
+          if (existingTask.approval_mode !== 'Client Approval Required') {
+            return new Response(
+              JSON.stringify({ error: 'This task is Internal Only and cannot be moved to Client Review.' }),
+              { status: 400, headers: corsHeaders }
+            );
+          }
+          eventType = 'client_review_submitted';
+        } else if (current === 'Client Review' && targetStatus === 'Completed') {
+          eventType = 'client_approved';
+          completedAtValue = new Date().toISOString();
+          completedByValue = callerProfile.id;
+        } else if (current === 'Client Review' && targetStatus === 'In Progress') {
+          if (!reason || !reason.trim()) {
+            return new Response(JSON.stringify({ error: 'A mandatory reason is required when returning a Client Review task to In Progress.' }), { status: 400, headers: corsHeaders });
+          }
+          eventType = 'changes_requested';
+        } else if (current === 'Completed' && targetStatus === 'In Progress') {
+          if (!reason || !reason.trim()) {
+            return new Response(JSON.stringify({ error: 'A mandatory reason is required to reopen a completed task.' }), { status: 400, headers: corsHeaders });
+          }
+          eventType = 'reopened';
+          completedAtValue = null;
+          completedByValue = null;
+          reopenedAtValue = new Date().toISOString();
+          reopenedByValue = callerProfile.id;
+          reopenReasonValue = reason.trim();
+        } else if (targetStatus === 'In Progress') {
+          // General move to In Progress
+        }
+      } else {
+        return new Response(JSON.stringify({ error: 'Forbidden: You cannot update status on this task.' }), { status: 403, headers: corsHeaders });
       }
 
       const { data: updatedTask, error: uErr } = await supabaseAdmin
@@ -591,6 +771,11 @@ serve(async (req: Request) => {
         .update({
           status: targetStatus,
           blocked_reason: blockedReasonValue,
+          completed_at: completedAtValue,
+          completed_by: completedByValue,
+          reopened_at: reopenedAtValue,
+          reopened_by: reopenedByValue,
+          reopen_reason: reopenReasonValue,
           updated_by: callerProfile.id
         })
         .eq('id', task_id)
@@ -612,6 +797,232 @@ serve(async (req: Request) => {
       });
 
       return new Response(JSON.stringify({ success: true, task: updatedTask }), { status: 200, headers: corsHeaders });
+    }
+
+    // --------------------------------------------------------------------------
+    // ACTION: create_message
+    // --------------------------------------------------------------------------
+    if (action === 'create_message') {
+      const { task_id, client_id, visibility, content, links = [] } = body;
+      if (!task_id || !client_id || !visibility || !content) {
+        return new Response(JSON.stringify({ error: 'Missing required fields: task_id, client_id, visibility, content.' }), { status: 400, headers: corsHeaders });
+      }
+
+      if (!['internal_note', 'shared_with_client'].includes(visibility)) {
+        return new Response(JSON.stringify({ error: 'Visibility must be internal_note or shared_with_client.' }), { status: 400, headers: corsHeaders });
+      }
+
+      const trimmedContent = content.trim();
+      if (trimmedContent.length === 0 || trimmedContent.length > 5000) {
+        return new Response(JSON.stringify({ error: 'Message content must be between 1 and 5,000 characters.' }), { status: 400, headers: corsHeaders });
+      }
+
+      // Validate links (Max 5, HTTPS only, no credentials, <= 2048 chars)
+      if (!Array.isArray(links) || links.length > 5) {
+        return new Response(JSON.stringify({ error: 'Maximum 5 external links permitted.' }), { status: 400, headers: corsHeaders });
+      }
+
+      const validatedLinks = [];
+      for (const item of links) {
+        const urlStr = typeof item === 'string' ? item : item?.url;
+        const res = validateHttpsLink(urlStr);
+        if (!res.valid) {
+          return new Response(JSON.stringify({ error: res.error }), { status: 400, headers: corsHeaders });
+        }
+        validatedLinks.push({
+          url: res.sanitized,
+          title: typeof item === 'object' && item?.title ? String(item.title).trim().slice(0, 100) : undefined
+        });
+      }
+
+      // Check task and client records
+      const { data: existingTask } = await supabaseAdmin
+        .from('client_tasks')
+        .select('id, client_id, archived_at')
+        .eq('id', task_id)
+        .single();
+
+      if (!existingTask || existingTask.archived_at || existingTask.client_id !== client_id) {
+        return new Response(JSON.stringify({ error: 'Task not found or is archived.' }), { status: 404, headers: corsHeaders });
+      }
+
+      const { data: targetClient } = await supabaseAdmin
+        .from('clients')
+        .select('id, status')
+        .eq('id', client_id)
+        .single();
+
+      if (!targetClient || targetClient.status === 'Archived') {
+        return new Response(JSON.stringify({ error: 'Feed is read-only: Client is archived.' }), { status: 400, headers: corsHeaders });
+      }
+
+      // Check role permissions and paused state
+      if (callerProfile.role === 'client') {
+        if (callerProfile.organization_id !== client_id) {
+          return new Response(JSON.stringify({ error: 'Forbidden: Access to this client is not permitted.' }), { status: 403, headers: corsHeaders });
+        }
+        if (visibility !== 'shared_with_client') {
+          return new Response(JSON.stringify({ error: 'Clients can only create shared messages.' }), { status: 403, headers: corsHeaders });
+        }
+        if (targetClient.status === 'Paused') {
+          return new Response(JSON.stringify({ error: 'Cannot post messages for a paused client.' }), { status: 400, headers: corsHeaders });
+        }
+      } else {
+        const canAccess = await checkCanAccessClient(client_id);
+        if (!canAccess) {
+          return new Response(JSON.stringify({ error: 'Forbidden: You do not have access to this client.' }), { status: 403, headers: corsHeaders });
+        }
+        if (targetClient.status === 'Paused') {
+          if (callerProfile.role === 'team_member') {
+            return new Response(JSON.stringify({ error: 'Cannot post messages for a paused client.' }), { status: 400, headers: corsHeaders });
+          }
+          if (visibility !== 'internal_note') {
+            return new Response(JSON.stringify({ error: 'Only internal administrative notes are allowed for paused clients.' }), { status: 400, headers: corsHeaders });
+          }
+        }
+      }
+
+      // Insert message record (Append-only)
+      const { data: newMsg, error: mErr } = await supabaseAdmin
+        .from('client_task_messages')
+        .insert({
+          task_id,
+          client_id,
+          author_id: callerProfile.id,
+          visibility,
+          content: trimmedContent,
+          links: validatedLinks
+        })
+        .select(`
+          id, task_id, client_id, author_id, visibility, content, links, created_at,
+          author:profiles!author_id(id, full_name, role)
+        `)
+        .single();
+
+      if (mErr || !newMsg) {
+        return new Response(JSON.stringify({ error: mErr?.message || 'Failed to save message.' }), { status: 500, headers: corsHeaders });
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          message: {
+            id: newMsg.id,
+            taskId: newMsg.task_id,
+            clientId: newMsg.client_id,
+            authorId: newMsg.author_id,
+            authorName: newMsg.author?.full_name || callerProfile.full_name,
+            authorRole: newMsg.author?.role || callerProfile.role,
+            visibility: newMsg.visibility,
+            content: newMsg.content,
+            links: newMsg.links || [],
+            createdAt: newMsg.created_at
+          }
+        }),
+        { status: 200, headers: corsHeaders }
+      );
+    }
+
+    // --------------------------------------------------------------------------
+    // ACTION: fetch_feed
+    // --------------------------------------------------------------------------
+    if (action === 'fetch_feed') {
+      const { task_id, before_timestamp, limit = 30 } = body;
+      if (!task_id) {
+        return new Response(JSON.stringify({ error: 'Missing task_id' }), { status: 400, headers: corsHeaders });
+      }
+
+      const { data: existingTask } = await supabaseAdmin
+        .from('client_tasks')
+        .select('id, client_id, archived_at')
+        .eq('id', task_id)
+        .single();
+
+      if (!existingTask) {
+        return new Response(JSON.stringify({ error: 'Task not found.' }), { status: 404, headers: corsHeaders });
+      }
+
+      const canAccess = await checkCanAccessClient(existingTask.client_id);
+      if (!canAccess) {
+        return new Response(JSON.stringify({ error: 'Forbidden: You do not have access to this client.' }), { status: 403, headers: corsHeaders });
+      }
+
+      let msgQuery = supabaseAdmin
+        .from('client_task_messages')
+        .select(`
+          id, task_id, client_id, author_id, visibility, content, links, created_at,
+          author:profiles!author_id(id, full_name, role)
+        `)
+        .eq('task_id', task_id)
+        .order('created_at', { ascending: false })
+        .limit(Number(limit) + 1);
+
+      if (callerProfile.role === 'client') {
+        msgQuery = msgQuery.eq('visibility', 'shared_with_client');
+      }
+
+      if (before_timestamp) {
+        msgQuery = msgQuery.lt('created_at', before_timestamp);
+      }
+
+      let evtQuery = supabaseAdmin
+        .from('client_task_events')
+        .select(`
+          id, task_id, client_id, actor_id, event_type,
+          previous_state, new_state, notes, created_at,
+          actor:profiles!actor_id(id, full_name)
+        `)
+        .eq('task_id', task_id)
+        .order('created_at', { ascending: false })
+        .limit(Number(limit) + 1);
+
+      if (before_timestamp) {
+        evtQuery = evtQuery.lt('created_at', before_timestamp);
+      }
+
+      const [msgRes, evtRes] = await Promise.all([msgQuery, evtQuery]);
+      const rawMsgs = msgRes.data || [];
+      const rawEvts = evtRes.data || [];
+
+      const messages = rawMsgs.slice(0, Number(limit)).map((m: any) => ({
+        id: m.id,
+        taskId: m.task_id,
+        clientId: m.client_id,
+        authorId: m.author_id,
+        authorName: m.author?.full_name || 'Staff Member',
+        authorRole: m.author?.role || 'team_member',
+        visibility: m.visibility,
+        content: m.content,
+        links: m.links || [],
+        createdAt: m.created_at
+      }));
+
+      const events = rawEvts.slice(0, Number(limit)).map((e: any) => ({
+        id: e.id,
+        taskId: e.task_id,
+        clientId: e.client_id,
+        actorId: e.actor_id,
+        actorName: e.actor?.full_name || 'System / Staff',
+        eventType: e.event_type,
+        previousState: e.previous_state,
+        newState: e.new_state,
+        notes: e.notes,
+        createdAt: e.created_at
+      }));
+
+      const combined = [
+        ...messages.map((m: any) => ({ type: 'message', data: m, timestamp: m.createdAt })),
+        ...events.map((e: any) => ({ type: 'event', data: e, timestamp: e.createdAt }))
+      ];
+      combined.sort((a: any, b: any) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+
+      const hasMore = rawMsgs.length > Number(limit) || rawEvts.length > Number(limit);
+      const nextCursor = hasMore && combined.length > 0 ? combined[0].timestamp : null;
+
+      return new Response(
+        JSON.stringify({ success: true, messages, events, combinedFeed: combined, nextCursor, hasMore }),
+        { status: 200, headers: corsHeaders }
+      );
     }
 
     // --------------------------------------------------------------------------
