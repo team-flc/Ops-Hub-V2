@@ -461,13 +461,18 @@ export const taskManagementService = {
 
   /**
    * Fetch Task Conversation Feed (combines human messages and system lifecycle events)
-   * Supports cursor pagination with newest 30 items initially.
+   * Supports composite cursor pagination (created_at, id) returning the newest 30 combined items.
    */
-  async fetchTaskFeed(taskId: string, beforeTimestamp?: string, limit = 30): Promise<{
+  async fetchTaskFeed(
+    taskId: string,
+    beforeTimestamp?: string,
+    limit = 30,
+    beforeId?: string
+  ): Promise<{
     messages: TaskMessage[];
     events: ClientTaskEvent[];
-    combinedFeed: Array<{ type: 'message' | 'event'; data: TaskMessage | ClientTaskEvent; timestamp: string }>;
-    nextCursor: string | null;
+    combinedFeed: Array<{ type: 'message' | 'event'; data: TaskMessage | ClientTaskEvent; timestamp: string; id?: string }>;
+    nextCursor: { timestamp: string; id: string } | null;
     hasMore: boolean;
   }> {
     if (!isSupabaseConfigured || !supabase || !taskId) {
@@ -475,7 +480,25 @@ export const taskManagementService = {
     }
 
     try {
-      // 1. Fetch messages
+      // 1. Attempt authoritative Edge Function feed query
+      const edgeRes = await this.invokeEdgeFunction('fetch_feed', {
+        task_id: taskId,
+        before_timestamp: beforeTimestamp,
+        before_id: beforeId,
+        limit
+      });
+
+      if (!edgeRes.error && edgeRes.data?.success) {
+        return {
+          messages: edgeRes.data.messages || [],
+          events: edgeRes.data.events || [],
+          combinedFeed: edgeRes.data.combinedFeed || [],
+          nextCursor: edgeRes.data.nextCursor || null,
+          hasMore: Boolean(edgeRes.data.hasMore)
+        };
+      }
+
+      // 2. Fallback to direct client query with composite cursor
       let msgQuery = supabase
         .from('client_task_messages')
         .select(`
@@ -484,13 +507,15 @@ export const taskManagementService = {
         `)
         .eq('task_id', taskId)
         .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
         .limit(limit + 1);
 
-      if (beforeTimestamp) {
+      if (beforeTimestamp && beforeId) {
+        msgQuery = msgQuery.or(`created_at.lt.${beforeTimestamp},and(created_at.eq.${beforeTimestamp},id.lt.${beforeId})`);
+      } else if (beforeTimestamp) {
         msgQuery = msgQuery.lt('created_at', beforeTimestamp);
       }
 
-      // 2. Fetch events
       let evtQuery = supabase
         .from('client_task_events')
         .select(`
@@ -500,18 +525,20 @@ export const taskManagementService = {
         `)
         .eq('task_id', taskId)
         .order('created_at', { ascending: false })
+        .order('id', { ascending: false })
         .limit(limit + 1);
 
-      if (beforeTimestamp) {
+      if (beforeTimestamp && beforeId) {
+        evtQuery = evtQuery.or(`created_at.lt.${beforeTimestamp},and(created_at.eq.${beforeTimestamp},id.lt.${beforeId})`);
+      } else if (beforeTimestamp) {
         evtQuery = evtQuery.lt('created_at', beforeTimestamp);
       }
 
       const [msgRes, evtRes] = await Promise.all([msgQuery, evtQuery]);
-
       const rawMsgs = msgRes.data || [];
       const rawEvts = evtRes.data || [];
 
-      const messages: TaskMessage[] = rawMsgs.slice(0, limit).map((m: any) => ({
+      const messages: TaskMessage[] = rawMsgs.map((m: any) => ({
         id: m.id,
         taskId: m.task_id,
         clientId: m.client_id,
@@ -524,7 +551,7 @@ export const taskManagementService = {
         createdAt: m.created_at
       }));
 
-      const events: ClientTaskEvent[] = rawEvts.slice(0, limit).map((e: any) => ({
+      const events: ClientTaskEvent[] = rawEvts.map((e: any) => ({
         id: e.id,
         taskId: e.task_id,
         clientId: e.client_id,
@@ -537,22 +564,32 @@ export const taskManagementService = {
         createdAt: e.created_at
       }));
 
-      const combined: Array<{ type: 'message' | 'event'; data: TaskMessage | ClientTaskEvent; timestamp: string }> = [
-        ...messages.map((m) => ({ type: 'message' as const, data: m, timestamp: m.createdAt })),
-        ...events.map((e) => ({ type: 'event' as const, data: e, timestamp: e.createdAt }))
+      const combined: Array<{ type: 'message' | 'event'; data: TaskMessage | ClientTaskEvent; timestamp: string; id: string }> = [
+        ...messages.map((m) => ({ type: 'message' as const, data: m, timestamp: m.createdAt, id: m.id })),
+        ...events.map((e) => ({ type: 'event' as const, data: e, timestamp: e.createdAt, id: e.id }))
       ];
 
-      // Sort chronologically ascending for display in chat feed
-      combined.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
+      // Sort descending [timestamp DESC, id DESC]
+      combined.sort((a, b) => {
+        const timeDiff = new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime();
+        if (timeDiff !== 0) return timeDiff;
+        return b.id.localeCompare(a.id);
+      });
 
-      const hasMore = rawMsgs.length > limit || rawEvts.length > limit;
-      const earliestTimestamp = combined.length > 0 ? combined[0].timestamp : null;
+      // Slice top limit combined items
+      const pageItems = combined.slice(0, limit);
+      const hasMore = combined.length > limit;
+      const lastItem = pageItems[pageItems.length - 1];
+      const nextCursor = (hasMore && lastItem) ? { timestamp: lastItem.timestamp, id: lastItem.id } : null;
+
+      // Sort ascending for chronological display in feed UI
+      pageItems.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime());
 
       return {
-        messages,
-        events,
-        combinedFeed: combined,
-        nextCursor: hasMore ? earliestTimestamp : null,
+        messages: pageItems.filter(i => i.type === 'message').map(i => i.data as TaskMessage),
+        events: pageItems.filter(i => i.type === 'event').map(i => i.data as ClientTaskEvent),
+        combinedFeed: pageItems,
+        nextCursor,
         hasMore
       };
     } catch (err: any) {
@@ -598,6 +635,7 @@ export const taskManagementService = {
     visibility: TaskMessageVisibility;
     content: string;
     links?: TaskExternalLink[];
+    idempotencyKey?: string;
   }): Promise<{ data: TaskMessage | null; error: string | null }> {
     if (!params.content || !params.content.trim()) {
       return { data: null, error: 'Message content cannot be empty.' };
@@ -615,7 +653,8 @@ export const taskManagementService = {
       client_id: params.clientId,
       visibility: params.visibility,
       content: params.content.trim(),
-      links: linkValidation.validatedLinks || []
+      links: linkValidation.validatedLinks || [],
+      idempotency_key: params.idempotencyKey
     });
 
     if (edgeRes.error || !edgeRes.data?.message) {
@@ -837,7 +876,12 @@ export const taskManagementService = {
     taskId: string,
     status: ClientTaskStatus,
     reason?: string,
-    currentStatus?: ClientTaskStatus
+    currentStatus?: ClientTaskStatus,
+    options?: {
+      idempotencyKey?: string;
+      isOverride?: boolean;
+      overrideReason?: string;
+    }
   ): Promise<{ error: string | null; task?: ClientTask }> {
     if (status === 'Blocked' && (!reason || !reason.trim())) {
       return { error: 'A reason is required when marking a task as Blocked.' };
@@ -850,7 +894,10 @@ export const taskManagementService = {
       task_id: taskId,
       status,
       reason,
-      current_status: currentStatus
+      current_status: currentStatus,
+      idempotency_key: options?.idempotencyKey,
+      is_override: options?.isOverride,
+      override_reason: options?.overrideReason
     });
 
     if (edgeRes.error) {
@@ -863,8 +910,16 @@ export const taskManagementService = {
   /**
    * Client / Management approves Client Review deliverable -> moves to Completed
    */
-  async approveClientReview(taskId: string, currentStatus = 'Client Review' as ClientTaskStatus): Promise<{ error: string | null; task?: ClientTask }> {
-    return this.updateStatus(taskId, 'Completed', undefined, currentStatus);
+  async approveClientReview(
+    taskId: string,
+    currentStatus = 'Client Review' as ClientTaskStatus,
+    options?: {
+      isOverride?: boolean;
+      overrideReason?: string;
+      idempotencyKey?: string;
+    }
+  ): Promise<{ error: string | null; task?: ClientTask }> {
+    return this.updateStatus(taskId, 'Completed', undefined, currentStatus, options);
   },
 
   /**
@@ -880,11 +935,16 @@ export const taskManagementService = {
   /**
    * Reopen Completed Task (Management only, requires mandatory reason)
    */
-  async reopenTask(taskId: string, reason: string, currentStatus = 'Completed' as ClientTaskStatus): Promise<{ error: string | null; task?: ClientTask }> {
+  async reopenTask(
+    taskId: string,
+    reason: string,
+    currentStatus = 'Completed' as ClientTaskStatus,
+    options?: { idempotencyKey?: string }
+  ): Promise<{ error: string | null; task?: ClientTask }> {
     if (!reason || !reason.trim()) {
       return { error: 'A reason is mandatory to reopen a completed task.' };
     }
-    return this.updateStatus(taskId, 'In Progress', reason.trim(), currentStatus);
+    return this.updateStatus(taskId, 'In Progress', reason.trim(), currentStatus, options);
   },
 
   /**
