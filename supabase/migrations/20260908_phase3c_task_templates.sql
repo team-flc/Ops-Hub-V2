@@ -323,3 +323,579 @@ BEGIN
         RAISE NOTICE 'Starter seed already present: Skipped.';
     END IF;
 END $$;
+
+-- 9. Transactional Mutation RPC Function (Genuine Atomic Mutation, Audit & Idempotency)
+CREATE OR REPLACE FUNCTION public.fn_manage_task_template_mutation(
+    p_actor_id UUID,
+    p_action TEXT,
+    p_idempotency_key TEXT,
+    p_payload JSONB
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, auth, pg_temp
+AS $$
+DECLARE
+    v_actor_profile RECORD;
+    v_existing_claim RECORD;
+    v_template RECORD;
+    v_old_template RECORD;
+    v_source_template RECORD;
+    v_department_name TEXT;
+    v_response_payload JSONB;
+    v_template_json JSONB;
+    v_previous_state JSONB := NULL;
+    v_new_state JSONB := NULL;
+    v_entity_id UUID := NULL;
+    v_entity_name TEXT := NULL;
+    v_audit_action TEXT := NULL;
+
+    -- Extracted Payload Variables
+    v_template_id UUID;
+    v_name TEXT;
+    v_description TEXT;
+    v_department_id UUID;
+    v_default_task_title TEXT;
+    v_task_details TEXT;
+    v_default_priority TEXT;
+    v_default_approval_mode TEXT;
+    v_suggested_duration_days INTEGER;
+    v_sort_order INTEGER;
+    v_expected_version INTEGER;
+    v_archive_reason TEXT;
+BEGIN
+    -- 1. Validate Actor Profile & Owner Authorization
+    SELECT id, full_name, role, status
+    INTO v_actor_profile
+    FROM public.profiles
+    WHERE id = p_actor_id;
+
+    IF v_actor_profile.id IS NULL OR v_actor_profile.status != 'active' OR v_actor_profile.role != 'owner' THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'error', 'Forbidden: Only active Executive Owners can govern task templates.',
+            'code', '403_FORBIDDEN'
+        );
+    END IF;
+
+    -- Validate Idempotency Key Parameter
+    IF p_idempotency_key IS NULL OR length(trim(p_idempotency_key)) = 0 THEN
+        RETURN jsonb_build_object(
+            'success', false,
+            'error', 'Missing required parameter: idempotency_key.',
+            'code', '400_BAD_REQUEST'
+        );
+    END IF;
+
+    -- 2. Check / Claim Idempotency Record (Atomic Lock)
+    SELECT status, response_payload
+    INTO v_existing_claim
+    FROM public.template_mutation_requests
+    WHERE actor_id = p_actor_id
+      AND action = p_action
+      AND idempotency_key = p_idempotency_key
+    FOR UPDATE;
+
+    IF v_existing_claim.status = 'completed' AND v_existing_claim.response_payload IS NOT NULL THEN
+        -- Replay: Return cached response immediately without repeating mutation or audit event
+        RETURN jsonb_set(v_existing_claim.response_payload, '{is_replay}', 'true'::jsonb);
+    END IF;
+
+    IF v_existing_claim.status = 'processing' THEN
+        -- Concurrent duplicate request in progress
+        RETURN jsonb_build_object(
+            'success', false,
+            'error', 'Conflict: Mutation already in progress for this request. Please wait.',
+            'code', '409_CONCURRENT'
+        );
+    END IF;
+
+    IF v_existing_claim.status IS NULL THEN
+        -- First time claim: insert with status 'processing'
+        INSERT INTO public.template_mutation_requests (
+            actor_id,
+            action,
+            idempotency_key,
+            status
+        ) VALUES (
+            p_actor_id,
+            p_action,
+            p_idempotency_key,
+            'processing'
+        );
+    ELSE
+        -- Previous claim was 'failed': retry by setting status to 'processing'
+        UPDATE public.template_mutation_requests
+        SET status = 'processing',
+            response_payload = NULL,
+            completed_at = NULL,
+            created_at = timezone('utc'::text, now())
+        WHERE actor_id = p_actor_id
+          AND action = p_action
+          AND idempotency_key = p_idempotency_key;
+    END IF;
+
+    -- 3. Execute Mutation Action
+    -- --------------------------------------------------------------------------
+    -- ACTION: create
+    -- --------------------------------------------------------------------------
+    IF p_action = 'create' THEN
+        v_name := trim(p_payload->>'name');
+        v_description := p_payload->>'description';
+        v_department_id := (p_payload->>'department_id')::UUID;
+        v_default_task_title := trim(p_payload->>'default_task_title');
+        v_task_details := p_payload->>'task_details';
+        v_default_priority := COALESCE(p_payload->>'default_priority', 'Normal');
+        v_default_approval_mode := COALESCE(p_payload->>'default_approval_mode', 'Internal Only');
+        v_suggested_duration_days := COALESCE((p_payload->>'suggested_duration_days')::INTEGER, 3);
+        v_sort_order := COALESCE((p_payload->>'sort_order')::INTEGER, 0);
+
+        -- Validations
+        IF v_name IS NULL OR length(v_name) = 0 THEN
+            UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
+            RETURN jsonb_build_object('success', false, 'error', 'Template name is required.', 'code', '400_BAD_REQUEST');
+        END IF;
+
+        IF v_default_task_title IS NULL OR length(v_default_task_title) = 0 THEN
+            UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
+            RETURN jsonb_build_object('success', false, 'error', 'Default task title is required.', 'code', '400_BAD_REQUEST');
+        END IF;
+
+        IF v_department_id IS NULL THEN
+            UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
+            RETURN jsonb_build_object('success', false, 'error', 'Responsible department is required.', 'code', '400_BAD_REQUEST');
+        END IF;
+
+        IF v_default_priority NOT IN ('Low', 'Normal', 'High', 'Urgent') THEN
+            UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
+            RETURN jsonb_build_object('success', false, 'error', 'Invalid default priority.', 'code', '400_BAD_REQUEST');
+        END IF;
+
+        IF v_default_approval_mode NOT IN ('Internal Only', 'Client Approval Required') THEN
+            UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
+            RETURN jsonb_build_object('success', false, 'error', 'Invalid default approval mode.', 'code', '400_BAD_REQUEST');
+        END IF;
+
+        IF v_suggested_duration_days < 1 OR v_suggested_duration_days > 30 THEN
+            UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
+            RETURN jsonb_build_object('success', false, 'error', 'Suggested duration must be between 1 and 30 business days.', 'code', '400_BAD_REQUEST');
+        END IF;
+
+        -- Check department existence
+        SELECT name INTO v_department_name FROM public.departments WHERE id = v_department_id;
+        IF v_department_name IS NULL THEN
+            UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
+            RETURN jsonb_build_object('success', false, 'error', 'Referenced department does not exist.', 'code', '400_BAD_REQUEST');
+        END IF;
+
+        INSERT INTO public.task_templates (
+            name,
+            description,
+            department_id,
+            default_task_title,
+            task_details,
+            default_priority,
+            default_approval_mode,
+            suggested_duration_days,
+            sort_order,
+            status,
+            version,
+            created_by,
+            updated_by
+        ) VALUES (
+            v_name,
+            v_description,
+            v_department_id,
+            v_default_task_title,
+            v_task_details,
+            v_default_priority,
+            v_default_approval_mode,
+            v_suggested_duration_days,
+            v_sort_order,
+            'Active',
+            1,
+            p_actor_id,
+            p_actor_id
+        ) RETURNING * INTO v_template;
+
+        v_entity_id := v_template.id;
+        v_entity_name := v_template.name;
+        v_previous_state := NULL;
+        v_new_state := to_jsonb(v_template);
+        v_audit_action := 'template_created';
+
+    -- --------------------------------------------------------------------------
+    -- ACTION: update
+    -- --------------------------------------------------------------------------
+    ELSIF p_action = 'update' THEN
+        v_template_id := (p_payload->>'template_id')::UUID;
+        IF v_template_id IS NULL THEN
+            UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
+            RETURN jsonb_build_object('success', false, 'error', 'Missing required parameter: template_id.', 'code', '400_BAD_REQUEST');
+        END IF;
+
+        v_expected_version := (p_payload->>'expected_version')::INTEGER;
+
+        -- Lock existing template
+        SELECT * INTO v_old_template FROM public.task_templates WHERE id = v_template_id FOR UPDATE;
+        IF v_old_template.id IS NULL THEN
+            UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
+            RETURN jsonb_build_object('success', false, 'error', 'Template not found.', 'code', '404_NOT_FOUND');
+        END IF;
+
+        -- Atomic version check
+        IF v_expected_version IS NOT NULL AND v_old_template.version != v_expected_version THEN
+            UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
+            RETURN jsonb_build_object(
+                'success', false,
+                'error', 'Stale update rejected: Expected version ' || v_expected_version || ', but template is at version ' || v_old_template.version || '. Please refresh and retry.',
+                'code', '409_VERSION_CONFLICT'
+            );
+        END IF;
+
+        -- Extract fields or preserve existing
+        IF p_payload ? 'name' THEN
+            v_name := trim(p_payload->>'name');
+            IF length(v_name) = 0 THEN
+                UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
+                RETURN jsonb_build_object('success', false, 'error', 'Template name cannot be empty.', 'code', '400_BAD_REQUEST');
+            END IF;
+        ELSE
+            v_name := v_old_template.name;
+        END IF;
+
+        IF p_payload ? 'default_task_title' THEN
+            v_default_task_title := trim(p_payload->>'default_task_title');
+            IF length(v_default_task_title) = 0 THEN
+                UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
+                RETURN jsonb_build_object('success', false, 'error', 'Default task title cannot be empty.', 'code', '400_BAD_REQUEST');
+            END IF;
+        ELSE
+            v_default_task_title := v_old_template.default_task_title;
+        END IF;
+
+        IF p_payload ? 'department_id' THEN
+            v_department_id := (p_payload->>'department_id')::UUID;
+            SELECT name INTO v_department_name FROM public.departments WHERE id = v_department_id;
+            IF v_department_name IS NULL THEN
+                UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
+                RETURN jsonb_build_object('success', false, 'error', 'Referenced department does not exist.', 'code', '400_BAD_REQUEST');
+            END IF;
+        ELSE
+            v_department_id := v_old_template.department_id;
+        END IF;
+
+        IF p_payload ? 'description' THEN
+            v_description := p_payload->>'description';
+        ELSE
+            v_description := v_old_template.description;
+        END IF;
+
+        IF p_payload ? 'task_details' THEN
+            v_task_details := p_payload->>'task_details';
+        ELSE
+            v_task_details := v_old_template.task_details;
+        END IF;
+
+        IF p_payload ? 'default_priority' THEN
+            v_default_priority := p_payload->>'default_priority';
+            IF v_default_priority NOT IN ('Low', 'Normal', 'High', 'Urgent') THEN
+                UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
+                RETURN jsonb_build_object('success', false, 'error', 'Invalid default priority.', 'code', '400_BAD_REQUEST');
+            END IF;
+        ELSE
+            v_default_priority := v_old_template.default_priority;
+        END IF;
+
+        IF p_payload ? 'default_approval_mode' THEN
+            v_default_approval_mode := p_payload->>'default_approval_mode';
+            IF v_default_approval_mode NOT IN ('Internal Only', 'Client Approval Required') THEN
+                UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
+                RETURN jsonb_build_object('success', false, 'error', 'Invalid default approval mode.', 'code', '400_BAD_REQUEST');
+            END IF;
+        ELSE
+            v_default_approval_mode := v_old_template.default_approval_mode;
+        END IF;
+
+        IF p_payload ? 'suggested_duration_days' THEN
+            v_suggested_duration_days := (p_payload->>'suggested_duration_days')::INTEGER;
+            IF v_suggested_duration_days < 1 OR v_suggested_duration_days > 30 THEN
+                UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
+                RETURN jsonb_build_object('success', false, 'error', 'Suggested duration must be between 1 and 30 business days.', 'code', '400_BAD_REQUEST');
+            END IF;
+        ELSE
+            v_suggested_duration_days := v_old_template.suggested_duration_days;
+        END IF;
+
+        IF p_payload ? 'sort_order' THEN
+            v_sort_order := (p_payload->>'sort_order')::INTEGER;
+        ELSE
+            v_sort_order := v_old_template.sort_order;
+        END IF;
+
+        -- Atomic update with WHERE version check
+        UPDATE public.task_templates
+        SET name = v_name,
+            description = v_description,
+            department_id = v_department_id,
+            default_task_title = v_default_task_title,
+            task_details = v_task_details,
+            default_priority = v_default_priority,
+            default_approval_mode = v_default_approval_mode,
+            suggested_duration_days = v_suggested_duration_days,
+            sort_order = v_sort_order,
+            version = v_old_template.version + 1,
+            updated_by = p_actor_id,
+            updated_at = timezone('utc'::text, now())
+        WHERE id = v_template_id
+          AND version = v_old_template.version
+        RETURNING * INTO v_template;
+
+        IF v_template.id IS NULL THEN
+            UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
+            RETURN jsonb_build_object('success', false, 'error', 'Conflict: Concurrent update detected. Please retry.', 'code', '409_CONCURRENT_UPDATE');
+        END IF;
+
+        v_entity_id := v_template.id;
+        v_entity_name := v_template.name;
+        v_previous_state := to_jsonb(v_old_template);
+        v_new_state := to_jsonb(v_template);
+        v_audit_action := 'template_updated';
+
+    -- --------------------------------------------------------------------------
+    -- ACTION: duplicate
+    -- --------------------------------------------------------------------------
+    ELSIF p_action = 'duplicate' THEN
+        v_template_id := (p_payload->>'template_id')::UUID;
+        IF v_template_id IS NULL THEN
+            UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
+            RETURN jsonb_build_object('success', false, 'error', 'Missing required parameter: template_id.', 'code', '400_BAD_REQUEST');
+        END IF;
+
+        SELECT * INTO v_source_template FROM public.task_templates WHERE id = v_template_id;
+        IF v_source_template.id IS NULL THEN
+            UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
+            RETURN jsonb_build_object('success', false, 'error', 'Source template not found.', 'code', '404_NOT_FOUND');
+        END IF;
+
+        INSERT INTO public.task_templates (
+            name,
+            description,
+            department_id,
+            default_task_title,
+            task_details,
+            default_priority,
+            default_approval_mode,
+            suggested_duration_days,
+            sort_order,
+            status,
+            version,
+            seed_key,
+            created_by,
+            updated_by
+        ) VALUES (
+            v_source_template.name || ' (Copy)',
+            v_source_template.description,
+            v_source_template.department_id,
+            v_source_template.default_task_title,
+            v_source_template.task_details,
+            v_source_template.default_priority,
+            v_source_template.default_approval_mode,
+            v_source_template.suggested_duration_days,
+            v_source_template.sort_order + 1,
+            'Active',
+            1,
+            NULL,
+            p_actor_id,
+            p_actor_id
+        ) RETURNING * INTO v_template;
+
+        v_entity_id := v_template.id;
+        v_entity_name := v_template.name;
+        v_previous_state := NULL;
+        v_new_state := to_jsonb(v_template);
+        v_audit_action := 'template_duplicated';
+
+    -- --------------------------------------------------------------------------
+    -- ACTION: archive
+    -- --------------------------------------------------------------------------
+    ELSIF p_action = 'archive' THEN
+        v_template_id := (p_payload->>'template_id')::UUID;
+        v_archive_reason := trim(p_payload->>'archive_reason');
+
+        IF v_template_id IS NULL THEN
+            UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
+            RETURN jsonb_build_object('success', false, 'error', 'Missing required parameter: template_id.', 'code', '400_BAD_REQUEST');
+        END IF;
+
+        IF v_archive_reason IS NULL OR length(v_archive_reason) = 0 THEN
+            UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
+            RETURN jsonb_build_object('success', false, 'error', 'A mandatory non-empty reason is required to archive a template.', 'code', '400_BAD_REQUEST');
+        END IF;
+
+        SELECT * INTO v_old_template FROM public.task_templates WHERE id = v_template_id FOR UPDATE;
+        IF v_old_template.id IS NULL THEN
+            UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
+            RETURN jsonb_build_object('success', false, 'error', 'Template not found.', 'code', '404_NOT_FOUND');
+        END IF;
+
+        -- Atomic check for Active status
+        IF v_old_template.status != 'Active' THEN
+            UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
+            RETURN jsonb_build_object(
+                'success', false,
+                'error', 'Conflict: Template is already archived or is not in Active status.',
+                'code', '409_STATUS_CONFLICT'
+            );
+        END IF;
+
+        UPDATE public.task_templates
+        SET status = 'Archived',
+            archive_reason = v_archive_reason,
+            archived_at = timezone('utc'::text, now()),
+            archived_by = p_actor_id,
+            updated_by = p_actor_id,
+            version = v_old_template.version + 1,
+            updated_at = timezone('utc'::text, now())
+        WHERE id = v_template_id
+          AND status = 'Active'
+        RETURNING * INTO v_template;
+
+        IF v_template.id IS NULL THEN
+            UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
+            RETURN jsonb_build_object('success', false, 'error', 'Conflict: Template is not Active or was modified concurrently.', 'code', '409_STATUS_CONFLICT');
+        END IF;
+
+        v_entity_id := v_template.id;
+        v_entity_name := v_template.name;
+        v_previous_state := to_jsonb(v_old_template);
+        v_new_state := to_jsonb(v_template);
+        v_audit_action := 'template_archived';
+
+    -- --------------------------------------------------------------------------
+    -- ACTION: restore
+    -- --------------------------------------------------------------------------
+    ELSIF p_action = 'restore' THEN
+        v_template_id := (p_payload->>'template_id')::UUID;
+        IF v_template_id IS NULL THEN
+            UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
+            RETURN jsonb_build_object('success', false, 'error', 'Missing required parameter: template_id.', 'code', '400_BAD_REQUEST');
+        END IF;
+
+        SELECT * INTO v_old_template FROM public.task_templates WHERE id = v_template_id FOR UPDATE;
+        IF v_old_template.id IS NULL THEN
+            UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
+            RETURN jsonb_build_object('success', false, 'error', 'Template not found.', 'code', '404_NOT_FOUND');
+        END IF;
+
+        -- Atomic check for Archived status
+        IF v_old_template.status != 'Archived' THEN
+            UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
+            RETURN jsonb_build_object(
+                'success', false,
+                'error', 'Conflict: Template is already active or is not in Archived status.',
+                'code', '409_STATUS_CONFLICT'
+            );
+        END IF;
+
+        UPDATE public.task_templates
+        SET status = 'Active',
+            archive_reason = NULL,
+            archived_at = NULL,
+            archived_by = NULL,
+            updated_by = p_actor_id,
+            version = v_old_template.version + 1,
+            updated_at = timezone('utc'::text, now())
+        WHERE id = v_template_id
+          AND status = 'Archived'
+        RETURNING * INTO v_template;
+
+        IF v_template.id IS NULL THEN
+            UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
+            RETURN jsonb_build_object('success', false, 'error', 'Conflict: Template is not Archived or was modified concurrently.', 'code', '409_STATUS_CONFLICT');
+        END IF;
+
+        v_entity_id := v_template.id;
+        v_entity_name := v_template.name;
+        v_previous_state := to_jsonb(v_old_template);
+        v_new_state := to_jsonb(v_template);
+        v_audit_action := 'template_restored';
+
+    ELSE
+        UPDATE public.template_mutation_requests SET status = 'failed' WHERE actor_id = p_actor_id AND action = p_action AND idempotency_key = p_idempotency_key;
+        RETURN jsonb_build_object('success', false, 'error', 'Unsupported mutation action: ' || p_action, 'code', '400_BAD_REQUEST');
+    END IF;
+
+    -- 4. Mandatory Audit Event Logging (Inside Same PostgreSQL Transaction)
+    INSERT INTO public.system_audit_events (
+        actor_id,
+        actor_name,
+        actor_role,
+        action,
+        entity_type,
+        entity_id,
+        entity_name,
+        previous_state,
+        new_state
+    ) VALUES (
+        p_actor_id,
+        v_actor_profile.full_name,
+        v_actor_profile.role,
+        v_audit_action,
+        'task_template',
+        v_entity_id,
+        v_entity_name,
+        v_previous_state,
+        v_new_state
+    );
+
+    -- 5. Construct Final Template Representation & Save Completed Idempotency Record
+    SELECT name INTO v_department_name FROM public.departments WHERE id = v_template.department_id;
+
+    v_template_json := jsonb_build_object(
+        'id', v_template.id,
+        'name', v_template.name,
+        'description', v_template.description,
+        'departmentId', v_template.department_id,
+        'departmentName', v_department_name,
+        'defaultTaskTitle', v_template.default_task_title,
+        'taskDetails', v_template.task_details,
+        'defaultPriority', v_template.default_priority,
+        'defaultApprovalMode', v_template.default_approval_mode,
+        'suggestedDurationDays', v_template.suggested_duration_days,
+        'status', v_template.status,
+        'sortOrder', v_template.sort_order,
+        'version', v_template.version,
+        'createdBy', v_template.created_by,
+        'updatedBy', v_template.updated_by,
+        'archivedAt', v_template.archived_at,
+        'archivedBy', v_template.archived_by,
+        'archiveReason', v_template.archive_reason,
+        'createdAt', v_template.created_at,
+        'updatedAt', v_template.updated_at
+    );
+
+    v_response_payload := jsonb_build_object(
+        'success', true,
+        'template', v_template_json
+    );
+
+    UPDATE public.template_mutation_requests
+    SET status = 'completed',
+        resource_id = v_template.id,
+        response_payload = v_response_payload,
+        completed_at = timezone('utc'::text, now())
+    WHERE actor_id = p_actor_id
+      AND action = p_action
+      AND idempotency_key = p_idempotency_key;
+
+    -- 6. Return Completed Response Payload
+    RETURN v_response_payload;
+END;
+$$;
+
+-- 10. Privileged RPC Function Permissions (Strict Service Role Only)
+ALTER FUNCTION public.fn_manage_task_template_mutation(UUID, TEXT, TEXT, JSONB) OWNER TO postgres;
+REVOKE ALL ON FUNCTION public.fn_manage_task_template_mutation(UUID, TEXT, TEXT, JSONB) FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.fn_manage_task_template_mutation(UUID, TEXT, TEXT, JSONB) TO service_role;

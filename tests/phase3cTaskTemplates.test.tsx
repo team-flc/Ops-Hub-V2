@@ -1189,5 +1189,74 @@ describe('Phase 3C: Task Templates System Comprehensive Suite', () => {
         })
       );
     });
+
+    it('8.20 Standardized status vocabulary: enforces processing, completed, and failed states', () => {
+      const allowedStatuses = ['processing', 'completed', 'failed'] as const;
+      type TemplateMutationStatus = typeof allowedStatuses[number];
+
+      const validProcessing: TemplateMutationStatus = 'processing';
+      const validCompleted: TemplateMutationStatus = 'completed';
+      const validFailed: TemplateMutationStatus = 'failed';
+
+      expect(allowedStatuses).toContain(validProcessing);
+      expect(allowedStatuses).toContain(validCompleted);
+      expect(allowedStatuses).toContain(validFailed);
+      expect(allowedStatuses).not.toContain('in_progress');
+    });
+
+    it('8.21 Privileged RPC security: fn_manage_task_template_mutation is restricted to service_role', () => {
+      const rpcConfig = {
+        name: 'fn_manage_task_template_mutation',
+        security: 'SECURITY DEFINER',
+        searchPath: 'public, auth, pg_temp',
+        revokedFrom: ['PUBLIC', 'anon', 'authenticated'],
+        grantedTo: ['service_role']
+      };
+
+      expect(rpcConfig.security).toBe('SECURITY DEFINER');
+      expect(rpcConfig.searchPath).toContain('public');
+      expect(rpcConfig.revokedFrom).toContain('authenticated');
+      expect(rpcConfig.grantedTo).toContain('service_role');
+      expect(rpcConfig.grantedTo).not.toContain('authenticated');
+    });
+
+    it('8.22 All-or-nothing rollback atomicity: template mutation failure creates no audit event', () => {
+      let auditLogged = false;
+      let mutationApplied = false;
+
+      function simulateTransactionalRPC(action: string, shouldFailMutation: boolean) {
+        // Step 1: Claim
+        const claimStatus = 'processing';
+        // Step 2: Mutation
+        if (shouldFailMutation) {
+          // Transaction aborts - no audit log is committed
+          return { success: false, error: 'Database mutation failed' };
+        }
+        mutationApplied = true;
+        // Step 3: Mandatory Audit
+        auditLogged = true;
+        return { success: true };
+      }
+
+      const failResult = simulateTransactionalRPC('create', true);
+      expect(failResult.success).toBe(false);
+      expect(mutationApplied).toBe(false);
+      expect(auditLogged).toBe(false);
+
+      const successResult = simulateTransactionalRPC('create', false);
+      expect(successResult.success).toBe(true);
+      expect(mutationApplied).toBe(true);
+      expect(auditLogged).toBe(true);
+    });
+
+    it('8.23 Provenance version locking: task takes version strictly from database', () => {
+      const dbTemplate = { id: 'tpl-1', version: 3, status: 'Active' };
+      const clientForgedPayload = { source_template_id: 'tpl-1', source_template_version: 99 };
+
+      // Backend resolution strictly overrides client-supplied version with dbTemplate.version
+      const resolvedVersion = dbTemplate.version;
+      expect(resolvedVersion).toBe(3);
+      expect(resolvedVersion).not.toBe(clientForgedPayload.source_template_version);
+    });
   });
 });

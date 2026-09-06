@@ -69,13 +69,13 @@ CREATE TABLE public.task_templates (
   sort_order INTEGER NOT NULL DEFAULT 0,
   version INTEGER NOT NULL DEFAULT 1,
   seed_key TEXT,
-  created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
-  updated_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  created_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+  updated_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   archived_at TIMESTAMPTZ,
-  archived_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  archived_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
   archive_reason TEXT,
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 ```
 
@@ -84,19 +84,20 @@ Dedicated idempotency claim store:
 ```sql
 CREATE TABLE public.template_mutation_requests (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  actor_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  actor_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE RESTRICT,
   action TEXT NOT NULL,
   idempotency_key TEXT NOT NULL,
+  status TEXT NOT NULL DEFAULT 'processing'
+    CONSTRAINT chk_template_mutation_status CHECK (status IN ('processing', 'completed', 'failed')),
+  resource_id UUID,
   response_payload JSONB,
-  status TEXT NOT NULL DEFAULT 'in_progress'
-    CONSTRAINT chk_template_mutation_status CHECK (status IN ('in_progress', 'completed')),
-  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT uq_template_mutation_actor_action_key UNIQUE (actor_id, action, idempotency_key)
+  created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+  completed_at TIMESTAMPTZ,
+  CONSTRAINT uq_template_mutation_idempotency UNIQUE (actor_id, action, idempotency_key)
 );
 ```
 - Protected with RLS enabled and an explicit deny-all policy for `anon` and `authenticated` roles.
-- Mutated exclusively by Edge Functions using the service role client.
+- Mutated exclusively via the transactional PostgreSQL RPC function by the service role client.
 
 ### 3.3 Companion Columns on `client_tasks`
 ```sql
@@ -119,30 +120,36 @@ ALTER TABLE public.client_tasks
 
 ---
 
-## 4. Backend Edge Functions & Authorization
+## 4. Backend Edge Functions, RPC & Authorization
 
-### 4.1 `manage-task-template` Edge Function
+### 4.1 Transactional RPC: `public.fn_manage_task_template_mutation`
+To ensure genuine database atomicity across mutation execution, audit event generation, and idempotency status tracking, all template mutations run inside a single PostgreSQL function (`public.fn_manage_task_template_mutation`):
+1. **Actor & Owner Validation**: Confirms actor exists, is active, and holds the `owner` role.
+2. **Idempotency Claim & Replay Lock**:
+   - Checks `template_mutation_requests` with row-level locking (`FOR UPDATE`).
+   - If `completed`, returns the cached response payload immediately with `is_replay: true`.
+   - If `processing`, returns `409 Conflict` (`409_CONCURRENT`).
+   - Otherwise, claims the request with `status = 'processing'`.
+3. **Atomic Mutation Execution**:
+   - `create`: Inserts template with initial `version = 1`.
+   - `update`: Enforces `WHERE id = template_id AND version = expected_version`. Rejects stale updates with `409 Conflict` (`409_VERSION_CONFLICT`).
+   - `duplicate`: Inserts copy with `name = name || ' (Copy)'` and `version = 1`.
+   - `archive`: Enforces `WHERE id = template_id AND status = 'Active'`. Requires mandatory non-empty reason. Rejects non-active status with `409 Conflict` (`409_STATUS_CONFLICT`).
+   - `restore`: Enforces `WHERE id = template_id AND status = 'Archived'`. Rejects non-archived status with `409 Conflict` (`409_STATUS_CONFLICT`).
+4. **Mandatory Audit Event Insertion**: Inserts record into `system_audit_events`. If this or any preceding step fails, PostgreSQL automatically rolls back the entire transaction.
+5. **Idempotency Completion**: Updates the claim to `status = 'completed'` and caches `response_payload`.
+6. **Security**: Defined with `SECURITY DEFINER`, fixed safe `search_path`, revoked from `PUBLIC, anon, authenticated`, and granted exclusively to `service_role`.
+
+### 4.2 `manage-task-template` Edge Function
 - **Endpoint**: `POST /functions/v1/manage-task-template`
 - **Actions**: `list`, `get`, `create`, `update`, `duplicate`, `archive`, `restore`.
 - **Identity & RBAC**:
   - Validates caller session via `supabaseAdmin.auth.getUser(jwt)`.
-  - Queries `profiles` for role and active status.
+  - Queries `profiles` for active status and role.
   - Owners: full access.
   - Operational Managers: read Active templates only (`list` with `include_archived: false`, `get`). All mutation actions return HTTP 403 Forbidden.
   - Team Members & Clients: HTTP 403 Forbidden on all actions.
-- **Claim-Before-Mutation Idempotency**:
-  1. Checks `template_mutation_requests` for existing `(actor_id, action, idempotency_key)`.
-  2. If found with status `completed`, returns the cached response payload immediately.
-  3. If found with status `in_progress`, returns HTTP 409 Conflict.
-  4. Otherwise, inserts an initial claim with `status: 'in_progress'`.
-  5. Upon successful mutation and audit logging, updates the claim to `status: 'completed'` with the response payload.
-- **Atomic Concurrency**:
-  - `update`: Enforces `WHERE id = template_id AND version = expected_version`. If zero rows updated, distinguishes 404 Not Found from 409 Conflict (stale version).
-  - `archive`: Enforces `WHERE id = template_id AND status = 'Active'`. If zero rows updated, returns 409 Conflict.
-  - `restore`: Enforces `WHERE id = template_id AND status = 'Archived'`. If zero rows updated, returns 409 Conflict.
-- **Mandatory Audit Logging**:
-  - Inserts audit record into `system_audit_events` adhering strictly to existing schema columns (`actor_id`, `actor_name`, `actor_role`, `action`, `entity_type`, `entity_id`, `entity_name`, `previous_state`, `new_state`).
-  - Explicitly verifies `{ error }` on audit insert; any failure aborts the operation and returns HTTP 500.
+- **Delegation**: Read operations (`list`, `get`) query `task_templates` directly. All mutations delegate to `fn_manage_task_template_mutation`.
 
 ### 4.2 `manage-client-task` Edge Function
 - Preserves existing `'create'` action vocabulary.

@@ -2,92 +2,109 @@
 
 ## 1. Executive Summary
 
-This document specifies the step-by-step rollback procedures for Phase 3C (Task Templates System). Because Phase 3C was developed under strict isolation boundaries:
+This document specifies the rollback procedures for Phase 3C (Task Templates System). Because Phase 3C is developed under strict isolation boundaries:
 - The database migration has **not** been applied to remote production Supabase.
-- The `manage-task-template` Edge Function has **not** been deployed to production.
+- The `manage-task-template` Edge Function and transactional RPC have **not** been deployed to production.
 - Production `main` remains at commit `37d5e824b7f15856cfaf47e93d443085f0efdf5a` (Phase 3B Owner Only Beta).
 - The feature branch `feature/phase3c-task-templates` contains all Phase 3C code.
 
-Should any rollback be required either during feature branch evaluation or after a future production rollout, execute the procedures detailed below.
-
 ---
 
-## 2. Frontend Rollback Procedures
+## 2. Application & Edge Function Revert Procedures
 
-### Scenario A: Rollback on Feature Branch / Preview
-To revert the feature branch to the Phase 3B production baseline:
+All code reverts must use standard Git forward commits (`git revert`). Never use `git reset --hard` or force-push on shared or deployment branches.
+
+### 2.1 Feature Branch / Preview Evaluation
+To revert experimental changes on the feature branch while maintaining linear Git history:
 ```bash
 git checkout feature/phase3c-task-templates
-git reset --hard 37d5e824b7f15856cfaf47e93d443085f0efdf5a
-git push origin feature/phase3c-task-templates --force
+git revert --no-edit <commit-sha>
+git push origin feature/phase3c-task-templates
 ```
-Cloudflare Pages Preview will automatically rebuild and serve the Phase 3B baseline.
 
-### Scenario B: Rollback after Production Release (Future)
-If Phase 3C is merged into `main` and needs immediate rollback:
+### 2.2 Post-Production Merge Revert (Future)
+If Phase 3C is merged into `main` and needs immediate frontend/function rollback:
 ```bash
 git checkout main
 git revert -m 1 <merge-commit-sha> -m "revert: rollback Phase 3C task templates"
 git push origin main
 ```
-Cloudflare Pages Production will automatically redeploy the clean Phase 3B build.
+Cloudflare Pages Production will automatically build and deploy the reverted codebase.
 
----
-
-## 3. Backend Edge Function Rollback Procedures
-
-If Edge Functions are deployed in a future release and encounter anomalies:
-
-### 3.1 `manage-task-template`
-- If deployed, this is a net-new function.
-- It can be decommissioned or disabled without impacting any other platform capabilities:
+### 2.3 Edge Functions Decommissioning
+- **`manage-task-template`**: Net-new Edge Function. If deployed, disable or delete via Supabase CLI:
   ```bash
-  # Delete or unpublish from Supabase CLI
   supabase functions delete manage-task-template --project-ref <project-ref>
   ```
-- With `manage-task-template` removed, the frontend gracefully falls back to Blank Task mode without throwing unhandled exceptions.
-
-### 3.2 `manage-client-task`
-- Re-deploy Phase 3B Version 3 of `manage-client-task`:
+- **`manage-client-task`**: Re-deploy the Phase 3B baseline version from `main`:
   ```bash
   git checkout 37d5e824b7f15856cfaf47e93d443085f0efdf5a -- supabase/functions/manage-client-task/index.ts
   supabase functions deploy manage-client-task --project-ref <project-ref>
   ```
-- The Phase 3B Version 3 code continues to operate seamlessly with existing `client_tasks`.
 
 ---
 
-## 4. Database Rollback Procedures (Down-Migration)
+## 3. Database Rollback Strategies
 
-If `supabase/migrations/20260908_phase3c_task_templates.sql` is applied to remote Supabase in a future rollout and needs full reversal, execute the following non-destructive down-migration script:
+### Strategy A: Forward-Safe Post-Launch Rollback (Recommended once production data exists)
+When production data has already been written (e.g. customized agency templates created or client tasks instantiated with template provenance):
+1. **Preserve Database Tables & Provenance Columns**: Leave `task_templates`, `template_mutation_requests`, `client_tasks.source_template_id`, `client_tasks.source_template_version`, and audit events in `system_audit_events` intact.
+2. **Revert Frontend & Edge Functions**: Reverting the application code gracefully returns the user interface to legacy task creation. The frontend's built-in backend-unavailability guards automatically fallback to Blank Task mode without data loss.
+3. **Draft Reviewed Forward Migration**: If schema changes are needed, apply an additive forward migration rather than dropping populated tables.
+
+### Strategy B: Pre-Data Cleanup / Destructive Purge (Strictly allowed ONLY before real production data exists)
+If `supabase/migrations/20260908_phase3c_task_templates.sql` was applied in staging or before any real production template data was created, execute the following destructive purge script:
 
 ```sql
 -- ==============================================================================
--- PHASE 3C DOWN-MIGRATION / ROLLBACK SCRIPT
+-- PHASE 3C DESTRUCTIVE PURGE SCRIPT (Pre-Data Cleanup Only)
+-- WARNING: Drops task_templates, template_mutation_requests, and RPC functions.
 -- ==============================================================================
 
 BEGIN;
 
--- 1. Remove companion columns from client_tasks (non-destructive to tasks)
+-- 1. Remove companion columns from client_tasks
 ALTER TABLE IF EXISTS public.client_tasks 
   DROP COLUMN IF EXISTS source_template_version,
   DROP COLUMN IF EXISTS source_template_id;
 
--- 2. Drop RLS policies on template_mutation_requests and task_templates
-DROP POLICY IF EXISTS "template_mutation_requests_deny_all" ON public.template_mutation_requests;
-DROP POLICY IF EXISTS "task_templates_select_active" ON public.task_templates;
+-- 2. Drop RPC function
+DROP FUNCTION IF EXISTS public.fn_manage_task_template_mutation(UUID, TEXT, TEXT, JSONB);
+
+-- 3. Drop RLS policies on template_mutation_requests and task_templates
+DROP POLICY IF EXISTS "template_mutation_deny_all" ON public.template_mutation_requests;
+DROP POLICY IF EXISTS "task_templates_select" ON public.task_templates;
 DROP POLICY IF EXISTS "task_templates_insert_deny" ON public.task_templates;
 DROP POLICY IF EXISTS "task_templates_update_deny" ON public.task_templates;
 DROP POLICY IF EXISTS "task_templates_delete_deny" ON public.task_templates;
 
--- 3. Drop tables (CASCADE removes dependent constraints and indexes)
+-- 4. Drop tables (CASCADE removes foreign keys, indexes, and named constraints)
 DROP TABLE IF EXISTS public.template_mutation_requests CASCADE;
 DROP TABLE IF EXISTS public.task_templates CASCADE;
 
 COMMIT;
 ```
 
-### Data Impact Assessment
-- **Existing Tasks**: Zero impact. All `client_tasks` created before or during Phase 3C retain their complete status, assignees, dates, deliverables, and Phase 3B conversation feeds.
-- **Client Records**: Zero impact.
-- **Audit Logs**: Historical audit events recording `TEMPLATE_CREATED` or `TASK_CREATED` remain preserved in `system_audit_events` for governance integrity.
+---
+
+## 4. Schema References & Invariants Reference
+- **Foreign Key Invariants**:
+  - `task_templates.department_id` -> `public.departments(id)` (`ON DELETE RESTRICT`)
+  - `task_templates.created_by`, `updated_by`, `archived_by` -> `public.profiles(id)` (`ON DELETE SET NULL`)
+  - `template_mutation_requests.actor_id` -> `public.profiles(id)` (`ON DELETE RESTRICT`)
+  - `client_tasks.source_template_id` -> `public.task_templates(id)` (`ON DELETE SET NULL`)
+- **Exact Named Constraints**:
+  - `chk_task_templates_name`
+  - `chk_task_templates_default_title`
+  - `chk_task_templates_priority`
+  - `chk_task_templates_approval_mode`
+  - `chk_task_templates_duration`
+  - `chk_task_templates_status`
+  - `chk_task_templates_version`
+  - `chk_template_mutation_status` (`CHECK (status IN ('processing', 'completed', 'failed'))`)
+- **Exact Index Names**:
+  - `uq_idx_task_templates_seed_key`
+  - `idx_task_templates_status_sort`
+  - `idx_task_templates_department`
+  - `idx_client_tasks_source_template`
+  - `idx_template_mutation_lookup`
