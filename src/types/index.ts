@@ -509,7 +509,6 @@ export type TaskTemplateStatus = 'Active' | 'Archived';
 
 export interface TaskTemplate {
   id: string;
-  organizationId?: string;
   name: string;
   description?: string | null;
   departmentId: string;

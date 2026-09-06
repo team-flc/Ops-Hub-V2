@@ -847,7 +847,7 @@ describe('Phase 3C: Task Templates System Comprehensive Suite', () => {
       expect(rlsPolicies.length).toBe(4);
     });
 
-    it('8.3 Cross-organization and Client access is strictly denied', async () => {
+    it('8.3 Client and unauthorized access is strictly denied', async () => {
       mockFunctionsInvoke.mockResolvedValueOnce({
         data: null,
         error: 'Forbidden: Client users cannot access task templates.'
@@ -973,13 +973,13 @@ describe('Phase 3C: Task Templates System Comprehensive Suite', () => {
       );
     });
 
-    it('8.10 Same-organization Owner access allows full active and archived template retrieval', async () => {
+    it('8.10 Owner access allows full active and archived template retrieval across global library', async () => {
       mockFunctionsInvoke.mockResolvedValueOnce({
         data: {
           success: true,
           templates: [
-            { id: 'tpl-1', organizationId: 'org-flc', name: 'Media Buying Workflow', status: 'Active', version: 1 },
-            { id: 'tpl-2', organizationId: 'org-flc', name: 'Archived SEO Workflow', status: 'Archived', version: 2 }
+            { id: 'tpl-1', name: 'Media Buying Workflow', status: 'Active', version: 1 },
+            { id: 'tpl-2', name: 'Archived SEO Workflow', status: 'Archived', version: 2 }
           ]
         },
         error: null
@@ -988,8 +988,8 @@ describe('Phase 3C: Task Templates System Comprehensive Suite', () => {
       const res = await taskTemplateService.fetchTemplates(true);
       expect(res.error).toBeNull();
       expect(res.data).toHaveLength(2);
-      expect(res.data[0].organizationId).toBe('org-flc');
-      expect(res.data[1].organizationId).toBe('org-flc');
+      expect(res.data[0].id).toBe('tpl-1');
+      expect(res.data[1].id).toBe('tpl-2');
       expect(mockFunctionsInvoke).toHaveBeenCalledWith(
         'manage-task-template',
         expect.objectContaining({
@@ -1001,26 +1001,23 @@ describe('Phase 3C: Task Templates System Comprehensive Suite', () => {
       );
     });
 
-    it('8.11 Cross-organization Owner denial: mutations on other organizations are rejected', async () => {
+    it('8.11 Simultaneous duplicate conflict: concurrent requests with same idempotency key return 409 conflict', async () => {
       mockFunctionsInvoke.mockResolvedValueOnce({
         data: null,
-        error: { message: 'Template not found or belongs to another organization.' }
+        error: { message: 'Conflict: A request with this idempotency key is currently being processed.' }
       });
 
-      const res = await taskTemplateService.updateTemplate('tpl-other-org', {
-        name: 'Unauthorized Org Update Attempt'
-      });
-
-      expect(res.error).toBe('Template not found or belongs to another organization.');
+      const res = await taskTemplateService.duplicateTemplate('tpl-1');
+      expect(res.error).toContain('Conflict');
       expect(res.data).toBeNull();
     });
 
-    it('8.12 Same-organization Manager active-template access returns active templates only', async () => {
+    it('8.12 Operational Manager active-template access returns active templates only', async () => {
       mockFunctionsInvoke.mockResolvedValueOnce({
         data: {
           success: true,
           templates: [
-            { id: 'tpl-1', organizationId: 'org-flc', name: 'Media Buying Workflow', status: 'Active', version: 1 }
+            { id: 'tpl-1', name: 'Media Buying Workflow', status: 'Active', version: 1 }
           ]
         },
         error: null
@@ -1030,72 +1027,53 @@ describe('Phase 3C: Task Templates System Comprehensive Suite', () => {
       expect(res.error).toBeNull();
       expect(res.data).toHaveLength(1);
       expect(res.data[0].status).toBe('Active');
-      expect(res.data[0].organizationId).toBe('org-flc');
     });
 
-    it('8.13 Manager cross-organization denial: task creation with cross-org template is blocked server-side', async () => {
+    it('8.13 Atomic archive / restore status conflict: status mismatch in WHERE clause returns 409 conflict', async () => {
       mockFunctionsInvoke.mockResolvedValueOnce({
-        data: { error: 'Forbidden: Cross-organization template usage is strictly prohibited.' },
-        error: null
+        data: null,
+        error: { message: 'Conflict: Template is already archived or status has changed.' }
       });
 
-      const res = await taskManagementService.createTask({
-        clientId: mockClient.id,
-        weekNumber: 1,
-        title: 'Cross-Org Task Attempt',
-        departmentId: 'dept-paid-ads',
-        plannedStart: '2026-09-07T09:00:00.000Z',
-        dueDate: '2026-09-11T18:00:00.000Z',
-        sourceTemplateId: 'tpl-alien-org'
-      });
-
-      expect(res.error).toContain('Forbidden: Cross-organization template usage is strictly prohibited.');
+      const res = await taskTemplateService.archiveTemplate('tpl-1', 'Already archived test', 'Active');
+      expect(res.error).toContain('Conflict');
       expect(res.data).toBeNull();
     });
 
-    it('8.14 Per-organization starter seed associates seed templates with each organization Owner', () => {
-      const orgA = { id: 'org-1', name: 'Org One' };
-      const orgB = { id: 'org-2', name: 'Org Two' };
-      const ownerA = { id: 'owner-1', organizationId: 'org-1', role: 'owner' };
-      const ownerB = { id: 'owner-2', organizationId: 'org-2', role: 'owner' };
+    it('8.14 Global starter seed creates a single internal agency template linked to the earliest Executive Owner', () => {
+      const earliestOwner = { id: 'owner-early', role: 'owner', created_at: '2026-01-01T00:00:00Z' };
+      const laterOwner = { id: 'owner-late', role: 'owner', created_at: '2026-02-01T00:00:00Z' };
+      const allOwners = [earliestOwner, laterOwner];
 
-      const seedForOrg = (org: typeof orgA, owner: typeof ownerA) => ({
-        organization_id: org.id,
+      const resolvedOwner = allOwners.sort((a, b) => a.created_at.localeCompare(b.created_at))[0];
+
+      const seedRecord = {
         seed_key: 'media_buying_campaign_setup_v1',
         name: 'Media Buying Campaign Setup & Launch',
-        created_by: owner.id,
-        updated_by: owner.id
-      });
+        created_by: resolvedOwner.id,
+        updated_by: resolvedOwner.id
+      };
 
-      const seedA = seedForOrg(orgA, ownerA);
-      const seedB = seedForOrg(orgB, ownerB);
-
-      expect(seedA.organization_id).toBe('org-1');
-      expect(seedA.created_by).toBe('owner-1');
-      expect(seedB.organization_id).toBe('org-2');
-      expect(seedB.created_by).toBe('owner-2');
-      expect(seedA.seed_key).toBe(seedB.seed_key);
-      expect(seedA.organization_id).not.toBe(seedB.organization_id);
+      expect(seedRecord.seed_key).toBe('media_buying_campaign_setup_v1');
+      expect(seedRecord.created_by).toBe('owner-early');
+      expect(seedRecord).not.toHaveProperty('organization_id');
     });
 
-    it('8.15 Rename-safe seed idempotency: renaming seeded template does not re-trigger seed duplication', () => {
+    it('8.15 Rename-safe seed idempotency: renaming globally seeded template does not re-trigger seed duplication based on unique seed_key', () => {
       const existingTemplates = [
         {
           id: 'tpl-seeded-1',
-          organization_id: 'org-1',
           seed_key: 'media_buying_campaign_setup_v1',
           name: 'Custom Agency Growth Flow' // Renamed from default
         }
       ];
 
-      const checkShouldSeed = (orgId: string, seedKey: string) => {
-        return !existingTemplates.some(
-          t => t.organization_id === orgId && t.seed_key === seedKey
-        );
+      const checkShouldSeed = (seedKey: string) => {
+        return !existingTemplates.some(t => t.seed_key === seedKey);
       };
 
-      expect(checkShouldSeed('org-1', 'media_buying_campaign_setup_v1')).toBe(false);
-      expect(checkShouldSeed('org-2', 'media_buying_campaign_setup_v1')).toBe(true);
+      expect(checkShouldSeed('media_buying_campaign_setup_v1')).toBe(false);
+      expect(checkShouldSeed('seo_sprint_v1')).toBe(true);
     });
 
     it('8.16 Duplicate-request protection: replaying idempotency key returns cached response payload', async () => {
@@ -1103,7 +1081,6 @@ describe('Phase 3C: Task Templates System Comprehensive Suite', () => {
         success: true,
         template: {
           id: 'tpl-idemp-1',
-          organizationId: 'org-flc',
           name: 'Idempotent Template',
           version: 1
         }
@@ -1121,7 +1098,7 @@ describe('Phase 3C: Task Templates System Comprehensive Suite', () => {
       });
 
       expect(res.data?.id).toBe('tpl-idemp-1');
-      expect(res.data?.organizationId).toBe('org-flc');
+      expect(res.data?.name).toBe('Idempotent Template');
     });
 
     it('8.17 Stale-version rejection: updating template with outdated version returns 409 conflict', async () => {
@@ -1149,30 +1126,26 @@ describe('Phase 3C: Task Templates System Comprehensive Suite', () => {
       );
     });
 
-    it('8.18 Audit-event replay protection: idempotent replay does not create duplicate audit events', () => {
-      let auditEventCount = 0;
-      const idempotencyStore = new Map<string, any>();
-
-      function executeMutationWithAudit(key: string, orgId: string, actorId: string, mutationFn: () => any) {
-        const compositeKey = `${orgId}:${actorId}:${key}`;
-        if (idempotencyStore.has(compositeKey)) {
-          return { ...idempotencyStore.get(compositeKey), isReplay: true };
+    it('8.18 Audit failure rollback: mandatory audit failure halts mutation and raises error', () => {
+      let mutationCommitted = false;
+      function executeMutationWithAudit(shouldAuditSucceed: boolean) {
+        // Step 1: Claim/pre-check
+        // Step 2: Perform DB operation
+        // Step 3: Write audit event
+        const auditResult = shouldAuditSucceed ? { error: null } : { error: new Error('Audit table constraint error') };
+        if (auditResult.error) {
+          // Failure in audit log aborts mutation / returns 500 error
+          throw new Error(`Audit event failed: ${auditResult.error.message}`);
         }
-
-        const result = mutationFn();
-        auditEventCount++;
-        idempotencyStore.set(compositeKey, result);
-        return { ...result, isReplay: false };
+        mutationCommitted = true;
+        return { success: true };
       }
 
-      const req1 = executeMutationWithAudit('key-123', 'org-1', 'actor-1', () => ({ status: 'created' }));
-      expect(req1.isReplay).toBe(false);
-      expect(auditEventCount).toBe(1);
+      expect(() => executeMutationWithAudit(false)).toThrow('Audit event failed');
+      expect(mutationCommitted).toBe(false);
 
-      // Replay identical request
-      const req2 = executeMutationWithAudit('key-123', 'org-1', 'actor-1', () => ({ status: 'created' }));
-      expect(req2.isReplay).toBe(true);
-      expect(auditEventCount).toBe(1); // Audit count NOT incremented
+      expect(() => executeMutationWithAudit(true)).not.toThrow();
+      expect(mutationCommitted).toBe(true);
     });
 
     it('8.19 Exact manage-client-task action compatibility preserves create action and locks template version', async () => {

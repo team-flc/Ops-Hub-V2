@@ -68,25 +68,20 @@ If `supabase/migrations/20260908_phase3c_task_templates.sql` is applied to remot
 
 BEGIN;
 
--- 1. Remove foreign key columns from client_tasks (non-destructive to tasks)
+-- 1. Remove companion columns from client_tasks (non-destructive to tasks)
 ALTER TABLE IF EXISTS public.client_tasks 
   DROP COLUMN IF EXISTS source_template_version,
   DROP COLUMN IF EXISTS source_template_id;
 
--- 2. Drop RLS policies on task_templates
+-- 2. Drop RLS policies on template_mutation_requests and task_templates
+DROP POLICY IF EXISTS "template_mutation_requests_deny_all" ON public.template_mutation_requests;
 DROP POLICY IF EXISTS "task_templates_select_active" ON public.task_templates;
-DROP POLICY IF EXISTS "task_templates_select_owner" ON public.task_templates;
-DROP POLICY IF EXISTS "task_templates_insert_owner" ON public.task_templates;
-DROP POLICY IF EXISTS "task_templates_update_owner" ON public.task_templates;
-DROP POLICY IF EXISTS "task_templates_delete_owner" ON public.task_templates;
+DROP POLICY IF EXISTS "task_templates_insert_deny" ON public.task_templates;
+DROP POLICY IF EXISTS "task_templates_update_deny" ON public.task_templates;
+DROP POLICY IF EXISTS "task_templates_delete_deny" ON public.task_templates;
 
--- 3. Drop indexes on task_templates
-DROP INDEX IF EXISTS public.idx_task_templates_org;
-DROP INDEX IF EXISTS public.idx_task_templates_category;
-DROP INDEX IF EXISTS public.idx_task_templates_status;
-DROP INDEX IF EXISTS public.uq_idx_task_templates_seed_key;
-
--- 4. Drop task_templates table
+-- 3. Drop tables (CASCADE removes dependent constraints and indexes)
+DROP TABLE IF EXISTS public.template_mutation_requests CASCADE;
 DROP TABLE IF EXISTS public.task_templates CASCADE;
 
 COMMIT;

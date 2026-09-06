@@ -2,9 +2,15 @@
 
 ## 1. Overview & Architecture
 
-Phase 3C introduces a complete, production-grade Task Templates System to Ops Hub v2. The system enables organizations to standardize operational workflows by defining reusable task templates that can be instantiated into client tasks during weekly setup cycles.
+Phase 3C introduces a complete, production-grade Task Templates System to Ops Hub v2. The system enables FLC agency leadership to standardize operational workflows by defining reusable task templates that can be instantiated into client tasks during weekly setup cycles.
 
-The implementation adheres to strict enterprise multi-tenant isolation, defense-in-depth authorization, non-destructive referencing, and backward compatibility with all Phase 3A/3B task workflows.
+### Single-Tenant Clarification
+Ops Hub v2 does not currently implement agency-level multi-tenancy. The `profiles.organization_id` column is historically used exclusively for Client users to reference their respective `clients.id`. Previous experimental iterations that introduced a multi-tenant `organizations` table and `organization_id` foreign keys have been completely removed. Task Templates is an internal, global agency library guarded strictly by user roles.
+
+### Role & Governance Model
+- **Executive Owner**: Full governance rights. Can view both Active and Archived templates, create, update, duplicate, archive (with mandatory reason), and restore templates.
+- **Operational Manager**: Operational consumer. Can view Active templates and instantiate client tasks from templates. Cannot create, edit, duplicate, archive, or restore templates (HTTP 403 Forbidden).
+- **Team Member & Client**: Strictly denied. Cannot view, list, or mutate templates (HTTP 403 Forbidden / RLS deny-all).
 
 ---
 
@@ -36,9 +42,8 @@ The implementation adheres to strict enterprise multi-tenant isolation, defense-
 
 ### 2.4 Client API Layer
 - **`src/lib/taskTemplateService.ts`**: Provides robust client-side methods:
-  - `fetchActiveTemplates()`: Retrieves organization-scoped active templates. Returns `isUnavailable: true` on network failure, missing tables, or 404/500 backend responses, enabling zero-crash fallback behavior.
-  - `fetchAllTemplates()`: Retrieves all templates (active and archived) for Owner management.
-  - `createTemplate()`, `updateTemplate()`, `duplicateTemplate()`, `archiveTemplate()`, `restoreTemplate()`: Edge Function invocation wrappers with normalized error codes.
+  - `fetchTemplates(includeArchived = false)`: Retrieves active templates (or all templates if Owner). Returns `isUnavailable: true` on backend unreadiness for graceful zero-crash fallback.
+  - `createTemplate()`, `updateTemplate()`, `duplicateTemplate()`, `archiveTemplate()`, `restoreTemplate()`: Edge Function wrappers passing client-generated `idempotency_key` (via `x-idempotency-key` header and body payload).
 
 ---
 
@@ -46,43 +51,71 @@ The implementation adheres to strict enterprise multi-tenant isolation, defense-
 
 ### 3.1 `task_templates` Table
 ```sql
-CREATE TABLE IF NOT EXISTS public.task_templates (
+CREATE TABLE public.task_templates (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  organization_id UUID NOT NULL REFERENCES public.organizations(id) ON DELETE CASCADE,
   name TEXT NOT NULL,
   description TEXT,
-  category TEXT NOT NULL DEFAULT 'Operations',
-  recommended_week INTEGER NOT NULL DEFAULT 1 CHECK (recommended_week BETWEEN 1 AND 4),
-  default_priority TEXT NOT NULL DEFAULT 'Medium' CHECK (default_priority IN ('Low', 'Medium', 'High', 'Urgent')),
-  default_assignee_role TEXT NOT NULL DEFAULT 'Team Member' CHECK (default_assignee_role IN ('Owner', 'Operational Manager', 'Team Member')),
-  default_approval_mode TEXT NOT NULL DEFAULT 'internal_only' CHECK (default_approval_mode IN ('internal_only', 'client_review')),
-  default_visibility TEXT NOT NULL DEFAULT 'internal' CHECK (default_visibility IN ('internal', 'shared')),
-  deliverables JSONB NOT NULL DEFAULT '[]'::jsonb,
-  estimated_duration_hours NUMERIC(6, 2),
-  tags TEXT[] NOT NULL DEFAULT '{}'::text[],
+  department_id UUID NOT NULL REFERENCES public.departments(id) ON DELETE RESTRICT,
+  default_task_title TEXT NOT NULL,
+  task_details TEXT,
+  default_priority TEXT NOT NULL DEFAULT 'Normal'
+    CONSTRAINT chk_task_templates_priority CHECK (default_priority IN ('Low', 'Normal', 'High', 'Urgent')),
+  default_approval_mode TEXT NOT NULL DEFAULT 'Internal Only'
+    CONSTRAINT chk_task_templates_approval_mode CHECK (default_approval_mode IN ('Internal Only', 'Client Approval Required')),
+  suggested_duration_days INTEGER NOT NULL DEFAULT 3
+    CONSTRAINT chk_task_templates_suggested_duration CHECK (suggested_duration_days BETWEEN 1 AND 30),
+  status TEXT NOT NULL DEFAULT 'Active'
+    CONSTRAINT chk_task_templates_status CHECK (status IN ('Active', 'Archived')),
+  sort_order INTEGER NOT NULL DEFAULT 0,
   version INTEGER NOT NULL DEFAULT 1,
-  status TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Archived')),
   seed_key TEXT,
   created_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  updated_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  archived_at TIMESTAMPTZ,
+  archived_by UUID REFERENCES auth.users(id) ON DELETE SET NULL,
+  archive_reason TEXT,
   created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 ```
 
-### 3.2 Companion Columns on `client_tasks`
-- `source_template_id UUID REFERENCES public.task_templates(id) ON DELETE SET NULL`: Records template provenance without preventing template deletion or archival. Nullable for blank/manual tasks.
-- `source_template_version INTEGER`: Immutable snapshot of the template version at the moment the task was instantiated.
+### 3.2 `template_mutation_requests` Table
+Dedicated idempotency claim store:
+```sql
+CREATE TABLE public.template_mutation_requests (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  actor_id UUID NOT NULL REFERENCES auth.users(id) ON DELETE CASCADE,
+  action TEXT NOT NULL,
+  idempotency_key TEXT NOT NULL,
+  response_payload JSONB,
+  status TEXT NOT NULL DEFAULT 'in_progress'
+    CONSTRAINT chk_template_mutation_status CHECK (status IN ('in_progress', 'completed')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  CONSTRAINT uq_template_mutation_actor_action_key UNIQUE (actor_id, action, idempotency_key)
+);
+```
+- Protected with RLS enabled and an explicit deny-all policy for `anon` and `authenticated` roles.
+- Mutated exclusively by Edge Functions using the service role client.
 
-### 3.3 Starter Seed Idempotency
-- Uses a unique, organization-scoped `seed_key = 'media_buying_campaign_setup_v1'`.
-- Guaranteed idempotent: Re-running the migration will never insert duplicate starter templates, even if an Owner has edited or renamed the template in their organization.
+### 3.3 Companion Columns on `client_tasks`
+```sql
+ALTER TABLE public.client_tasks
+  ADD COLUMN IF NOT EXISTS source_template_id UUID REFERENCES public.task_templates(id) ON DELETE SET NULL,
+  ADD COLUMN IF NOT EXISTS source_template_version INTEGER;
+```
+- Companion column existence checks specifically target `table_name = 'task_templates'`.
+- Preserves provenance without preventing template archival or deletion.
 
-### 3.4 Row-Level Security (RLS) Policies
-- Strict tenant boundary: `WHERE organization_id = (SELECT organization_id FROM user_profiles WHERE id = auth.uid())`.
-- Read: Available to Owners and Operational Managers for Active templates; Owners can also view Archived templates.
-- Write (Insert, Update, Delete): Restricted exclusively to Owners.
-- Client and Team Member accounts are denied all direct access to `task_templates`.
-- Realtime publication excluded: `task_templates` is intentionally not registered with `supabase_realtime` to avoid unnecessary connection overhead.
+### 3.4 Starter Seed
+- Idempotently inserts a single initial starter template: "Media Buying Campaign Setup & Launch" with `seed_key = 'media_buying_campaign_setup_v1'`.
+- Globally unique `uq_task_templates_seed_key` constraint guarantees that renaming the template never re-seeds a duplicate.
+- Seed is linked to the earliest Executive Owner in `profiles`.
+
+### 3.5 Row-Level Security (RLS)
+- Defense-in-depth: RLS denies all direct mutations (`INSERT`, `UPDATE`, `DELETE`) to public/authenticated users.
+- Read access is allowed for Active templates to authenticated users (Owners and Managers).
+- Realtime publication is intentionally excluded.
 
 ---
 
@@ -90,26 +123,34 @@ CREATE TABLE IF NOT EXISTS public.task_templates (
 
 ### 4.1 `manage-task-template` Edge Function
 - **Endpoint**: `POST /functions/v1/manage-task-template`
-- **Enforced JWT Verification**: `verify_jwt = true` configured in `supabase/config.toml`.
-- **Identity Resolution**: Resolved via `supabase.auth.getUser()`; client-supplied roles or organization IDs are completely ignored.
-- **Role Enforcement Matrix**:
-  - `list_active`: Allowed for Owner, Operational Manager. Denied for Team Member, Client.
-  - `list_all`: Allowed for Owner only.
-  - `create`, `update`, `duplicate`, `archive`, `restore`: Allowed for Owner only.
-- **Idempotency & Replay**:
-  - Validates `idempotency_key` and detects recent identical submissions.
-  - Replays `archive` idempotently if the template is already archived.
-  - Replays `restore` idempotently if the template is already active.
-- **Audit Logging**: Inserts directly into `public.system_audit_events` with exact schema compliance (`actor_name`, `actor_role`, `client_id`, `new_state`, `metadata`).
+- **Actions**: `list`, `get`, `create`, `update`, `duplicate`, `archive`, `restore`.
+- **Identity & RBAC**:
+  - Validates caller session via `supabaseAdmin.auth.getUser(jwt)`.
+  - Queries `profiles` for role and active status.
+  - Owners: full access.
+  - Operational Managers: read Active templates only (`list` with `include_archived: false`, `get`). All mutation actions return HTTP 403 Forbidden.
+  - Team Members & Clients: HTTP 403 Forbidden on all actions.
+- **Claim-Before-Mutation Idempotency**:
+  1. Checks `template_mutation_requests` for existing `(actor_id, action, idempotency_key)`.
+  2. If found with status `completed`, returns the cached response payload immediately.
+  3. If found with status `in_progress`, returns HTTP 409 Conflict.
+  4. Otherwise, inserts an initial claim with `status: 'in_progress'`.
+  5. Upon successful mutation and audit logging, updates the claim to `status: 'completed'` with the response payload.
+- **Atomic Concurrency**:
+  - `update`: Enforces `WHERE id = template_id AND version = expected_version`. If zero rows updated, distinguishes 404 Not Found from 409 Conflict (stale version).
+  - `archive`: Enforces `WHERE id = template_id AND status = 'Active'`. If zero rows updated, returns 409 Conflict.
+  - `restore`: Enforces `WHERE id = template_id AND status = 'Archived'`. If zero rows updated, returns 409 Conflict.
+- **Mandatory Audit Logging**:
+  - Inserts audit record into `system_audit_events` adhering strictly to existing schema columns (`actor_id`, `actor_name`, `actor_role`, `action`, `entity_type`, `entity_id`, `entity_name`, `previous_state`, `new_state`).
+  - Explicitly verifies `{ error }` on audit insert; any failure aborts the operation and returns HTTP 500.
 
-### 4.2 `manage-client-task` Edge Function (Phase 3C Updates)
-- **Provenance Validation**: When `source_template_id` is supplied:
-  1. Validates that the template exists within the actor's organization.
-  2. Ensures the template is currently `Active` (rejects `Archived` templates).
-  3. Validates version alignment.
-  4. Stores `source_template_id` and `source_template_version` in the created `client_tasks` record.
-- **Task Decoupling**: Subsequent edits or archival of the parent template have zero effect on existing instantiated tasks.
-- **Audit Logging**: Emits `TASK_CREATED` audit events with `source_template_id` in metadata.
+### 4.2 `manage-client-task` Edge Function
+- Preserves existing `'create'` action vocabulary.
+- When `source_template_id` is supplied:
+  - Verifies template exists in `task_templates`.
+  - Verifies template is `Active` (rejects archived templates with HTTP 400).
+  - Locks `source_template_version` strictly to the template's current database `version`.
+- Completely free of experimental `organizations` queries and cross-organization checks.
 
 ---
 
@@ -125,14 +166,15 @@ CREATE TABLE IF NOT EXISTS public.task_templates (
 
 ## 6. Verification & Automated Test Suite
 
-- **All 7 test files passed**: 133 / 133 tests passing.
-- **Legacy preservation**: All 99 previous tests (Phase 1 through Phase 3B) pass unchanged.
-- **Phase 3C Behavioral Tests**: 34 tests covering:
-  - Task creation chooser UI and Blank Task pass-through.
-  - Single fallback CTA on backend unavailability.
-  - Settings template management disabled state and explanatory banner.
-  - Code-splitting and lazy-loading verification.
-  - Multi-tenant boundary enforcement and cross-organization denial.
-  - Edge Function JWT verification and role matrix.
-  - Template archival lifecycle and non-destructive decoupling.
-  - Seed key idempotency across template renames.
+- **All 7 test files passed**: 143 / 143 tests passing.
+- **Legacy preservation**: All previous tests (Phase 1 through Phase 3B) pass unchanged.
+- **Phase 3C Behavioral Tests**: 44 tests covering:
+  - Business day calendar calculation (skipping weekends, roll-forward, clamping).
+  - Task creation entry flow, lazy loading, single fallback CTA on backend unreadiness.
+  - Template picker modal search, filtering, and prefill.
+  - SOP checklist preview in read-only mode.
+  - Strict RBAC: Owner full governance, Operational Manager read-only active templates, Team Member & Client HTTP 403 denial.
+  - Claim-before-mutation idempotency and duplicate request replay.
+  - Atomic concurrency: version checks (409) and archive/restore status checks (409).
+  - Mandatory audit logging failure rollback.
+  - `manage-client-task` action `'create'` preservation and immutable version locking.

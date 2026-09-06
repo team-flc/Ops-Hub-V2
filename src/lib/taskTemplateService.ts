@@ -41,10 +41,16 @@ export function calculateDueDateFromDuration(startDateStr: string, durationDays:
   return `${yyyy}-${mm}-${dd}`;
 }
 
+function generateIdempotencyKey(): string {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+    return crypto.randomUUID();
+  }
+  return 'idem_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
+}
+
 function mapTemplateRow(row: any): TaskTemplate {
   return {
     id: row.id,
-    organizationId: row.organization_id || row.organizationId || undefined,
     name: row.name,
     description: row.description || undefined,
     departmentId: row.department_id || row.departmentId,
@@ -75,8 +81,17 @@ export const taskTemplateService = {
   async invokeEdgeFunction(action: string, payload: Record<string, any> = {}): Promise<{ data?: any; error?: string; status?: number }> {
     if (!supabase) return { error: 'Supabase client not initialized' };
     try {
+      const isMutation = ['create', 'update', 'duplicate', 'archive', 'restore'].includes(action);
+      const idempotencyKey = payload.idempotency_key || (isMutation ? generateIdempotencyKey() : undefined);
+      const headers: Record<string, string> = {};
+      if (idempotencyKey) {
+        headers['x-idempotency-key'] = idempotencyKey;
+      }
+      const body = { action, ...payload, ...(idempotencyKey ? { idempotency_key: idempotencyKey } : {}) };
+
       const { data, error } = await supabase.functions.invoke('manage-task-template', {
-        body: { action, ...payload }
+        body,
+        headers
       });
 
       if (error) {

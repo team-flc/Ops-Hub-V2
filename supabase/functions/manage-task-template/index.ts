@@ -2,7 +2,7 @@
 // SUPABASE EDGE FUNCTION: manage-task-template
 // Location: supabase/functions/manage-task-template/index.ts
 // Environment: Deno Runtime / Supabase Functions
-// Phase: 3C — Task Templates System
+// Phase: 3C — Task Templates System (Internal FLC Global Template Library)
 // ==============================================================================
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
@@ -75,10 +75,10 @@ serve(async (req: Request) => {
     );
   }
 
-  // Load Caller Profile and Resolve Organization Server-Side
+  // Load Caller Profile
   const { data: callerProfile, error: profileError } = await supabaseAdmin
     .from('profiles')
-    .select('id, full_name, role, status, organization_id')
+    .select('id, full_name, role, status')
     .eq('id', callerUser.id)
     .single();
 
@@ -90,7 +90,7 @@ serve(async (req: Request) => {
   }
 
   // Strict Role Checking:
-  // Client and Team Member are strictly denied template library governance
+  // Client and Team Member are strictly denied template library access
   if (callerProfile.role === 'client') {
     return new Response(
       JSON.stringify({ error: 'Forbidden: Client users cannot access task templates.' }),
@@ -105,26 +105,8 @@ serve(async (req: Request) => {
     );
   }
 
-  // Derive organization strictly from authenticated profile (never trust client-supplied org ID)
-  let callerOrgId = callerProfile.organization_id;
-  if (!callerOrgId) {
-    const { data: defaultOrg } = await supabaseAdmin
-      .from('organizations')
-      .select('id')
-      .order('created_at', { ascending: true })
-      .limit(1)
-      .maybeSingle();
-    if (defaultOrg) {
-      callerOrgId = defaultOrg.id;
-    }
-  }
-
-  if (!callerOrgId) {
-    return new Response(
-      JSON.stringify({ error: 'Forbidden: Caller does not belong to a valid organization.' }),
-      { status: 403, headers: corsHeaders }
-    );
-  }
+  const isOwner = callerProfile.role === 'owner';
+  const isManager = callerProfile.role === 'operational_manager';
 
   let body: any;
   try {
@@ -136,7 +118,6 @@ serve(async (req: Request) => {
     );
   }
 
-  const idempotencyKey = body.idempotency_key || body.request_id || req.headers.get('x-idempotency-key') || null;
   const { action } = body;
   if (!action) {
     return new Response(
@@ -145,36 +126,15 @@ serve(async (req: Request) => {
     );
   }
 
-  const isOwner = callerProfile.role === 'owner';
-  const isManager = callerProfile.role === 'operational_manager';
-
-  // Helper: Persist idempotency record safely
-  async function persistIdempotency(actionName: string, resourceId: string | null, payload: any) {
-    if (!idempotencyKey) return;
-    try {
-      await supabaseAdmin.from('mutation_idempotency_records').insert({
-        organization_id: callerOrgId,
-        actor_id: callerProfile.id,
-        idempotency_key: idempotencyKey,
-        action: actionName,
-        resource_id: resourceId,
-        response_payload: payload
-      });
-    } catch {
-      // Ignore idempotency insert collisions
-    }
-  }
-
   try {
     // --------------------------------------------------------------------------
-    // ACTION: list
+    // ACTION: list (Owner: Active + Archived; Operational Manager: Active only)
     // --------------------------------------------------------------------------
     if (action === 'list') {
       let query = supabaseAdmin
         .from('task_templates')
         .select(`
           id,
-          organization_id,
           name,
           description,
           department_id,
@@ -195,7 +155,6 @@ serve(async (req: Request) => {
           updated_at,
           department:departments!department_id(id, name, slug)
         `)
-        .eq('organization_id', callerOrgId)
         .order('sort_order', { ascending: true })
         .order('name', { ascending: true });
 
@@ -211,7 +170,6 @@ serve(async (req: Request) => {
 
       const mapped = (templates || []).map((t: any) => ({
         id: t.id,
-        organizationId: t.organization_id,
         name: t.name,
         description: t.description,
         departmentId: t.department_id,
@@ -237,7 +195,7 @@ serve(async (req: Request) => {
     }
 
     // --------------------------------------------------------------------------
-    // Mutation Guards: Only Owner can create, edit, duplicate, archive, restore
+    // MUTATION GUARDS: Only Executive Owner can govern templates
     // --------------------------------------------------------------------------
     if (!isOwner) {
       return new Response(
@@ -246,22 +204,117 @@ serve(async (req: Request) => {
       );
     }
 
-    // Database-backed idempotency replay check for mutations
-    if (idempotencyKey) {
-      const { data: existingIdemp } = await supabaseAdmin
-        .from('mutation_idempotency_records')
-        .select('response_payload')
-        .eq('organization_id', callerOrgId)
-        .eq('actor_id', callerProfile.id)
-        .eq('idempotency_key', idempotencyKey)
-        .maybeSingle();
+    // Mutation Request ID / Idempotency Key validation
+    const rawIdempotencyKey = body.idempotency_key || body.request_id || req.headers.get('x-idempotency-key');
+    if (!rawIdempotencyKey || typeof rawIdempotencyKey !== 'string' || !rawIdempotencyKey.trim()) {
+      return new Response(
+        JSON.stringify({ error: 'Missing required field: idempotency_key (mutation request ID required).' }),
+        { status: 400, headers: corsHeaders }
+      );
+    }
+    const idempotencyKey = rawIdempotencyKey.trim();
 
-      if (existingIdemp && existingIdemp.response_payload) {
+    // --------------------------------------------------------------------------
+    // CLAIM IDEMPOTENCY BEFORE MUTATION EXECUTION
+    // --------------------------------------------------------------------------
+    const { data: existingIdemp, error: fetchIdempErr } = await supabaseAdmin
+      .from('template_mutation_requests')
+      .select('status, response_payload, resource_id')
+      .eq('actor_id', callerProfile.id)
+      .eq('action', action)
+      .eq('idempotency_key', idempotencyKey)
+      .maybeSingle();
+
+    if (fetchIdempErr) {
+      return new Response(
+        JSON.stringify({ error: `Idempotency lookup error: ${fetchIdempErr.message}` }),
+        { status: 500, headers: corsHeaders }
+      );
+    }
+
+    if (existingIdemp) {
+      if (existingIdemp.status === 'completed' && existingIdemp.response_payload) {
         return new Response(
           JSON.stringify(existingIdemp.response_payload),
           { status: 200, headers: { ...corsHeaders, 'X-Idempotent-Replay': 'true' } }
         );
       }
+      if (existingIdemp.status === 'processing') {
+        return new Response(
+          JSON.stringify({ error: 'Conflict: Mutation already in progress for this request. Please wait.' }),
+          { status: 409, headers: corsHeaders }
+        );
+      }
+    }
+
+    // Claim the request with status = 'processing'
+    const { error: claimErr } = await supabaseAdmin
+      .from('template_mutation_requests')
+      .insert({
+        actor_id: callerProfile.id,
+        action: action,
+        idempotency_key: idempotencyKey,
+        status: 'processing'
+      });
+
+    if (claimErr) {
+      if (claimErr.code === '23505') {
+        const { data: raceRecord } = await supabaseAdmin
+          .from('template_mutation_requests')
+          .select('status, response_payload')
+          .eq('actor_id', callerProfile.id)
+          .eq('action', action)
+          .eq('idempotency_key', idempotencyKey)
+          .maybeSingle();
+
+        if (raceRecord && raceRecord.status === 'completed' && raceRecord.response_payload) {
+          return new Response(
+            JSON.stringify(raceRecord.response_payload),
+            { status: 200, headers: { ...corsHeaders, 'X-Idempotent-Replay': 'true' } }
+          );
+        }
+        return new Response(
+          JSON.stringify({ error: 'Conflict: Concurrent duplicate request in progress. Please retry shortly.' }),
+          { status: 409, headers: corsHeaders }
+        );
+      }
+
+      return new Response(
+        JSON.stringify({ error: `Failed to claim mutation idempotency: ${claimErr.message}` }),
+        { status: 500, headers: corsHeaders }
+      );
+    }
+
+    // Helper: Mark idempotency completed with response payload
+    async function completeIdempotency(resourceId: string | null, payload: any) {
+      const { error: compErr } = await supabaseAdmin
+        .from('template_mutation_requests')
+        .update({
+          status: 'completed',
+          resource_id: resourceId,
+          response_payload: payload,
+          completed_at: new Date().toISOString()
+        })
+        .eq('actor_id', callerProfile.id)
+        .eq('action', action)
+        .eq('idempotency_key', idempotencyKey);
+      if (compErr) {
+        console.error('Failed to complete idempotency record:', compErr);
+      }
+    }
+
+    // Helper: Mark idempotency failed on validation or execution errors
+    async function failIdempotency(reason: string) {
+      await supabaseAdmin
+        .from('template_mutation_requests')
+        .update({
+          status: 'failed',
+          response_payload: { error: reason },
+          completed_at: new Date().toISOString()
+        })
+        .eq('actor_id', callerProfile.id)
+        .eq('action', action)
+        .eq('idempotency_key', idempotencyKey);
     }
 
     // --------------------------------------------------------------------------
@@ -281,81 +334,36 @@ serve(async (req: Request) => {
       } = body;
 
       if (!name || !name.trim()) {
+        await failIdempotency('Template name is required.');
         return new Response(JSON.stringify({ error: 'Template name is required.' }), { status: 400, headers: corsHeaders });
       }
       if (!default_task_title || !default_task_title.trim()) {
+        await failIdempotency('Default task title is required.');
         return new Response(JSON.stringify({ error: 'Default task title is required.' }), { status: 400, headers: corsHeaders });
       }
       if (!department_id) {
+        await failIdempotency('Responsible department is required.');
         return new Response(JSON.stringify({ error: 'Responsible department is required.' }), { status: 400, headers: corsHeaders });
       }
 
       if (!['Low', 'Normal', 'High', 'Urgent'].includes(default_priority)) {
+        await failIdempotency('Invalid default priority.');
         return new Response(JSON.stringify({ error: 'Invalid default priority.' }), { status: 400, headers: corsHeaders });
       }
       if (!['Internal Only', 'Client Approval Required'].includes(default_approval_mode)) {
+        await failIdempotency('Invalid default approval mode.');
         return new Response(JSON.stringify({ error: 'Invalid default approval mode.' }), { status: 400, headers: corsHeaders });
       }
 
       const durationNum = Number(suggested_duration_days);
       if (isNaN(durationNum) || durationNum < 1 || durationNum > 30) {
+        await failIdempotency('Suggested duration must be between 1 and 30 business days.');
         return new Response(JSON.stringify({ error: 'Suggested duration must be between 1 and 30 business days.' }), { status: 400, headers: corsHeaders });
-      }
-
-      // Check for duplicate recent creation within the same organization
-      const { data: existingDup } = await supabaseAdmin
-        .from('task_templates')
-        .select(`
-          id, organization_id, name, description, department_id, default_task_title, task_details,
-          default_priority, default_approval_mode, suggested_duration_days, status,
-          sort_order, version, created_by, updated_by, created_at, updated_at,
-          department:departments!department_id(id, name, slug)
-        `)
-        .eq('organization_id', callerOrgId)
-        .eq('name', name.trim())
-        .eq('department_id', department_id)
-        .eq('status', 'Active')
-        .order('created_at', { ascending: false })
-        .limit(1)
-        .maybeSingle();
-
-      if (existingDup) {
-        const createdMs = new Date(existingDup.created_at).getTime();
-        const nowMs = Date.now();
-        if (idempotencyKey || (nowMs - createdMs < 60000 && existingDup.created_by === callerProfile.id)) {
-          const replayPayload = {
-            success: true,
-            template: {
-              id: existingDup.id,
-              organizationId: existingDup.organization_id,
-              name: existingDup.name,
-              description: existingDup.description,
-              departmentId: existingDup.department_id,
-              departmentName: existingDup.department?.name,
-              defaultTaskTitle: existingDup.default_task_title,
-              taskDetails: existingDup.task_details,
-              defaultPriority: existingDup.default_priority,
-              defaultApprovalMode: existingDup.default_approval_mode,
-              suggestedDurationDays: existingDup.suggested_duration_days,
-              status: existingDup.status,
-              sortOrder: existingDup.sort_order,
-              version: existingDup.version,
-              createdAt: existingDup.created_at,
-              updatedAt: existingDup.updated_at
-            }
-          };
-          await persistIdempotency('create', existingDup.id, replayPayload);
-          return new Response(
-            JSON.stringify(replayPayload),
-            { status: 200, headers: { ...corsHeaders, 'X-Idempotent-Replay': 'true' } }
-          );
-        }
       }
 
       const { data: newTemplate, error: insertError } = await supabaseAdmin
         .from('task_templates')
         .insert({
-          organization_id: callerOrgId,
           name: name.trim(),
           description: description?.trim() || null,
           department_id,
@@ -371,7 +379,7 @@ serve(async (req: Request) => {
           updated_by: callerProfile.id
         })
         .select(`
-          id, organization_id, name, description, department_id, default_task_title, task_details,
+          id, name, description, department_id, default_task_title, task_details,
           default_priority, default_approval_mode, suggested_duration_days, status,
           sort_order, version, created_by, updated_by, created_at, updated_at,
           department:departments!department_id(id, name, slug)
@@ -379,12 +387,12 @@ serve(async (req: Request) => {
         .single();
 
       if (insertError || !newTemplate) {
+        await failIdempotency(insertError?.message || 'Failed to create template.');
         return new Response(JSON.stringify({ error: insertError?.message || 'Failed to create template.' }), { status: 500, headers: corsHeaders });
       }
 
-      // Record Audit Event
-      await supabaseAdmin.from('system_audit_events').insert({
-        organization_id: callerOrgId,
+      // Mandatory Audit Event Writing with strict error checking
+      const { error: auditError } = await supabaseAdmin.from('system_audit_events').insert({
         actor_id: callerProfile.id,
         actor_name: callerProfile.full_name,
         actor_role: callerProfile.role,
@@ -393,14 +401,21 @@ serve(async (req: Request) => {
         entity_id: newTemplate.id,
         entity_name: newTemplate.name,
         new_state: newTemplate,
-        metadata: { organization_id: callerOrgId }
+        metadata: { version: newTemplate.version }
       });
+
+      if (auditError) {
+        await failIdempotency(`Audit error: ${auditError.message}`);
+        return new Response(
+          JSON.stringify({ error: `Mandatory audit writing failed: ${auditError.message}. Mutation aborted.` }),
+          { status: 500, headers: corsHeaders }
+        );
+      }
 
       const responsePayload = {
         success: true,
         template: {
           id: newTemplate.id,
-          organizationId: newTemplate.organization_id,
           name: newTemplate.name,
           description: newTemplate.description,
           departmentId: newTemplate.department_id,
@@ -418,7 +433,7 @@ serve(async (req: Request) => {
         }
       };
 
-      await persistIdempotency('create', newTemplate.id, responsePayload);
+      await completeIdempotency(newTemplate.id, responsePayload);
 
       return new Response(
         JSON.stringify(responsePayload),
@@ -427,70 +442,70 @@ serve(async (req: Request) => {
     }
 
     // --------------------------------------------------------------------------
-    // ACTION: update
+    // ACTION: update (Atomic concurrency check via expected_version in WHERE)
     // --------------------------------------------------------------------------
     if (action === 'update') {
       const templateId = body.template_id || body.id;
-      const {
-        name, description, department_id, default_task_title, task_details,
-        default_priority, default_approval_mode, suggested_duration_days, sort_order,
-        expected_version, expectedVersion
-      } = body;
-
       if (!templateId) {
+        await failIdempotency('Missing template id.');
         return new Response(JSON.stringify({ error: 'Missing template id.' }), { status: 400, headers: corsHeaders });
       }
 
-      // Scoped fetch: enforces same organization isolation
-      const { data: existing, error: fetchErr } = await supabaseAdmin
-        .from('task_templates')
-        .select('*')
-        .eq('id', templateId)
-        .eq('organization_id', callerOrgId)
-        .single();
-
-      if (fetchErr || !existing) {
-        return new Response(JSON.stringify({ error: 'Template not found or belongs to another organization.' }), { status: 404, headers: corsHeaders });
+      const targetVersion = body.expected_version !== undefined ? body.expected_version : body.expectedVersion;
+      if (targetVersion === undefined || targetVersion === null) {
+        await failIdempotency('Missing expected_version.');
+        return new Response(
+          JSON.stringify({ error: 'Missing required field: expected_version is required for concurrent update safety.' }),
+          { status: 400, headers: corsHeaders }
+        );
       }
+      const expectedVerNum = Number(targetVersion);
 
-      // Concurrency protection: Reject stale updates
-      const targetVersion = expected_version !== undefined ? expected_version : expectedVersion;
-      if (targetVersion !== undefined && targetVersion !== null) {
-        if (existing.version !== Number(targetVersion)) {
-          return new Response(
-            JSON.stringify({
-              error: `Stale update rejected: Expected version ${targetVersion}, but template is at version ${existing.version}. Please refresh and retry.`
-            }),
-            { status: 409, headers: corsHeaders }
-          );
-        }
-      }
+      const {
+        name,
+        description,
+        department_id,
+        default_task_title,
+        task_details,
+        default_priority,
+        default_approval_mode,
+        suggested_duration_days,
+        sort_order
+      } = body;
 
       const updates: any = {
         updated_by: callerProfile.id,
         updated_at: new Date().toISOString(),
-        version: existing.version + 1
+        version: expectedVerNum + 1
       };
 
       if (name !== undefined) {
-        if (!name.trim()) return new Response(JSON.stringify({ error: 'Template name cannot be empty.' }), { status: 400, headers: corsHeaders });
+        if (!name.trim()) {
+          await failIdempotency('Template name cannot be empty.');
+          return new Response(JSON.stringify({ error: 'Template name cannot be empty.' }), { status: 400, headers: corsHeaders });
+        }
         updates.name = name.trim();
       }
       if (description !== undefined) updates.description = description?.trim() || null;
       if (department_id !== undefined) updates.department_id = department_id;
       if (default_task_title !== undefined) {
-        if (!default_task_title.trim()) return new Response(JSON.stringify({ error: 'Default task title cannot be empty.' }), { status: 400, headers: corsHeaders });
+        if (!default_task_title.trim()) {
+          await failIdempotency('Default task title cannot be empty.');
+          return new Response(JSON.stringify({ error: 'Default task title cannot be empty.' }), { status: 400, headers: corsHeaders });
+        }
         updates.default_task_title = default_task_title.trim();
       }
       if (task_details !== undefined) updates.task_details = task_details;
       if (default_priority !== undefined) {
         if (!['Low', 'Normal', 'High', 'Urgent'].includes(default_priority)) {
+          await failIdempotency('Invalid default priority.');
           return new Response(JSON.stringify({ error: 'Invalid default priority.' }), { status: 400, headers: corsHeaders });
         }
         updates.default_priority = default_priority;
       }
       if (default_approval_mode !== undefined) {
         if (!['Internal Only', 'Client Approval Required'].includes(default_approval_mode)) {
+          await failIdempotency('Invalid default approval mode.');
           return new Response(JSON.stringify({ error: 'Invalid default approval mode.' }), { status: 400, headers: corsHeaders });
         }
         updates.default_approval_mode = default_approval_mode;
@@ -498,32 +513,57 @@ serve(async (req: Request) => {
       if (suggested_duration_days !== undefined) {
         const dNum = Number(suggested_duration_days);
         if (isNaN(dNum) || dNum < 1 || dNum > 30) {
+          await failIdempotency('Suggested duration must be between 1 and 30 business days.');
           return new Response(JSON.stringify({ error: 'Suggested duration must be between 1 and 30 business days.' }), { status: 400, headers: corsHeaders });
         }
         updates.suggested_duration_days = dNum;
       }
       if (sort_order !== undefined) updates.sort_order = Number(sort_order) || 0;
 
+      // Atomic UPDATE query enforcing expected_version in WHERE condition
       const { data: updated, error: updateErr } = await supabaseAdmin
         .from('task_templates')
         .update(updates)
         .eq('id', templateId)
-        .eq('organization_id', callerOrgId)
+        .eq('version', expectedVerNum)
         .select(`
-          id, organization_id, name, description, department_id, default_task_title, task_details,
+          id, name, description, department_id, default_task_title, task_details,
           default_priority, default_approval_mode, suggested_duration_days, status,
           sort_order, version, created_by, updated_by, archived_at, archived_by,
           archive_reason, created_at, updated_at,
           department:departments!department_id(id, name, slug)
         `)
-        .single();
+        .maybeSingle();
 
-      if (updateErr || !updated) {
-        return new Response(JSON.stringify({ error: updateErr?.message || 'Failed to update template.' }), { status: 500, headers: corsHeaders });
+      if (updateErr) {
+        await failIdempotency(updateErr.message);
+        return new Response(JSON.stringify({ error: updateErr.message }), { status: 500, headers: corsHeaders });
       }
 
-      await supabaseAdmin.from('system_audit_events').insert({
-        organization_id: callerOrgId,
+      if (!updated) {
+        // Distinguish between 404 (not found) and 409 (stale version conflict)
+        const { data: existingCheck } = await supabaseAdmin
+          .from('task_templates')
+          .select('id, version')
+          .eq('id', templateId)
+          .maybeSingle();
+
+        if (!existingCheck) {
+          await failIdempotency('Template not found');
+          return new Response(JSON.stringify({ error: 'Template not found.' }), { status: 404, headers: corsHeaders });
+        }
+
+        await failIdempotency('Stale version conflict');
+        return new Response(
+          JSON.stringify({
+            error: `Stale update rejected: Expected version ${expectedVerNum}, but template is at version ${existingCheck.version}. Please refresh and retry.`
+          }),
+          { status: 409, headers: corsHeaders }
+        );
+      }
+
+      // Mandatory Audit Event Writing with strict error checking
+      const { error: auditError } = await supabaseAdmin.from('system_audit_events').insert({
         actor_id: callerProfile.id,
         actor_name: callerProfile.full_name,
         actor_role: callerProfile.role,
@@ -531,16 +571,23 @@ serve(async (req: Request) => {
         entity_type: 'task_template',
         entity_id: updated.id,
         entity_name: updated.name,
-        previous_state: existing,
+        previous_state: { version: expectedVerNum },
         new_state: updated,
-        metadata: { organization_id: callerOrgId }
+        metadata: { previous_version: expectedVerNum, new_version: updated.version }
       });
+
+      if (auditError) {
+        await failIdempotency(`Audit error: ${auditError.message}`);
+        return new Response(
+          JSON.stringify({ error: `Mandatory audit writing failed: ${auditError.message}. Mutation aborted.` }),
+          { status: 500, headers: corsHeaders }
+        );
+      }
 
       const responsePayload = {
         success: true,
         template: {
           id: updated.id,
-          organizationId: updated.organization_id,
           name: updated.name,
           description: updated.description,
           departmentId: updated.department_id,
@@ -558,7 +605,7 @@ serve(async (req: Request) => {
         }
       };
 
-      await persistIdempotency('update', updated.id, responsePayload);
+      await completeIdempotency(updated.id, responsePayload);
 
       return new Response(
         JSON.stringify(responsePayload),
@@ -572,19 +619,19 @@ serve(async (req: Request) => {
     if (action === 'duplicate') {
       const templateId = body.template_id || body.id;
       if (!templateId) {
+        await failIdempotency('Missing template id.');
         return new Response(JSON.stringify({ error: 'Missing template id.' }), { status: 400, headers: corsHeaders });
       }
 
-      // Scoped fetch: enforces same organization
       const { data: existing, error: fetchErr } = await supabaseAdmin
         .from('task_templates')
         .select('*')
         .eq('id', templateId)
-        .eq('organization_id', callerOrgId)
-        .single();
+        .maybeSingle();
 
       if (fetchErr || !existing) {
-        return new Response(JSON.stringify({ error: 'Template not found or belongs to another organization.' }), { status: 404, headers: corsHeaders });
+        await failIdempotency('Template not found.');
+        return new Response(JSON.stringify({ error: 'Template not found.' }), { status: 404, headers: corsHeaders });
       }
 
       const duplicateName = `${existing.name} (Copy)`.slice(0, 200);
@@ -592,7 +639,6 @@ serve(async (req: Request) => {
       const { data: duplicated, error: dupErr } = await supabaseAdmin
         .from('task_templates')
         .insert({
-          organization_id: callerOrgId,
           name: duplicateName,
           description: existing.description,
           department_id: existing.department_id,
@@ -608,7 +654,7 @@ serve(async (req: Request) => {
           updated_by: callerProfile.id
         })
         .select(`
-          id, organization_id, name, description, department_id, default_task_title, task_details,
+          id, name, description, department_id, default_task_title, task_details,
           default_priority, default_approval_mode, suggested_duration_days, status,
           sort_order, version, created_by, updated_by, created_at, updated_at,
           department:departments!department_id(id, name, slug)
@@ -616,11 +662,12 @@ serve(async (req: Request) => {
         .single();
 
       if (dupErr || !duplicated) {
+        await failIdempotency(dupErr?.message || 'Failed to duplicate template.');
         return new Response(JSON.stringify({ error: dupErr?.message || 'Failed to duplicate template.' }), { status: 500, headers: corsHeaders });
       }
 
-      await supabaseAdmin.from('system_audit_events').insert({
-        organization_id: callerOrgId,
+      // Mandatory Audit Event Writing with strict error checking
+      const { error: auditError } = await supabaseAdmin.from('system_audit_events').insert({
         actor_id: callerProfile.id,
         actor_name: callerProfile.full_name,
         actor_role: callerProfile.role,
@@ -628,14 +675,21 @@ serve(async (req: Request) => {
         entity_type: 'task_template',
         entity_id: duplicated.id,
         entity_name: duplicated.name,
-        metadata: { source_template_id: existing.id, organization_id: callerOrgId }
+        metadata: { source_template_id: existing.id }
       });
+
+      if (auditError) {
+        await failIdempotency(`Audit error: ${auditError.message}`);
+        return new Response(
+          JSON.stringify({ error: `Mandatory audit writing failed: ${auditError.message}. Mutation aborted.` }),
+          { status: 500, headers: corsHeaders }
+        );
+      }
 
       const responsePayload = {
         success: true,
         template: {
           id: duplicated.id,
-          organizationId: duplicated.organization_id,
           name: duplicated.name,
           description: duplicated.description,
           departmentId: duplicated.department_id,
@@ -653,7 +707,7 @@ serve(async (req: Request) => {
         }
       };
 
-      await persistIdempotency('duplicate', duplicated.id, responsePayload);
+      await completeIdempotency(duplicated.id, responsePayload);
 
       return new Response(
         JSON.stringify(responsePayload),
@@ -662,95 +716,65 @@ serve(async (req: Request) => {
     }
 
     // --------------------------------------------------------------------------
-    // ACTION: archive
+    // ACTION: archive (Atomic condition status = 'Active' in WHERE)
     // --------------------------------------------------------------------------
     if (action === 'archive') {
       const templateId = body.template_id || body.id;
-      const { reason, archive_reason, expected_status, expectedStatus } = body;
-      const archiveReason = reason || archive_reason;
+      const archiveReason = (body.archive_reason || body.reason || '').trim();
 
-      if (!templateId || !archiveReason || !archiveReason.trim()) {
+      if (!templateId || !archiveReason) {
+        await failIdempotency('Template id and a mandatory archive reason are required.');
         return new Response(JSON.stringify({ error: 'Template id and a mandatory archive reason are required.' }), { status: 400, headers: corsHeaders });
       }
 
-      const { data: existing, error: fetchErr } = await supabaseAdmin
-        .from('task_templates')
-        .select('*')
-        .eq('id', templateId)
-        .eq('organization_id', callerOrgId)
-        .single();
-
-      if (fetchErr || !existing) {
-        return new Response(JSON.stringify({ error: 'Template not found or belongs to another organization.' }), { status: 404, headers: corsHeaders });
-      }
-
-      // Expected state validation for concurrency
-      const reqStatus = expected_status || expectedStatus;
-      if (reqStatus && existing.status !== reqStatus) {
-        return new Response(
-          JSON.stringify({ error: `State conflict: Expected status ${reqStatus}, but template is ${existing.status}.` }),
-          { status: 409, headers: corsHeaders }
-        );
-      }
-
-      // Idempotency check: if already archived, return safely without duplicate audit event
-      if (existing.status === 'Archived') {
-        const replayPayload = {
-          success: true,
-          template: {
-            id: existing.id,
-            organizationId: existing.organization_id,
-            name: existing.name,
-            description: existing.description,
-            departmentId: existing.department_id,
-            defaultTaskTitle: existing.default_task_title,
-            taskDetails: existing.task_details,
-            defaultPriority: existing.default_priority,
-            defaultApprovalMode: existing.default_approval_mode,
-            suggestedDurationDays: existing.suggested_duration_days,
-            status: existing.status,
-            sortOrder: existing.sort_order,
-            version: existing.version,
-            archivedAt: existing.archived_at,
-            archivedBy: existing.archived_by,
-            archiveReason: existing.archive_reason,
-            createdAt: existing.created_at,
-            updatedAt: existing.updated_at
-          }
-        };
-        await persistIdempotency('archive', existing.id, replayPayload);
-        return new Response(
-          JSON.stringify(replayPayload),
-          { status: 200, headers: { ...corsHeaders, 'X-Idempotent-Replay': 'true' } }
-        );
-      }
-
+      // Atomic update query enforcing status = 'Active'
       const { data: archived, error: archErr } = await supabaseAdmin
         .from('task_templates')
         .update({
           status: 'Archived',
           archived_at: new Date().toISOString(),
           archived_by: callerProfile.id,
-          archive_reason: archiveReason.trim(),
+          archive_reason: archiveReason,
           updated_at: new Date().toISOString()
         })
         .eq('id', templateId)
-        .eq('organization_id', callerOrgId)
+        .eq('status', 'Active')
         .select(`
-          id, organization_id, name, description, department_id, default_task_title, task_details,
+          id, name, description, department_id, default_task_title, task_details,
           default_priority, default_approval_mode, suggested_duration_days, status,
           sort_order, version, created_by, updated_by, archived_at, archived_by,
           archive_reason, created_at, updated_at,
           department:departments!department_id(id, name, slug)
         `)
-        .single();
+        .maybeSingle();
 
-      if (archErr || !archived) {
-        return new Response(JSON.stringify({ error: archErr?.message || 'Failed to archive template.' }), { status: 500, headers: corsHeaders });
+      if (archErr) {
+        await failIdempotency(archErr.message);
+        return new Response(JSON.stringify({ error: archErr.message }), { status: 500, headers: corsHeaders });
       }
 
-      await supabaseAdmin.from('system_audit_events').insert({
-        organization_id: callerOrgId,
+      if (!archived) {
+        // Check if template exists
+        const { data: existingCheck } = await supabaseAdmin
+          .from('task_templates')
+          .select('id, status')
+          .eq('id', templateId)
+          .maybeSingle();
+
+        if (!existingCheck) {
+          await failIdempotency('Template not found.');
+          return new Response(JSON.stringify({ error: 'Template not found.' }), { status: 404, headers: corsHeaders });
+        }
+
+        await failIdempotency('State conflict: Template is not Active.');
+        return new Response(
+          JSON.stringify({ error: `State conflict: Template is already ${existingCheck.status}. Only Active templates can be archived.` }),
+          { status: 409, headers: corsHeaders }
+        );
+      }
+
+      // Mandatory Audit Event Writing with strict error checking
+      const { error: auditError } = await supabaseAdmin.from('system_audit_events').insert({
         actor_id: callerProfile.id,
         actor_name: callerProfile.full_name,
         actor_role: callerProfile.role,
@@ -758,19 +782,25 @@ serve(async (req: Request) => {
         entity_type: 'task_template',
         entity_id: archived.id,
         entity_name: archived.name,
-        reason: archiveReason.trim(),
-        metadata: { organization_id: callerOrgId }
+        reason: archiveReason,
+        new_state: archived
       });
+
+      if (auditError) {
+        await failIdempotency(`Audit error: ${auditError.message}`);
+        return new Response(
+          JSON.stringify({ error: `Mandatory audit writing failed: ${auditError.message}. Mutation aborted.` }),
+          { status: 500, headers: corsHeaders }
+        );
+      }
 
       const responsePayload = {
         success: true,
         template: {
           id: archived.id,
-          organizationId: archived.organization_id,
           name: archived.name,
           description: archived.description,
           departmentId: archived.department_id,
-          departmentName: archived.department?.name,
           defaultTaskTitle: archived.default_task_title,
           taskDetails: archived.task_details,
           defaultPriority: archived.default_priority,
@@ -787,7 +817,7 @@ serve(async (req: Request) => {
         }
       };
 
-      await persistIdempotency('archive', archived.id, responsePayload);
+      await completeIdempotency(archived.id, responsePayload);
 
       return new Response(
         JSON.stringify(responsePayload),
@@ -796,65 +826,16 @@ serve(async (req: Request) => {
     }
 
     // --------------------------------------------------------------------------
-    // ACTION: restore
+    // ACTION: restore (Atomic condition status = 'Archived' in WHERE)
     // --------------------------------------------------------------------------
     if (action === 'restore') {
       const templateId = body.template_id || body.id;
-      const { expected_status, expectedStatus } = body;
-
       if (!templateId) {
+        await failIdempotency('Missing template id.');
         return new Response(JSON.stringify({ error: 'Missing template id.' }), { status: 400, headers: corsHeaders });
       }
 
-      const { data: existing, error: fetchErr } = await supabaseAdmin
-        .from('task_templates')
-        .select('*')
-        .eq('id', templateId)
-        .eq('organization_id', callerOrgId)
-        .single();
-
-      if (fetchErr || !existing) {
-        return new Response(JSON.stringify({ error: 'Template not found or belongs to another organization.' }), { status: 404, headers: corsHeaders });
-      }
-
-      // Expected state validation for concurrency
-      const reqStatus = expected_status || expectedStatus;
-      if (reqStatus && existing.status !== reqStatus) {
-        return new Response(
-          JSON.stringify({ error: `State conflict: Expected status ${reqStatus}, but template is ${existing.status}.` }),
-          { status: 409, headers: corsHeaders }
-        );
-      }
-
-      // Idempotency check: if already active, return safely without duplicate audit event
-      if (existing.status === 'Active') {
-        const replayPayload = {
-          success: true,
-          template: {
-            id: existing.id,
-            organizationId: existing.organization_id,
-            name: existing.name,
-            description: existing.description,
-            departmentId: existing.department_id,
-            defaultTaskTitle: existing.default_task_title,
-            taskDetails: existing.task_details,
-            defaultPriority: existing.default_priority,
-            defaultApprovalMode: existing.default_approval_mode,
-            suggestedDurationDays: existing.suggested_duration_days,
-            status: existing.status,
-            sortOrder: existing.sort_order,
-            version: existing.version,
-            createdAt: existing.created_at,
-            updatedAt: existing.updated_at
-          }
-        };
-        await persistIdempotency('restore', existing.id, replayPayload);
-        return new Response(
-          JSON.stringify(replayPayload),
-          { status: 200, headers: { ...corsHeaders, 'X-Idempotent-Replay': 'true' } }
-        );
-      }
-
+      // Atomic update query enforcing status = 'Archived'
       const { data: restored, error: restErr } = await supabaseAdmin
         .from('task_templates')
         .update({
@@ -865,36 +846,63 @@ serve(async (req: Request) => {
           updated_at: new Date().toISOString()
         })
         .eq('id', templateId)
-        .eq('organization_id', callerOrgId)
+        .eq('status', 'Archived')
         .select(`
-          id, organization_id, name, description, department_id, default_task_title, task_details,
+          id, name, description, department_id, default_task_title, task_details,
           default_priority, default_approval_mode, suggested_duration_days, status,
           sort_order, version, created_by, updated_by, created_at, updated_at,
           department:departments!department_id(id, name, slug)
         `)
-        .single();
+        .maybeSingle();
 
-      if (restErr || !restored) {
-        return new Response(JSON.stringify({ error: restErr?.message || 'Failed to restore template.' }), { status: 500, headers: corsHeaders });
+      if (restErr) {
+        await failIdempotency(restErr.message);
+        return new Response(JSON.stringify({ error: restErr.message }), { status: 500, headers: corsHeaders });
       }
 
-      await supabaseAdmin.from('system_audit_events').insert({
-        organization_id: callerOrgId,
+      if (!restored) {
+        // Check if template exists
+        const { data: existingCheck } = await supabaseAdmin
+          .from('task_templates')
+          .select('id, status')
+          .eq('id', templateId)
+          .maybeSingle();
+
+        if (!existingCheck) {
+          await failIdempotency('Template not found.');
+          return new Response(JSON.stringify({ error: 'Template not found.' }), { status: 404, headers: corsHeaders });
+        }
+
+        await failIdempotency('State conflict: Template is not Archived.');
+        return new Response(
+          JSON.stringify({ error: `State conflict: Template is already ${existingCheck.status}. Only Archived templates can be restored.` }),
+          { status: 409, headers: corsHeaders }
+        );
+      }
+
+      // Mandatory Audit Event Writing with strict error checking
+      const { error: auditError } = await supabaseAdmin.from('system_audit_events').insert({
         actor_id: callerProfile.id,
         actor_name: callerProfile.full_name,
         actor_role: callerProfile.role,
         action: 'template_restored',
         entity_type: 'task_template',
         entity_id: restored.id,
-        entity_name: restored.name,
-        metadata: { organization_id: callerOrgId }
+        entity_name: restored.name
       });
+
+      if (auditError) {
+        await failIdempotency(`Audit error: ${auditError.message}`);
+        return new Response(
+          JSON.stringify({ error: `Mandatory audit writing failed: ${auditError.message}. Mutation aborted.` }),
+          { status: 500, headers: corsHeaders }
+        );
+      }
 
       const responsePayload = {
         success: true,
         template: {
           id: restored.id,
-          organizationId: restored.organization_id,
           name: restored.name,
           description: restored.description,
           departmentId: restored.department_id,
@@ -912,7 +920,7 @@ serve(async (req: Request) => {
         }
       };
 
-      await persistIdempotency('restore', restored.id, responsePayload);
+      await completeIdempotency(restored.id, responsePayload);
 
       return new Response(
         JSON.stringify(responsePayload),
@@ -926,7 +934,7 @@ serve(async (req: Request) => {
     );
   } catch (err: any) {
     return new Response(
-      JSON.stringify({ error: err.message || 'Internal server error.' }),
+      JSON.stringify({ error: err?.message || 'Internal server error processing template action.' }),
       { status: 500, headers: corsHeaders }
     );
   }
