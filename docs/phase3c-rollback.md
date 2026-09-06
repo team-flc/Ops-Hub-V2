@@ -53,7 +53,7 @@ When production data has already been written (e.g. customized agency templates 
 3. **Draft Reviewed Forward Migration**: If schema changes are needed, apply an additive forward migration rather than dropping populated tables.
 
 ### Strategy B: Pre-Data Cleanup / Destructive Purge (Strictly allowed ONLY before real production data exists)
-If `supabase/migrations/20260908_phase3c_task_templates.sql` was applied in staging or before any real production template data was created, execute the following destructive purge script:
+If `supabase/migrations/20260908000001_phase3c_task_templates.sql` was applied in staging or before any real production template data was created, execute the following destructive purge script:
 
 ```sql
 -- ==============================================================================

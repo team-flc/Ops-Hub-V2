@@ -47,7 +47,7 @@ Ops Hub v2 does not currently implement agency-level multi-tenancy. The `profile
 
 ---
 
-## 3. Database Schema & Migration (`supabase/migrations/20260908_phase3c_task_templates.sql`)
+## 3. Database Schema & Migration (`supabase/migrations/20260908000001_phase3c_task_templates.sql`)
 
 ### 3.1 `task_templates` Table
 ```sql
