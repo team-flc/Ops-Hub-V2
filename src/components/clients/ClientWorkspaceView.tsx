@@ -14,8 +14,10 @@ import { CreateClientTaskModal } from '../tasks/CreateClientTaskModal';
 import { EditClientTaskModal } from '../tasks/EditClientTaskModal';
 import { TaskTemplate } from '../../types';
 import { taskManagementService } from '../../lib/taskManagementService';
-
 import { TaskCreationModeModal } from '../tasks/TaskCreationModeModal';
+import { ApplyServiceTemplateModal } from '../tasks/ApplyServiceTemplateModal';
+import { ClientWorkPlanView } from '../workplans/ClientWorkPlanView';
+
 const TaskTemplatePickerModal = React.lazy(() =>
   import('../tasks/TaskTemplatePickerModal').then((m) => ({ default: m.TaskTemplatePickerModal }))
 );
@@ -30,7 +32,7 @@ interface ClientWorkspaceViewProps {
   onClientUpdated: (updated: ClientRecord) => void;
 }
 
-type MainTab = 'setup' | 'details';
+type MainTab = 'setup' | 'workplans' | 'details';
 type WeekTab = 'week1' | 'week2' | 'week3' | 'week4';
 
 export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
@@ -55,6 +57,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
   // Modals
   const [isModeModalOpen, setIsModeModalOpen] = useState(false);
   const [isTemplatePickerOpen, setIsTemplatePickerOpen] = useState(false);
+  const [isApplyTemplateOpen, setIsApplyTemplateOpen] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [selectedTemplateForCreation, setSelectedTemplateForCreation] = useState<TaskTemplate | null>(null);
   const [modalWeekNumber, setModalWeekNumber] = useState<1 | 2 | 3 | 4>(1);
@@ -66,10 +69,12 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
     setIsModeModalOpen(true);
   };
 
-  const handleSelectMode = (mode: 'template' | 'blank', week: 1 | 2 | 3 | 4) => {
+  const handleSelectMode = (mode: 'service_template' | 'template' | 'blank', week: 1 | 2 | 3 | 4) => {
     setModalWeekNumber(week);
     setIsModeModalOpen(false);
-    if (mode === 'template') {
+    if (mode === 'service_template') {
+      setIsApplyTemplateOpen(true);
+    } else if (mode === 'template') {
       setIsTemplatePickerOpen(true);
     } else {
       setSelectedTemplateForCreation(null);
@@ -195,15 +200,15 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
 
       {/* Paused Client Warning Banner */}
       {client.status === 'Paused' && (
-        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 sm:px-6 py-3 flex items-center gap-3 text-amber-800 dark:text-amber-300 text-xs font-semibold animate-fade-in">
-          <AlertTriangle className="w-4 h-4 flex-shrink-0 text-amber-600 dark:text-amber-400" />
+        <div className="bg-brand-500/10 border-b border-brand-500/20 px-4 sm:px-6 py-3 flex items-center gap-3 text-brand-800 dark:text-brand-300 text-xs font-semibold animate-fade-in">
+          <AlertTriangle className="w-4 h-4 flex-shrink-0 text-brand-600 dark:text-brand-400" />
           <div className="flex-1">
             <span>Workspace Paused: This client organization is currently paused ({client.pauseReason || 'Operational reason'}). Creating new tasks and active work mutations are blocked.</span>
           </div>
         </div>
       )}
 
-      {/* 2. Top-Level Tab Navigation (30-Day Setup and Client Details only) */}
+      {/* 2. Top-Level Tab Navigation (30-Day Setup, 90-Day Work Plans, and Client Details) */}
       <div className="bg-white dark:bg-dark-card border-b border-gray-200 dark:border-dark-border px-4 sm:px-6 flex items-center justify-between">
         <div className="flex items-center gap-2">
           <button
@@ -217,6 +222,19 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
           >
             <Calendar className="w-4 h-4" />
             <span>30-Day Setup</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setActiveTab('workplans')}
+            className={`flex items-center gap-2 px-4 py-3 min-h-[44px] text-xs font-bold border-b-2 transition-all cursor-pointer ${
+              activeTab === 'workplans'
+                ? 'border-brand-500 text-brand-600 dark:text-brand-400'
+                : 'border-transparent text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'
+            }`}
+          >
+            <Layers className="w-4 h-4" />
+            <span>90-Day Work Plans</span>
           </button>
 
           <button
@@ -238,7 +256,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
       {toastMessage && (
         <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 max-w-[calc(100vw-2rem)] animate-bounce">
           <div className="flex items-center gap-2 px-4 py-3 rounded-2xl bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-xs font-bold shadow-2xl border border-gray-700/30">
-            <Sparkles className="w-4 h-4 text-amber-400 shrink-0" />
+            <Sparkles className="w-4 h-4 text-brand-500 shrink-0" />
             <span className="truncate">{toastMessage}</span>
           </div>
         </div>
@@ -258,7 +276,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                   onClick={() => setActiveWeek(w.id)}
                   className={`py-3 px-4 min-h-[44px] rounded-xl text-center border transition-all cursor-pointer ${
                     activeWeek === w.id
-                      ? 'bg-brand-500/10 border-brand-500/40 text-brand-600 dark:text-brand-400 font-bold shadow-sm'
+                      ? 'bg-brand-500/10 border-brand-500/40 text-brand-600 dark:text-brand-400 font-bold shadow-xs'
                       : 'bg-white dark:bg-dark-card border-gray-200 dark:border-dark-border text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-50 dark:hover:bg-dark-200'
                   }`}
                 >
@@ -281,10 +299,10 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                 {isOwnerOrManager && (
                   client.status === 'Paused' ? (
                     <span 
-                      className="px-3.5 py-2 min-h-[44px] rounded-xl bg-amber-100 dark:bg-amber-950/40 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-300 text-xs font-bold flex items-center gap-1.5 opacity-80 cursor-not-allowed"
+                      className="px-3.5 py-2 min-h-[44px] rounded-xl bg-gray-100 dark:bg-dark-200 border border-gray-300 dark:border-dark-border text-gray-500 dark:text-gray-400 text-xs font-bold flex items-center gap-1.5 opacity-80 cursor-not-allowed"
                       title="Task creation is blocked while client organization is paused."
                     >
-                      <AlertTriangle className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
+                      <AlertTriangle className="w-3.5 h-3.5 text-brand-500" />
                       <span>Tasks Paused</span>
                     </span>
                   ) : (
@@ -315,7 +333,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                   ))}
                 </div>
               ) : (
-                /* Clean Empty State when no tasks exist (single + Add Task button remains in top-right header) */
+                /* Clean Empty State when no tasks exist */
                 <div className="bg-white dark:bg-dark-card rounded-2xl border border-gray-200 dark:border-dark-border p-12 shadow-sm min-h-[240px] flex flex-col items-center justify-center text-center space-y-3">
                   <div className="w-12 h-12 rounded-2xl bg-brand-500/10 text-brand-500 flex items-center justify-center border border-brand-500/20">
                     <Layers className="w-6 h-6" />
@@ -334,7 +352,22 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
           </div>
         )}
 
-        {/* TAB 2: CLIENT DETAILS */}
+        {/* TAB 2: 90-DAY WORK PLANS (Phase 3D) */}
+        {activeTab === 'workplans' && (
+          <ClientWorkPlanView
+            client={client}
+            currentUserProfile={currentUserProfile}
+            departments={departments}
+            onSelectWeek={(wk) => {
+              if (wk >= 1 && wk <= 4) {
+                setActiveWeek(`week${wk}` as WeekTab);
+                setActiveTab('setup');
+              }
+            }}
+          />
+        )}
+
+        {/* TAB 3: CLIENT DETAILS */}
         {activeTab === 'details' && (
           <ClientDetailsTab
             client={client}
@@ -374,6 +407,22 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
         </React.Suspense>
       )}
 
+      {/* Apply Multi-Task Service Template Modal (Phase 3D) */}
+      {isApplyTemplateOpen && (
+        <ApplyServiceTemplateModal
+          isOpen={isApplyTemplateOpen}
+          onClose={() => setIsApplyTemplateOpen(false)}
+          onSuccess={() => {
+            setIsApplyTemplateOpen(false);
+            loadTasks();
+            showToast('Service template launched into Draft tasks.');
+          }}
+          client={client}
+          initialWeek={modalWeekNumber}
+          departments={departments}
+        />
+      )}
+
       <CreateClientTaskModal
         key={`create-modal-week-${modalWeekNumber}-${selectedTemplateForCreation?.id || 'blank'}`}
         isOpen={isCreateModalOpen}
@@ -408,6 +457,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
             isOpen={Boolean(selectedTaskDetails)}
             onClose={() => setSelectedTaskDetails(null)}
             task={selectedTaskDetails}
+            client={client}
             currentUserProfile={currentUserProfile}
             departments={departments}
             eligibleAssignees={eligibleAssignees}

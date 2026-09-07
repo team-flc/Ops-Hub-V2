@@ -12,6 +12,7 @@ import {
 export interface CreateTeamMemberPayload {
   fullName: string;
   workEmail: string;
+  role?: 'operational_manager' | 'team_member';
   phone?: string;
   backupPhone?: string;
   contactEmail?: string;

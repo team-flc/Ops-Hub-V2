@@ -352,6 +352,7 @@ export const taskManagementService = {
         blocked_reason, sort_order, created_by, created_at,
         updated_by, updated_at, archived_at, archived_by, archive_reason,
         source_template_id, source_template_version,
+        plan_id, plan_week, occurrence_id, launch_batch_id,
         departments(id, name),
         assignee:profiles!assignee_id(id, full_name, role, status),
         creator:profiles!created_by(id, full_name)
@@ -375,8 +376,8 @@ export const taskManagementService = {
       data = res.data;
       error = res.error;
 
-      // Graceful fallback if source_template columns do not exist in database yet (e.g. on un-migrated preview)
-      if (error && (error.message?.includes('source_template') || error.code === 'PGRST204')) {
+      // Graceful fallback if source_template or plan columns do not exist in database yet (e.g. on un-migrated preview)
+      if (error && (error.message?.includes('source_template') || error.message?.includes('plan_') || error.code === 'PGRST204')) {
         const fallbackFields = `
           id, client_id, week_number, title, details, department_id,
           assignee_id, priority, planned_start, due_date, status,
@@ -428,15 +429,17 @@ export const taskManagementService = {
           departmentName: row.departments?.name || 'Department',
           assigneeId: row.assignee_id,
           assigneeName: row.assignee?.full_name || null,
+          assigneeAvatar: row.assignee?.avatar_url || null,
           assigneeRole: row.assignee?.role || null,
           isAssigneeEligible,
           priority: row.priority,
           plannedStart: row.planned_start,
           dueDate: row.due_date,
           status: row.status,
-          approvalMode: (row.approval_mode as TaskApprovalMode) || 'Internal Only',
+          approvalMode: row.approval_mode || 'Internal Only',
           completedAt: row.completed_at || null,
           completedBy: row.completed_by || null,
+          completedByName: row.completer?.full_name || null,
           reopenedAt: row.reopened_at || null,
           reopenedBy: row.reopened_by || null,
           reopenReason: row.reopen_reason || null,
@@ -452,6 +455,10 @@ export const taskManagementService = {
           archiveReason: row.archive_reason,
           sourceTemplateId: row.source_template_id || null,
           sourceTemplateVersion: row.source_template_version || null,
+          planId: row.plan_id || null,
+          planWeek: row.plan_week || null,
+          occurrenceId: row.occurrence_id || null,
+          launchBatchId: row.launch_batch_id || null,
           isOverdue
         };
       });

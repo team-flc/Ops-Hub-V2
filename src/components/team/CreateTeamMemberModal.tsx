@@ -49,6 +49,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
   const [selectedDesignationId, setSelectedDesignationId] = useState('');
   const [selectedManagerId, setSelectedManagerId] = useState('');
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
+  const [selectedRole, setSelectedRole] = useState<'operational_manager' | 'team_member'>('team_member');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -204,6 +205,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
       const result = await teamManagementService.createTeamMember({
         fullName: fullName.trim(),
         workEmail: workEmail.trim().toLowerCase(),
+        role: selectedRole,
         phone: phone.trim() || undefined,
         backupPhone: backupPhone.trim() || undefined,
         contactEmail: contactEmail.trim().toLowerCase() || undefined,
@@ -226,7 +228,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
         setCreatedCredentials({
           fullName: fullName.trim(),
           workEmail: workEmail.trim().toLowerCase(),
-          role: 'Team Member',
+          role: selectedRole === 'operational_manager' ? 'Operational Manager' : 'Team Member',
           password
         });
         setIsSubmitting(false);
@@ -240,7 +242,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
 
   const handleCopyCredentials = () => {
     if (!createdCredentials) return;
-    const text = `FLC Ops Hub Credentials:\nName: ${createdCredentials.fullName}\nWork Email: ${createdCredentials.workEmail}\nRole: Team Member\nPassword: ${createdCredentials.password}\nPortal URL: ${window.location.origin}/login`;
+    const text = `FLC Ops Hub Credentials:\nName: ${createdCredentials.fullName}\nWork Email: ${createdCredentials.workEmail}\nRole: ${createdCredentials.role}\nPassword: ${createdCredentials.password}\nPortal URL: ${window.location.origin}/login`;
     navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2500);
@@ -552,13 +554,31 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
                   <div className="space-y-1">
-                    <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
-                      System Role
-                    </label>
-                    <div className="px-3.5 py-2.5 bg-slate-100 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-xs font-bold text-slate-700 dark:text-gray-300 flex items-center justify-between cursor-not-allowed">
-                      <span>Team Member</span>
-                      <span className="text-[10px] text-slate-400 font-normal">Fixed</span>
+                    <div className="flex items-center justify-between">
+                      <label htmlFor="create-member-role-select" className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                        System Role
+                      </label>
+                      <span className="text-[10px] text-slate-400 font-normal">
+                        {currentUserProfile?.role === 'owner' ? (selectedRole === 'team_member' ? 'Fixed' : 'Configured') : 'Fixed'}
+                      </span>
                     </div>
+                    {currentUserProfile?.role === 'owner' ? (
+                      <select
+                        id="create-member-role-select"
+                        aria-label="System Role"
+                        value={selectedRole}
+                        onChange={(e) => setSelectedRole(e.target.value as 'operational_manager' | 'team_member')}
+                        className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 font-bold"
+                      >
+                        <option value="team_member">Team Member</option>
+                        <option value="operational_manager">Operational Manager</option>
+                      </select>
+                    ) : (
+                      <div className="px-3.5 py-2.5 bg-slate-100 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-xs font-bold text-slate-700 dark:text-gray-300 flex items-center justify-between cursor-not-allowed">
+                        <span>Team Member</span>
+                        <span className="text-[10px] text-slate-400 font-normal">Fixed</span>
+                      </div>
+                    )}
                   </div>
 
                   <div className="space-y-1">

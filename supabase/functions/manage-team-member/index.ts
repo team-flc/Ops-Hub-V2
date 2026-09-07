@@ -224,6 +224,34 @@ serve(async (req: Request) => {
         );
       }
 
+      // Determine and validate target role based on creation matrix
+      let targetRole = 'team_member';
+      if (callerProfile.role === 'owner') {
+        if (payload.role === 'operational_manager') {
+          targetRole = 'operational_manager';
+        } else if (payload.role === 'team_member' || !payload.role) {
+          targetRole = 'team_member';
+        } else {
+          return new Response(
+            JSON.stringify({ error: 'Forbidden: Owner can only provision Operational Managers or Team Members.' }),
+            { status: 400, headers: corsHeaders }
+          );
+        }
+      } else if (callerProfile.role === 'operational_manager') {
+        if (payload.role && payload.role !== 'team_member') {
+          return new Response(
+            JSON.stringify({ error: 'Forbidden: Operational Managers can only provision Team Members.' }),
+            { status: 403, headers: corsHeaders }
+          );
+        }
+        targetRole = 'team_member';
+      } else {
+        return new Response(
+          JSON.stringify({ error: 'Forbidden: Insufficient privileges to create users.' }),
+          { status: 403, headers: corsHeaders }
+        );
+      }
+
       // Enforce Scope on Reporting Manager
       let targetManagerId: string = reportingManagerId;
       if (callerProfile.role === 'operational_manager') {
@@ -249,6 +277,22 @@ serve(async (req: Request) => {
         }
       }
 
+      // For Manager-created members: restrict client grants to manager's permitted scope
+      if (callerProfile.role === 'operational_manager' && Array.isArray(clientIds) && clientIds.length > 0) {
+        const { data: managerClients } = await supabaseAdmin
+          .from('client_team_access')
+          .select('client_id')
+          .eq('user_id', callerProfile.id);
+        const allowedSet = new Set((managerClients || []).map((mc: any) => mc.client_id));
+        const unauthorizedClients = clientIds.filter((cid: string) => !allowedSet.has(cid));
+        if (unauthorizedClients.length > 0) {
+          return new Response(
+            JSON.stringify({ error: 'Forbidden: Cannot grant access to clients outside your operational scope.' }),
+            { status: 403, headers: corsHeaders }
+          );
+        }
+      }
+
       // 1. Create Auth User
       const { data: newAuthData, error: authCreateError } = await supabaseAdmin.auth.admin.createUser({
         email: cleanEmail,
@@ -256,7 +300,7 @@ serve(async (req: Request) => {
         email_confirm: true,
         user_metadata: {
           full_name: fullName.trim(),
-          role: 'team_member' // Locked role
+          role: targetRole
         }
       });
 
@@ -281,7 +325,7 @@ serve(async (req: Request) => {
           linkedin_url: cleanLinkedinUrl,
           bio: cleanBio,
           avatar_url: cleanAvatarUrl,
-          role: 'team_member',
+          role: targetRole,
           status: 'active',
           designation_id: designationId,
           reporting_manager_id: targetManagerId,

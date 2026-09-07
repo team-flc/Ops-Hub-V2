@@ -500,6 +500,10 @@ export interface ClientTask {
   isOverdue?: boolean;
   sourceTemplateId?: string | null;
   sourceTemplateVersion?: number | null;
+  planId?: string | null;
+  planWeek?: number | null;
+  occurrenceId?: string | null;
+  launchBatchId?: string | null;
   unreadCount?: number;
   hasUnread?: boolean;
 }
@@ -554,6 +558,102 @@ export interface UpdateTaskTemplateInput {
   suggestedDurationDays?: number;
   sortOrder?: number;
   expectedVersion?: number;
+}
+
+// --- PHASE 3D: MULTI-TASK SERVICE TEMPLATES & 90-DAY WORK PLANS ---
+export interface ServiceTemplateTask {
+  id?: string;
+  definitionId: string;
+  title: string;
+  description?: string | null;
+  departmentId: string;
+  departmentName?: string;
+  priority: ClientTaskPriority;
+  approvalMode: TaskApprovalMode;
+  plannedOffsetDays: number;
+  durationBusinessDays: number;
+  displayOrder: number;
+}
+
+export interface ServiceTemplate {
+  id: string;
+  name: string;
+  serviceLabel: string;
+  description?: string | null;
+  status: TaskTemplateStatus;
+  version: number;
+  sortOrder: number;
+  tasks: ServiceTemplateTask[];
+  createdBy?: string | null;
+  createdByName?: string | null;
+  updatedBy?: string | null;
+  archivedAt?: string | null;
+  archivedBy?: string | null;
+  archiveReason?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreateServiceTemplateInput {
+  name: string;
+  serviceLabel: string;
+  description?: string;
+  tasks: Omit<ServiceTemplateTask, 'id'>[];
+}
+
+export interface UpdateServiceTemplateInput {
+  name?: string;
+  serviceLabel?: string;
+  description?: string;
+  tasks?: Omit<ServiceTemplateTask, 'id'>[];
+  expectedVersion?: number;
+}
+
+export type WorkPlanStatus = 'Draft' | 'Launched' | 'Archived';
+
+export interface WorkPlanOccurrence {
+  occurrenceId: string;
+  templateId: string;
+  templateName: string;
+  serviceLabel: string;
+  templateVersion: number;
+  tasks: ServiceTemplateTask[];
+}
+
+export interface WorkPlanWeek {
+  weekNumber: number; // 1..13
+  startDate: string; // YYYY-MM-DD
+  endDate: string; // YYYY-MM-DD
+  occurrences: WorkPlanOccurrence[];
+  customTasks: ServiceTemplateTask[];
+}
+
+export interface ClientWorkPlan {
+  id: string;
+  clientId: string;
+  name: string;
+  status: WorkPlanStatus;
+  startDate: string; // YYYY-MM-DD
+  endDate: string; // YYYY-MM-DD (startDate + 89 days)
+  revision: number;
+  weeks: WorkPlanWeek[];
+  launchSnapshot?: any;
+  launchedAt?: string | null;
+  launchedBy?: string | null;
+  launchBatchId?: string | null;
+  createdBy?: string | null;
+  updatedBy?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface TaskLaunchBatchResult {
+  success: boolean;
+  batchId?: string;
+  taskCount?: number;
+  taskIds?: string[];
+  error?: string;
+  idempotentReplay?: boolean;
 }
 
 export interface ClientTaskEvent {

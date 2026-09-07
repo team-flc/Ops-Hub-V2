@@ -1,11 +1,12 @@
-import React, { useState, useEffect } from 'react';
-import { X, BookTemplate, FilePlus2, Sparkles } from 'lucide-react';
+﻿import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
+import { X, BookTemplate, FilePlus2, Sparkles, Layers } from 'lucide-react';
 import { ClientRecord } from '../../types';
 
 interface TaskCreationModeModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelectMode: (mode: 'template' | 'blank', weekNumber: 1 | 2 | 3 | 4) => void;
+  onSelectMode: (mode: 'service_template' | 'template' | 'blank', weekNumber: 1 | 2 | 3 | 4) => void;
   client: ClientRecord;
   weekNumber: 1 | 2 | 3 | 4;
 }
@@ -27,7 +28,7 @@ export const TaskCreationModeModal: React.FC<TaskCreationModeModalProps> = ({
 
   if (!isOpen) return null;
 
-  return (
+  const modalContent = (
     <div 
       className="fixed inset-0 z-50 flex items-center justify-center p-0 sm:p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-200"
       role="dialog"
@@ -56,7 +57,7 @@ export const TaskCreationModeModal: React.FC<TaskCreationModeModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-xl hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors"
+            className="p-2 text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 rounded-xl hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors cursor-pointer"
             aria-label="Close dialog"
           >
             <X className="w-5 h-5" />
@@ -64,11 +65,11 @@ export const TaskCreationModeModal: React.FC<TaskCreationModeModalProps> = ({
         </div>
 
         {/* Content */}
-        <div className="p-4 sm:p-6 space-y-5 flex-1 overflow-y-auto">
+        <div className="p-4 sm:p-6 space-y-4 flex-1 overflow-y-auto">
           {/* Workspace Week Selector */}
           <div>
             <label htmlFor="modal-week-select" className="block text-xs font-bold uppercase tracking-wider text-gray-700 dark:text-gray-300 mb-1.5">
-              Workspace Week <span className="text-rose-500">*</span>
+              Workspace Week <span className="text-brand-500">*</span>
             </label>
             <select
               id="modal-week-select"
@@ -89,12 +90,12 @@ export const TaskCreationModeModal: React.FC<TaskCreationModeModalProps> = ({
           </p>
 
           {/* Action Cards */}
-          <div className="grid grid-cols-1 gap-3.5">
+          <div className="grid grid-cols-1 gap-3">
             {/* Start from Template */}
             <button
               type="button"
               onClick={() => onSelectMode('template', selectedWeek)}
-              className="group relative p-4 rounded-xl border-2 border-brand-500/30 hover:border-brand-500 bg-brand-500/5 hover:bg-brand-500/10 dark:bg-brand-500/10 dark:hover:bg-brand-500/20 text-left transition-all flex items-start gap-4 min-h-[72px]"
+              className="group relative p-4 rounded-xl border-2 border-brand-500/30 hover:border-brand-500 bg-brand-500/5 hover:bg-brand-500/10 dark:bg-brand-500/10 dark:hover:bg-brand-500/20 text-left transition-all flex items-start gap-4 min-h-[72px] cursor-pointer"
             >
               <div className="p-2.5 rounded-xl bg-brand-500 text-white shadow-md shadow-brand-500/20 shrink-0">
                 <BookTemplate className="w-5 h-5" />
@@ -114,13 +115,37 @@ export const TaskCreationModeModal: React.FC<TaskCreationModeModalProps> = ({
               </div>
             </button>
 
+            {/* Apply Multi-Task Service Template (Phase 3D) */}
+            <button
+              type="button"
+              onClick={() => onSelectMode('service_template', selectedWeek)}
+              className="group relative p-4 rounded-xl border border-gray-200 dark:border-dark-border hover:border-brand-500/50 bg-white hover:bg-gray-50/50 dark:bg-dark-100/50 dark:hover:bg-dark-100 text-left transition-all flex items-start gap-4 min-h-[72px] cursor-pointer"
+            >
+              <div className="p-2.5 rounded-xl bg-gray-100 dark:bg-dark-200 text-gray-700 dark:text-gray-300 shrink-0">
+                <Layers className="w-5 h-5" />
+              </div>
+              <div className="flex-1 min-w-0 pr-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-sm font-bold text-gray-900 dark:text-gray-100 group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors">
+                    Apply Service Template
+                  </span>
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-brand-500/10 text-brand-600 dark:text-brand-400">
+                    Multi-Task
+                  </span>
+                </div>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">
+                  Bulk launch a full multi-task service package into Draft, Unassigned tasks.
+                </p>
+              </div>
+            </button>
+
             {/* Create Blank Task */}
             <button
               type="button"
               onClick={() => onSelectMode('blank', selectedWeek)}
-              className="group p-4 rounded-xl border border-gray-200 dark:border-dark-border hover:border-gray-400 dark:hover:border-gray-600 bg-gray-50/50 hover:bg-gray-100/50 dark:bg-dark-100/50 dark:hover:bg-dark-100 text-left transition-all flex items-start gap-4 min-h-[72px]"
+              className="group p-4 rounded-xl border border-gray-200 dark:border-dark-border hover:border-gray-400 dark:hover:border-gray-600 bg-white hover:bg-gray-50/50 dark:bg-dark-100/50 dark:hover:bg-dark-100 text-left transition-all flex items-start gap-4 min-h-[72px] cursor-pointer"
             >
-              <div className="p-2.5 rounded-xl bg-gray-200 dark:bg-dark-200 text-gray-700 dark:text-gray-300 shrink-0">
+              <div className="p-2.5 rounded-xl bg-gray-100 dark:bg-dark-200 text-gray-700 dark:text-gray-300 shrink-0">
                 <FilePlus2 className="w-5 h-5" />
               </div>
               <div className="flex-1 min-w-0">
@@ -140,7 +165,7 @@ export const TaskCreationModeModal: React.FC<TaskCreationModeModalProps> = ({
           <button
             type="button"
             onClick={onClose}
-            className="w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors min-h-[44px]"
+            className="w-full sm:w-auto px-4 py-2.5 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors min-h-[44px] cursor-pointer"
           >
             Cancel
           </button>
@@ -148,4 +173,6 @@ export const TaskCreationModeModal: React.FC<TaskCreationModeModalProps> = ({
       </div>
     </div>
   );
+
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 };
