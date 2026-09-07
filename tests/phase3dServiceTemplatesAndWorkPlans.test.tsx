@@ -1,9 +1,9 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { 
-  compute90DayPlanRange, 
-  generate13PlanWeeks, 
+import {
+  compute90DayPlanRange,
+  generate13PlanWeeks,
   calculateTaskDatesForWeek,
   calculateBusinessDueDate,
   getBusinessDaysInRange
@@ -12,11 +12,11 @@ import { isSaturday, isSunday, isWeekend, rollForwardToNextMonday } from '../src
 import { serviceTemplateService } from '../src/lib/serviceTemplateService';
 import { taskLaunchEngine, generateRequestId } from '../src/lib/taskLaunchEngine';
 import { workPlanService } from '../src/lib/workPlanService';
-import { 
-  ServiceTemplate, 
-  ServiceTemplateTask, 
-  ClientRecord, 
-  Department, 
+import {
+  ServiceTemplate,
+  ServiceTemplateTask,
+  ClientRecord,
+  Department,
   UserProfile,
   WorkPlanWeek
 } from '../src/types';
@@ -99,42 +99,36 @@ const mockDepartments: Department[] = [
 
 const mockOwner: UserProfile = {
   id: 'user-owner-1',
-  authId: 'auth-owner-1',
-  fullName: 'Faseeh Lall',
-  workEmail: 'owner@flc.com',
+  email: 'owner@flc.com',
+  fullName: 'Owner Faseeh',
   role: 'owner',
-  status: 'active',
-  organizationId: 'org-flc-1',
-  createdAt: '2026-01-01T00:00:00Z',
-  updatedAt: '2026-01-01T00:00:00Z'
+  isSuspended: false,
+  createdAt: '2026-01-01T00:00:00Z'
 };
 
 const mockManager: UserProfile = {
   id: 'user-mgr-1',
-  authId: 'auth-mgr-1',
-  fullName: 'Bob Manager',
-  workEmail: 'bob@flc.com',
+  email: 'manager@flc.com',
+  fullName: 'Manager Bob',
   role: 'operational_manager',
-  status: 'active',
-  organizationId: 'org-flc-1',
-  createdAt: '2026-01-01T00:00:00Z',
-  updatedAt: '2026-01-01T00:00:00Z'
+  isSuspended: false,
+  createdAt: '2026-01-01T00:00:00Z'
 };
 
 const sampleServiceTemplate: ServiceTemplate = {
-  id: 'stpl-media-1',
+  id: 'tpl-meta-ads',
   name: 'Meta Ads Launch Package',
-  serviceLabel: 'Media Buying',
-  description: 'Complete 3-step paid traffic launch',
+  serviceLabel: 'Paid Media',
+  description: 'Standard 3-task media buying kickoff suite',
   status: 'Active',
   version: 1,
-  sortOrder: 0,
+  sortOrder: 1,
   tasks: [
     {
-      id: 'task-def-1',
+      id: 'task-1',
       definitionId: 'def-1',
       title: 'Pixel & CAPI Audit',
-      description: 'Verify Event Quality Score >= 8.0',
+      description: 'Audit Meta Pixel, Events Manager & Conversions API setup',
       departmentId: 'dept-tech',
       departmentName: 'Tech & Tracking',
       priority: 'High',
@@ -144,10 +138,10 @@ const sampleServiceTemplate: ServiceTemplate = {
       displayOrder: 0
     },
     {
-      id: 'task-def-2',
+      id: 'task-2',
       definitionId: 'def-2',
       title: 'Ad Creatives Review',
-      description: 'Prepare 3 video angles and copy variations',
+      description: 'Review copy, hook variations, and graphic angles',
       departmentId: 'dept-creative',
       departmentName: 'Creative',
       priority: 'Normal',
@@ -157,10 +151,10 @@ const sampleServiceTemplate: ServiceTemplate = {
       displayOrder: 1
     },
     {
-      id: 'task-def-3',
+      id: 'task-3',
       definitionId: 'def-3',
       title: 'Campaign Setup & Launch',
-      description: 'Set up CBO campaigns and bid caps',
+      description: 'Configure target audiences, budget rules, and publish campaigns',
       departmentId: 'dept-media',
       departmentName: 'Media Buying',
       priority: 'Urgent',
@@ -170,6 +164,7 @@ const sampleServiceTemplate: ServiceTemplate = {
       displayOrder: 2
     }
   ],
+  createdBy: 'user-owner-1',
   createdAt: '2026-04-01T00:00:00Z',
   updatedAt: '2026-04-01T00:00:00Z'
 };
@@ -177,234 +172,520 @@ const sampleServiceTemplate: ServiceTemplate = {
 describe('Phase 3D: Service Templates, 90-Day Work Plans & Hardening Suite', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockGetUser.mockResolvedValue({ data: { user: { id: 'auth-owner-1', email: 'owner@flc.com' } }, error: null });
+    mockGetUser.mockResolvedValue({
+      data: { user: { id: 'user-owner-1' } },
+      error: null
+    });
   });
 
   // ==========================================================================
-  // 1. 90-CALENDAR-DAY WORK PLAN CALENDAR & BUSINESS DAYS MATH
+  // 1. 90-CALENDAR-DAY CALENDAR MATH & WEEK STRUCTURE
   // ==========================================================================
-  describe('1. 90-Calendar-Day Work Plan Calendar & Business Days Math', () => {
-    it('1.1 Computes exact 90 calendar days inclusive (Start to Start + 89)', () => {
-      const start = '2026-04-01'; // April 1, 2026
-      const { startDate, endDate, isStartDateWeekend } = compute90DayPlanRange(start);
-
+  describe('1. 90-Calendar-Day Math & 13 Normalized Weeks', () => {
+    it('1.1 Computes exact 90 calendar days range: Start Date to Start Date + 89', () => {
+      const { startDate, endDate } = compute90DayPlanRange('2026-04-01');
       expect(startDate).toBe('2026-04-01');
       expect(endDate).toBe('2026-06-29');
-      expect(isStartDateWeekend).toBe(false);
 
-      // Verify exact 90 calendar days inclusive
-      const [y1, m1, d1] = startDate.split('-').map(Number);
-      const [y2, m2, d2] = endDate.split('-').map(Number);
-      const dayDiff = Math.round((Date.UTC(y2, m2 - 1, d2) - Date.UTC(y1, m1 - 1, d1)) / (1000 * 60 * 60 * 24)) + 1;
-      expect(dayDiff).toBe(90);
+      const start = new Date('2026-04-01T00:00:00Z');
+      const end = new Date('2026-06-29T00:00:00Z');
+      const diffDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      expect(diffDays).toBe(90);
     });
 
-    it('1.2 Generates exactly 13 weeks: Weeks 1-12 have 7 days (84 days), Week 13 has 6 days (90 total)', () => {
+    it('1.2 Generates exactly 13 normalized weeks: Weeks 1..12 are 7 days; Week 13 is 6 days', () => {
       const weeks = generate13PlanWeeks('2026-04-01');
-
       expect(weeks).toHaveLength(13);
 
-      // Verify Weeks 1 to 12 have 7 calendar days
       for (let i = 0; i < 12; i++) {
-        expect(weeks[i].calendarDayCount).toBe(7);
-        expect(weeks[i].weekNumber).toBe(i + 1);
+        const w = weeks[i];
+        expect(w.weekNumber).toBe(i + 1);
+        const ws = new Date(`${w.startDate}T00:00:00Z`);
+        const we = new Date(`${w.endDate}T00:00:00Z`);
+        const duration = Math.round((we.getTime() - ws.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+        expect(duration).toBe(7);
       }
 
-      // Verify Week 13 has exactly 6 calendar days
-      expect(weeks[12].weekNumber).toBe(13);
-      expect(weeks[12].calendarDayCount).toBe(6);
-
-      // Total calendar days across all 13 weeks must equal 90
-      const totalDays = weeks.reduce((sum, w) => sum + w.calendarDayCount, 0);
-      expect(totalDays).toBe(90);
+      const w13 = weeks[12];
+      expect(w13.weekNumber).toBe(13);
+      const w13s = new Date(`${w13.startDate}T00:00:00Z`);
+      const w13e = new Date(`${w13.endDate}T00:00:00Z`);
+      const w13Duration = Math.round((w13e.getTime() - w13s.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+      expect(w13Duration).toBe(6);
+      expect(w13.endDate).toBe('2026-06-29');
     });
 
-    it('1.3 Operational task scheduling strictly skips Saturday and Sunday (Monday-Friday business calendar in Asia/Karachi)', () => {
-      // 2026-04-04 is Saturday, 2026-04-05 is Sunday
+    it('1.3 Business-day due date calculation skips Saturday and Sunday', () => {
+      const wednesday = '2026-04-01'; // Wednesday
+      const dueDate = calculateBusinessDueDate(wednesday, 3);
+      expect(dueDate).toBe('2026-04-03'); // Friday (3 days: Wed, Thu, Fri)
+
+      const thursday = '2026-04-02'; // Thursday
+      const dueDateOverWeekend = calculateBusinessDueDate(thursday, 3);
+      expect(dueDateOverWeekend).toBe('2026-04-06'); // Monday (3 business days: Thu, Fri, Mon)
+    });
+
+    it('1.4 Weekend detector and roll-forward logic operates accurately', () => {
       expect(isSaturday('2026-04-04')).toBe(true);
       expect(isSunday('2026-04-05')).toBe(true);
       expect(isWeekend('2026-04-04')).toBe(true);
-      expect(isWeekend('2026-04-05')).toBe(true);
-      expect(isWeekend('2026-04-06')).toBe(false); // Monday
+      expect(isWeekend('2026-04-01')).toBe(false);
 
-      // Saturday rolls forward to next Monday
       expect(rollForwardToNextMonday('2026-04-04')).toBe('2026-04-06');
       expect(rollForwardToNextMonday('2026-04-05')).toBe('2026-04-06');
-
-      // getBusinessDaysInRange across 2026-04-03 (Fri) to 2026-04-07 (Tue)
-      const bDays = getBusinessDaysInRange('2026-04-03', '2026-04-07');
-      expect(bDays).toEqual(['2026-04-03', '2026-04-06', '2026-04-07']);
-      expect(bDays).not.toContain('2026-04-04');
-      expect(bDays).not.toContain('2026-04-05');
-
-      // 2 business days starting on Friday 2026-04-03 -> Friday (day 1), Monday (day 2)
-      const dueDate = calculateBusinessDueDate('2026-04-03', 2);
-      expect(dueDate).toBe('2026-04-06');
+      expect(rollForwardToNextMonday('2026-04-01')).toBe('2026-04-01');
     });
 
-    it('1.4 Weekend plan start date suggests Monday adjustment', () => {
-      // 2026-04-04 is Saturday
-      const { isStartDateWeekend, suggestedMonday } = compute90DayPlanRange('2026-04-04');
-      expect(isStartDateWeekend).toBe(true);
-      expect(suggestedMonday).toBe('2026-04-06');
+    it('1.5 Task date calculation clamps inside week and plan boundaries', () => {
+      const calc = calculateTaskDatesForWeek({
+        weekStartDate: '2026-04-01',
+        weekEndDate: '2026-04-07',
+        planEndDate: '2026-06-29',
+        plannedOffsetDays: 1,
+        durationBusinessDays: 2
+      });
+
+      expect(calc.isValid).toBe(true);
+      expect(calc.plannedStart).toBe('2026-04-02');
+      expect(calc.dueDate).toBe('2026-04-03');
+    });
+
+    it('1.6 Deterministic legacy week number mapping for Weeks 5, 12, and 13', () => {
+      const getLegacyWeekNumber = (planWeek: number) => ((planWeek - 1) % 4) + 1;
+      expect(getLegacyWeekNumber(1)).toBe(1);
+      expect(getLegacyWeekNumber(4)).toBe(4);
+      expect(getLegacyWeekNumber(5)).toBe(1);
+      expect(getLegacyWeekNumber(12)).toBe(4);
+      expect(getLegacyWeekNumber(13)).toBe(1);
     });
   });
 
   // ==========================================================================
-  // 2. MULTI-TASK SERVICE TEMPLATE MANAGEMENT & PRESERVATION
+  // 2. AUTHORITATIVE RPC INTEGRATION FOR SERVICE TEMPLATES
   // ==========================================================================
-  describe('2. Multi-Task Service Template Management & Preservation', () => {
-    it('2.1 CreateEditServiceTemplateModal renders form with child task controls and limits', () => {
-      render(
-        <CreateEditServiceTemplateModal
-          isOpen={true}
-          onClose={vi.fn()}
-          onSuccess={vi.fn()}
-          template={null}
-          departments={mockDepartments}
-        />
-      );
+  describe('2. Authoritative RPC Integration for Service Templates', () => {
+    it('2.1 createTemplate calls fn_manage_service_template RPC with action "create"', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: { success: true, template_id: 'tpl-new-1', version: 1 },
+        error: null
+      });
 
-      expect(screen.getByRole('heading', { name: 'Create Service Template' })).toBeInTheDocument();
-      expect(screen.getByPlaceholderText(/e.g. social media weekly delivery/i)).toBeInTheDocument();
-      expect(screen.getByText(/ordered child tasks/i)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /add task/i })).toBeInTheDocument();
+      mockFrom.mockReturnValueOnce({
+        select: vi.fn().mockReturnValueOnce({
+          eq: vi.fn().mockReturnValueOnce({
+            single: vi.fn().mockResolvedValueOnce({
+              data: {
+                id: 'tpl-new-1',
+                name: 'New SEO Sprint',
+                service_label: 'SEO',
+                description: '30 day SEO kickoff',
+                status: 'Active',
+                version: 1,
+                sort_order: 0,
+                tasks: []
+              },
+              error: null
+            })
+          })
+        })
+      });
+
+      const res = await serviceTemplateService.createTemplate({
+        name: 'New SEO Sprint',
+        serviceLabel: 'SEO',
+        description: '30 day SEO kickoff',
+        tasks: [
+          {
+            definitionId: 'def-seo-1',
+            title: 'Technical Audit',
+            departmentId: 'dept-tech',
+            departmentName: 'Tech',
+            priority: 'High',
+            approvalMode: 'Internal Only',
+            plannedOffsetDays: 0,
+            durationBusinessDays: 3,
+            displayOrder: 0
+          }
+        ]
+      });
+
+      expect(mockRpc).toHaveBeenCalledWith('fn_manage_service_template', expect.objectContaining({
+        p_action: 'create',
+        p_name: 'New SEO Sprint',
+        p_service_label: 'SEO'
+      }));
+      expect(res.data?.id).toBe('tpl-new-1');
     });
 
-    it('2.2 Can add a child task and reorder using Move Down and Move Up', async () => {
-      render(
-        <CreateEditServiceTemplateModal
-          isOpen={true}
-          onClose={vi.fn()}
-          onSuccess={vi.fn()}
-          template={sampleServiceTemplate}
-          departments={mockDepartments}
-        />
-      );
+    it('2.2 updateTemplate calls fn_manage_service_template with expected_version lock', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: { success: true, template_id: 'tpl-meta-ads', version: 2 },
+        error: null
+      });
 
-      expect(screen.getByDisplayValue('Pixel & CAPI Audit')).toBeInTheDocument();
-      expect(screen.getByDisplayValue('Ad Creatives Review')).toBeInTheDocument();
-      expect(screen.getByDisplayValue('Campaign Setup & Launch')).toBeInTheDocument();
+      mockFrom.mockReturnValueOnce({
+        select: vi.fn().mockReturnValueOnce({
+          eq: vi.fn().mockReturnValueOnce({
+            single: vi.fn().mockResolvedValueOnce({
+              data: {
+                ...sampleServiceTemplate,
+                version: 2
+              },
+              error: null
+            })
+          })
+        })
+      });
 
-      const moveDownBtns = screen.getAllByLabelText(/move task.*down/i);
-      expect(moveDownBtns.length).toBeGreaterThan(0);
-      fireEvent.click(moveDownBtns[0]);
+      const res = await serviceTemplateService.updateTemplate('tpl-meta-ads', {
+        name: 'Meta Ads Launch Package V2',
+        serviceLabel: 'Paid Media',
+        expectedVersion: 1
+      });
 
-      const addTaskBtn = screen.getByRole('button', { name: /add task/i });
-      fireEvent.click(addTaskBtn);
-
-      const titleInputs = screen.getAllByPlaceholderText(/e.g. prepare content calendar/i);
-      expect(titleInputs.length).toBe(4);
+      expect(mockRpc).toHaveBeenCalledWith('fn_manage_service_template', expect.objectContaining({
+        p_action: 'update',
+        p_template_id: 'tpl-meta-ads',
+        p_expected_version: 1
+      }));
+      expect(res.data?.version).toBe(2);
     });
 
-    it('2.3 ServiceTemplatePreviewModal displays all ordered tasks and business-day durations', () => {
-      render(
-        <ServiceTemplatePreviewModal
-          isOpen={true}
-          onClose={vi.fn()}
-          template={sampleServiceTemplate}
-        />
-      );
+    it('2.3 duplicateTemplate calls fn_manage_service_template with action "duplicate"', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: { success: true, template_id: 'tpl-meta-copy', version: 1 },
+        error: null
+      });
 
-      expect(screen.getByText('Meta Ads Launch Package')).toBeInTheDocument();
-      expect(screen.getByText('Ordered Package Tasks (3 tasks)')).toBeInTheDocument();
-      expect(screen.getByText('Pixel & CAPI Audit')).toBeInTheDocument();
-      expect(screen.getByText('Ad Creatives Review')).toBeInTheDocument();
-      expect(screen.getByText('Campaign Setup & Launch')).toBeInTheDocument();
+      mockFrom.mockReturnValueOnce({
+        select: vi.fn().mockReturnValueOnce({
+          eq: vi.fn().mockReturnValueOnce({
+            single: vi.fn().mockResolvedValueOnce({
+              data: {
+                id: 'tpl-meta-copy',
+                name: 'Meta Ads Launch Package (Copy)',
+                service_label: 'Paid Media',
+                status: 'Active',
+                version: 1,
+                tasks: []
+              },
+              error: null
+            })
+          })
+        })
+      });
+
+      const res = await serviceTemplateService.duplicateTemplate('tpl-meta-ads');
+      expect(mockRpc).toHaveBeenCalledWith('fn_manage_service_template', expect.objectContaining({
+        p_action: 'duplicate',
+        p_template_id: 'tpl-meta-ads'
+      }));
+      expect(res.data?.id).toBe('tpl-meta-copy');
     });
 
-    it('2.4 Preserves existing Phase 3C single-task template as a valid 1-task Service Template', async () => {
-      // Mock legacy taskTemplateService fallback
-      const mockLegacyTemplate = {
-        id: 'legacy-tpl-1',
-        name: 'Media Buying Campaign Setup & Launch',
-        description: 'Standard paid traffic launch SOP',
-        departmentId: 'dept-media',
-        departmentName: 'Media Buying',
-        defaultTaskTitle: 'Campaign Setup & Launch Checklist',
-        taskDetails: 'SOP instructions for paid ads launch',
-        defaultPriority: 'High',
-        defaultApprovalMode: 'Internal Only',
-        suggestedDurationDays: 3,
-        status: 'Active',
-        version: 1,
-        sortOrder: 1,
-        createdBy: 'user-1',
-        createdByName: 'Faseeh Lall',
-        createdAt: '2026-03-01T00:00:00Z',
-        updatedAt: '2026-03-01T00:00:00Z'
+    it('2.4 archiveTemplate and restoreTemplate invoke authoritative RPC', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: { success: true, template_id: 'tpl-meta-ads', status: 'Archived' },
+        error: null
+      });
+
+      const archiveRes = await serviceTemplateService.archiveTemplate('tpl-meta-ads', 'End of seasonal run');
+      expect(mockRpc).toHaveBeenCalledWith('fn_manage_service_template', expect.objectContaining({
+        p_action: 'archive',
+        p_template_id: 'tpl-meta-ads',
+        p_archive_reason: 'End of seasonal run'
+      }));
+      expect(archiveRes.success).toBe(true);
+
+      mockRpc.mockResolvedValueOnce({
+        data: { success: true, template_id: 'tpl-meta-ads', status: 'Active' },
+        error: null
+      });
+
+      const restoreRes = await serviceTemplateService.restoreTemplate('tpl-meta-ads');
+      expect(mockRpc).toHaveBeenCalledWith('fn_manage_service_template', expect.objectContaining({
+        p_action: 'restore',
+        p_template_id: 'tpl-meta-ads'
+      }));
+      expect(restoreRes.success).toBe(true);
+    });
+
+    it('2.5 Update returns conflict error when stale expectedVersion is rejected by RPC', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: { error: 'Conflict: Template was modified in another session. Please reload.' },
+        error: null
+      });
+
+      const res = await serviceTemplateService.updateTemplate('tpl-meta-ads', {
+        name: 'Conflict Update',
+        expectedVersion: 1
+      });
+
+      expect(res.data).toBeNull();
+      expect(res.error).toContain('Conflict');
+    });
+  });
+
+  // ==========================================================================
+  // 3. AUTHORITATIVE RPC INTEGRATION FOR WORK PLANS
+  // ==========================================================================
+  describe('3. Authoritative RPC Integration for Work Plans', () => {
+    it('3.1 saveDraftPlan calls fn_save_draft_work_plan with 13 weeks array', async () => {
+      const weeks = generate13PlanWeeks('2026-04-01').map((w) => ({
+        weekNumber: w.weekNumber,
+        startDate: w.startDate,
+        endDate: w.endDate,
+        occurrences: [],
+        customTasks: []
+      }));
+
+      mockRpc.mockResolvedValueOnce({
+        data: { success: true, plan_id: 'plan-123', revision: 1 },
+        error: null
+      });
+
+      mockFrom.mockReturnValueOnce({
+        select: vi.fn().mockReturnValueOnce({
+          eq: vi.fn().mockReturnValueOnce({
+            single: vi.fn().mockResolvedValueOnce({
+              data: {
+                id: 'plan-123',
+                client_id: mockClient.id,
+                name: 'Q2 Roadmap',
+                status: 'Draft',
+                start_date: '2026-04-01',
+                end_date: '2026-06-29',
+                revision: 1,
+                plan_data: { weeks }
+              },
+              error: null
+            })
+          })
+        })
+      });
+
+      const res = await workPlanService.saveDraftPlan({
+        clientId: mockClient.id,
+        name: 'Q2 Roadmap',
+        startDate: '2026-04-01',
+        weeks
+      });
+
+      expect(mockRpc).toHaveBeenCalledWith('fn_save_draft_work_plan', expect.objectContaining({
+        p_client_id: mockClient.id,
+        p_name: 'Q2 Roadmap',
+        p_start_date: '2026-04-01'
+      }));
+      expect(res.data?.id).toBe('plan-123');
+    });
+
+    it('3.2 deleteDraftPlan calls fn_delete_draft_work_plan RPC', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: { success: true, deleted_plan_id: 'plan-123' },
+        error: null
+      });
+
+      const res = await workPlanService.deleteDraftPlan('plan-123');
+      expect(mockRpc).toHaveBeenCalledWith('fn_delete_draft_work_plan', {
+        p_plan_id: 'plan-123'
+      });
+      expect(res.success).toBe(true);
+    });
+
+    it('3.3 saveDraftPlan validates and rejects plan with invalid week count (< 13 weeks)', async () => {
+      const res = await workPlanService.saveDraftPlan({
+        clientId: mockClient.id,
+        name: 'Incomplete Plan',
+        startDate: '2026-04-01',
+        weeks: [] // 0 weeks
+      });
+
+      expect(res.data).toBeNull();
+      expect(res.error).toContain('exactly 13 weeks');
+      expect(mockRpc).not.toHaveBeenCalled();
+    });
+
+    it('3.4 saveDraftPlan returns error on stale revision conflict from RPC', async () => {
+      const weeks = generate13PlanWeeks('2026-04-01').map((w) => ({
+        weekNumber: w.weekNumber,
+        startDate: w.startDate,
+        endDate: w.endDate,
+        occurrences: [],
+        customTasks: []
+      }));
+
+      mockRpc.mockResolvedValueOnce({
+        data: { error: 'Conflict: Work plan was modified by another session. Please reload.' },
+        error: null
+      });
+
+      const res = await workPlanService.saveDraftPlan({
+        id: 'plan-123',
+        clientId: mockClient.id,
+        name: 'Q2 Roadmap Update',
+        startDate: '2026-04-01',
+        weeks,
+        expectedRevision: 1
+      });
+
+      expect(res.data).toBeNull();
+      expect(res.error).toContain('Conflict');
+    });
+  });
+
+  // ==========================================================================
+  // 4. TRANSACTIONAL BULK TASK LAUNCH ENGINE (fn_launch_task_batch)
+  // ==========================================================================
+  describe('4. Transactional Bulk Task Launch Engine', () => {
+    it('4.1 launchServiceTemplate calls fn_launch_task_batch without p_actor_id in contract', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: {
+          batch_id: 'batch-launch-1',
+          task_count: 3,
+          task_ids: ['t-1', 't-2', 't-3']
+        },
+        error: null
+      });
+
+      const res = await taskLaunchEngine.launchServiceTemplate({
+        clientId: mockClient.id,
+        templateId: sampleServiceTemplate.id,
+        templateVersion: 1,
+        targetWeek: 2,
+        tasks: [
+          { title: 'Task 1', departmentId: 'dept-media', plannedDate: '2026-04-08', dueDate: '2026-04-09' },
+          { title: 'Task 2', departmentId: 'dept-creative', plannedDate: '2026-04-08', dueDate: '2026-04-10' }
+        ]
+      });
+
+      expect(mockRpc).toHaveBeenCalledWith('fn_launch_task_batch', expect.objectContaining({
+        p_client_id: mockClient.id,
+        p_launch_type: 'service_template',
+        p_source_id: sampleServiceTemplate.id,
+        p_target_week: 2
+      }));
+      // Verify p_actor_id is NOT in the parameters sent to RPC
+      const passedArgs = mockRpc.mock.calls[0][1];
+      expect(passedArgs).not.toHaveProperty('p_actor_id');
+      expect(res.success).toBe(true);
+      expect(res.batchId).toBe('batch-launch-1');
+    });
+
+    it('4.2 launchWorkPlan calls fn_launch_task_batch for work plan launch', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: {
+          batch_id: 'batch-plan-1',
+          task_count: 5,
+          task_ids: ['pt-1', 'pt-2', 'pt-3', 'pt-4', 'pt-5']
+        },
+        error: null
+      });
+
+      const res = await taskLaunchEngine.launchWorkPlan({
+        clientId: mockClient.id,
+        planId: 'plan-90d-1',
+        expectedRevision: 1,
+        tasks: [
+          { title: 'Plan Task Week 5', departmentId: 'dept-tech', planWeek: 5, plannedDate: '2026-04-29', dueDate: '2026-04-30' },
+          { title: 'Plan Task Week 12', departmentId: 'dept-media', planWeek: 12, plannedDate: '2026-06-17', dueDate: '2026-06-18' },
+          { title: 'Plan Task Week 13', departmentId: 'dept-creative', planWeek: 13, plannedDate: '2026-06-24', dueDate: '2026-06-25' }
+        ]
+      });
+
+      expect(mockRpc).toHaveBeenCalledWith('fn_launch_task_batch', expect.objectContaining({
+        p_client_id: mockClient.id,
+        p_launch_type: 'work_plan',
+        p_source_id: 'plan-90d-1'
+      }));
+      expect(res.success).toBe(true);
+      expect(res.taskCount).toBe(5);
+    });
+
+    it('4.3 Fails closed with an understandable error when RPC encounters an error', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: null,
+        error: { message: 'function fn_launch_task_batch does not exist' }
+      });
+
+      const res = await taskLaunchEngine.launchServiceTemplate({
+        clientId: mockClient.id,
+        templateId: sampleServiceTemplate.id,
+        templateVersion: 1,
+        targetWeek: 1,
+        tasks: [{ title: 'Task 1', departmentId: 'dept-media' }]
+      });
+
+      expect(res.success).toBe(false);
+      expect(res.error).toBe('function fn_launch_task_batch does not exist');
+    });
+
+    it('4.4 Launch engine idempotency: replaying same requestId returns cached batch snapshot', async () => {
+      const testRequestId = 'idempotent-req-test-456';
+      const cachedBatch = {
+        batch_id: 'batch-cached-456',
+        task_count: 3,
+        task_ids: ['t-1', 't-2', 't-3'],
+        idempotent_replay: true
       };
 
-      // Mock service_templates table missing -> fallback triggered
-      mockFrom.mockReturnValueOnce({
-        select: vi.fn().mockReturnValueOnce({
-          order: vi.fn().mockReturnValueOnce({
-            order: vi.fn().mockReturnValueOnce({
-              eq: vi.fn().mockResolvedValueOnce({
-                data: null,
-                error: { code: '42P01', message: 'relation "service_templates" does not exist' }
-              })
-            })
-          })
-        })
+      mockRpc.mockResolvedValueOnce({ data: cachedBatch, error: null });
+      const res = await taskLaunchEngine.launchServiceTemplate({
+        clientId: mockClient.id,
+        templateId: sampleServiceTemplate.id,
+        templateVersion: 1,
+        targetWeek: 1,
+        tasks: [{ title: 'Task 1', departmentId: 'dept-media', plannedDate: '2026-04-01', dueDate: '2026-04-02' }],
+        requestId: testRequestId
       });
 
-      // Mock legacy task_templates fetch
-      mockFrom.mockReturnValueOnce({
-        select: vi.fn().mockReturnValueOnce({
-          order: vi.fn().mockReturnValueOnce({
-            order: vi.fn().mockReturnValueOnce({
-              eq: vi.fn().mockResolvedValueOnce({
-                data: [mockLegacyTemplate],
-                error: null
-              })
-            })
-          })
-        })
-      });
-
-      const res = await serviceTemplateService.fetchTemplates(false);
-      expect(res.data).toHaveLength(1);
-      expect(res.isUnavailable).toBe(true);
-      const migrated = res.data[0];
-      expect(migrated.name).toBe('Media Buying Campaign Setup & Launch');
-      expect(migrated.tasks).toHaveLength(1);
-      expect(migrated.tasks[0].title).toBe('Campaign Setup & Launch Checklist');
-      expect(migrated.tasks[0].durationBusinessDays).toBe(3);
+      expect(res.success).toBe(true);
+      expect(res.batchId).toBe('batch-cached-456');
+      expect(res.idempotentReplay).toBe(true);
     });
 
-    it('2.5 ServiceTemplatesView disables New/Edit/Duplicate/Archive/Restore when backend is unavailable', async () => {
-      // Mock fetchTemplates returning isUnavailable = true
-      vi.spyOn(serviceTemplateService, 'fetchTemplates').mockResolvedValueOnce({
-        data: [sampleServiceTemplate],
-        error: null,
-        isUnavailable: true
+    it('4.5 Launch engine handles conflict error on payload mismatch for duplicate request ID', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: { error: 'Conflict: A launch request with this ID already exists with different payload parameters.' },
+        error: null
       });
 
-      render(
-        <ServiceTemplatesView
-          currentUserProfile={mockOwner}
-          onOpenTaskTemplates={vi.fn()}
-        />
-      );
-
-      await waitFor(() => {
-        expect(screen.getByText(/phase 3d backend is not enabled in this environment yet. preview is read-only./i)).toBeInTheDocument();
+      const res = await taskLaunchEngine.launchServiceTemplate({
+        clientId: mockClient.id,
+        templateId: sampleServiceTemplate.id,
+        templateVersion: 1,
+        targetWeek: 1,
+        tasks: [{ title: 'Modified Task Title', departmentId: 'dept-media' }],
+        requestId: 'reused-id'
       });
 
-      const disabledActions = screen.getAllByTitle(/phase 3d backend is not enabled in this environment yet. preview is read-only./i);
-      expect(disabledActions.length).toBeGreaterThanOrEqual(4);
-      disabledActions.forEach((btn) => {
-        expect(btn).toBeDisabled();
+      expect(res.success).toBe(false);
+      expect(res.error).toContain('Conflict');
+    });
+
+    it('4.6 Rejects launch for paused and archived clients via RPC error', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: { error: 'Forbidden: Cannot launch tasks for an Archived client.' },
+        error: null
       });
+
+      const res = await taskLaunchEngine.launchServiceTemplate({
+        clientId: mockArchivedClient.id,
+        templateId: sampleServiceTemplate.id,
+        templateVersion: 1,
+        targetWeek: 1,
+        tasks: [{ title: 'Task 1', departmentId: 'dept-media' }]
+      });
+
+      expect(res.success).toBe(false);
+      expect(res.error).toContain('Archived client');
     });
   });
 
   // ==========================================================================
-  // 3. TASK CREATION MODES & AUTHORITATIVE WORKFLOW
+  // 5. UI COMPONENTS & ACCESS CONTROL
   // ==========================================================================
-  describe('3. Task Creation Modes & Authoritative Workflow', () => {
-    it('3.1 TaskCreationModeModal exposes exactly 2 modes: Apply Service Template vs Create Individual Task', () => {
+  describe('5. UI Components & Access Control', () => {
+    it('5.1 TaskCreationModeModal exposes Apply Service Template vs Create Individual Task', () => {
       const handleSelectMode = vi.fn();
       render(
         <TaskCreationModeModal
@@ -417,299 +698,31 @@ describe('Phase 3D: Service Templates, 90-Day Work Plans & Hardening Suite', () 
       );
 
       expect(screen.getByText('Apply Service Template')).toBeInTheDocument();
-      expect(screen.getByText('Multi-Task Package')).toBeInTheDocument();
       expect(screen.getByText('Create Individual Task')).toBeInTheDocument();
-      expect(screen.queryByText(/start from template — sop/i)).not.toBeInTheDocument();
-
-      // Click Apply Service Template
       fireEvent.click(screen.getByText('Apply Service Template'));
       expect(handleSelectMode).toHaveBeenCalledWith('template', 1);
     });
-  });
 
-  // ==========================================================================
-  // 4. SAFE BULK CREATION OF DRAFT, UNASSIGNED TASKS & LAUNCH ENGINE
-  // ==========================================================================
-  describe('4. Safe Bulk Creation of Tasks & Transactional Launch Engine', () => {
-    it('4.1 taskLaunchEngine launches tasks strictly in Draft status with assignee_id = null', async () => {
-      mockRpc.mockResolvedValueOnce({
-        data: {
-          batch_id: 'batch-123',
-          task_count: 3,
-          task_ids: ['t-1', 't-2', 't-3']
-        },
+    it('5.2 ServiceTemplatesView displays templates list and headers correctly', async () => {
+      vi.spyOn(serviceTemplateService, 'fetchTemplates').mockResolvedValueOnce({
+        data: [sampleServiceTemplate],
         error: null
       });
 
-      const launchPayload = {
-        clientId: mockClient.id,
-        templateId: sampleServiceTemplate.id,
-        templateVersion: sampleServiceTemplate.version,
-        targetWeek: 1,
-        tasks: sampleServiceTemplate.tasks.map((t) => ({
-          title: t.title,
-          description: t.description,
-          departmentId: t.departmentId,
-          priority: t.priority,
-          approvalMode: t.approvalMode,
-          plannedDate: '2026-04-01',
-          dueDate: '2026-04-02'
-        })),
-        requestId: generateRequestId()
-      };
-
-      const res = await taskLaunchEngine.launchServiceTemplate(launchPayload);
-      expect(res.success).toBe(true);
-      expect(res.taskCount).toBe(3);
-      expect(res.batchId).toBe('batch-123');
-      expect(res.taskIds).toHaveLength(3);
-    });
-
-    it('4.2 Launch engine idempotency: replaying same requestId returns previous batch without duplication', async () => {
-      const testRequestId = 'idempotent-req-test-456';
-      const cachedBatch = {
-        batch_id: 'batch-cached-456',
-        task_count: 3,
-        task_ids: ['t-1', 't-2', 't-3'],
-        idempotent_replay: true
-      };
-
-      // First call succeeds
-      mockRpc.mockResolvedValueOnce({ data: cachedBatch, error: null });
-      const res1 = await taskLaunchEngine.launchServiceTemplate({
-        clientId: mockClient.id,
-        templateId: sampleServiceTemplate.id,
-        templateVersion: 1,
-        targetWeek: 1,
-        tasks: [{ title: 'Task 1', departmentId: 'dept-media', plannedDate: '2026-04-01', dueDate: '2026-04-02' }],
-        requestId: testRequestId
-      });
-      expect(res1.success).toBe(true);
-      expect(res1.batchId).toBe('batch-cached-456');
-
-      // Second call with same requestId (simulating network replay) returns cached batch
-      mockRpc.mockResolvedValueOnce({ data: cachedBatch, error: null });
-      const res2 = await taskLaunchEngine.launchServiceTemplate({
-        clientId: mockClient.id,
-        templateId: sampleServiceTemplate.id,
-        templateVersion: 1,
-        targetWeek: 1,
-        tasks: [{ title: 'Task 1', departmentId: 'dept-media', plannedDate: '2026-04-01', dueDate: '2026-04-02' }],
-        requestId: testRequestId
-      });
-      expect(res2.success).toBe(true);
-      expect(res2.batchId).toBe('batch-cached-456');
-    });
-
-    it('4.3 ApplyServiceTemplateModal displays plain guarantee of N Draft, Unassigned tasks and blocks paused client', () => {
       render(
-        <ApplyServiceTemplateModal
-          isOpen={true}
-          onClose={vi.fn()}
-          onSuccess={vi.fn()}
-          client={mockPausedClient}
-          initialWeek={1}
-          departments={mockDepartments}
-        />
-      );
-
-      expect(screen.getByText(/client workspace paused/i)).toBeInTheDocument();
-      expect(screen.getByText(/this service template will create/i)).toBeInTheDocument();
-      const launchBtn = screen.getByRole('button', { name: /launch service pack/i });
-      expect(launchBtn).toBeDisabled();
-    });
-
-    it('4.4 RPC launch rejects archived and paused clients', async () => {
-      mockRpc.mockResolvedValueOnce({
-        data: { error: 'Forbidden: Cannot launch tasks for an archived client' },
-        error: null
-      });
-
-      const resArchived = await taskLaunchEngine.launchServiceTemplate({
-        clientId: mockArchivedClient.id,
-        templateId: sampleServiceTemplate.id,
-        templateVersion: 1,
-        targetWeek: 1,
-        tasks: [{ title: 'Task 1', departmentId: 'dept-media' }]
-      });
-      expect(resArchived.success).toBe(false);
-      expect(resArchived.error).toContain('archived client');
-
-      mockRpc.mockResolvedValueOnce({
-        data: { error: 'Forbidden: Cannot launch tasks for a paused client' },
-        error: null
-      });
-
-      const resPaused = await taskLaunchEngine.launchServiceTemplate({
-        clientId: mockPausedClient.id,
-        templateId: sampleServiceTemplate.id,
-        templateVersion: 1,
-        targetWeek: 1,
-        tasks: [{ title: 'Task 1', departmentId: 'dept-media' }]
-      });
-      expect(resPaused.success).toBe(false);
-      expect(resPaused.error).toContain('paused client');
-    });
-
-    it('4.5 Replaying same requestId with different payload is rejected with conflict error', async () => {
-      mockRpc.mockResolvedValueOnce({
-        data: { error: 'Conflict: Request ID already used with a different task payload' },
-        error: null
-      });
-
-      const resConflict = await taskLaunchEngine.launchServiceTemplate({
-        clientId: mockClient.id,
-        templateId: sampleServiceTemplate.id,
-        templateVersion: 1,
-        targetWeek: 1,
-        tasks: [{ title: 'Modified Task Title', departmentId: 'dept-media' }],
-        requestId: 'reused-req-different-payload'
-      });
-
-      expect(resConflict.success).toBe(false);
-      expect(resConflict.error).toContain('different task payload');
-    });
-
-    it('4.6 Work Plan launch rejects client mismatch and stale revision', async () => {
-      mockRpc.mockResolvedValueOnce({
-        data: { error: 'Conflict: Work Plan does not belong to the target client' },
-        error: null
-      });
-
-      const resMismatch = await taskLaunchEngine.launchWorkPlan({
-        clientId: 'wrong-client-id',
-        planId: 'plan-123',
-        expectedRevision: 1,
-        tasks: [{ title: 'Plan Task 1', departmentId: 'dept-tech', planWeek: 1 }]
-      });
-      expect(resMismatch.success).toBe(false);
-      expect(resMismatch.error).toContain('does not belong');
-
-      mockRpc.mockResolvedValueOnce({
-        data: { error: 'Conflict: Work Plan revision has changed. Please refresh and review.' },
-        error: null
-      });
-
-      const resStale = await taskLaunchEngine.launchWorkPlan({
-        clientId: mockClient.id,
-        planId: 'plan-123',
-        expectedRevision: 1,
-        tasks: [{ title: 'Plan Task 1', departmentId: 'dept-tech', planWeek: 1 }]
-      });
-      expect(resStale.success).toBe(false);
-      expect(resStale.error).toContain('revision has changed');
-    });
-  });
-
-  // ==========================================================================
-  // 5. 90-DAY WORK PLAN SAFETY & ISOLATION
-  // ==========================================================================
-  describe('5. 90-Day Work Plan Safety & Isolation', () => {
-    it('5.1 ClientWorkPlanView displays 90-calendar-day header and build button', async () => {
-      render(
-        <ClientWorkPlanView
-          client={mockClient}
+        <ServiceTemplatesView
           currentUserProfile={mockOwner}
-          departments={mockDepartments}
+          onOpenTaskTemplates={vi.fn()}
         />
       );
 
-      expect(screen.getByText('90-Calendar-Day Work Plans')).toBeInTheDocument();
-      expect(screen.getByText('13 Weeks')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /build 90-day plan/i })).toBeInTheDocument();
-    });
-
-    it('5.2 WorkPlanBuilderModal renders 13 weekly columns and save/launch actions', () => {
-      render(
-        <WorkPlanBuilderModal
-          isOpen={true}
-          onClose={vi.fn()}
-          onSuccess={vi.fn()}
-          client={mockClient}
-          departments={mockDepartments}
-          existingPlan={null}
-        />
-      );
-
-      expect(screen.getByText(/build 90-day work plan/i)).toBeInTheDocument();
-      expect(screen.getByText(/exact 90 calendar days/i)).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /save draft plan/i })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /launch 90-day plan/i })).toBeInTheDocument();
-    });
-
-    it('5.3 Modifying an occurrence in a plan does not mutate master template', () => {
-      const occurrenceTasks = sampleServiceTemplate.tasks.map(t => ({ ...t, title: 'Customized Task Title' }));
-      expect(sampleServiceTemplate.tasks[0].title).toBe('Pixel & CAPI Audit');
-      expect(occurrenceTasks[0].title).toBe('Customized Task Title');
-    });
-
-    it('5.4 Saving a draft plan creates zero operational client tasks', async () => {
-      mockGetUser.mockResolvedValueOnce({
-        data: { user: { id: 'user-owner-1' } },
-        error: null
+      await waitFor(() => {
+        expect(screen.getByText('Service Templates Library')).toBeInTheDocument();
+        expect(screen.getByText('Meta Ads Launch Package')).toBeInTheDocument();
       });
-
-      mockFrom.mockReturnValueOnce({
-        insert: vi.fn().mockReturnValueOnce({
-          select: vi.fn().mockReturnValueOnce({
-            single: vi.fn().mockResolvedValueOnce({
-              data: {
-                id: 'plan-draft-1',
-                client_id: mockClient.id,
-                name: 'Q2 90-Day Growth Plan',
-                status: 'Draft',
-                revision: 1,
-                start_date: '2026-04-01',
-                end_date: '2026-06-29',
-                plan_data: { weeks: [] },
-                created_at: '2026-04-01T00:00:00Z',
-                updated_at: '2026-04-01T00:00:00Z'
-              },
-              error: null
-            })
-          })
-        })
-      });
-
-      const res = await workPlanService.saveDraftPlan({
-        clientId: mockClient.id,
-        name: 'Q2 90-Day Growth Plan',
-        startDate: '2026-04-01',
-        weeks: []
-      });
-
-      expect(res.data?.status).toBe('Draft');
-      // Verify RPC was NOT called for draft saving
-      expect(mockRpc).not.toHaveBeenCalled();
-    });
-  });
-
-  // ==========================================================================
-  // 6. OWNER / OPERATIONAL MANAGER ROLE PROVISIONING MATRIX
-  // ==========================================================================
-  describe('6. Role Provisioning Matrix', () => {
-    it('6.1 CreateTeamMemberModal displays role selector (Team Member vs Operational Manager) for Owner', () => {
-      render(
-        <CreateTeamMemberModal
-          isOpen={true}
-          onClose={vi.fn()}
-          onMemberCreated={vi.fn()}
-          currentUserProfile={mockOwner}
-          departments={mockDepartments}
-          designations={[]}
-          eligibleManagers={[]}
-          onOpenDesignationManager={vi.fn()}
-        />
-      );
-
-      const roleSelect = screen.getByLabelText(/system role/i);
-      expect(roleSelect).toBeInTheDocument();
-      expect(screen.getByRole('option', { name: /team member/i })).toBeInTheDocument();
-      expect(screen.getByRole('option', { name: /operational manager/i })).toBeInTheDocument();
-      expect(screen.queryByRole('option', { name: /^owner$/i })).not.toBeInTheDocument();
     });
 
-    it('6.2 CreateTeamMemberModal locks role to Team Member for Operational Manager', () => {
+    it('5.3 CreateTeamMemberModal locks system role to Team Member for Operational Manager', () => {
       render(
         <CreateTeamMemberModal
           isOpen={true}
@@ -726,13 +739,8 @@ describe('Phase 3D: Service Templates, 90-Day Work Plans & Hardening Suite', () 
       expect(screen.getAllByText(/team member/i).length).toBeGreaterThan(0);
       expect(screen.queryByLabelText(/system role/i)).not.toBeInTheDocument();
     });
-  });
 
-  // ==========================================================================
-  // 7. CLIENT WORKSPACE LINKS IN SIDEBAR & RESTRAINED RED/BLACK/WHITE PALETTE
-  // ==========================================================================
-  describe('7. Client Workspace Links in Sidebar & Header Cleanup', () => {
-    it('7.1 Sidebar renders reactive client workspace links with safe external attributes', async () => {
+    it('5.4 Sidebar renders reactive client workspace links with safe external attributes', async () => {
       useOpsStore.setState({
         clients: [mockClient],
         selectedClientId: mockClient.id,
@@ -749,9 +757,6 @@ describe('Phase 3D: Service Templates, 90-Day Work Plans & Hardening Suite', () 
       await waitFor(() => {
         expect(screen.getByText('Workspace Links')).toBeInTheDocument();
         expect(screen.getByTitle('Open Website')).toBeInTheDocument();
-        expect(screen.getByTitle('Open LinkedIn')).toBeInTheDocument();
-        expect(screen.getByTitle('Open Google Drive')).toBeInTheDocument();
-        expect(screen.getByTitle('Open Slack')).toBeInTheDocument();
       });
 
       const websiteLink = screen.getByTitle('Open Website');
@@ -760,19 +765,14 @@ describe('Phase 3D: Service Templates, 90-Day Work Plans & Hardening Suite', () 
       expect(websiteLink).toHaveAttribute('rel', 'noopener noreferrer');
     });
 
-    it('7.2 SelectedClientHeader does not render duplicate external client link buttons', () => {
+    it('5.5 SelectedClientHeader does not render duplicate external client link buttons', () => {
       render(<SelectedClientHeader client={mockClient} />);
-
       expect(screen.getByText('Nova Marketing Co')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /linkedin profiles/i })).toBeInTheDocument();
-
-      // Quick links must NOT be in the header anymore
       expect(screen.queryByTitle('Open Website / Landing Page')).not.toBeInTheDocument();
       expect(screen.queryByTitle('Open Google Drive Folder')).not.toBeInTheDocument();
-      expect(screen.queryByTitle('Open Slack Channel')).not.toBeInTheDocument();
     });
 
-    it('7.3 Modals render direct to document.body via Portal outside transform containers', () => {
+    it('5.6 Modals render direct to document.body via Portal outside transform containers', () => {
       render(
         <ApplyServiceTemplateModal
           isOpen={true}

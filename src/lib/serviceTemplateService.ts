@@ -1,15 +1,15 @@
 // ==============================================================================
 // SERVICE: serviceTemplateService
 // Location: src/lib/serviceTemplateService.ts
-// Phase: 3D — Multi-Task Service Templates Management
+// Phase: 3D — Multi-Task Service Templates Management (RPC-Authoritative)
 // ==============================================================================
 
 import { supabase, isSupabaseConfigured } from './supabase';
-import { 
-  ServiceTemplate, 
-  ServiceTemplateTask, 
-  CreateServiceTemplateInput, 
-  UpdateServiceTemplateInput 
+import {
+  ServiceTemplate,
+  ServiceTemplateTask,
+  CreateServiceTemplateInput,
+  UpdateServiceTemplateInput
 } from '../types';
 import { taskTemplateService } from './taskTemplateService';
 
@@ -81,9 +81,8 @@ export const serviceTemplateService = {
 
       const { data, error } = await query;
 
-      // Graceful fallback if service_templates table does not exist yet (e.g. un-migrated preview)
+      // Graceful read-only fallback if service_templates table does not exist yet
       if (error && (error.code === '42P01' || error.message?.includes('service_templates'))) {
-        // Fall back to legacy taskTemplateService and map single-task templates into ServiceTemplate format for read-only preview
         const legacyRes = await taskTemplateService.fetchTemplates(includeArchived);
         if (legacyRes.data) {
           const mapped: ServiceTemplate[] = legacyRes.data.map((tpl) => ({
@@ -130,11 +129,45 @@ export const serviceTemplateService = {
   },
 
   /**
-   * Create a new Service Template with ordered child tasks
+   * Fetch a single Service Template by ID
+   */
+  async fetchTemplateById(id: string): Promise<{ data: ServiceTemplate | null; error: string | null }> {
+    if (!isSupabaseConfigured || !supabase || !id) {
+      return { data: null, error: 'Database not initialized' };
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('service_templates')
+        .select(`
+          id, name, service_label, description, status, version, sort_order,
+          created_by, updated_by, archived_at, archived_by, archive_reason,
+          created_at, updated_at,
+          tasks:service_template_tasks(
+            id, definition_id, title, description, department_id,
+            priority, approval_mode, planned_offset_days, duration_business_days, display_order,
+            departments(id, name)
+          )
+        `)
+        .eq('id', id)
+        .single();
+
+      if (error || !data) {
+        return { data: null, error: error?.message || 'Template not found.' };
+      }
+
+      return { data: mapTemplateRow(data), error: null };
+    } catch (err: any) {
+      return { data: null, error: err?.message || 'Failed to fetch service template.' };
+    }
+  },
+
+  /**
+   * Create a new Service Template via Authoritative RPC (fn_manage_service_template)
    */
   async createTemplate(input: CreateServiceTemplateInput): Promise<{ data: ServiceTemplate | null; error: string | null }> {
     if (!isSupabaseConfigured || !supabase) {
-      return { data: null, error: 'Database not initialized' };
+      return { data: null, error: 'Database not initialized.' };
     }
 
     if (!input.name?.trim()) {
@@ -150,317 +183,197 @@ export const serviceTemplateService = {
       return { data: null, error: 'A Service Template can contain at most 100 tasks.' };
     }
 
-    for (let i = 0; i < input.tasks.length; i++) {
-      const t = input.tasks[i];
-      if (!t.title?.trim()) {
-        return { data: null, error: `Task #${i + 1} must have a title.` };
-      }
-      if (!t.departmentId) {
-        return { data: null, error: `Task "${t.title}" must have a department assigned.` };
-      }
-    }
+    const taskPayloads = input.tasks.map((t, idx) => ({
+      definition_id: t.definitionId || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : undefined),
+      title: t.title.trim(),
+      description: t.description?.trim() || null,
+      department_id: t.departmentId,
+      priority: t.priority || 'Normal',
+      approval_mode: t.approvalMode || 'Internal Only',
+      planned_offset_days: t.plannedOffsetDays || 0,
+      duration_business_days: t.durationBusinessDays || 1,
+      display_order: idx
+    }));
 
     try {
-      const { data: userData } = await supabase.auth.getUser();
-      const currentUserId = userData?.user?.id || null;
-
-      // 1. Insert master template row
-      const { data: tplRow, error: tplErr } = await supabase
-        .from('service_templates')
-        .insert({
-          name: input.name.trim(),
-          service_label: input.serviceLabel.trim(),
-          description: input.description?.trim() || null,
-          status: 'Active',
-          version: 1,
-          created_by: currentUserId,
-          updated_by: currentUserId
-        })
-        .select()
-        .single();
-
-      if (tplErr || !tplRow) {
-        return { data: null, error: tplErr?.message || 'Failed to insert service template.' };
-      }
-
-      // 2. Insert child tasks
-      const taskInserts = input.tasks.map((t, idx) => ({
-        template_id: tplRow.id,
-        definition_id: t.definitionId || crypto.randomUUID(),
-        title: t.title.trim(),
-        description: t.description?.trim() || null,
-        department_id: t.departmentId,
-        priority: t.priority || 'Normal',
-        approval_mode: t.approvalMode || 'Internal Only',
-        planned_offset_days: t.plannedOffsetDays || 0,
-        duration_business_days: t.durationBusinessDays || 1,
-        display_order: idx
-      }));
-
-      const { data: insertedTasks, error: taskErr } = await supabase
-        .from('service_template_tasks')
-        .insert(taskInserts)
-        .select(`
-          id, definition_id, title, description, department_id,
-          priority, approval_mode, planned_offset_days, duration_business_days, display_order,
-          departments(id, name)
-        `);
-
-      if (taskErr) {
-        // Rollback template row if tasks fail
-        await supabase.from('service_templates').delete().eq('id', tplRow.id);
-        return { data: null, error: taskErr.message };
-      }
-
-      // 3. Create version 1 snapshot
-      await supabase.from('service_template_versions').insert({
-        template_id: tplRow.id,
-        version: 1,
-        snapshot: {
-          id: tplRow.id,
-          name: tplRow.name,
-          service_label: tplRow.service_label,
-          tasks: taskInserts
-        },
-        created_by: currentUserId
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('fn_manage_service_template', {
+        p_action: 'create',
+        p_template_id: null,
+        p_name: input.name.trim(),
+        p_service_label: input.serviceLabel.trim(),
+        p_description: input.description?.trim() || null,
+        p_tasks: taskPayloads,
+        p_sort_order: 0,
+        p_archive_reason: null,
+        p_expected_version: null
       });
 
-      const fullTemplate = mapTemplateRow({
-        ...tplRow,
-        tasks: insertedTasks || taskInserts
-      });
+      if (rpcErr) {
+        return { data: null, error: rpcErr.message };
+      }
+      if (rpcRes?.error) {
+        return { data: null, error: rpcRes.error };
+      }
 
-      return { data: fullTemplate, error: null };
+      if (rpcRes?.template_id) {
+        return this.fetchTemplateById(rpcRes.template_id);
+      }
+
+      return { data: null, error: 'Failed to create template via server authority.' };
     } catch (err: any) {
       return { data: null, error: err?.message || 'Failed to create service template.' };
     }
   },
 
   /**
-   * Update an existing Service Template and bump its version
+   * Update an existing Service Template via Authoritative RPC (fn_manage_service_template)
    */
   async updateTemplate(id: string, input: UpdateServiceTemplateInput): Promise<{ data: ServiceTemplate | null; error: string | null }> {
     if (!isSupabaseConfigured || !supabase) {
-      return { data: null, error: 'Database not initialized' };
+      return { data: null, error: 'Database not initialized.' };
     }
 
+    const taskPayloads = input.tasks ? input.tasks.map((t, idx) => ({
+      definition_id: t.definitionId || (typeof crypto !== 'undefined' && crypto.randomUUID ? crypto.randomUUID() : undefined),
+      title: t.title.trim(),
+      description: t.description?.trim() || null,
+      department_id: t.departmentId,
+      priority: t.priority || 'Normal',
+      approval_mode: t.approvalMode || 'Internal Only',
+      planned_offset_days: t.plannedOffsetDays || 0,
+      duration_business_days: t.durationBusinessDays || 1,
+      display_order: idx
+    })) : undefined;
+
     try {
-      const { data: userData } = await supabase.auth.getUser();
-      const currentUserId = userData?.user?.id || null;
-
-      // 1. Fetch current template
-      const { data: current, error: fetchErr } = await supabase
-        .from('service_templates')
-        .select('id, version, status')
-        .eq('id', id)
-        .single();
-
-      if (fetchErr || !current) {
-        return { data: null, error: 'Template not found.' };
-      }
-
-      if (input.expectedVersion && current.version !== input.expectedVersion) {
-        return { data: null, error: 'Conflict: Template has been modified by another user. Please reload.' };
-      }
-
-      const nextVersion = current.version + 1;
-
-      // 2. Update master template row
-      const updates: Record<string, any> = {
-        version: nextVersion,
-        updated_by: currentUserId,
-        updated_at: new Date().toISOString()
-      };
-      if (input.name?.trim()) updates.name = input.name.trim();
-      if (input.serviceLabel?.trim()) updates.service_label = input.serviceLabel.trim();
-      if (input.description !== undefined) updates.description = input.description?.trim() || null;
-
-      const { data: updatedTpl, error: updateErr } = await supabase
-        .from('service_templates')
-        .update(updates)
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (updateErr || !updatedTpl) {
-        return { data: null, error: updateErr?.message || 'Failed to update template.' };
-      }
-
-      // 3. Update child tasks if provided
-      let finalTasks: any[] = [];
-      if (Array.isArray(input.tasks)) {
-        if (input.tasks.length === 0) {
-          return { data: null, error: 'A Service Template must contain at least one task.' };
-        }
-        if (input.tasks.length > 100) {
-          return { data: null, error: 'A Service Template can contain at most 100 tasks.' };
-        }
-
-        // Delete old tasks and insert new tasks
-        await supabase.from('service_template_tasks').delete().eq('template_id', id);
-
-        const taskInserts = input.tasks.map((t, idx) => ({
-          template_id: id,
-          definition_id: t.definitionId || crypto.randomUUID(),
-          title: t.title.trim(),
-          description: t.description?.trim() || null,
-          department_id: t.departmentId,
-          priority: t.priority || 'Normal',
-          approval_mode: t.approvalMode || 'Internal Only',
-          planned_offset_days: t.plannedOffsetDays || 0,
-          duration_business_days: t.durationBusinessDays || 1,
-          display_order: idx
-        }));
-
-        const { data: inserted, error: taskErr } = await supabase
-          .from('service_template_tasks')
-          .insert(taskInserts)
-          .select(`
-            id, definition_id, title, description, department_id,
-            priority, approval_mode, planned_offset_days, duration_business_days, display_order,
-            departments(id, name)
-          `);
-
-        if (taskErr) {
-          return { data: null, error: taskErr.message };
-        }
-        finalTasks = inserted || taskInserts;
-
-        // Record version snapshot
-        await supabase.from('service_template_versions').insert({
-          template_id: id,
-          version: nextVersion,
-          snapshot: {
-            id,
-            name: updatedTpl.name,
-            service_label: updatedTpl.service_label,
-            tasks: taskInserts
-          },
-          created_by: currentUserId
-        });
-      }
-
-      const fullTemplate = mapTemplateRow({
-        ...updatedTpl,
-        tasks: finalTasks
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('fn_manage_service_template', {
+        p_action: 'update',
+        p_template_id: id,
+        p_name: input.name?.trim() || null,
+        p_service_label: input.serviceLabel?.trim() || null,
+        p_description: input.description !== undefined ? (input.description?.trim() || null) : null,
+        p_tasks: taskPayloads || [],
+        p_sort_order: 0,
+        p_archive_reason: null,
+        p_expected_version: input.expectedVersion || 1
       });
 
-      return { data: fullTemplate, error: null };
+      if (rpcErr) {
+        return { data: null, error: rpcErr.message };
+      }
+      if (rpcRes?.error) {
+        return { data: null, error: rpcRes.error };
+      }
+
+      return this.fetchTemplateById(id);
     } catch (err: any) {
       return { data: null, error: err?.message || 'Failed to update service template.' };
     }
   },
 
   /**
-   * Duplicate a Service Template with all child tasks
+   * Duplicate a Service Template via Authoritative RPC
    */
   async duplicateTemplate(id: string): Promise<{ data: ServiceTemplate | null; error: string | null }> {
     if (!isSupabaseConfigured || !supabase) {
-      return { data: null, error: 'Database not initialized' };
+      return { data: null, error: 'Database not initialized.' };
     }
 
     try {
-      const { data: existing, error: fetchErr } = await supabase
-        .from('service_templates')
-        .select(`
-          name, service_label, description,
-          tasks:service_template_tasks(
-            title, description, department_id, priority, approval_mode,
-            planned_offset_days, duration_business_days, display_order
-          )
-        `)
-        .eq('id', id)
-        .single();
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('fn_manage_service_template', {
+        p_action: 'duplicate',
+        p_template_id: id,
+        p_name: null,
+        p_service_label: null,
+        p_description: null,
+        p_tasks: [],
+        p_sort_order: 0,
+        p_archive_reason: null,
+        p_expected_version: null
+      });
 
-      if (fetchErr || !existing) {
-        return { data: null, error: 'Template to duplicate was not found.' };
+      if (rpcErr) {
+        return { data: null, error: rpcErr.message };
+      }
+      if (rpcRes?.error) {
+        return { data: null, error: rpcRes.error };
       }
 
-      const tasksToClone = (existing.tasks || []).map((t: any) => ({
-        definitionId: crypto.randomUUID(),
-        title: t.title,
-        description: t.description,
-        departmentId: t.department_id,
-        priority: t.priority,
-        approvalMode: t.approval_mode,
-        plannedOffsetDays: t.planned_offset_days,
-        durationBusinessDays: t.duration_business_days,
-        displayOrder: t.display_order
-      }));
+      if (rpcRes?.template_id) {
+        return this.fetchTemplateById(rpcRes.template_id);
+      }
 
-      return this.createTemplate({
-        name: `Copy of ${existing.name}`,
-        serviceLabel: existing.service_label,
-        description: existing.description,
-        tasks: tasksToClone
-      });
+      return { data: null, error: 'Failed to duplicate template.' };
     } catch (err: any) {
       return { data: null, error: err?.message || 'Failed to duplicate service template.' };
     }
   },
 
   /**
-   * Archive a Service Template
+   * Archive a Service Template via Authoritative RPC
    */
-  async archiveTemplate(id: string, reason: string): Promise<{ data: ServiceTemplate | null; error: string | null }> {
+  async archiveTemplate(id: string, reason: string): Promise<{ success: boolean; error: string | null }> {
     if (!isSupabaseConfigured || !supabase) {
-      return { data: null, error: 'Database not initialized' };
+      return { success: false, error: 'Database not initialized.' };
     }
 
     try {
-      const { data: userData } = await supabase.auth.getUser();
-      const currentUserId = userData?.user?.id || null;
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('fn_manage_service_template', {
+        p_action: 'archive',
+        p_template_id: id,
+        p_name: null,
+        p_service_label: null,
+        p_description: null,
+        p_tasks: [],
+        p_sort_order: 0,
+        p_archive_reason: reason.trim(),
+        p_expected_version: null
+      });
 
-      const { data, error } = await supabase
-        .from('service_templates')
-        .update({
-          status: 'Archived',
-          archived_at: new Date().toISOString(),
-          archived_by: currentUserId,
-          archive_reason: reason.trim() || 'Archived by owner'
-        })
-        .eq('id', id)
-        .select()
-        .single();
-
-      if (error || !data) {
-        return { data: null, error: error?.message || 'Failed to archive template.' };
+      if (rpcErr) {
+        return { success: false, error: rpcErr.message };
+      }
+      if (rpcRes?.error) {
+        return { success: false, error: rpcRes.error };
       }
 
-      return { data: mapTemplateRow(data), error: null };
+      return { success: true, error: null };
     } catch (err: any) {
-      return { data: null, error: err?.message || 'Failed to archive service template.' };
+      return { success: false, error: err?.message || 'Failed to archive service template.' };
     }
   },
 
   /**
-   * Restore an archived Service Template
+   * Restore an Archived Service Template via Authoritative RPC
    */
-  async restoreTemplate(id: string): Promise<{ data: ServiceTemplate | null; error: string | null }> {
+  async restoreTemplate(id: string): Promise<{ success: boolean; error: string | null }> {
     if (!isSupabaseConfigured || !supabase) {
-      return { data: null, error: 'Database not initialized' };
+      return { success: false, error: 'Database not initialized.' };
     }
 
     try {
-      const { data, error } = await supabase
-        .from('service_templates')
-        .update({
-          status: 'Active',
-          archived_at: null,
-          archived_by: null,
-          archive_reason: null
-        })
-        .eq('id', id)
-        .select()
-        .single();
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('fn_manage_service_template', {
+        p_action: 'restore',
+        p_template_id: id,
+        p_name: null,
+        p_service_label: null,
+        p_description: null,
+        p_tasks: [],
+        p_sort_order: 0,
+        p_archive_reason: null,
+        p_expected_version: null
+      });
 
-      if (error || !data) {
-        return { data: null, error: error?.message || 'Failed to restore template.' };
+      if (rpcErr) {
+        return { success: false, error: rpcErr.message };
+      }
+      if (rpcRes?.error) {
+        return { success: false, error: rpcRes.error };
       }
 
-      return { data: mapTemplateRow(data), error: null };
+      return { success: true, error: null };
     } catch (err: any) {
-      return { data: null, error: err?.message || 'Failed to restore service template.' };
+      return { success: false, error: err?.message || 'Failed to restore service template.' };
     }
   }
 };

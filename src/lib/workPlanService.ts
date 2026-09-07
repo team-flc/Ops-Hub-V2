@@ -1,12 +1,12 @@
 // ==============================================================================
 // SERVICE: workPlanService
 // Location: src/lib/workPlanService.ts
-// Phase: 3D — Client 90-Day Work Plans Management & Draft Persistence
+// Phase: 3D — Client 90-Day Work Plans Management (RPC-Authoritative)
 // ==============================================================================
 
 import { supabase, isSupabaseConfigured } from './supabase';
 import { ClientWorkPlan, WorkPlanWeek, TaskLaunchBatchResult } from '../types';
-import { compute90DayPlanRange, generate13PlanWeeks } from './workPlanCalendar';
+import { compute90DayPlanRange } from './workPlanCalendar';
 import { taskLaunchEngine } from './taskLaunchEngine';
 
 function mapPlanRow(row: any): ClientWorkPlan {
@@ -69,8 +69,36 @@ export const workPlanService = {
   },
 
   /**
-   * Save or update a Draft Work Plan in the database
-   * Survives browser refreshes!
+   * Fetch a single Work Plan by ID
+   */
+  async fetchPlanById(id: string): Promise<{ data: ClientWorkPlan | null; error: string | null }> {
+    if (!isSupabaseConfigured || !supabase || !id) {
+      return { data: null, error: 'Database not initialized.' };
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('client_work_plans')
+        .select(`
+          id, client_id, name, status, start_date, end_date, revision,
+          plan_data, launch_snapshot, launched_at, launched_by, launch_batch_id,
+          created_by, updated_by, created_at, updated_at
+        `)
+        .eq('id', id)
+        .single();
+
+      if (error || !data) {
+        return { data: null, error: error?.message || 'Work plan not found.' };
+      }
+
+      return { data: mapPlanRow(data), error: null };
+    } catch (err: any) {
+      return { data: null, error: err?.message || 'Failed to fetch work plan.' };
+    }
+  },
+
+  /**
+   * Save or update a Draft Work Plan via Authoritative RPC (fn_save_draft_work_plan)
    */
   async saveDraftPlan(input: {
     id?: string;
@@ -90,98 +118,57 @@ export const workPlanService = {
     if (!input.startDate) {
       return { data: null, error: 'Plan start date is required.' };
     }
-
-    const { startDate, endDate } = compute90DayPlanRange(input.startDate);
+    if (!Array.isArray(input.weeks) || input.weeks.length !== 13) {
+      return { data: null, error: 'A 90-day work plan must contain exactly 13 weeks.' };
+    }
 
     try {
-      const { data: userData } = await supabase.auth.getUser();
-      const currentUserId = userData?.user?.id || null;
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('fn_save_draft_work_plan', {
+        p_plan_id: input.id || null,
+        p_client_id: input.clientId,
+        p_name: input.name.trim(),
+        p_start_date: input.startDate,
+        p_weeks: input.weeks,
+        p_expected_revision: input.expectedRevision || null
+      });
 
-      if (input.id) {
-        // Update existing draft plan
-        const { data: current, error: fetchErr } = await supabase
-          .from('client_work_plans')
-          .select('id, status, revision')
-          .eq('id', input.id)
-          .single();
-
-        if (fetchErr || !current) {
-          return { data: null, error: 'Plan not found.' };
-        }
-        if (current.status !== 'Draft') {
-          return { data: null, error: 'Cannot modify a plan that is already launched or archived.' };
-        }
-        if (input.expectedRevision && current.revision !== input.expectedRevision) {
-          return { data: null, error: 'Conflict: Plan was updated in another session. Please reload.' };
-        }
-
-        const { data: updated, error: updateErr } = await supabase
-          .from('client_work_plans')
-          .update({
-            name: input.name.trim(),
-            start_date: startDate,
-            end_date: endDate,
-            revision: current.revision + 1,
-            plan_data: { weeks: input.weeks },
-            updated_by: currentUserId,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', input.id)
-          .select()
-          .single();
-
-        if (updateErr || !updated) {
-          return { data: null, error: updateErr?.message || 'Failed to update draft plan.' };
-        }
-
-        return { data: mapPlanRow(updated), error: null };
-      } else {
-        // Insert new draft plan
-        const { data: inserted, error: insertErr } = await supabase
-          .from('client_work_plans')
-          .insert({
-            client_id: input.clientId,
-            name: input.name.trim(),
-            status: 'Draft',
-            start_date: startDate,
-            end_date: endDate,
-            revision: 1,
-            plan_data: { weeks: input.weeks },
-            created_by: currentUserId,
-            updated_by: currentUserId
-          })
-          .select()
-          .single();
-
-        if (insertErr || !inserted) {
-          return { data: null, error: insertErr?.message || 'Failed to create draft plan.' };
-        }
-
-        return { data: mapPlanRow(inserted), error: null };
+      if (rpcErr) {
+        return { data: null, error: rpcErr.message };
       }
+      if (rpcRes?.error) {
+        return { data: null, error: rpcRes.error };
+      }
+
+      if (rpcRes?.plan_id) {
+        return this.fetchPlanById(rpcRes.plan_id);
+      }
+
+      return { data: null, error: 'Failed to save draft plan via server authority.' };
     } catch (err: any) {
       return { data: null, error: err?.message || 'Failed to save draft plan.' };
     }
   },
 
   /**
-   * Delete a Draft Work Plan
+   * Delete a Draft Work Plan via Authoritative RPC (fn_delete_draft_work_plan)
    */
   async deleteDraftPlan(planId: string): Promise<{ success: boolean; error: string | null }> {
-    if (!isSupabaseConfigured || !supabase) {
+    if (!isSupabaseConfigured || !supabase || !planId) {
       return { success: false, error: 'Database not initialized.' };
     }
 
     try {
-      const { error } = await supabase
-        .from('client_work_plans')
-        .delete()
-        .eq('id', planId)
-        .eq('status', 'Draft');
+      const { data: rpcRes, error: rpcErr } = await supabase.rpc('fn_delete_draft_work_plan', {
+        p_plan_id: planId
+      });
 
-      if (error) {
-        return { success: false, error: error.message };
+      if (rpcErr) {
+        return { success: false, error: rpcErr.message };
       }
+      if (rpcRes?.error) {
+        return { success: false, error: rpcRes.error };
+      }
+
       return { success: true, error: null };
     } catch (err: any) {
       return { success: false, error: err?.message || 'Failed to delete draft plan.' };

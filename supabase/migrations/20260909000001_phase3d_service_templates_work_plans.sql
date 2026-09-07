@@ -1,15 +1,18 @@
 -- ==============================================================================
 -- MIGRATION: 20260909000001_phase3d_service_templates_work_plans.sql
--- Phase: 3D — Multi-Task Service Templates, 90-Day Work Plans, Phase 3C Backfill & Authoritative RPC Engine
--- Database: PostgreSQL / Supabase (Ops Hub V2 Schema)
+-- Description: Phase 3D Multi-Task Service Templates, 90-Day Work Plans,
+--              Database-Backed Launch Idempotency Registry, Authoritative
+--              Mutation RPCs, Strict RLS Security Matrix, and Idempotent
+--              Non-Destructive Phase 3C Backfill.
+-- Schema Authority: PostgreSQL 15+ / Supabase Auth
 -- ==============================================================================
 
 -- ------------------------------------------------------------------------------
--- 1. ADD PHASE 3D COMPANION PROVENANCE COLUMNS TO REAL OPERATIONAL TASKS TABLE
+-- 1. EXTEND EXISTING TABLES WITH COMPANION COLUMNS
 -- ------------------------------------------------------------------------------
+
 DO $$
 BEGIN
-    -- 1.1 Source Template Reference
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.columns
         WHERE table_schema = 'public' AND table_name = 'client_tasks' AND column_name = 'source_template_id'
@@ -17,15 +20,13 @@ BEGIN
         ALTER TABLE public.client_tasks ADD COLUMN source_template_id UUID;
     END IF;
 
-    -- 1.2 Source Template Version
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.columns
         WHERE table_schema = 'public' AND table_name = 'client_tasks' AND column_name = 'source_template_version'
     ) THEN
-        ALTER TABLE public.client_tasks ADD COLUMN source_template_version INTEGER;
+        ALTER TABLE public.client_tasks ADD COLUMN source_template_version INTEGER DEFAULT 1;
     END IF;
 
-    -- 1.3 Work Plan Reference
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.columns
         WHERE table_schema = 'public' AND table_name = 'client_tasks' AND column_name = 'plan_id'
@@ -33,15 +34,13 @@ BEGIN
         ALTER TABLE public.client_tasks ADD COLUMN plan_id UUID;
     END IF;
 
-    -- 1.4 Work Plan Week Number (Weeks 1..13)
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.columns
         WHERE table_schema = 'public' AND table_name = 'client_tasks' AND column_name = 'plan_week'
     ) THEN
-        ALTER TABLE public.client_tasks ADD COLUMN plan_week INTEGER CHECK (plan_week BETWEEN 1 AND 13);
+        ALTER TABLE public.client_tasks ADD COLUMN plan_week INTEGER CHECK (plan_week IS NULL OR (plan_week >= 1 AND plan_week <= 13));
     END IF;
 
-    -- 1.5 Work Plan Template Occurrence Reference
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.columns
         WHERE table_schema = 'public' AND table_name = 'client_tasks' AND column_name = 'occurrence_id'
@@ -49,7 +48,6 @@ BEGIN
         ALTER TABLE public.client_tasks ADD COLUMN occurrence_id UUID;
     END IF;
 
-    -- 1.6 Launch Batch Reference
     IF NOT EXISTS (
         SELECT 1 FROM information_schema.columns
         WHERE table_schema = 'public' AND table_name = 'client_tasks' AND column_name = 'launch_batch_id'
@@ -58,33 +56,25 @@ BEGIN
     END IF;
 END $$;
 
--- Performance indexes for task provenance
-CREATE INDEX IF NOT EXISTS idx_client_tasks_plan_provenance
-ON public.client_tasks(plan_id, plan_week)
-WHERE plan_id IS NOT NULL;
-
-CREATE INDEX IF NOT EXISTS idx_client_tasks_source_template
-ON public.client_tasks(source_template_id)
-WHERE source_template_id IS NOT NULL;
-
-CREATE INDEX IF NOT EXISTS idx_client_tasks_launch_batch
-ON public.client_tasks(launch_batch_id)
-WHERE launch_batch_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_client_tasks_plan_id ON public.client_tasks(plan_id);
+CREATE INDEX IF NOT EXISTS idx_client_tasks_plan_week ON public.client_tasks(plan_week);
+CREATE INDEX IF NOT EXISTS idx_client_tasks_source_template_id ON public.client_tasks(source_template_id);
+CREATE INDEX IF NOT EXISTS idx_client_tasks_launch_batch_id ON public.client_tasks(launch_batch_id);
 
 -- ------------------------------------------------------------------------------
--- 2. SERVICE TEMPLATES CORE SCHEMA
+-- 2. MULTI-TASK SERVICE TEMPLATES ENTITY SUITE
 -- ------------------------------------------------------------------------------
 
 -- 2.1 Service Templates Master Table
 CREATE TABLE IF NOT EXISTS public.service_templates (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    legacy_task_template_id UUID,
     name TEXT NOT NULL,
     service_label TEXT NOT NULL DEFAULT 'General Service',
     description TEXT,
     status TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Archived')),
     version INTEGER NOT NULL DEFAULT 1 CHECK (version >= 1),
     sort_order INTEGER NOT NULL DEFAULT 0,
-    legacy_task_template_id UUID REFERENCES public.task_templates(id) ON DELETE SET NULL,
     created_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
     updated_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
     archived_at TIMESTAMPTZ,
@@ -93,18 +83,15 @@ CREATE TABLE IF NOT EXISTS public.service_templates (
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
     updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
 
-    CONSTRAINT chk_service_templates_name CHECK (length(trim(name)) > 0 AND length(name) <= 200),
-    CONSTRAINT chk_service_templates_label CHECK (length(trim(service_label)) > 0 AND length(service_label) <= 100)
+    CONSTRAINT chk_service_templates_name CHECK (length(trim(name)) > 0 AND length(name) <= 150),
+    CONSTRAINT chk_service_templates_label CHECK (length(trim(service_label)) > 0 AND length(service_label) <= 100),
+    CONSTRAINT uq_service_templates_legacy_id UNIQUE (legacy_task_template_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_service_templates_status_sort
-ON public.service_templates(status, sort_order ASC, name ASC);
+ON public.service_templates(status, sort_order);
 
-CREATE UNIQUE INDEX IF NOT EXISTS uq_service_templates_legacy_id
-ON public.service_templates(legacy_task_template_id)
-WHERE legacy_task_template_id IS NOT NULL;
-
--- 2.2 Service Template Child Tasks (1–100 Ordered Tasks per Template)
+-- 2.2 Service Template Tasks (Ordered Child Tasks 1..100)
 CREATE TABLE IF NOT EXISTS public.service_template_tasks (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     template_id UUID NOT NULL REFERENCES public.service_templates(id) ON DELETE CASCADE,
@@ -114,20 +101,18 @@ CREATE TABLE IF NOT EXISTS public.service_template_tasks (
     department_id UUID NOT NULL REFERENCES public.departments(id) ON DELETE RESTRICT,
     priority TEXT NOT NULL DEFAULT 'Normal' CHECK (priority IN ('Low', 'Normal', 'High', 'Urgent')),
     approval_mode TEXT NOT NULL DEFAULT 'Internal Only' CHECK (approval_mode IN ('Internal Only', 'Client Approval Required')),
-    planned_offset_days INTEGER NOT NULL DEFAULT 0 CHECK (planned_offset_days >= 0 AND planned_offset_days <= 89),
+    planned_offset_days INTEGER NOT NULL DEFAULT 0 CHECK (planned_offset_days >= 0 AND planned_offset_days <= 90),
     duration_business_days INTEGER NOT NULL DEFAULT 1 CHECK (duration_business_days >= 1 AND duration_business_days <= 90),
-    display_order INTEGER NOT NULL DEFAULT 0 CHECK (display_order >= 0 AND display_order <= 99),
+    display_order INTEGER NOT NULL DEFAULT 0 CHECK (display_order >= 0 AND display_order < 100),
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
-    updated_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
 
-    CONSTRAINT chk_service_template_tasks_title CHECK (length(trim(title)) > 0 AND length(title) <= 200),
-    CONSTRAINT uq_service_template_task_order UNIQUE(template_id, display_order)
+    CONSTRAINT chk_service_template_tasks_title CHECK (length(trim(title)) > 0 AND length(title) <= 200)
 );
 
-CREATE INDEX IF NOT EXISTS idx_service_template_tasks_lookup
-ON public.service_template_tasks(template_id, display_order ASC);
+CREATE INDEX IF NOT EXISTS idx_service_template_tasks_tpl_order
+ON public.service_template_tasks(template_id, display_order);
 
--- 2.3 Service Template Versions (Immutable Snapshots)
+-- 2.3 Service Template Version History (Audit Snapshots)
 CREATE TABLE IF NOT EXISTS public.service_template_versions (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     template_id UUID NOT NULL REFERENCES public.service_templates(id) ON DELETE CASCADE,
@@ -135,6 +120,7 @@ CREATE TABLE IF NOT EXISTS public.service_template_versions (
     snapshot JSONB NOT NULL,
     created_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
+
     CONSTRAINT uq_service_template_version UNIQUE (template_id, version)
 );
 
@@ -142,7 +128,7 @@ CREATE INDEX IF NOT EXISTS idx_service_template_versions_lookup
 ON public.service_template_versions(template_id, version DESC);
 
 -- ------------------------------------------------------------------------------
--- 3. EXACT 90-CALENDAR-DAY WORK PLANS SCHEMA
+-- 3. 90-DAY CLIENT WORK PLANS ENTITY SUITE
 -- ------------------------------------------------------------------------------
 
 -- 3.1 Client Work Plans Master Table
@@ -216,29 +202,45 @@ CREATE TABLE IF NOT EXISTS public.task_launch_batches (
     metadata JSONB NOT NULL DEFAULT '{}'::jsonb,
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now()),
 
+    CONSTRAINT chk_launch_batch_req_id CHECK (length(trim(request_id)) > 0 AND length(request_id) <= 128),
     CONSTRAINT uq_launch_batch_client_request UNIQUE (client_id, request_id)
 );
 
 CREATE INDEX IF NOT EXISTS idx_task_launch_batches_client_req
 ON public.task_launch_batches(client_id, request_id);
 
--- Add Foreign Key Constraints to companion columns
+-- Add Foreign Key Constraints to companion columns independently
 DO $$
 BEGIN
-    ALTER TABLE public.client_tasks DROP CONSTRAINT IF EXISTS fk_client_tasks_source_template;
-    ALTER TABLE public.client_tasks ADD CONSTRAINT fk_client_tasks_source_template
-        FOREIGN KEY (source_template_id) REFERENCES public.service_templates(id) ON DELETE SET NULL;
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'fk_client_tasks_source_template' AND table_name = 'client_tasks'
+    ) THEN
+        ALTER TABLE public.client_tasks ADD CONSTRAINT fk_client_tasks_source_template
+            FOREIGN KEY (source_template_id) REFERENCES public.service_templates(id) ON DELETE SET NULL;
+    END IF;
+END $$;
 
-    ALTER TABLE public.client_tasks DROP CONSTRAINT IF EXISTS fk_client_tasks_plan_id;
-    ALTER TABLE public.client_tasks ADD CONSTRAINT fk_client_tasks_plan_id
-        FOREIGN KEY (plan_id) REFERENCES public.client_work_plans(id) ON DELETE SET NULL;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'fk_client_tasks_plan_id' AND table_name = 'client_tasks'
+    ) THEN
+        ALTER TABLE public.client_tasks ADD CONSTRAINT fk_client_tasks_plan_id
+            FOREIGN KEY (plan_id) REFERENCES public.client_work_plans(id) ON DELETE SET NULL;
+    END IF;
+END $$;
 
-    ALTER TABLE public.client_tasks DROP CONSTRAINT IF EXISTS fk_client_tasks_launch_batch;
-    ALTER TABLE public.client_tasks ADD CONSTRAINT fk_client_tasks_launch_batch
-        FOREIGN KEY (launch_batch_id) REFERENCES public.task_launch_batches(id) ON DELETE SET NULL;
-EXCEPTION
-    WHEN OTHERS THEN
-        RAISE NOTICE 'Foreign keys added or already existing.';
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints
+        WHERE constraint_name = 'fk_client_tasks_launch_batch' AND table_name = 'client_tasks'
+    ) THEN
+        ALTER TABLE public.client_tasks ADD CONSTRAINT fk_client_tasks_launch_batch
+            FOREIGN KEY (launch_batch_id) REFERENCES public.task_launch_batches(id) ON DELETE SET NULL;
+    END IF;
 END $$;
 
 -- ------------------------------------------------------------------------------
@@ -248,55 +250,59 @@ DO $$
 DECLARE
     tpl RECORD;
     dept_name TEXT;
-    v_backfilled_count INTEGER := 0;
+    new_template_id UUID;
+    v_order INTEGER := 0;
+    v_dur INTEGER;
 BEGIN
-    IF EXISTS (SELECT 1 FROM information_schema.tables WHERE table_schema = 'public' AND table_name = 'task_templates') THEN
-        FOR tpl IN SELECT * FROM public.task_templates ORDER BY sort_order ASC, created_at ASC LOOP
-            -- Non-destructive: Skip if this legacy template has already been backfilled
+    IF EXISTS (
+        SELECT 1 FROM information_schema.tables
+        WHERE table_schema = 'public' AND table_name = 'task_templates'
+    ) THEN
+        FOR tpl IN
+            SELECT tt.*, d.name AS dept_name
+            FROM public.task_templates tt
+            LEFT JOIN public.departments d ON d.id = tt.department_id
+            ORDER BY tt.created_at ASC
+        LOOP
             IF NOT EXISTS (
                 SELECT 1 FROM public.service_templates
-                WHERE id = tpl.id OR legacy_task_template_id = tpl.id
+                WHERE legacy_task_template_id = tpl.id
             ) THEN
-                -- Look up department name for service label
-                SELECT name INTO dept_name FROM public.departments WHERE id = tpl.department_id;
+                v_order := v_order + 1;
+                new_template_id := gen_random_uuid();
+                v_dur := COALESCE(tpl.suggested_duration_days, 1);
+                IF v_dur < 1 OR v_dur > 90 THEN v_dur := 1; END IF;
 
-                -- Insert into service_templates preserving UUID and legacy reference
                 INSERT INTO public.service_templates (
                     id,
+                    legacy_task_template_id,
                     name,
                     service_label,
                     description,
                     status,
                     version,
                     sort_order,
-                    legacy_task_template_id,
                     created_by,
                     updated_by,
-                    archived_at,
-                    archived_by,
-                    archive_reason,
                     created_at,
                     updated_at
                 ) VALUES (
+                    new_template_id,
                     tpl.id,
                     tpl.name,
-                    COALESCE(dept_name, 'General Service'),
+                    COALESCE(tpl.dept_name, 'General Service'),
                     tpl.description,
                     tpl.status,
-                    tpl.version,
-                    tpl.sort_order,
-                    tpl.id,
+                    1,
+                    v_order,
                     tpl.created_by,
-                    tpl.updated_by,
-                    tpl.archived_at,
-                    tpl.archived_by,
-                    tpl.archive_reason,
+                    tpl.created_by,
                     tpl.created_at,
-                    tpl.updated_at
+                    tpl.created_at
                 );
 
-                -- Insert primary child task definition
                 INSERT INTO public.service_template_tasks (
+                    id,
                     template_id,
                     definition_id,
                     title,
@@ -307,10 +313,10 @@ BEGIN
                     planned_offset_days,
                     duration_business_days,
                     display_order,
-                    created_at,
-                    updated_at
+                    created_at
                 ) VALUES (
-                    tpl.id,
+                    gen_random_uuid(),
+                    new_template_id,
                     tpl.id,
                     tpl.default_task_title,
                     tpl.task_details,
@@ -318,36 +324,37 @@ BEGIN
                     tpl.default_priority,
                     tpl.default_approval_mode,
                     0,
-                    tpl.suggested_duration_days,
+                    v_dur,
                     0,
-                    tpl.created_at,
-                    tpl.updated_at
+                    tpl.created_at
                 );
 
-                -- Create version 1 snapshot
                 INSERT INTO public.service_template_versions (
+                    id,
                     template_id,
                     version,
                     snapshot,
                     created_by,
                     created_at
                 ) VALUES (
-                    tpl.id,
-                    tpl.version,
+                    gen_random_uuid(),
+                    new_template_id,
+                    1,
                     jsonb_build_object(
-                        'id', tpl.id,
+                        'template_id', new_template_id,
                         'name', tpl.name,
-                        'service_label', COALESCE(dept_name, 'General Service'),
-                        'version', tpl.version,
+                        'service_label', COALESCE(tpl.dept_name, 'General Service'),
+                        'description', tpl.description,
                         'tasks', jsonb_build_array(
                             jsonb_build_object(
+                                'definition_id', tpl.id,
                                 'title', tpl.default_task_title,
                                 'description', tpl.task_details,
                                 'department_id', tpl.department_id,
                                 'priority', tpl.default_priority,
                                 'approval_mode', tpl.default_approval_mode,
-                                'duration_business_days', tpl.suggested_duration_days,
                                 'planned_offset_days', 0,
+                                'duration_business_days', v_dur,
                                 'display_order', 0
                             )
                         )
@@ -355,21 +362,27 @@ BEGIN
                     tpl.created_by,
                     tpl.created_at
                 );
-
-                v_backfilled_count := v_backfilled_count + 1;
             END IF;
         END LOOP;
-
-        RAISE NOTICE 'Phase 3C non-destructive backfill completed: % new templates migrated.', v_backfilled_count;
     END IF;
 END $$;
 
 -- ------------------------------------------------------------------------------
--- 6. AUTHORITATIVE SERVICE TEMPLATE MUTATION RPC
+-- 6. AUTHORITATIVE MUTATION RPC: fn_manage_service_template
 -- ------------------------------------------------------------------------------
+DROP FUNCTION IF EXISTS public.fn_manage_service_template(TEXT, UUID, TEXT, TEXT, TEXT, JSONB, INTEGER, TEXT);
+DROP FUNCTION IF EXISTS public.fn_manage_service_template(TEXT, UUID, TEXT, TEXT, TEXT, JSONB, INTEGER, TEXT, INTEGER);
+
 CREATE OR REPLACE FUNCTION public.fn_manage_service_template(
     p_action TEXT,
-    p_payload JSONB
+    p_template_id UUID DEFAULT NULL,
+    p_name TEXT DEFAULT NULL,
+    p_service_label TEXT DEFAULT NULL,
+    p_description TEXT DEFAULT NULL,
+    p_tasks JSONB DEFAULT '[]'::jsonb,
+    p_sort_order INTEGER DEFAULT 0,
+    p_archive_reason TEXT DEFAULT NULL,
+    p_expected_version INTEGER DEFAULT NULL
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -378,311 +391,413 @@ SET search_path = ''
 AS $$
 DECLARE
     v_caller_id UUID;
-    v_actor RECORD;
-    v_template_id UUID;
-    v_name TEXT;
-    v_service_label TEXT;
-    v_description TEXT;
-    v_tasks JSONB;
+    v_caller_role TEXT;
+    v_is_suspended BOOLEAN;
+    v_template RECORD;
+    v_target_id UUID;
+    v_new_version INTEGER;
     v_task_count INTEGER;
-    v_expected_version INTEGER;
-    v_current RECORD;
-    v_next_version INTEGER;
-    v_created_tpl RECORD;
-    v_task_item JSONB;
-    v_task_title TEXT;
-    v_task_dept UUID;
-    v_task_priority TEXT;
-    v_task_approval TEXT;
-    v_task_offset INTEGER;
-    v_task_duration INTEGER;
+    v_task_elem JSONB;
     v_idx INTEGER;
-    v_cloned RECORD;
+    v_title TEXT;
+    v_dept_id UUID;
+    v_priority TEXT;
+    v_approval TEXT;
+    v_offset INTEGER;
+    v_duration INTEGER;
+    v_def_id UUID;
+    v_task_array JSONB := '[]'::jsonb;
+    v_copied_task RECORD;
 BEGIN
-    -- 1. Authentication & Active Profile Check
     v_caller_id := auth.uid();
     IF v_caller_id IS NULL THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Unauthorized: Missing authenticated user context');
+        RETURN jsonb_build_object('error', 'Unauthorized: Missing active authentication session.');
     END IF;
 
-    SELECT * INTO v_actor
+    SELECT role, is_suspended INTO v_caller_role, v_is_suspended
     FROM public.profiles
     WHERE id = v_caller_id;
 
-    IF v_actor.id IS NULL OR v_actor.status != 'active' THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Unauthorized: Inactive or invalid caller profile');
+    IF v_caller_role IS NULL OR v_is_suspended = true THEN
+        RETURN jsonb_build_object('error', 'Forbidden: User profile is suspended or does not exist.');
     END IF;
 
-    IF v_actor.role NOT IN ('owner', 'operational_manager') THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Forbidden: Insufficient permissions to manage service templates');
+    IF v_caller_role NOT IN ('owner', 'operational_manager') THEN
+        RETURN jsonb_build_object('error', 'Forbidden: Only Owners and Operational Managers can manage service templates.');
     END IF;
 
-    -- 2. Dispatch Action
+    -- =========================================================================
+    -- ACTION: CREATE
+    -- =========================================================================
     IF p_action = 'create' THEN
-        v_name := trim(p_payload->>'name');
-        IF v_name IS NULL OR length(v_name) = 0 OR length(v_name) > 200 THEN
-            RETURN jsonb_build_object('success', false, 'error', 'Template name is required and must be under 200 characters');
+        IF p_name IS NULL OR length(trim(p_name)) = 0 THEN
+            RETURN jsonb_build_object('error', 'Validation Error: Template name is required.');
+        END IF;
+        IF length(p_name) > 150 THEN
+            RETURN jsonb_build_object('error', 'Validation Error: Template name cannot exceed 150 characters.');
         END IF;
 
-        v_service_label := trim(COALESCE(p_payload->>'service_label', p_payload->>'serviceLabel', 'General Service'));
-        IF length(v_service_label) = 0 OR length(v_service_label) > 100 THEN
-            v_service_label := 'General Service';
+        IF p_service_label IS NULL OR length(trim(p_service_label)) = 0 THEN
+            RETURN jsonb_build_object('error', 'Validation Error: Service category label is required.');
+        END IF;
+        IF length(p_service_label) > 100 THEN
+            RETURN jsonb_build_object('error', 'Validation Error: Service category label cannot exceed 100 characters.');
         END IF;
 
-        v_description := trim(p_payload->>'description');
-        v_tasks := p_payload->'tasks';
-
-        IF v_tasks IS NULL OR jsonb_typeof(v_tasks) <> 'array' THEN
-            RETURN jsonb_build_object('success', false, 'error', 'Tasks array is required');
+        IF jsonb_typeof(p_tasks) != 'array' THEN
+            RETURN jsonb_build_object('error', 'Validation Error: Tasks payload must be a JSON array.');
         END IF;
 
-        v_task_count := jsonb_array_length(v_tasks);
-        IF v_task_count < 1 OR v_task_count > 100 THEN
-            RETURN jsonb_build_object('success', false, 'error', 'A Service Template must contain between 1 and 100 tasks');
+        v_task_count := jsonb_array_length(p_tasks);
+        IF v_task_count < 1 THEN
+            RETURN jsonb_build_object('error', 'Validation Error: A Service Template must contain at least 1 child task.');
+        END IF;
+        IF v_task_count > 100 THEN
+            RETURN jsonb_build_object('error', 'Validation Error: A Service Template cannot contain more than 100 child tasks.');
         END IF;
 
-        -- Validate all tasks before inserting
         FOR v_idx IN 0..(v_task_count - 1) LOOP
-            v_task_item := v_tasks->v_idx;
-            v_task_title := trim(v_task_item->>'title');
-            IF v_task_title IS NULL OR length(v_task_title) = 0 THEN
-                RETURN jsonb_build_object('success', false, 'error', 'Task #' || (v_idx + 1) || ' must have a non-empty title');
+            v_task_elem := p_tasks->v_idx;
+            v_title := trim(COALESCE(v_task_elem->>'title', ''));
+            IF length(v_title) = 0 THEN
+                RETURN jsonb_build_object('error', format('Validation Error: Task #%s must have a non-empty title.', v_idx + 1));
+            END IF;
+            IF length(v_title) > 200 THEN
+                RETURN jsonb_build_object('error', format('Validation Error: Task #%s title cannot exceed 200 characters.', v_idx + 1));
             END IF;
 
-            v_task_dept := (COALESCE(v_task_item->>'department_id', v_task_item->>'departmentId'))::UUID;
-            IF v_task_dept IS NULL OR NOT EXISTS (SELECT 1 FROM public.departments WHERE id = v_task_dept) THEN
-                RETURN jsonb_build_object('success', false, 'error', 'Task "' || v_task_title || '" has an invalid department');
+            BEGIN
+                v_dept_id := (v_task_elem->>'department_id')::UUID;
+            EXCEPTION WHEN OTHERS THEN
+                RETURN jsonb_build_object('error', format('Validation Error: Task #%s has an invalid department UUID.', v_idx + 1));
+            END IF;
+
+            IF NOT EXISTS (SELECT 1 FROM public.departments WHERE id = v_dept_id AND is_active = true) THEN
+                RETURN jsonb_build_object('error', format('Validation Error: Task #%s references an inactive or non-existent department.', v_idx + 1));
+            END IF;
+
+            v_priority := COALESCE(v_task_elem->>'priority', 'Normal');
+            IF v_priority NOT IN ('Low', 'Normal', 'High', 'Urgent') THEN
+                RETURN jsonb_build_object('error', format('Validation Error: Task #%s has invalid priority "%s".', v_idx + 1, v_priority));
+            END IF;
+
+            v_approval := COALESCE(v_task_elem->>'approval_mode', 'Internal Only');
+            IF v_approval NOT IN ('Internal Only', 'Client Approval Required') THEN
+                RETURN jsonb_build_object('error', format('Validation Error: Task #%s has invalid approval mode "%s".', v_idx + 1, v_approval));
+            END IF;
+
+            v_offset := COALESCE((v_task_elem->>'planned_offset_days')::INTEGER, 0);
+            IF v_offset < 0 OR v_offset > 90 THEN
+                RETURN jsonb_build_object('error', format('Validation Error: Task #%s planned offset days must be between 0 and 90.', v_idx + 1));
+            END IF;
+
+            v_duration := COALESCE((v_task_elem->>'duration_business_days')::INTEGER, 1);
+            IF v_duration < 1 OR v_duration > 90 THEN
+                RETURN jsonb_build_object('error', format('Validation Error: Task #%s duration business days must be between 1 and 90.', v_idx + 1));
             END IF;
         END LOOP;
 
-        -- Insert Master Template
-        v_template_id := gen_random_uuid();
+        v_target_id := gen_random_uuid();
         INSERT INTO public.service_templates (
-            id, name, service_label, description, status, version, sort_order,
-            created_by, updated_by, created_at, updated_at
+            id, name, service_label, description, status, version, sort_order, created_by, updated_by
         ) VALUES (
-            v_template_id, v_name, v_service_label, v_description, 'Active', 1, 0,
-            v_caller_id, v_caller_id, timezone('utc'::text, now()), timezone('utc'::text, now())
-        ) RETURNING * INTO v_created_tpl;
+            v_target_id, trim(p_name), trim(p_service_label), NULLIF(trim(p_description), ''), 'Active', 1, p_sort_order, v_caller_id, v_caller_id
+        );
 
-        -- Insert Child Tasks
         FOR v_idx IN 0..(v_task_count - 1) LOOP
-            v_task_item := v_tasks->v_idx;
-            v_task_title := trim(v_task_item->>'title');
-            v_task_dept := (COALESCE(v_task_item->>'department_id', v_task_item->>'departmentId'))::UUID;
-            v_task_priority := COALESCE(v_task_item->>'priority', 'Normal');
-            IF v_task_priority NOT IN ('Low', 'Normal', 'High', 'Urgent') THEN
-                v_task_priority := 'Normal';
+            v_task_elem := p_tasks->v_idx;
+            v_title := trim(v_task_elem->>'title');
+            v_dept_id := (v_task_elem->>'department_id')::UUID;
+            v_priority := COALESCE(v_task_elem->>'priority', 'Normal');
+            v_approval := COALESCE(v_task_elem->>'approval_mode', 'Internal Only');
+            v_offset := COALESCE((v_task_elem->>'planned_offset_days')::INTEGER, 0);
+            v_duration := COALESCE((v_task_elem->>'duration_business_days')::INTEGER, 1);
+
+            BEGIN
+                v_def_id := COALESCE((v_task_elem->>'definition_id')::UUID, gen_random_uuid());
+            EXCEPTION WHEN OTHERS THEN
+                v_def_id := gen_random_uuid();
             END IF;
-            v_task_approval := COALESCE(COALESCE(v_task_item->>'approval_mode', v_task_item->>'approvalMode'), 'Internal Only');
-            IF v_task_approval NOT IN ('Internal Only', 'Client Approval Required') THEN
-                v_task_approval := 'Internal Only';
-            END IF;
-            v_task_offset := COALESCE((COALESCE(v_task_item->>'planned_offset_days', v_task_item->>'plannedOffsetDays'))::INTEGER, 0);
-            v_task_duration := COALESCE((COALESCE(v_task_item->>'duration_business_days', v_task_item->>'durationBusinessDays'))::INTEGER, 1);
 
             INSERT INTO public.service_template_tasks (
-                template_id, definition_id, title, description, department_id,
+                id, template_id, definition_id, title, description, department_id,
                 priority, approval_mode, planned_offset_days, duration_business_days, display_order
             ) VALUES (
-                v_template_id,
-                COALESCE((COALESCE(v_task_item->>'definition_id', v_task_item->>'definitionId'))::UUID, gen_random_uuid()),
-                v_task_title,
-                v_task_item->>'description',
-                v_task_dept,
-                v_task_priority,
-                v_task_approval,
-                v_task_offset,
-                v_task_duration,
-                v_idx
+                gen_random_uuid(), v_target_id, v_def_id, v_title, NULLIF(trim(v_task_elem->>'description'), ''),
+                v_dept_id, v_priority, v_approval, v_offset, v_duration, v_idx
+            );
+
+            v_task_array := v_task_array || jsonb_build_object(
+                'definition_id', v_def_id, 'title', v_title, 'description', NULLIF(trim(v_task_elem->>'description'), ''),
+                'department_id', v_dept_id, 'priority', v_priority, 'approval_mode', v_approval,
+                'planned_offset_days', v_offset, 'duration_business_days', v_duration, 'display_order', v_idx
             );
         END LOOP;
 
-        -- Insert Version 1 Snapshot
         INSERT INTO public.service_template_versions (
-            template_id, version, snapshot, created_by, created_at
+            id, template_id, version, snapshot, created_by
         ) VALUES (
-            v_template_id, 1,
-            jsonb_build_object('id', v_template_id, 'name', v_name, 'service_label', v_service_label, 'tasks', v_tasks),
-            v_caller_id, timezone('utc'::text, now())
+            gen_random_uuid(), v_target_id, 1,
+            jsonb_build_object('id', v_target_id, 'name', trim(p_name), 'service_label', trim(p_service_label), 'tasks', v_task_array),
+            v_caller_id
         );
 
-        RETURN jsonb_build_object('success', true, 'data', jsonb_build_object('id', v_template_id, 'name', v_name, 'version', 1));
+        RETURN jsonb_build_object('success', true, 'template_id', v_target_id, 'version', 1);
 
+    -- =========================================================================
+    -- ACTION: UPDATE
+    -- =========================================================================
     ELSIF p_action = 'update' THEN
-        v_template_id := (p_payload->>'id')::UUID;
-        IF v_template_id IS NULL THEN
-            RETURN jsonb_build_object('success', false, 'error', 'Template ID is required for update');
+        IF p_template_id IS NULL THEN
+            RETURN jsonb_build_object('error', 'Validation Error: template_id is required for update.');
         END IF;
 
-        SELECT * INTO v_current
-        FROM public.service_templates
-        WHERE id = v_template_id
-        FOR UPDATE;
-
-        IF v_current.id IS NULL THEN
-            RETURN jsonb_build_object('success', false, 'error', 'Service template not found');
+        IF p_expected_version IS NULL THEN
+            RETURN jsonb_build_object('error', 'Validation Error: expected_version is required for update.');
         END IF;
 
-        IF v_current.status = 'Archived' THEN
-            RETURN jsonb_build_object('success', false, 'error', 'Cannot update an archived template. Please restore it first.');
+        SELECT * INTO v_template FROM public.service_templates WHERE id = p_template_id FOR UPDATE;
+        IF v_template.id IS NULL THEN
+            RETURN jsonb_build_object('error', 'Not Found: Service template does not exist.');
+        END IF;
+        IF v_template.status = 'Archived' THEN
+            RETURN jsonb_build_object('error', 'Forbidden: Cannot edit an archived service template. Restore it first.');
         END IF;
 
-        v_expected_version := (COALESCE(p_payload->>'expected_version', p_payload->>'expectedVersion'))::INTEGER;
-        IF v_expected_version IS NOT NULL AND v_current.version != v_expected_version THEN
-            RETURN jsonb_build_object('success', false, 'error', 'Conflict: Template was modified in another session. Please reload.');
+        IF v_template.version != p_expected_version THEN
+            RETURN jsonb_build_object('error', 'Conflict: Template was modified in another session. Please reload.');
         END IF;
 
-        v_name := COALESCE(trim(p_payload->>'name'), v_current.name);
-        v_service_label := COALESCE(trim(COALESCE(p_payload->>'service_label', p_payload->>'serviceLabel')), v_current.service_label);
-        v_description := CASE WHEN p_payload ? 'description' THEN trim(p_payload->>'description') ELSE v_current.description END;
-        v_next_version := v_current.version + 1;
+        IF p_name IS NOT NULL AND length(trim(p_name)) = 0 THEN
+            RETURN jsonb_build_object('error', 'Validation Error: Template name cannot be blank.');
+        END IF;
+        IF p_name IS NOT NULL AND length(p_name) > 150 THEN
+            RETURN jsonb_build_object('error', 'Validation Error: Template name cannot exceed 150 characters.');
+        END IF;
 
-        -- Update Master
-        UPDATE public.service_templates
-        SET name = v_name,
-            service_label = v_service_label,
-            description = v_description,
-            version = v_next_version,
-            updated_by = v_caller_id,
-            updated_at = timezone('utc'::text, now())
-        WHERE id = v_template_id;
+        IF p_service_label IS NOT NULL AND length(trim(p_service_label)) = 0 THEN
+            RETURN jsonb_build_object('error', 'Validation Error: Service category label cannot be blank.');
+        END IF;
+        IF p_service_label IS NOT NULL AND length(p_service_label) > 100 THEN
+            RETURN jsonb_build_object('error', 'Validation Error: Service category label cannot exceed 100 characters.');
+        END IF;
 
-        -- Update Child Tasks if supplied
-        v_tasks := p_payload->'tasks';
-        IF v_tasks IS NOT NULL AND jsonb_typeof(v_tasks) = 'array' THEN
-            v_task_count := jsonb_array_length(v_tasks);
-            IF v_task_count < 1 OR v_task_count > 100 THEN
-                RETURN jsonb_build_object('success', false, 'error', 'A Service Template must contain between 1 and 100 tasks');
+        IF p_tasks IS NOT NULL AND jsonb_typeof(p_tasks) = 'array' AND jsonb_array_length(p_tasks) > 0 THEN
+            v_task_count := jsonb_array_length(p_tasks);
+            IF v_task_count > 100 THEN
+                RETURN jsonb_build_object('error', 'Validation Error: A Service Template cannot contain more than 100 child tasks.');
             END IF;
 
-            -- Validate before replacing
             FOR v_idx IN 0..(v_task_count - 1) LOOP
-                v_task_item := v_tasks->v_idx;
-                v_task_title := trim(v_task_item->>'title');
-                IF v_task_title IS NULL OR length(v_task_title) = 0 THEN
-                    RETURN jsonb_build_object('success', false, 'error', 'Task #' || (v_idx + 1) || ' must have a non-empty title');
+                v_task_elem := p_tasks->v_idx;
+                v_title := trim(COALESCE(v_task_elem->>'title', ''));
+                IF length(v_title) = 0 THEN
+                    RETURN jsonb_build_object('error', format('Validation Error: Task #%s must have a non-empty title.', v_idx + 1));
                 END IF;
-                v_task_dept := (COALESCE(v_task_item->>'department_id', v_task_item->>'departmentId'))::UUID;
-                IF v_task_dept IS NULL OR NOT EXISTS (SELECT 1 FROM public.departments WHERE id = v_task_dept) THEN
-                    RETURN jsonb_build_object('success', false, 'error', 'Task "' || v_task_title || '" has an invalid department');
+                IF length(v_title) > 200 THEN
+                    RETURN jsonb_build_object('error', format('Validation Error: Task #%s title cannot exceed 200 characters.', v_idx + 1));
+                END IF;
+
+                BEGIN
+                    v_dept_id := (v_task_elem->>'department_id')::UUID;
+                EXCEPTION WHEN OTHERS THEN
+                    RETURN jsonb_build_object('error', format('Validation Error: Task #%s has an invalid department UUID.', v_idx + 1));
+                END IF;
+
+                IF NOT EXISTS (SELECT 1 FROM public.departments WHERE id = v_dept_id AND is_active = true) THEN
+                    RETURN jsonb_build_object('error', format('Validation Error: Task #%s references an inactive or non-existent department.', v_idx + 1));
+                END IF;
+
+                v_priority := COALESCE(v_task_elem->>'priority', 'Normal');
+                IF v_priority NOT IN ('Low', 'Normal', 'High', 'Urgent') THEN
+                    RETURN jsonb_build_object('error', format('Validation Error: Task #%s has invalid priority "%s".', v_idx + 1, v_priority));
+                END IF;
+
+                v_approval := COALESCE(v_task_elem->>'approval_mode', 'Internal Only');
+                IF v_approval NOT IN ('Internal Only', 'Client Approval Required') THEN
+                    RETURN jsonb_build_object('error', format('Validation Error: Task #%s has invalid approval mode "%s".', v_idx + 1, v_approval));
+                END IF;
+
+                v_offset := COALESCE((v_task_elem->>'planned_offset_days')::INTEGER, 0);
+                IF v_offset < 0 OR v_offset > 90 THEN
+                    RETURN jsonb_build_object('error', format('Validation Error: Task #%s planned offset days must be between 0 and 90.', v_idx + 1));
+                END IF;
+
+                v_duration := COALESCE((v_task_elem->>'duration_business_days')::INTEGER, 1);
+                IF v_duration < 1 OR v_duration > 90 THEN
+                    RETURN jsonb_build_object('error', format('Validation Error: Task #%s duration business days must be between 1 and 90.', v_idx + 1));
                 END IF;
             END LOOP;
 
-            -- Atomically replace tasks
-            DELETE FROM public.service_template_tasks WHERE template_id = v_template_id;
+            v_new_version := v_template.version + 1;
+
+            UPDATE public.service_templates
+            SET name = COALESCE(NULLIF(trim(p_name), ''), name),
+                service_label = COALESCE(NULLIF(trim(p_service_label), ''), service_label),
+                description = CASE WHEN p_description IS NOT NULL THEN NULLIF(trim(p_description), '') ELSE description END,
+                sort_order = COALESCE(p_sort_order, sort_order),
+                version = v_new_version,
+                updated_by = v_caller_id,
+                updated_at = timezone('utc'::text, now())
+            WHERE id = p_template_id AND version = p_expected_version;
+
+            DELETE FROM public.service_template_tasks WHERE template_id = p_template_id;
 
             FOR v_idx IN 0..(v_task_count - 1) LOOP
-                v_task_item := v_tasks->v_idx;
-                v_task_title := trim(v_task_item->>'title');
-                v_task_dept := (COALESCE(v_task_item->>'department_id', v_task_item->>'departmentId'))::UUID;
-                v_task_priority := COALESCE(v_task_item->>'priority', 'Normal');
-                IF v_task_priority NOT IN ('Low', 'Normal', 'High', 'Urgent') THEN v_task_priority := 'Normal'; END IF;
-                v_task_approval := COALESCE(COALESCE(v_task_item->>'approval_mode', v_task_item->>'approvalMode'), 'Internal Only');
-                IF v_task_approval NOT IN ('Internal Only', 'Client Approval Required') THEN v_task_approval := 'Internal Only'; END IF;
-                v_task_offset := COALESCE((COALESCE(v_task_item->>'planned_offset_days', v_task_item->>'plannedOffsetDays'))::INTEGER, 0);
-                v_task_duration := COALESCE((COALESCE(v_task_item->>'duration_business_days', v_task_item->>'durationBusinessDays'))::INTEGER, 1);
+                v_task_elem := p_tasks->v_idx;
+                v_title := trim(v_task_elem->>'title');
+                v_dept_id := (v_task_elem->>'department_id')::UUID;
+                v_priority := COALESCE(v_task_elem->>'priority', 'Normal');
+                v_approval := COALESCE(v_task_elem->>'approval_mode', 'Internal Only');
+                v_offset := COALESCE((v_task_elem->>'planned_offset_days')::INTEGER, 0);
+                v_duration := COALESCE((v_task_elem->>'duration_business_days')::INTEGER, 1);
+
+                BEGIN
+                    v_def_id := COALESCE((v_task_elem->>'definition_id')::UUID, gen_random_uuid());
+                EXCEPTION WHEN OTHERS THEN
+                    v_def_id := gen_random_uuid();
+                END IF;
 
                 INSERT INTO public.service_template_tasks (
-                    template_id, definition_id, title, description, department_id,
+                    id, template_id, definition_id, title, description, department_id,
                     priority, approval_mode, planned_offset_days, duration_business_days, display_order
                 ) VALUES (
-                    v_template_id,
-                    COALESCE((COALESCE(v_task_item->>'definition_id', v_task_item->>'definitionId'))::UUID, gen_random_uuid()),
-                    v_task_title,
-                    v_task_item->>'description',
-                    v_task_dept,
-                    v_task_priority,
-                    v_task_approval,
-                    v_task_offset,
-                    v_task_duration,
-                    v_idx
+                    gen_random_uuid(), p_template_id, v_def_id, v_title, NULLIF(trim(v_task_elem->>'description'), ''),
+                    v_dept_id, v_priority, v_approval, v_offset, v_duration, v_idx
+                );
+
+                v_task_array := v_task_array || jsonb_build_object(
+                    'definition_id', v_def_id, 'title', v_title, 'description', NULLIF(trim(v_task_elem->>'description'), ''),
+                    'department_id', v_dept_id, 'priority', v_priority, 'approval_mode', v_approval,
+                    'planned_offset_days', v_offset, 'duration_business_days', v_duration, 'display_order', v_idx
                 );
             END LOOP;
 
-            -- Record Version Snapshot
             INSERT INTO public.service_template_versions (
-                template_id, version, snapshot, created_by, created_at
+                id, template_id, version, snapshot, created_by
             ) VALUES (
-                v_template_id, v_next_version,
-                jsonb_build_object('id', v_template_id, 'name', v_name, 'service_label', v_service_label, 'tasks', v_tasks),
-                v_caller_id, timezone('utc'::text, now())
+                gen_random_uuid(), p_template_id, v_new_version,
+                jsonb_build_object('id', p_template_id, 'name', COALESCE(NULLIF(trim(p_name), ''), v_template.name), 'service_label', COALESCE(NULLIF(trim(p_service_label), ''), v_template.service_label), 'tasks', v_task_array),
+                v_caller_id
             );
+
+            RETURN jsonb_build_object('success', true, 'template_id', p_template_id, 'version', v_new_version);
+        ELSE
+            UPDATE public.service_templates
+            SET name = COALESCE(NULLIF(trim(p_name), ''), name),
+                service_label = COALESCE(NULLIF(trim(p_service_label), ''), service_label),
+                description = CASE WHEN p_description IS NOT NULL THEN NULLIF(trim(p_description), '') ELSE description END,
+                sort_order = COALESCE(p_sort_order, sort_order),
+                updated_by = v_caller_id,
+                updated_at = timezone('utc'::text, now())
+            WHERE id = p_template_id AND version = p_expected_version;
+
+            RETURN jsonb_build_object('success', true, 'template_id', p_template_id, 'version', v_template.version);
         END IF;
 
-        RETURN jsonb_build_object('success', true, 'data', jsonb_build_object('id', v_template_id, 'name', v_name, 'version', v_next_version));
-
+    -- =========================================================================
+    -- ACTION: DUPLICATE
+    -- =========================================================================
     ELSIF p_action = 'duplicate' THEN
-        v_template_id := (p_payload->>'id')::UUID;
-        IF v_template_id IS NULL THEN
-            RETURN jsonb_build_object('success', false, 'error', 'Template ID is required for duplicate');
+        IF p_template_id IS NULL THEN
+            RETURN jsonb_build_object('error', 'Validation Error: template_id is required for duplicate.');
         END IF;
 
-        SELECT * INTO v_current FROM public.service_templates WHERE id = v_template_id;
-        IF v_current.id IS NULL THEN
-            RETURN jsonb_build_object('success', false, 'error', 'Service template to duplicate not found');
+        SELECT * INTO v_template FROM public.service_templates WHERE id = p_template_id;
+        IF v_template.id IS NULL THEN
+            RETURN jsonb_build_object('error', 'Not Found: Source service template does not exist.');
         END IF;
 
-        -- Insert Duplicate Master
+        v_target_id := gen_random_uuid();
         INSERT INTO public.service_templates (
-            name, service_label, description, status, version, sort_order,
-            created_by, updated_by, created_at, updated_at
+            id, name, service_label, description, status, version, sort_order, created_by, updated_by
         ) VALUES (
-            'Copy of ' || v_current.name, v_current.service_label, v_current.description, 'Active', 1, v_current.sort_order,
-            v_caller_id, v_caller_id, timezone('utc'::text, now()), timezone('utc'::text, now())
-        ) RETURNING * INTO v_cloned;
-
-        -- Clone Tasks
-        INSERT INTO public.service_template_tasks (
-            template_id, definition_id, title, description, department_id,
-            priority, approval_mode, planned_offset_days, duration_business_days, display_order
-        )
-        SELECT
-            v_cloned.id,
-            gen_random_uuid(),
-            title,
-            description,
-            department_id,
-            priority,
-            approval_mode,
-            planned_offset_days,
-            duration_business_days,
-            display_order
-        FROM public.service_template_tasks
-        WHERE template_id = v_template_id
-        ORDER BY display_order ASC;
-
-        -- Version 1 Snapshot for clone
-        INSERT INTO public.service_template_versions (
-            template_id, version, snapshot, created_by, created_at
-        ) VALUES (
-            v_cloned.id, 1,
-            jsonb_build_object('id', v_cloned.id, 'name', v_cloned.name, 'service_label', v_cloned.service_label),
-            v_caller_id, timezone('utc'::text, now())
+            v_target_id, format('%s (Copy)', v_template.name), v_template.service_label, v_template.description,
+            'Active', 1, v_template.sort_order + 1, v_caller_id, v_caller_id
         );
 
-        RETURN jsonb_build_object('success', true, 'data', jsonb_build_object('id', v_cloned.id, 'name', v_cloned.name, 'version', 1));
+        FOR v_copied_task IN
+            SELECT * FROM public.service_template_tasks
+            WHERE template_id = p_template_id
+            ORDER BY display_order ASC
+        LOOP
+            v_def_id := gen_random_uuid();
+            INSERT INTO public.service_template_tasks (
+                id, template_id, definition_id, title, description, department_id,
+                priority, approval_mode, planned_offset_days, duration_business_days, display_order
+            ) VALUES (
+                gen_random_uuid(), v_target_id, v_def_id, v_copied_task.title, v_copied_task.description,
+                v_copied_task.department_id, v_copied_task.priority, v_copied_task.approval_mode,
+                v_copied_task.planned_offset_days, v_copied_task.duration_business_days, v_copied_task.display_order
+            );
 
+            v_task_array := v_task_array || jsonb_build_object(
+                'definition_id', v_def_id, 'title', v_copied_task.title, 'description', v_copied_task.description,
+                'department_id', v_copied_task.department_id, 'priority', v_copied_task.priority,
+                'approval_mode', v_copied_task.approval_mode, 'planned_offset_days', v_copied_task.planned_offset_days,
+                'duration_business_days', v_copied_task.duration_business_days, 'display_order', v_copied_task.display_order
+            );
+        END LOOP;
+
+        INSERT INTO public.service_template_versions (
+            id, template_id, version, snapshot, created_by
+        ) VALUES (
+            gen_random_uuid(), v_target_id, 1,
+            jsonb_build_object('id', v_target_id, 'name', format('%s (Copy)', v_template.name), 'service_label', v_template.service_label, 'tasks', v_task_array),
+            v_caller_id
+        );
+
+        RETURN jsonb_build_object('success', true, 'template_id', v_target_id, 'version', 1);
+
+    -- =========================================================================
+    -- ACTION: ARCHIVE
+    -- =========================================================================
     ELSIF p_action = 'archive' THEN
-        v_template_id := (p_payload->>'id')::UUID;
-        IF v_template_id IS NULL THEN
-            RETURN jsonb_build_object('success', false, 'error', 'Template ID is required for archive');
+        IF p_template_id IS NULL THEN
+            RETURN jsonb_build_object('error', 'Validation Error: template_id is required for archive.');
+        END IF;
+
+        IF v_caller_role != 'owner' THEN
+            RETURN jsonb_build_object('error', 'Forbidden: Only the Owner can archive service templates.');
+        END IF;
+
+        SELECT * INTO v_template FROM public.service_templates WHERE id = p_template_id FOR UPDATE;
+        IF v_template.id IS NULL THEN
+            RETURN jsonb_build_object('error', 'Not Found: Service template does not exist.');
+        END IF;
+        IF v_template.status = 'Archived' THEN
+            RETURN jsonb_build_object('error', 'Conflict: Template is already archived.');
         END IF;
 
         UPDATE public.service_templates
         SET status = 'Archived',
             archived_at = timezone('utc'::text, now()),
             archived_by = v_caller_id,
-            archive_reason = COALESCE(trim(p_payload->>'reason'), 'Archived by staff'),
+            archive_reason = NULLIF(trim(p_archive_reason), ''),
+            updated_by = v_caller_id,
             updated_at = timezone('utc'::text, now())
-        WHERE id = v_template_id;
+        WHERE id = p_template_id;
 
-        RETURN jsonb_build_object('success', true);
+        RETURN jsonb_build_object('success', true, 'template_id', p_template_id, 'status', 'Archived');
 
+    -- =========================================================================
+    -- ACTION: RESTORE
+    -- =========================================================================
     ELSIF p_action = 'restore' THEN
-        v_template_id := (p_payload->>'id')::UUID;
-        IF v_template_id IS NULL THEN
-            RETURN jsonb_build_object('success', false, 'error', 'Template ID is required for restore');
+        IF p_template_id IS NULL THEN
+            RETURN jsonb_build_object('error', 'Validation Error: template_id is required for restore.');
+        END IF;
+
+        IF v_caller_role != 'owner' THEN
+            RETURN jsonb_build_object('error', 'Forbidden: Only the Owner can restore archived service templates.');
+        END IF;
+
+        SELECT * INTO v_template FROM public.service_templates WHERE id = p_template_id FOR UPDATE;
+        IF v_template.id IS NULL THEN
+            RETURN jsonb_build_object('error', 'Not Found: Service template does not exist.');
+        END IF;
+        IF v_template.status = 'Active' THEN
+            RETURN jsonb_build_object('error', 'Conflict: Template is already active.');
         END IF;
 
         UPDATE public.service_templates
@@ -690,26 +805,30 @@ BEGIN
             archived_at = NULL,
             archived_by = NULL,
             archive_reason = NULL,
+            updated_by = v_caller_id,
             updated_at = timezone('utc'::text, now())
-        WHERE id = v_template_id;
+        WHERE id = p_template_id;
 
-        RETURN jsonb_build_object('success', true);
+        RETURN jsonb_build_object('success', true, 'template_id', p_template_id, 'status', 'Active');
 
     ELSE
-        RETURN jsonb_build_object('success', false, 'error', 'Unknown action: ' || p_action);
+        RETURN jsonb_build_object('error', format('Invalid Action: "%s" is not supported.', p_action));
     END IF;
 END;
 $$;
 
-ALTER FUNCTION public.fn_manage_service_template(TEXT, JSONB) OWNER TO postgres;
-REVOKE ALL ON FUNCTION public.fn_manage_service_template(TEXT, JSONB) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.fn_manage_service_template(TEXT, JSONB) TO authenticated;
+-- ------------------------------------------------------------------------------
+-- 7. AUTHORITATIVE MUTATION RPCS: fn_save_draft_work_plan & fn_delete_draft_work_plan
+-- ------------------------------------------------------------------------------
+DROP FUNCTION IF EXISTS public.fn_save_draft_work_plan(UUID, UUID, TEXT, DATE, JSONB, INTEGER);
 
--- ------------------------------------------------------------------------------
--- 7. AUTHORITATIVE WORK PLAN DRAFT MANAGEMENT RPCs
--- ------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.fn_save_draft_work_plan(
-    p_payload JSONB
+    p_plan_id UUID DEFAULT NULL,
+    p_client_id UUID DEFAULT NULL,
+    p_name TEXT DEFAULT NULL,
+    p_start_date DATE DEFAULT NULL,
+    p_weeks JSONB DEFAULT '[]'::jsonb,
+    p_expected_revision INTEGER DEFAULT NULL
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -718,194 +837,312 @@ SET search_path = ''
 AS $$
 DECLARE
     v_caller_id UUID;
-    v_actor RECORD;
-    v_plan_id UUID;
-    v_client_id UUID;
+    v_caller_role TEXT;
+    v_is_suspended BOOLEAN;
     v_client RECORD;
-    v_name TEXT;
+    v_existing RECORD;
+    v_target_id UUID;
     v_start_date DATE;
     v_end_date DATE;
-    v_weeks JSONB;
+    v_target_revision INTEGER;
     v_week_count INTEGER;
-    v_expected_rev INTEGER;
-    v_current RECORD;
-    v_next_rev INTEGER;
-    v_saved_plan RECORD;
-    v_w_idx INTEGER;
-    v_week_item JSONB;
-    v_w_num INTEGER;
-    v_w_start DATE;
-    v_w_end DATE;
-    v_week_id UUID;
-    v_occurrences JSONB;
+    v_week_idx INTEGER;
+    v_week_obj JSONB;
+    v_week_num INTEGER;
+    v_week_start DATE;
+    v_week_end DATE;
+    v_seen_weeks INTEGER[] := '{}';
     v_occ_idx INTEGER;
-    v_occ_item JSONB;
+    v_occ_obj JSONB;
+    v_occ_tpl_id UUID;
+    v_occ_tpl RECORD;
+    v_occ_tpl_ver INTEGER;
+    v_occ_snapshot JSONB;
+    v_custom_tasks JSONB;
+    v_custom_idx INTEGER;
+    v_custom_elem JSONB;
+    v_custom_title TEXT;
+    v_custom_dept_id UUID;
+    v_custom_priority TEXT;
+    v_custom_approval TEXT;
+    v_custom_dur INTEGER;
+    v_validated_weeks JSONB := '[]'::jsonb;
+    v_affected_rows INTEGER;
 BEGIN
-    -- 1. Authentication & Active Profile Check
     v_caller_id := auth.uid();
     IF v_caller_id IS NULL THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Unauthorized: Missing authenticated user context');
+        RETURN jsonb_build_object('error', 'Unauthorized: Missing active authentication session.');
     END IF;
 
-    SELECT * INTO v_actor FROM public.profiles WHERE id = v_caller_id;
-    IF v_actor.id IS NULL OR v_actor.status != 'active' THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Unauthorized: Inactive or invalid caller profile');
+    SELECT role, is_suspended INTO v_caller_role, v_is_suspended
+    FROM public.profiles
+    WHERE id = v_caller_id;
+
+    IF v_caller_role IS NULL OR v_is_suspended = true THEN
+        RETURN jsonb_build_object('error', 'Forbidden: User profile is suspended or does not exist.');
     END IF;
 
-    IF v_actor.role NOT IN ('owner', 'operational_manager') THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Forbidden: Team Members and Clients cannot save work plans');
+    IF v_caller_role NOT IN ('owner', 'operational_manager') THEN
+        RETURN jsonb_build_object('error', 'Forbidden: Only Owners and Operational Managers can manage work plans.');
     END IF;
 
-    -- 2. Validate Client Scope (created_by removed)
-    v_client_id := (COALESCE(p_payload->>'clientId', p_payload->>'client_id'))::UUID;
-    IF v_client_id IS NULL THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Client ID is required');
+    IF p_start_date IS NULL THEN
+        RETURN jsonb_build_object('error', 'Validation Error: Plan start_date is required.');
     END IF;
 
-    SELECT * INTO v_client FROM public.clients WHERE id = v_client_id;
-    IF v_client.id IS NULL THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Target client does not exist');
+    v_start_date := p_start_date;
+    v_end_date := v_start_date + 89; -- Exactly 90 calendar days (day 0 to day 89)
+
+    -- Validate Exactly 13 Weeks Array
+    IF jsonb_typeof(p_weeks) != 'array' THEN
+        RETURN jsonb_build_object('error', 'Validation Error: weeks payload must be a JSON array.');
     END IF;
 
-    IF v_client.status = 'Archived' THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Cannot create or modify work plans for an archived client');
+    v_week_count := jsonb_array_length(p_weeks);
+    IF v_week_count != 13 THEN
+        RETURN jsonb_build_object('error', format('Validation Error: A 90-day work plan must contain exactly 13 weeks (received %s).', v_week_count));
     END IF;
 
-    IF v_actor.role = 'operational_manager' THEN
-        IF NOT (
-            v_client.operational_manager_id = v_caller_id
-            OR EXISTS (
-                SELECT 1 FROM public.client_team_access cta
-                WHERE cta.client_id = v_client_id AND cta.profile_id = v_caller_id
-            )
-        ) THEN
-            RETURN jsonb_build_object('success', false, 'error', 'Forbidden: Operational Manager does not have access to this client workspace');
+    -- Validate each week and occurrences
+    FOR v_week_idx IN 0..12 LOOP
+        v_week_obj := p_weeks->v_week_idx;
+        v_week_num := COALESCE((v_week_obj->>'weekNumber')::INTEGER, (v_week_obj->>'week_number')::INTEGER);
+
+        IF v_week_num IS NULL OR v_week_num < 1 OR v_week_num > 13 THEN
+            RETURN jsonb_build_object('error', format('Validation Error: Invalid week number at index %s.', v_week_idx));
         END IF;
+
+        IF v_week_num = ANY(v_seen_weeks) THEN
+            RETURN jsonb_build_object('error', format('Validation Error: Duplicate week number %s detected.', v_week_num));
+        END IF;
+        v_seen_weeks := array_append(v_seen_weeks, v_week_num);
+
+        IF v_week_num <= 12 THEN
+            v_week_start := v_start_date + ((v_week_num - 1) * 7);
+            v_week_end := v_week_start + 6; -- 7 days
+        ELSE
+            -- Week 13 is exactly 6 calendar days, ending on v_start_date + 89
+            v_week_start := v_start_date + 84;
+            v_week_end := v_start_date + 89;
+        END IF;
+
+        -- Validate Occurrences within week
+        IF jsonb_typeof(v_week_obj->'occurrences') = 'array' THEN
+            FOR v_occ_idx IN 0..(jsonb_array_length(v_week_obj->'occurrences') - 1) LOOP
+                v_occ_obj := (v_week_obj->'occurrences')->v_occ_idx;
+                BEGIN
+                    v_occ_tpl_id := (v_occ_obj->>'templateId')::UUID;
+                EXCEPTION WHEN OTHERS THEN
+                    v_occ_tpl_id := NULL;
+                END IF;
+
+                IF v_occ_tpl_id IS NOT NULL THEN
+                    SELECT * INTO v_occ_tpl FROM public.service_templates WHERE id = v_occ_tpl_id;
+                    IF v_occ_tpl.id IS NULL OR v_occ_tpl.status != 'Active' THEN
+                        RETURN jsonb_build_object('error', format('Validation Error: Week %s occurrence references an archived or non-existent template.', v_week_num));
+                    END IF;
+                END IF;
+            END LOOP;
+        END IF;
+
+        -- Validate Custom Tasks within week
+        v_custom_tasks := v_week_obj->'customTasks';
+        IF jsonb_typeof(v_custom_tasks) = 'array' THEN
+            FOR v_custom_idx IN 0..(jsonb_array_length(v_custom_tasks) - 1) LOOP
+                v_custom_elem := v_custom_tasks->v_custom_idx;
+                v_custom_title := trim(COALESCE(v_custom_elem->>'title', ''));
+                IF length(v_custom_title) = 0 THEN
+                    RETURN jsonb_build_object('error', format('Validation Error: Week %s custom task #%s must have a non-empty title.', v_week_num, v_custom_idx + 1));
+                END IF;
+                IF length(v_custom_title) > 200 THEN
+                    RETURN jsonb_build_object('error', format('Validation Error: Week %s custom task #%s title cannot exceed 200 characters.', v_week_num, v_custom_idx + 1));
+                END IF;
+
+                BEGIN
+                    v_custom_dept_id := (v_custom_elem->>'departmentId')::UUID;
+                EXCEPTION WHEN OTHERS THEN
+                    BEGIN
+                        v_custom_dept_id := (v_custom_elem->>'department_id')::UUID;
+                    EXCEPTION WHEN OTHERS THEN
+                        v_custom_dept_id := NULL;
+                    END;
+                END IF;
+
+                IF v_custom_dept_id IS NULL OR NOT EXISTS (SELECT 1 FROM public.departments WHERE id = v_custom_dept_id AND is_active = true) THEN
+                    RETURN jsonb_build_object('error', format('Validation Error: Week %s custom task #%s has an invalid or inactive department.', v_week_num, v_custom_idx + 1));
+                END IF;
+
+                v_custom_priority := COALESCE(v_custom_elem->>'priority', 'Normal');
+                IF v_custom_priority NOT IN ('Low', 'Normal', 'High', 'Urgent') THEN
+                    RETURN jsonb_build_object('error', format('Validation Error: Week %s custom task #%s has invalid priority "%s".', v_week_num, v_custom_idx + 1, v_custom_priority));
+                END IF;
+
+                v_custom_approval := COALESCE(v_custom_elem->>'approvalMode', v_custom_elem->>'approval_mode', 'Internal Only');
+                IF v_custom_approval NOT IN ('Internal Only', 'Client Approval Required') THEN
+                    RETURN jsonb_build_object('error', format('Validation Error: Week %s custom task #%s has invalid approval mode "%s".', v_week_num, v_custom_idx + 1, v_custom_approval));
+                END IF;
+
+                v_custom_dur := COALESCE((v_custom_elem->>'durationBusinessDays')::INTEGER, (v_custom_elem->>'duration_business_days')::INTEGER, 1);
+                IF v_custom_dur < 1 OR v_custom_dur > 90 THEN
+                    RETURN jsonb_build_object('error', format('Validation Error: Week %s custom task #%s duration must be between 1 and 90.', v_week_num, v_custom_idx + 1));
+                END IF;
+            END LOOP;
+        END IF;
+    END LOOP;
+
+    IF cardinality(v_seen_weeks) != 13 THEN
+        RETURN jsonb_build_object('error', 'Validation Error: Weeks array must contain unique numbers from 1 to 13.');
     END IF;
 
-    -- 3. Validate Plan Name & 90-Calendar-Day Boundaries
-    v_name := trim(p_payload->>'name');
-    IF v_name IS NULL OR length(v_name) = 0 OR length(v_name) > 200 THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Work plan name is required and must be under 200 characters');
-    END IF;
+    -- =========================================================================
+    -- CREATE NEW WORK PLAN
+    -- =========================================================================
+    IF p_plan_id IS NULL THEN
+        IF p_client_id IS NULL THEN
+            RETURN jsonb_build_object('error', 'Validation Error: client_id is required for new work plan.');
+        END IF;
 
-    v_start_date := (COALESCE(p_payload->>'startDate', p_payload->>'start_date'))::DATE;
-    IF v_start_date IS NULL THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Plan start date is required');
-    END IF;
+        SELECT * INTO v_client FROM public.clients WHERE id = p_client_id;
+        IF v_client.id IS NULL THEN
+            RETURN jsonb_build_object('error', 'Validation Error: Target client does not exist.');
+        END IF;
+        IF v_client.status IN ('Archived', 'Paused') THEN
+            RETURN jsonb_build_object('error', format('Forbidden: Cannot create work plan for a %s client.', v_client.status));
+        END IF;
 
-    v_end_date := v_start_date + 89; -- Exact 90 calendar days inclusive
-    v_weeks := p_payload->'weeks';
-    v_plan_id := (p_payload->>'id')::UUID;
+        IF v_caller_role = 'operational_manager' THEN
+            IF NOT (
+                v_client.operational_manager_id = v_caller_id
+                OR EXISTS (
+                    SELECT 1 FROM public.client_team_access
+                    WHERE client_id = p_client_id AND profile_id = v_caller_id
+                )
+            ) THEN
+                RETURN jsonb_build_object('error', 'Forbidden: Operational Manager does not have access to this client.');
+            END IF;
+        END IF;
 
-    -- 4. Create or Update Draft Plan
-    IF v_plan_id IS NULL THEN
-        -- Insert new Draft Plan
+        IF p_name IS NULL OR length(trim(p_name)) = 0 THEN
+            RETURN jsonb_build_object('error', 'Validation Error: Work plan name is required.');
+        END IF;
+        IF length(p_name) > 200 THEN
+            RETURN jsonb_build_object('error', 'Validation Error: Work plan name cannot exceed 200 characters.');
+        END IF;
+
+        v_target_id := gen_random_uuid();
+        v_target_revision := 1;
+
         INSERT INTO public.client_work_plans (
-            client_id, name, status, start_date, end_date, revision, plan_data,
-            created_by, updated_by, created_at, updated_at
+            id, client_id, name, status, start_date, end_date, revision, plan_data, created_by, updated_by
         ) VALUES (
-            v_client_id, v_name, 'Draft', v_start_date, v_end_date, 1, jsonb_build_object('weeks', v_weeks),
-            v_caller_id, v_caller_id, timezone('utc'::text, now()), timezone('utc'::text, now())
-        ) RETURNING * INTO v_saved_plan;
-        v_plan_id := v_saved_plan.id;
+            v_target_id, p_client_id, trim(p_name), 'Draft', v_start_date, v_end_date, 1,
+            jsonb_build_object('weeks', p_weeks), v_caller_id, v_caller_id
+        );
+
+    -- =========================================================================
+    -- UPDATE EXISTING DRAFT WORK PLAN
+    -- =========================================================================
     ELSE
-        -- Update existing Draft Plan
-        SELECT * INTO v_current
-        FROM public.client_work_plans
-        WHERE id = v_plan_id
-        FOR UPDATE;
-
-        IF v_current.id IS NULL THEN
-            RETURN jsonb_build_object('success', false, 'error', 'Work plan not found');
+        IF p_expected_revision IS NULL THEN
+            RETURN jsonb_build_object('error', 'Validation Error: expected_revision is required to update a work plan.');
         END IF;
 
-        IF v_current.client_id != v_client_id THEN
-            RETURN jsonb_build_object('success', false, 'error', 'Conflict: Work Plan does not belong to the target client');
+        SELECT * INTO v_existing FROM public.client_work_plans WHERE id = p_plan_id FOR UPDATE;
+        IF v_existing.id IS NULL THEN
+            RETURN jsonb_build_object('error', 'Not Found: Work plan does not exist.');
         END IF;
 
-        IF v_current.status != 'Draft' THEN
-            RETURN jsonb_build_object('success', false, 'error', 'Cannot modify a plan that is already launched or archived. Status: ' || v_current.status);
+        IF v_existing.status != 'Draft' THEN
+            RETURN jsonb_build_object('error', format('Conflict: Cannot modify a work plan with status "%s".', v_existing.status));
         END IF;
 
-        v_expected_rev := (COALESCE(p_payload->>'expectedRevision', p_payload->>'expected_revision'))::INTEGER;
-        IF v_expected_rev IS NOT NULL AND v_current.revision != v_expected_rev THEN
-            RETURN jsonb_build_object('success', false, 'error', 'Conflict: Work plan was modified in another session. Please reload.');
+        IF v_existing.revision != p_expected_revision THEN
+            RETURN jsonb_build_object('error', 'Conflict: Work plan was modified by another session. Please reload.');
         END IF;
 
-        v_next_rev := v_current.revision + 1;
+        SELECT * INTO v_client FROM public.clients WHERE id = v_existing.client_id;
+        IF v_client.status IN ('Archived', 'Paused') THEN
+            RETURN jsonb_build_object('error', format('Forbidden: Cannot edit work plan for a %s client.', v_client.status));
+        END IF;
+
+        IF v_caller_role = 'operational_manager' THEN
+            IF NOT (
+                v_client.operational_manager_id = v_caller_id
+                OR EXISTS (
+                    SELECT 1 FROM public.client_team_access
+                    WHERE client_id = v_client.id AND profile_id = v_caller_id
+                )
+            ) THEN
+                RETURN jsonb_build_object('error', 'Forbidden: Operational Manager does not have access to this client.');
+            END IF;
+        END IF;
+
+        v_target_id := p_plan_id;
+        v_target_revision := v_existing.revision + 1;
 
         UPDATE public.client_work_plans
-        SET name = v_name,
+        SET name = COALESCE(NULLIF(trim(p_name), ''), name),
             start_date = v_start_date,
             end_date = v_end_date,
-            revision = v_next_rev,
-            plan_data = jsonb_build_object('weeks', v_weeks),
+            revision = v_target_revision,
+            plan_data = jsonb_build_object('weeks', p_weeks),
             updated_by = v_caller_id,
             updated_at = timezone('utc'::text, now())
-        WHERE id = v_plan_id
-        RETURNING * INTO v_saved_plan;
+        WHERE id = p_plan_id AND revision = p_expected_revision AND status = 'Draft';
+
+        GET DIAGNOSTICS v_affected_rows = ROW_COUNT;
+        IF v_affected_rows = 0 THEN
+            RETURN jsonb_build_object('error', 'Conflict: Stale revision or concurrent modification detected.');
+        END IF;
+
+        DELETE FROM public.client_work_plan_weeks WHERE work_plan_id = p_plan_id;
+        DELETE FROM public.client_work_plan_occurrences WHERE work_plan_id = p_plan_id;
     END IF;
 
-    -- 5. Atomically Populate Normalized Weeks and Occurrences
-    DELETE FROM public.client_work_plan_weeks WHERE work_plan_id = v_plan_id;
+    -- Normalize 13 weeks & occurrences into relational child tables
+    FOR v_week_idx IN 0..12 LOOP
+        v_week_obj := p_weeks->v_week_idx;
+        v_week_num := COALESCE((v_week_obj->>'weekNumber')::INTEGER, (v_week_obj->>'week_number')::INTEGER);
 
-    IF v_weeks IS NOT NULL AND jsonb_typeof(v_weeks) = 'array' THEN
-        v_week_count := jsonb_array_length(v_weeks);
-        FOR v_w_idx IN 0..(v_week_count - 1) LOOP
-            v_week_item := v_weeks->v_w_idx;
-            v_w_num := COALESCE((COALESCE(v_week_item->>'weekNumber', v_week_item->>'week_number'))::INTEGER, v_w_idx + 1);
-            v_w_start := (COALESCE(v_week_item->>'startDate', v_week_item->>'start_date'))::DATE;
-            v_w_end := (COALESCE(v_week_item->>'endDate', v_week_item->>'end_date'))::DATE;
+        IF v_week_num <= 12 THEN
+            v_week_start := v_start_date + ((v_week_num - 1) * 7);
+            v_week_end := v_week_start + 6;
+        ELSE
+            v_week_start := v_start_date + 84;
+            v_week_end := v_start_date + 89;
+        END IF;
 
-            IF v_w_start IS NOT NULL AND v_w_end IS NOT NULL THEN
-                INSERT INTO public.client_work_plan_weeks (
-                    work_plan_id, week_number, start_date, end_date
-                ) VALUES (
-                    v_plan_id, v_w_num, v_w_start, v_w_end
-                ) RETURNING id INTO v_week_id;
+        INSERT INTO public.client_work_plan_weeks (
+            id, work_plan_id, week_number, start_date, end_date
+        ) VALUES (
+            gen_random_uuid(), v_target_id, v_week_num, v_week_start, v_week_end
+        ) ON CONFLICT (work_plan_id, week_number) DO NOTHING;
 
-                -- Insert Occurrences
-                v_occurrences := v_week_item->'occurrences';
-                IF v_occurrences IS NOT NULL AND jsonb_typeof(v_occurrences) = 'array' THEN
-                    FOR v_occ_idx IN 0..(jsonb_array_length(v_occurrences) - 1) LOOP
-                        v_occ_item := v_occurrences->v_occ_idx;
-                        INSERT INTO public.client_work_plan_occurrences (
-                            work_plan_id, week_number, template_id, template_version, custom_label, sort_order, snapshot
-                        ) VALUES (
-                            v_plan_id,
-                            v_w_num,
-                            (COALESCE(v_occ_item->>'templateId', v_occ_item->>'template_id'))::UUID,
-                            COALESCE((COALESCE(v_occ_item->>'templateVersion', v_occ_item->>'template_version'))::INTEGER, 1),
-                            COALESCE(v_occ_item->>'templateName', v_occ_item->>'custom_label'),
-                            v_occ_idx,
-                            v_occ_item
-                        );
-                    END LOOP;
+        IF jsonb_typeof(v_week_obj->'occurrences') = 'array' THEN
+            FOR v_occ_idx IN 0..(jsonb_array_length(v_week_obj->'occurrences') - 1) LOOP
+                v_occ_obj := (v_week_obj->'occurrences')->v_occ_idx;
+                BEGIN
+                    v_occ_tpl_id := (v_occ_obj->>'templateId')::UUID;
+                EXCEPTION WHEN OTHERS THEN
+                    v_occ_tpl_id := NULL;
                 END IF;
-            END IF;
-        END LOOP;
-    END IF;
+                v_occ_tpl_ver := COALESCE((v_occ_obj->>'templateVersion')::INTEGER, 1);
 
-    RETURN jsonb_build_object(
-        'success', true,
-        'data', jsonb_build_object(
-            'id', v_saved_plan.id,
-            'clientId', v_saved_plan.client_id,
-            'name', v_saved_plan.name,
-            'status', v_saved_plan.status,
-            'startDate', v_saved_plan.start_date,
-            'endDate', v_saved_plan.end_date,
-            'revision', v_saved_plan.revision,
-            'weeks', v_weeks
-        )
-    );
+                INSERT INTO public.client_work_plan_occurrences (
+                    id, work_plan_id, week_number, template_id, template_version, custom_label, sort_order, snapshot
+                ) VALUES (
+                    gen_random_uuid(), v_target_id, v_week_num, v_occ_tpl_id, v_occ_tpl_ver,
+                    v_occ_obj->>'customLabel', v_occ_idx, v_occ_obj
+                );
+            END LOOP;
+        END IF;
+    END LOOP;
+
+    RETURN jsonb_build_object('success', true, 'plan_id', v_target_id, 'revision', v_target_revision);
 END;
 $$;
 
-ALTER FUNCTION public.fn_save_draft_work_plan(JSONB) OWNER TO postgres;
-REVOKE ALL ON FUNCTION public.fn_save_draft_work_plan(JSONB) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.fn_save_draft_work_plan(JSONB) TO authenticated;
+DROP FUNCTION IF EXISTS public.fn_delete_draft_work_plan(UUID);
 
 CREATE OR REPLACE FUNCTION public.fn_delete_draft_work_plan(
     p_plan_id UUID
@@ -917,63 +1154,71 @@ SET search_path = ''
 AS $$
 DECLARE
     v_caller_id UUID;
-    v_actor RECORD;
+    v_caller_role TEXT;
+    v_is_suspended BOOLEAN;
     v_plan RECORD;
     v_client RECORD;
 BEGIN
     v_caller_id := auth.uid();
     IF v_caller_id IS NULL THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Unauthorized: Missing authenticated user context');
+        RETURN jsonb_build_object('error', 'Unauthorized: Missing active authentication session.');
     END IF;
 
-    SELECT * INTO v_actor FROM public.profiles WHERE id = v_caller_id;
-    IF v_actor.id IS NULL OR v_actor.status != 'active' THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Unauthorized: Inactive or invalid caller profile');
+    SELECT role, is_suspended INTO v_caller_role, v_is_suspended
+    FROM public.profiles
+    WHERE id = v_caller_id;
+
+    IF v_caller_role IS NULL OR v_is_suspended = true THEN
+        RETURN jsonb_build_object('error', 'Forbidden: User profile is suspended or does not exist.');
     END IF;
 
-    SELECT * INTO v_plan FROM public.client_work_plans WHERE id = p_plan_id;
+    SELECT * INTO v_plan FROM public.client_work_plans WHERE id = p_plan_id FOR UPDATE;
     IF v_plan.id IS NULL THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Work plan not found');
+        RETURN jsonb_build_object('error', 'Not Found: Work plan does not exist.');
     END IF;
 
     IF v_plan.status != 'Draft' THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Cannot delete a plan that is already launched or archived');
+        RETURN jsonb_build_object('error', 'Conflict: Only Draft work plans can be deleted.');
     END IF;
 
     SELECT * INTO v_client FROM public.clients WHERE id = v_plan.client_id;
-    IF v_actor.role = 'operational_manager' THEN
+    IF v_client.status IN ('Archived', 'Paused') THEN
+        RETURN jsonb_build_object('error', format('Forbidden: Cannot delete work plan for a %s client.', v_client.status));
+    END IF;
+
+    IF v_caller_role = 'operational_manager' THEN
         IF NOT (
             v_client.operational_manager_id = v_caller_id
             OR EXISTS (
-                SELECT 1 FROM public.client_team_access cta
-                WHERE cta.client_id = v_plan.client_id AND cta.profile_id = v_caller_id
+                SELECT 1 FROM public.client_team_access
+                WHERE client_id = v_client.id AND profile_id = v_caller_id
             )
         ) THEN
-            RETURN jsonb_build_object('success', false, 'error', 'Forbidden: Insufficient permissions for this client workspace');
+            RETURN jsonb_build_object('error', 'Forbidden: Operational Manager does not have access to this client.');
         END IF;
+    ELSIF v_caller_role != 'owner' THEN
+        RETURN jsonb_build_object('error', 'Forbidden: Unauthorized to delete work plans.');
     END IF;
 
-    DELETE FROM public.client_work_plans WHERE id = p_plan_id;
-    RETURN jsonb_build_object('success', true);
+    DELETE FROM public.client_work_plans WHERE id = p_plan_id AND status = 'Draft';
+    RETURN jsonb_build_object('success', true, 'deleted_plan_id', p_plan_id);
 END;
 $$;
 
-ALTER FUNCTION public.fn_delete_draft_work_plan(UUID) OWNER TO postgres;
-REVOKE ALL ON FUNCTION public.fn_delete_draft_work_plan(UUID) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.fn_delete_draft_work_plan(UUID) TO authenticated;
+-- ------------------------------------------------------------------------------
+-- 8. AUTHORITATIVE LAUNCH MUTATION RPC: fn_launch_task_batch
+-- ------------------------------------------------------------------------------
+DROP FUNCTION IF EXISTS public.fn_launch_task_batch(UUID, TEXT, UUID, TEXT, UUID, INTEGER, JSONB, JSONB);
+DROP FUNCTION IF EXISTS public.fn_launch_task_batch(TEXT, UUID, TEXT, UUID, INTEGER, JSONB, JSONB);
 
--- ------------------------------------------------------------------------------
--- 8. AUTHORIZED, CONCURRENCY-SAFE TRANSACTIONAL LAUNCH RPC FUNCTION
--- ------------------------------------------------------------------------------
 CREATE OR REPLACE FUNCTION public.fn_launch_task_batch(
     p_request_id TEXT,
     p_client_id UUID,
     p_launch_type TEXT,
     p_source_id UUID,
-    p_target_week INTEGER,
-    p_tasks JSONB,
-    p_metadata JSONB DEFAULT '{}'::jsonb,
-    p_actor_id UUID DEFAULT NULL
+    p_target_week INTEGER DEFAULT NULL,
+    p_tasks JSONB DEFAULT '[]'::jsonb,
+    p_metadata JSONB DEFAULT '{}'::jsonb
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -982,372 +1227,406 @@ SET search_path = ''
 AS $$
 DECLARE
     v_caller_id UUID;
-    v_actor RECORD;
+    v_caller_role TEXT;
+    v_is_suspended BOOLEAN;
     v_client RECORD;
-    v_tpl RECORD;
-    v_plan RECORD;
     v_existing_batch RECORD;
-    v_task_item JSONB;
-    v_new_task_id UUID;
-    v_created_task_ids UUID[] := '{}';
-    v_task_count INTEGER := 0;
-    v_batch_id UUID;
     v_payload_hash TEXT;
-    v_expected_revision INTEGER;
-    v_task_title TEXT;
-    v_task_dept UUID;
-    v_task_priority TEXT;
-    v_task_approval TEXT;
-    v_task_planned TIMESTAMPTZ;
-    v_task_due TIMESTAMPTZ;
-    v_task_week INTEGER;
+    v_canonical_string TEXT;
+    v_task_count INTEGER;
+    v_batch_id UUID;
+    v_created_task_ids UUID[] := '{}';
+    v_task_idx INTEGER;
+    v_task_elem JSONB;
+    v_new_task_id UUID;
+    v_dept_id UUID;
+    v_priority TEXT;
+    v_approval TEXT;
+    v_plan RECORD;
+    v_template RECORD;
+    v_template_version RECORD;
+    v_planned_date DATE;
+    v_due_date DATE;
+    v_day_of_week INTEGER;
     v_plan_week INTEGER;
-    v_clean_req_id TEXT;
-    v_dow_planned INTEGER;
-    v_dow_due INTEGER;
-    v_rows_updated INTEGER;
+    v_task_week INTEGER;
+    v_week_start DATE;
+    v_week_end DATE;
+    v_source_tpl_id UUID;
+    v_source_tpl_ver INTEGER;
+    v_occ_id UUID;
+    v_details TEXT;
+    v_task_title TEXT;
+    v_expected_revision INTEGER;
+    v_affected_rows INTEGER;
 BEGIN
-    -- 1. Verify Caller Authentication & Identity (Authoritative auth.uid())
     v_caller_id := auth.uid();
     IF v_caller_id IS NULL THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Unauthorized: Missing authenticated user context');
+        RETURN jsonb_build_object('error', 'Unauthorized: Missing active authentication session.');
     END IF;
 
-    -- 2. Validate Request ID Format & Length (Bounded, Non-Empty)
-    v_clean_req_id := trim(COALESCE(p_request_id, ''));
-    IF length(v_clean_req_id) = 0 OR length(v_clean_req_id) > 128 THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Invalid request_id: Must be a non-empty string up to 128 characters');
+    -- Strict Request ID Validation
+    IF p_request_id IS NULL OR length(trim(p_request_id)) = 0 OR length(p_request_id) > 128 THEN
+        RETURN jsonb_build_object('error', 'Validation Error: p_request_id must be a non-empty string with max length 128.');
     END IF;
 
-    -- 3. Verify Active Profile & Role Permissions
-    SELECT * INTO v_actor
+    SELECT role, is_suspended INTO v_caller_role, v_is_suspended
     FROM public.profiles
     WHERE id = v_caller_id;
 
-    IF v_actor.id IS NULL OR v_actor.status != 'active' THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Unauthorized: Inactive or invalid caller profile');
+    IF v_caller_role IS NULL OR v_is_suspended = true THEN
+        RETURN jsonb_build_object('error', 'Forbidden: User profile is suspended or does not exist.');
     END IF;
 
-    IF v_actor.role NOT IN ('owner', 'operational_manager') THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Forbidden: Team Members and Clients cannot launch templates or work plans');
+    IF v_caller_role NOT IN ('owner', 'operational_manager') THEN
+        RETURN jsonb_build_object('error', 'Forbidden: Only Owners and Operational Managers can launch operational task batches.');
     END IF;
 
-    -- 4. Verify Target Client Exists, Access Scope & Active Status (created_by removed)
-    SELECT * INTO v_client
-    FROM public.clients
-    WHERE id = p_client_id;
-
+    SELECT * INTO v_client FROM public.clients WHERE id = p_client_id;
     IF v_client.id IS NULL THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Not Found: Target client does not exist');
+        RETURN jsonb_build_object('error', 'Validation Error: Target client does not exist.');
     END IF;
-
     IF v_client.status = 'Archived' THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Forbidden: Cannot launch tasks for an archived client');
+        RETURN jsonb_build_object('error', 'Forbidden: Cannot launch tasks for an Archived client.');
     END IF;
-
     IF v_client.status = 'Paused' THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Forbidden: Cannot launch tasks for a paused client');
+        RETURN jsonb_build_object('error', 'Forbidden: Cannot launch tasks for a Paused client.');
     END IF;
 
-    -- Scope check for Operational Manager
-    IF v_actor.role = 'operational_manager' THEN
+    IF v_caller_role = 'operational_manager' THEN
         IF NOT (
             v_client.operational_manager_id = v_caller_id
             OR EXISTS (
-                SELECT 1 FROM public.client_team_access cta
-                WHERE cta.client_id = p_client_id AND cta.profile_id = v_caller_id
+                SELECT 1 FROM public.client_team_access
+                WHERE client_id = p_client_id AND profile_id = v_caller_id
             )
         ) THEN
-            RETURN jsonb_build_object('success', false, 'error', 'Forbidden: Operational Manager does not have access to this client workspace');
+            RETURN jsonb_build_object('error', 'Forbidden: Operational Manager is not assigned to this client.');
         END IF;
     END IF;
 
-    -- 5. Validate Task Payload Count & JSON Structure
-    IF p_tasks IS NULL OR jsonb_typeof(p_tasks) <> 'array' THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Invalid task batch: Expected a JSON array of tasks');
+    -- Canonical SHA-256 Payload Hash using PostgreSQL built-in sha256
+    v_canonical_string := v_caller_id::TEXT || ':' ||
+        p_client_id::TEXT || ':' ||
+        p_launch_type || ':' ||
+        COALESCE(p_source_id::TEXT, '') || ':' ||
+        COALESCE(p_target_week::TEXT, '') || ':' ||
+        p_tasks::TEXT || ':' ||
+        p_metadata::TEXT;
+
+    v_payload_hash := encode(sha256(v_canonical_string::bytea), 'hex');
+
+    -- Check Existing Launch Batch for Idempotency Replay
+    SELECT * INTO v_existing_batch
+    FROM public.task_launch_batches
+    WHERE client_id = p_client_id AND request_id = p_request_id;
+
+    IF v_existing_batch.id IS NOT NULL THEN
+        IF v_existing_batch.payload_hash != v_payload_hash THEN
+            RETURN jsonb_build_object(
+                'error', 'Conflict: A launch request with this ID already exists with different payload parameters.'
+            );
+        END IF;
+
+        IF v_existing_batch.task_count = 0 OR cardinality(v_existing_batch.task_ids) != v_existing_batch.task_count THEN
+            RETURN jsonb_build_object(
+                'error', 'Conflict: Previous launch request was incomplete or failed.'
+            );
+        END IF;
+
+        RETURN jsonb_build_object(
+            'success', true,
+            'idempotent_replay', true,
+            'batch_id', v_existing_batch.id,
+            'task_count', v_existing_batch.task_count,
+            'task_ids', v_existing_batch.task_ids,
+            'message', 'Request previously executed. Returning existing batch snapshot.'
+        );
+    END IF;
+
+    IF jsonb_typeof(p_tasks) != 'array' THEN
+        RETURN jsonb_build_object('error', 'Validation Error: p_tasks must be a JSON array.');
     END IF;
 
     v_task_count := jsonb_array_length(p_tasks);
-    IF v_task_count < 1 OR v_task_count > 100 THEN
-        RETURN jsonb_build_object('success', false, 'error', 'Invalid task batch: Must contain between 1 and 100 tasks');
+    IF v_task_count < 1 THEN
+        RETURN jsonb_build_object('error', 'Validation Error: Batch must contain at least 1 task.');
+    END IF;
+    IF v_task_count > 100 THEN
+        RETURN jsonb_build_object('error', 'Validation Error: Batch task count cannot exceed 100.');
     END IF;
 
-    -- 6. Launch-Type Guardrails (Service Template vs Work Plan)
+    -- Validate Launch Authority by Type
     IF p_launch_type = 'service_template' THEN
-        SELECT * INTO v_tpl
-        FROM public.service_templates
-        WHERE id = p_source_id;
-
-        IF v_tpl.id IS NULL THEN
-            RETURN jsonb_build_object('success', false, 'error', 'Not Found: Service Template does not exist');
+        IF p_target_week IS NULL OR p_target_week < 1 OR p_target_week > 4 THEN
+            RETURN jsonb_build_object('error', 'Validation Error: Service template launch requires a target_week between 1 and 4.');
         END IF;
 
-        IF v_tpl.status = 'Archived' THEN
-            RETURN jsonb_build_object('success', false, 'error', 'Forbidden: Cannot launch an archived Service Template');
+        SELECT * INTO v_template FROM public.service_templates WHERE id = p_source_id;
+        IF v_template.id IS NULL THEN
+            RETURN jsonb_build_object('error', 'Not Found: Source service template does not exist.');
+        END IF;
+        IF v_template.status != 'Active' THEN
+            RETURN jsonb_build_object('error', 'Forbidden: Cannot launch tasks from an Archived service template.');
         END IF;
 
     ELSIF p_launch_type = 'work_plan' THEN
-        -- Atomic Row Lock on Work Plan
-        SELECT * INTO v_plan
-        FROM public.client_work_plans
-        WHERE id = p_source_id
-        FOR UPDATE;
+        IF p_source_id IS NULL THEN
+            RETURN jsonb_build_object('error', 'Validation Error: Work plan launch requires a valid source plan ID.');
+        END IF;
 
+        SELECT * INTO v_plan FROM public.client_work_plans WHERE id = p_source_id FOR UPDATE;
         IF v_plan.id IS NULL THEN
-            RETURN jsonb_build_object('success', false, 'error', 'Not Found: Work Plan does not exist');
+            RETURN jsonb_build_object('error', 'Not Found: Source work plan does not exist.');
         END IF;
 
         IF v_plan.client_id != p_client_id THEN
-            RETURN jsonb_build_object('success', false, 'error', 'Conflict: Work Plan does not belong to the target client');
+            RETURN jsonb_build_object('error', 'Forbidden: Work plan does not belong to the specified client.');
         END IF;
 
         IF v_plan.status != 'Draft' THEN
-            RETURN jsonb_build_object('success', false, 'error', 'Conflict: Only Draft Work Plans can be launched. Current status: ' || v_plan.status);
+            RETURN jsonb_build_object('error', format('Conflict: Work plan is already in "%s" status.', v_plan.status));
         END IF;
 
-        v_expected_revision := (COALESCE(p_metadata->>'expected_revision', p_metadata->>'expectedRevision'))::INTEGER;
+        v_expected_revision := (p_metadata->>'expected_revision')::INTEGER;
         IF v_expected_revision IS NOT NULL AND v_plan.revision != v_expected_revision THEN
-            RETURN jsonb_build_object('success', false, 'error', 'Conflict: Work Plan revision has changed. Please refresh and review.');
+            RETURN jsonb_build_object('error', 'Conflict: Work plan was modified by another session. Please reload.');
         END IF;
     ELSE
-        RETURN jsonb_build_object('success', false, 'error', 'Invalid launch_type: Expected "service_template" or "work_plan"');
+        RETURN jsonb_build_object('error', format('Validation Error: Unknown launch type "%s".', p_launch_type));
     END IF;
 
-    -- 7. Compute Complete Canonical Request Hash
-    v_payload_hash := md5(
-        p_client_id::text || '|' ||
-        p_launch_type || '|' ||
-        COALESCE(p_source_id::text, '') || '|' ||
-        COALESCE(p_target_week::text, '') || '|' ||
-        COALESCE((p_metadata->>'expected_revision'), '') || '|' ||
-        COALESCE((p_metadata->>'expectedRevision'), '') || '|' ||
-        COALESCE((p_metadata->>'source_version'), '') || '|' ||
-        p_tasks::text
-    );
-
-    -- 8. Concurrency-Safe Idempotency Check & Atomic Reservation
     v_batch_id := gen_random_uuid();
+
+    -- Concurrency Lock: Insert Batch Record First
     INSERT INTO public.task_launch_batches (
-        id,
-        request_id,
-        actor_id,
-        client_id,
-        launch_type,
-        source_template_id,
-        source_plan_id,
-        target_week,
-        task_count,
-        task_ids,
-        payload_hash,
-        metadata
+        id, request_id, actor_id, client_id, launch_type, source_template_id, source_plan_id,
+        target_week, task_count, task_ids, payload_hash, metadata
     ) VALUES (
-        v_batch_id,
-        v_clean_req_id,
-        v_caller_id,
-        p_client_id,
-        p_launch_type,
+        v_batch_id, p_request_id, v_caller_id, p_client_id, p_launch_type,
         CASE WHEN p_launch_type = 'service_template' THEN p_source_id ELSE NULL END,
         CASE WHEN p_launch_type = 'work_plan' THEN p_source_id ELSE NULL END,
-        p_target_week,
-        v_task_count,
-        '{}',
-        v_payload_hash,
-        p_metadata
-    )
-    ON CONFLICT (client_id, request_id) DO NOTHING;
+        p_target_week, v_task_count, '{}', v_payload_hash, p_metadata
+    ) ON CONFLICT (client_id, request_id) DO NOTHING;
 
-    -- Check if another request reserved or completed this batch
-    IF NOT FOUND THEN
+    GET DIAGNOSTICS v_affected_rows = ROW_COUNT;
+    IF v_affected_rows = 0 THEN
+        -- Concurrency collision: Another worker inserted this request concurrently
         SELECT * INTO v_existing_batch
         FROM public.task_launch_batches
-        WHERE client_id = p_client_id AND request_id = v_clean_req_id;
+        WHERE client_id = p_client_id AND request_id = p_request_id;
 
-        IF v_existing_batch.payload_hash = v_payload_hash THEN
+        IF v_existing_batch.payload_hash != v_payload_hash THEN
             RETURN jsonb_build_object(
-                'success', true,
-                'idempotent_replay', true,
-                'batch_id', v_existing_batch.id,
-                'task_ids', v_existing_batch.task_ids,
-                'task_count', v_existing_batch.task_count
+                'error', 'Conflict: A launch request with this ID already exists with different payload parameters.'
             );
-        ELSE
-            RETURN jsonb_build_object('success', false, 'error', 'Conflict: Request ID already used with a different task payload');
         END IF;
+
+        RETURN jsonb_build_object(
+            'success', true,
+            'idempotent_replay', true,
+            'batch_id', v_existing_batch.id,
+            'task_count', v_existing_batch.task_count,
+            'task_ids', v_existing_batch.task_ids,
+            'message', 'Concurrent request completed. Returning existing batch snapshot.'
+        );
     END IF;
 
-    -- 9. Validate & Insert All Child Tasks (Monday-Friday Enforced & Strictly Draft/Unassigned)
-    FOR v_task_item IN SELECT * FROM jsonb_array_elements(p_tasks) LOOP
-        v_task_title := trim(v_task_item->>'title');
-        IF length(v_task_title) = 0 THEN
-            RAISE EXCEPTION 'Task title cannot be empty';
-        END IF;
-
-        v_task_dept := (COALESCE(v_task_item->>'department_id', v_task_item->>'departmentId'))::UUID;
-        IF v_task_dept IS NULL OR NOT EXISTS (SELECT 1 FROM public.departments WHERE id = v_task_dept) THEN
-            RAISE EXCEPTION 'Invalid department specified for task "%"', v_task_title;
-        END IF;
-
-        v_task_priority := COALESCE(v_task_item->>'priority', 'Normal');
-        IF v_task_priority NOT IN ('Low', 'Normal', 'High', 'Urgent') THEN
-            RAISE EXCEPTION 'Invalid priority "%" for task "%"', v_task_priority, v_task_title;
-        END IF;
-
-        v_task_approval := COALESCE(COALESCE(v_task_item->>'approval_mode', v_task_item->>'approvalMode'), 'Internal Only');
-        IF v_task_approval NOT IN ('Internal Only', 'Client Approval Required') THEN
-            RAISE EXCEPTION 'Invalid approval mode "%" for task "%"', v_task_approval, v_task_title;
-        END IF;
-
-        v_task_planned := (COALESCE(v_task_item->>'planned_date', v_task_item->>'plannedDate'))::TIMESTAMPTZ;
-        v_task_due := (COALESCE(v_task_item->>'due_date', v_task_item->>'dueDate'))::TIMESTAMPTZ;
-
-        -- Monday-Friday Date Normalization:
-        -- Roll Saturday (6) forward 2 days to Monday; Roll Sunday (0) forward 1 day to Monday
-        IF v_task_planned IS NOT NULL THEN
-            v_dow_planned := EXTRACT(DOW FROM v_task_planned AT TIME ZONE 'Asia/Karachi');
-            IF v_dow_planned = 0 THEN
-                v_task_planned := v_task_planned + INTERVAL '1 day';
-            ELSIF v_dow_planned = 6 THEN
-                v_task_planned := v_task_planned + INTERVAL '2 days';
-            END IF;
-        END IF;
-
-        IF v_task_due IS NOT NULL THEN
-            v_dow_due := EXTRACT(DOW FROM v_task_due AT TIME ZONE 'Asia/Karachi');
-            IF v_dow_due = 0 THEN
-                v_task_due := v_task_due + INTERVAL '1 day';
-            ELSIF v_dow_due = 6 THEN
-                v_task_due := v_task_due + INTERVAL '2 days';
-            END IF;
-        END IF;
-
-        -- Ensure due_date >= planned_start
-        IF v_task_planned IS NOT NULL AND v_task_due IS NOT NULL AND v_task_due < v_task_planned THEN
-            v_task_due := v_task_planned;
-        END IF;
-
-        -- Week Number Assignment:
-        -- Legacy week_number is constrained to 1..4. Plan week is 1..13.
-        v_plan_week := (COALESCE(v_task_item->>'plan_week', v_task_item->>'planWeek'))::INTEGER;
-        v_task_week := CASE
-            WHEN p_target_week IS NOT NULL AND p_target_week BETWEEN 1 AND 4 THEN p_target_week
-            WHEN v_plan_week IS NOT NULL AND v_plan_week BETWEEN 1 AND 4 THEN v_plan_week
-            ELSE 1
-        END;
-
+    -- Process Each Task Payload with Strict Validation
+    FOR v_task_idx IN 0..(v_task_count - 1) LOOP
+        v_task_elem := p_tasks->v_task_idx;
         v_new_task_id := gen_random_uuid();
 
+        v_task_title := trim(COALESCE(v_task_elem->>'title', ''));
+        IF length(v_task_title) = 0 THEN
+            RAISE EXCEPTION 'Task #% title cannot be empty.', v_task_idx + 1;
+        END IF;
+        IF length(v_task_title) > 200 THEN
+            RAISE EXCEPTION 'Task #% title cannot exceed 200 characters.', v_task_idx + 1;
+        END IF;
+
+        BEGIN
+            v_dept_id := (v_task_elem->>'department_id')::UUID;
+        EXCEPTION WHEN OTHERS THEN
+            RAISE EXCEPTION 'Task #% has an invalid department UUID.', v_task_idx + 1;
+        END IF;
+
+        IF NOT EXISTS (SELECT 1 FROM public.departments WHERE id = v_dept_id AND is_active = true) THEN
+            RAISE EXCEPTION 'Task #% department is invalid or inactive.', v_task_idx + 1;
+        END IF;
+
+        v_priority := COALESCE(v_task_elem->>'priority', 'Normal');
+        IF v_priority NOT IN ('Low', 'Normal', 'High', 'Urgent') THEN
+            RAISE EXCEPTION 'Task #% has invalid priority "%".', v_task_idx + 1, v_priority;
+        END IF;
+
+        v_approval := COALESCE(v_task_elem->>'approval_mode', 'Internal Only');
+        IF v_approval NOT IN ('Internal Only', 'Client Approval Required') THEN
+            RAISE EXCEPTION 'Task #% has invalid approval mode "%".', v_task_idx + 1, v_approval;
+        END IF;
+
+        -- Strict Date Validation
+        IF v_task_elem->>'planned_date' IS NOT NULL AND length(trim(v_task_elem->>'planned_date')) > 0 THEN
+            BEGIN
+                v_planned_date := (v_task_elem->>'planned_date')::DATE;
+            EXCEPTION WHEN OTHERS THEN
+                RAISE EXCEPTION 'Task #% has invalid planned_date format.', v_task_idx + 1;
+            END;
+
+            v_day_of_week := EXTRACT(DOW FROM v_planned_date);
+            IF v_day_of_week = 0 OR v_day_of_week = 6 THEN
+                RAISE EXCEPTION 'Task #% planned_date cannot fall on a weekend (Saturday or Sunday).', v_task_idx + 1;
+            END IF;
+        ELSE
+            v_planned_date := NULL;
+        END IF;
+
+        IF v_task_elem->>'due_date' IS NOT NULL AND length(trim(v_task_elem->>'due_date')) > 0 THEN
+            BEGIN
+                v_due_date := (v_task_elem->>'due_date')::DATE;
+            EXCEPTION WHEN OTHERS THEN
+                RAISE EXCEPTION 'Task #% has invalid due_date format.', v_task_idx + 1;
+            END;
+
+            v_day_of_week := EXTRACT(DOW FROM v_due_date);
+            IF v_day_of_week = 0 OR v_day_of_week = 6 THEN
+                RAISE EXCEPTION 'Task #% due_date cannot fall on a weekend (Saturday or Sunday).', v_task_idx + 1;
+            END IF;
+        ELSE
+            v_due_date := NULL;
+        END IF;
+
+        IF v_planned_date IS NOT NULL AND v_due_date IS NOT NULL AND v_due_date < v_planned_date THEN
+            RAISE EXCEPTION 'Task #% due_date cannot be earlier than planned_date.', v_task_idx + 1;
+        END IF;
+
+        -- Plan Week and Date Range Validation for Work Plans
+        IF p_launch_type = 'work_plan' THEN
+            v_plan_week := (v_task_elem->>'plan_week')::INTEGER;
+            IF v_plan_week IS NULL OR v_plan_week < 1 OR v_plan_week > 13 THEN
+                RAISE EXCEPTION 'Task #% must specify a valid plan_week between 1 and 13.', v_task_idx + 1;
+            END IF;
+
+            IF v_plan_week <= 12 THEN
+                v_week_start := v_plan.start_date + ((v_plan_week - 1) * 7);
+                v_week_end := v_week_start + 6;
+            ELSE
+                v_week_start := v_plan.start_date + 84;
+                v_week_end := v_plan.start_date + 89;
+            END IF;
+
+            IF v_planned_date IS NOT NULL THEN
+                IF v_planned_date < v_plan.start_date OR v_planned_date > v_plan.end_date THEN
+                    RAISE EXCEPTION 'Task #% planned_date falls outside the 90-day plan date range.', v_task_idx + 1;
+                END IF;
+            END IF;
+
+            IF v_due_date IS NOT NULL THEN
+                IF v_due_date < v_plan.start_date OR v_due_date > v_plan.end_date THEN
+                    RAISE EXCEPTION 'Task #% due_date falls outside the 90-day plan date range.', v_task_idx + 1;
+                END IF;
+            END IF;
+
+            -- Deterministic legacy week_number mapping: ((plan_week - 1) % 4) + 1
+            v_task_week := ((v_plan_week - 1) % 4) + 1;
+
+            BEGIN
+                v_source_tpl_id := (v_task_elem->>'source_template_id')::UUID;
+            EXCEPTION WHEN OTHERS THEN
+                v_source_tpl_id := NULL;
+            END;
+
+            v_source_tpl_ver := COALESCE((v_task_elem->>'source_template_version')::INTEGER, 1);
+
+            BEGIN
+                v_occ_id := (v_task_elem->>'occurrence_id')::UUID;
+            EXCEPTION WHEN OTHERS THEN
+                v_occ_id := NULL;
+            END;
+
+        ELSE
+            -- Service Template launch
+            v_plan_week := NULL;
+            v_task_week := p_target_week;
+
+            BEGIN
+                v_source_tpl_id := (v_task_elem->>'source_template_id')::UUID;
+            EXCEPTION WHEN OTHERS THEN
+                v_source_tpl_id := NULL;
+            END;
+            -- Verified source template fallback (never become NULL if launched via service template)
+            IF v_source_tpl_id IS NULL THEN
+                v_source_tpl_id := p_source_id;
+            END IF;
+
+            v_source_tpl_ver := COALESCE((v_task_elem->>'source_template_version')::INTEGER, v_template.version, 1);
+            v_occ_id := NULL;
+        END IF;
+
+        v_details := NULLIF(trim(COALESCE(v_task_elem->>'description', v_task_elem->>'details', '')), '');
+
         INSERT INTO public.client_tasks (
-            id,
-            client_id,
-            title,
-            details,
-            department_id,
-            status,
-            priority,
-            approval_mode,
-            assignee_id,
-            week_number,
-            planned_start,
-            due_date,
-            source_template_id,
-            source_template_version,
-            plan_id,
-            plan_week,
-            occurrence_id,
-            launch_batch_id,
-            created_by
+            id, client_id, week_number, title, details, department_id, assignee_id,
+            priority, planned_start, due_date, status, approval_mode, created_by,
+            source_template_id, source_template_version, plan_id, plan_week, occurrence_id, launch_batch_id
         ) VALUES (
-            v_new_task_id,
-            p_client_id,
-            v_task_title,
-            v_task_item->>'description',
-            v_task_dept,
-            'Draft', -- Strictly Draft
-            v_task_priority,
-            v_task_approval,
-            NULL, -- Strictly Unassigned
-            v_task_week,
-            COALESCE(v_task_planned, timezone('utc'::text, now())),
-            COALESCE(v_task_due, timezone('utc'::text, now()) + INTERVAL '1 day'),
-            CASE WHEN p_launch_type = 'service_template' THEN p_source_id ELSE (COALESCE(v_task_item->>'source_template_id', v_task_item->>'sourceTemplateId'))::UUID END,
-            COALESCE((COALESCE(v_task_item->>'source_template_version', v_task_item->>'sourceTemplateVersion'))::INTEGER, 1),
+            v_new_task_id, p_client_id, v_task_week, v_task_title, v_details, v_dept_id, NULL,
+            v_priority, v_planned_date, v_due_date, 'Draft', v_approval, v_caller_id,
+            v_source_tpl_id, v_source_tpl_ver,
             CASE WHEN p_launch_type = 'work_plan' THEN p_source_id ELSE NULL END,
-            v_plan_week,
-            (COALESCE(v_task_item->>'occurrence_id', v_task_item->>'occurrenceId'))::UUID,
-            v_batch_id,
-            v_caller_id
+            v_plan_week, v_occ_id, v_batch_id
         );
 
-        -- Audit Task Creation Event
         INSERT INTO public.client_task_events (
-            task_id,
-            client_id,
-            actor_id,
-            event_type,
-            new_state,
-            notes
+            id, task_id, client_id, actor_id, event_type, old_state, new_state, notes, created_at
         ) VALUES (
-            v_new_task_id,
-            p_client_id,
-            v_caller_id,
-            'created',
+            gen_random_uuid(), v_new_task_id, p_client_id, v_caller_id, 'created', NULL,
             jsonb_build_object(
-                'status', 'Draft',
-                'title', v_task_title,
-                'launch_type', p_launch_type,
-                'batch_id', v_batch_id
+                'status', 'Draft', 'assignee_id', NULL, 'priority', v_priority, 'approval_mode', v_approval,
+                'launch_batch_id', v_batch_id, 'launch_type', p_launch_type
             ),
-            'Task created via ' || p_launch_type || ' launch batch.'
+            format('Task created via %s batch launch.', replace(p_launch_type, '_', ' ')),
+            timezone('utc'::text, now())
         );
 
         v_created_task_ids := array_append(v_created_task_ids, v_new_task_id);
     END LOOP;
 
-    -- 10. Update Launch Batch with Generated Task IDs
     UPDATE public.task_launch_batches
-    SET task_ids = v_created_task_ids, task_count = array_length(v_created_task_ids, 1)
+    SET task_ids = v_created_task_ids
     WHERE id = v_batch_id;
 
-    -- 11. Atomic State Transition for Work Plan
     IF p_launch_type = 'work_plan' THEN
         UPDATE public.client_work_plans
         SET status = 'Launched',
             launched_at = timezone('utc'::text, now()),
             launched_by = v_caller_id,
             launch_batch_id = v_batch_id,
-            launch_snapshot = jsonb_build_object(
-                'launched_tasks_count', array_length(v_created_task_ids, 1),
-                'tasks', p_tasks,
-                'metadata', p_metadata
-            ),
-            revision = revision + 1,
+            launch_snapshot = jsonb_build_object('batch_id', v_batch_id, 'task_count', v_task_count, 'task_ids', v_created_task_ids),
+            updated_by = v_caller_id,
             updated_at = timezone('utc'::text, now())
         WHERE id = p_source_id AND status = 'Draft' AND revision = v_plan.revision;
 
-        GET DIAGNOSTICS v_rows_updated = ROW_COUNT;
-        IF v_rows_updated = 0 THEN
-            RAISE EXCEPTION 'Conflict: Work Plan could not be transitioned to Launched due to concurrent revision modification.';
+        GET DIAGNOSTICS v_affected_rows = ROW_COUNT;
+        IF v_affected_rows != 1 THEN
+            RAISE EXCEPTION 'Work Plan revision conflict or plan already launched.';
         END IF;
     END IF;
 
-    -- Return Result
     RETURN jsonb_build_object(
         'success', true,
+        'idempotent_replay', false,
         'batch_id', v_batch_id,
-        'task_count', array_length(v_created_task_ids, 1),
+        'task_count', v_task_count,
         'task_ids', v_created_task_ids
     );
 END;
 $$;
 
--- Function Execution Permissions
-ALTER FUNCTION public.fn_launch_task_batch(TEXT, UUID, TEXT, UUID, INTEGER, JSONB, JSONB, UUID) OWNER TO postgres;
-REVOKE ALL ON FUNCTION public.fn_launch_task_batch(TEXT, UUID, TEXT, UUID, INTEGER, JSONB, JSONB, UUID) FROM PUBLIC, anon;
-GRANT EXECUTE ON FUNCTION public.fn_launch_task_batch(TEXT, UUID, TEXT, UUID, INTEGER, JSONB, JSONB, UUID) TO authenticated;
+-- ------------------------------------------------------------------------------
+-- 9. COMPLETE RLS SECURITY POLICY MATRIX
+-- ------------------------------------------------------------------------------
 
--- ------------------------------------------------------------------------------
--- 9. ROW LEVEL SECURITY POLICIES MATRIX
--- ------------------------------------------------------------------------------
 ALTER TABLE public.service_templates ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.service_template_tasks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.service_template_versions ENABLE ROW LEVEL SECURITY;
@@ -1356,210 +1635,224 @@ ALTER TABLE public.client_work_plan_weeks ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.client_work_plan_occurrences ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.task_launch_batches ENABLE ROW LEVEL SECURITY;
 
--- 9.1 Service Templates Policies
-DROP POLICY IF EXISTS service_templates_insert_deny ON public.service_templates;
-CREATE POLICY service_templates_insert_deny ON public.service_templates FOR INSERT TO authenticated WITH CHECK (false);
+-- Helper security functions
+CREATE OR REPLACE FUNCTION public.is_staff()
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = ''
+AS $$
+    SELECT EXISTS (
+        SELECT 1 FROM public.profiles
+        WHERE id = auth.uid()
+          AND is_suspended = false
+          AND role IN ('owner', 'operational_manager', 'team_member')
+    );
+$$;
 
-DROP POLICY IF EXISTS service_templates_update_deny ON public.service_templates;
-CREATE POLICY service_templates_update_deny ON public.service_templates FOR UPDATE TO authenticated USING (false);
+CREATE OR REPLACE FUNCTION public.is_manager_or_owner()
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = ''
+AS $$
+    SELECT EXISTS (
+        SELECT 1 FROM public.profiles
+        WHERE id = auth.uid()
+          AND is_suspended = false
+          AND role IN ('owner', 'operational_manager')
+    );
+$$;
 
-DROP POLICY IF EXISTS service_templates_delete_deny ON public.service_templates;
-CREATE POLICY service_templates_delete_deny ON public.service_templates FOR DELETE TO authenticated USING (false);
+CREATE OR REPLACE FUNCTION public.is_owner()
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = ''
+AS $$
+    SELECT EXISTS (
+        SELECT 1 FROM public.profiles
+        WHERE id = auth.uid()
+          AND is_suspended = false
+          AND role = 'owner'
+    );
+$$;
 
-DROP POLICY IF EXISTS service_templates_select ON public.service_templates;
-CREATE POLICY service_templates_select ON public.service_templates FOR SELECT TO authenticated
-USING (
-    EXISTS (
+CREATE OR REPLACE FUNCTION public.has_client_access(p_client_id UUID)
+RETURNS BOOLEAN
+LANGUAGE sql
+SECURITY DEFINER
+STABLE
+SET search_path = ''
+AS $$
+    SELECT EXISTS (
         SELECT 1 FROM public.profiles p
-        WHERE p.id = (SELECT auth.uid())
-          AND p.status = 'active'
-          AND (
-              p.role = 'owner'
-              OR (p.role = 'operational_manager' AND service_templates.status = 'Active')
-              OR (p.role = 'team_member' AND service_templates.status = 'Active')
-          )
-    )
-);
-
--- 9.2 Service Template Tasks Policies
-DROP POLICY IF EXISTS service_template_tasks_insert_deny ON public.service_template_tasks;
-CREATE POLICY service_template_tasks_insert_deny ON public.service_template_tasks FOR INSERT TO authenticated WITH CHECK (false);
-
-DROP POLICY IF EXISTS service_template_tasks_update_deny ON public.service_template_tasks;
-CREATE POLICY service_template_tasks_update_deny ON public.service_template_tasks FOR UPDATE TO authenticated USING (false);
-
-DROP POLICY IF EXISTS service_template_tasks_delete_deny ON public.service_template_tasks;
-CREATE POLICY service_template_tasks_delete_deny ON public.service_template_tasks FOR DELETE TO authenticated USING (false);
-
-DROP POLICY IF EXISTS service_template_tasks_select ON public.service_template_tasks;
-CREATE POLICY service_template_tasks_select ON public.service_template_tasks FOR SELECT TO authenticated
-USING (
-    EXISTS (
-        SELECT 1 FROM public.service_templates st
-        JOIN public.profiles p ON p.id = (SELECT auth.uid())
-        WHERE st.id = service_template_tasks.template_id
-          AND p.status = 'active'
-          AND (
-              p.role = 'owner'
-              OR (p.role IN ('operational_manager', 'team_member') AND st.status = 'Active')
-          )
-    )
-);
-
--- 9.3 Service Template Versions Policies (Immutable Snapshots)
-DROP POLICY IF EXISTS service_template_versions_insert_deny ON public.service_template_versions;
-CREATE POLICY service_template_versions_insert_deny ON public.service_template_versions FOR INSERT TO authenticated WITH CHECK (false);
-
-DROP POLICY IF EXISTS service_template_versions_update_deny ON public.service_template_versions;
-CREATE POLICY service_template_versions_update_deny ON public.service_template_versions FOR UPDATE TO authenticated USING (false);
-
-DROP POLICY IF EXISTS service_template_versions_delete_deny ON public.service_template_versions;
-CREATE POLICY service_template_versions_delete_deny ON public.service_template_versions FOR DELETE TO authenticated USING (false);
-
-DROP POLICY IF EXISTS service_template_versions_select ON public.service_template_versions;
-CREATE POLICY service_template_versions_select ON public.service_template_versions FOR SELECT TO authenticated
-USING (
-    EXISTS (
-        SELECT 1 FROM public.profiles p
-        WHERE p.id = (SELECT auth.uid())
-          AND p.status = 'active'
-          AND p.role IN ('owner', 'operational_manager')
-    )
-);
-
--- 9.4 Client Work Plans Policies (Strict Draft/Owner/Manager Scoped)
-DROP POLICY IF EXISTS client_work_plans_insert_deny ON public.client_work_plans;
-CREATE POLICY client_work_plans_insert_deny ON public.client_work_plans FOR INSERT TO authenticated WITH CHECK (false);
-
-DROP POLICY IF EXISTS client_work_plans_update_deny ON public.client_work_plans;
-CREATE POLICY client_work_plans_update_deny ON public.client_work_plans FOR UPDATE TO authenticated USING (false);
-
-DROP POLICY IF EXISTS client_work_plans_delete_deny ON public.client_work_plans;
-CREATE POLICY client_work_plans_delete_deny ON public.client_work_plans FOR DELETE TO authenticated USING (false);
-
-DROP POLICY IF EXISTS client_work_plans_select ON public.client_work_plans;
-CREATE POLICY client_work_plans_select ON public.client_work_plans FOR SELECT TO authenticated
-USING (
-    EXISTS (
-        SELECT 1 FROM public.profiles p
-        WHERE p.id = (SELECT auth.uid())
-          AND p.status = 'active'
+        WHERE p.id = auth.uid()
+          AND p.is_suspended = false
           AND (
               p.role = 'owner'
               OR (
                   p.role = 'operational_manager'
                   AND EXISTS (
                       SELECT 1 FROM public.clients c
-                      WHERE c.id = client_work_plans.client_id
-                        AND (c.operational_manager_id = p.id OR EXISTS (
-                            SELECT 1 FROM public.client_team_access cta WHERE cta.client_id = c.id AND cta.profile_id = p.id
-                        ))
+                      WHERE c.id = p_client_id
+                        AND (
+                            c.operational_manager_id = p.id
+                            OR EXISTS (
+                                SELECT 1 FROM public.client_team_access cta
+                                WHERE cta.client_id = p_client_id AND cta.profile_id = p.id
+                            )
+                        )
                   )
               )
               OR (
                   p.role = 'team_member'
                   AND EXISTS (
                       SELECT 1 FROM public.client_team_access cta
-                      WHERE cta.client_id = client_work_plans.client_id
-                        AND cta.profile_id = p.id
+                      WHERE cta.client_id = p_client_id AND cta.profile_id = p.id
                   )
               )
-          )
-    )
-);
-
--- 9.5 Client Work Plan Weeks & Occurrences Derived Policies
-DROP POLICY IF EXISTS client_work_plan_weeks_insert_deny ON public.client_work_plan_weeks;
-CREATE POLICY client_work_plan_weeks_insert_deny ON public.client_work_plan_weeks FOR INSERT TO authenticated WITH CHECK (false);
-
-DROP POLICY IF EXISTS client_work_plan_weeks_update_deny ON public.client_work_plan_weeks;
-CREATE POLICY client_work_plan_weeks_update_deny ON public.client_work_plan_weeks FOR UPDATE TO authenticated USING (false);
-
-DROP POLICY IF EXISTS client_work_plan_weeks_delete_deny ON public.client_work_plan_weeks;
-CREATE POLICY client_work_plan_weeks_delete_deny ON public.client_work_plan_weeks FOR DELETE TO authenticated USING (false);
-
-DROP POLICY IF EXISTS client_work_plan_weeks_select ON public.client_work_plan_weeks;
-CREATE POLICY client_work_plan_weeks_select ON public.client_work_plan_weeks FOR SELECT TO authenticated
-USING (
-    EXISTS (
-        SELECT 1 FROM public.client_work_plans wp
-        WHERE wp.id = client_work_plan_weeks.work_plan_id
-          AND EXISTS (
-              SELECT 1 FROM public.profiles p
-              WHERE p.id = (SELECT auth.uid()) AND p.status = 'active' AND (
-                  p.role = 'owner'
-                  OR (p.role IN ('operational_manager', 'team_member') AND EXISTS (
-                      SELECT 1 FROM public.clients c WHERE c.id = wp.client_id AND (
-                          c.operational_manager_id = p.id OR EXISTS (
-                              SELECT 1 FROM public.client_team_access cta WHERE cta.client_id = c.id AND cta.profile_id = p.id
-                          )
-                      )
-                  ))
-              )
-          )
-    )
-);
-
-DROP POLICY IF EXISTS client_work_plan_occurrences_insert_deny ON public.client_work_plan_occurrences;
-CREATE POLICY client_work_plan_occurrences_insert_deny ON public.client_work_plan_occurrences FOR INSERT TO authenticated WITH CHECK (false);
-
-DROP POLICY IF EXISTS client_work_plan_occurrences_update_deny ON public.client_work_plan_occurrences;
-CREATE POLICY client_work_plan_occurrences_update_deny ON public.client_work_plan_occurrences FOR UPDATE TO authenticated USING (false);
-
-DROP POLICY IF EXISTS client_work_plan_occurrences_delete_deny ON public.client_work_plan_occurrences;
-CREATE POLICY client_work_plan_occurrences_delete_deny ON public.client_work_plan_occurrences FOR DELETE TO authenticated USING (false);
-
-DROP POLICY IF EXISTS client_work_plan_occurrences_select ON public.client_work_plan_occurrences;
-CREATE POLICY client_work_plan_occurrences_select ON public.client_work_plan_occurrences FOR SELECT TO authenticated
-USING (
-    EXISTS (
-        SELECT 1 FROM public.client_work_plans wp
-        WHERE wp.id = client_work_plan_occurrences.work_plan_id
-          AND EXISTS (
-              SELECT 1 FROM public.profiles p
-              WHERE p.id = (SELECT auth.uid()) AND p.status = 'active' AND (
-                  p.role = 'owner'
-                  OR (p.role IN ('operational_manager', 'team_member') AND EXISTS (
-                      SELECT 1 FROM public.clients c WHERE c.id = wp.client_id AND (
-                          c.operational_manager_id = p.id OR EXISTS (
-                              SELECT 1 FROM public.client_team_access cta WHERE cta.client_id = c.id AND cta.profile_id = p.id
-                          )
-                      )
-                  ))
-              )
-          )
-    )
-);
-
--- 9.6 Task Launch Batches Policies
-DROP POLICY IF EXISTS task_launch_batches_insert_deny ON public.task_launch_batches;
-CREATE POLICY task_launch_batches_insert_deny ON public.task_launch_batches FOR INSERT TO authenticated WITH CHECK (false);
-
-DROP POLICY IF EXISTS task_launch_batches_update_deny ON public.task_launch_batches;
-CREATE POLICY task_launch_batches_update_deny ON public.task_launch_batches FOR UPDATE TO authenticated USING (false);
-
-DROP POLICY IF EXISTS task_launch_batches_delete_deny ON public.task_launch_batches;
-CREATE POLICY task_launch_batches_delete_deny ON public.task_launch_batches FOR DELETE TO authenticated USING (false);
-
-DROP POLICY IF EXISTS task_launch_batches_select ON public.task_launch_batches;
-CREATE POLICY task_launch_batches_select ON public.task_launch_batches FOR SELECT TO authenticated
-USING (
-    EXISTS (
-        SELECT 1 FROM public.profiles p
-        WHERE p.id = (SELECT auth.uid())
-          AND p.status = 'active'
-          AND (
-              p.role = 'owner'
               OR (
-                  p.role = 'operational_manager'
-                  AND EXISTS (
-                      SELECT 1 FROM public.clients c
-                      WHERE c.id = task_launch_batches.client_id
-                        AND (c.operational_manager_id = p.id OR EXISTS (
-                            SELECT 1 FROM public.client_team_access cta WHERE cta.client_id = c.id AND cta.profile_id = p.id
-                        ))
-                  )
+                  p.role = 'client'
+                  AND p.id = p_client_id
               )
           )
-    )
-);
+    );
+$$;
+
+-- 9.1 service_templates RLS
+DROP POLICY IF EXISTS "service_templates_select_policy" ON public.service_templates;
+CREATE POLICY "service_templates_select_policy" ON public.service_templates
+    FOR SELECT USING (
+        public.is_owner()
+        OR (public.is_manager_or_owner() AND status = 'Active')
+    );
+
+DROP POLICY IF EXISTS "service_templates_insert_policy" ON public.service_templates;
+CREATE POLICY "service_templates_insert_policy" ON public.service_templates
+    FOR INSERT WITH CHECK (false);
+
+DROP POLICY IF EXISTS "service_templates_update_policy" ON public.service_templates;
+CREATE POLICY "service_templates_update_policy" ON public.service_templates
+    FOR UPDATE USING (false);
+
+DROP POLICY IF EXISTS "service_templates_delete_policy" ON public.service_templates;
+CREATE POLICY "service_templates_delete_policy" ON public.service_templates
+    FOR DELETE USING (false);
+
+-- 9.2 service_template_tasks RLS
+DROP POLICY IF EXISTS "service_template_tasks_select_policy" ON public.service_template_tasks;
+CREATE POLICY "service_template_tasks_select_policy" ON public.service_template_tasks
+    FOR SELECT USING (
+        EXISTS (
+            SELECT 1 FROM public.service_templates st
+            WHERE st.id = service_template_tasks.template_id
+              AND (public.is_owner() OR (public.is_manager_or_owner() AND st.status = 'Active'))
+        )
+    );
+
+DROP POLICY IF EXISTS "service_template_tasks_insert_policy" ON public.service_template_tasks;
+CREATE POLICY "service_template_tasks_insert_policy" ON public.service_template_tasks
+    FOR INSERT WITH CHECK (false);
+
+DROP POLICY IF EXISTS "service_template_tasks_update_policy" ON public.service_template_tasks;
+CREATE POLICY "service_template_tasks_update_policy" ON public.service_template_tasks
+    FOR UPDATE USING (false);
+
+DROP POLICY IF EXISTS "service_template_tasks_delete_policy" ON public.service_template_tasks;
+CREATE POLICY "service_template_tasks_delete_policy" ON public.service_template_tasks
+    FOR DELETE USING (false);
+
+-- 9.3 service_template_versions RLS
+DROP POLICY IF EXISTS "service_template_versions_select_policy" ON public.service_template_versions;
+CREATE POLICY "service_template_versions_select_policy" ON public.service_template_versions
+    FOR SELECT USING (public.is_manager_or_owner());
+
+DROP POLICY IF EXISTS "service_template_versions_write_policy" ON public.service_template_versions;
+CREATE POLICY "service_template_versions_write_policy" ON public.service_template_versions
+    FOR ALL USING (false) WITH CHECK (false);
+
+-- 9.4 client_work_plans RLS
+DROP POLICY IF EXISTS "client_work_plans_select_policy" ON public.client_work_plans;
+CREATE POLICY "client_work_plans_select_policy" ON public.client_work_plans
+    FOR SELECT USING (
+        public.is_manager_or_owner() AND public.has_client_access(client_id)
+    );
+
+DROP POLICY IF EXISTS "client_work_plans_direct_write_policy" ON public.client_work_plans;
+CREATE POLICY "client_work_plans_direct_write_policy" ON public.client_work_plans
+    FOR ALL USING (false) WITH CHECK (false);
+
+-- 9.5 client_work_plan_weeks RLS
+DROP POLICY IF EXISTS "client_work_plan_weeks_select_policy" ON public.client_work_plan_weeks;
+CREATE POLICY "client_work_plan_weeks_select_policy" ON public.client_work_plan_weeks
+    FOR SELECT USING (
+        EXISTS (
+            SELECT 1 FROM public.client_work_plans cwp
+            WHERE cwp.id = client_work_plan_weeks.work_plan_id
+              AND public.is_manager_or_owner()
+              AND public.has_client_access(cwp.client_id)
+        )
+    );
+
+DROP POLICY IF EXISTS "client_work_plan_weeks_direct_write" ON public.client_work_plan_weeks;
+CREATE POLICY "client_work_plan_weeks_direct_write" ON public.client_work_plan_weeks
+    FOR ALL USING (false) WITH CHECK (false);
+
+-- 9.6 client_work_plan_occurrences RLS
+DROP POLICY IF EXISTS "client_work_plan_occurrences_select_policy" ON public.client_work_plan_occurrences;
+CREATE POLICY "client_work_plan_occurrences_select_policy" ON public.client_work_plan_occurrences
+    FOR SELECT USING (
+        EXISTS (
+            SELECT 1 FROM public.client_work_plans cwp
+            WHERE cwp.id = client_work_plan_occurrences.work_plan_id
+              AND public.is_manager_or_owner()
+              AND public.has_client_access(cwp.client_id)
+        )
+    );
+
+DROP POLICY IF EXISTS "client_work_plan_occurrences_direct_write" ON public.client_work_plan_occurrences;
+CREATE POLICY "client_work_plan_occurrences_direct_write" ON public.client_work_plan_occurrences
+    FOR ALL USING (false) WITH CHECK (false);
+
+-- 9.7 task_launch_batches RLS
+DROP POLICY IF EXISTS "task_launch_batches_select_policy" ON public.task_launch_batches;
+CREATE POLICY "task_launch_batches_select_policy" ON public.task_launch_batches
+    FOR SELECT USING (
+        public.is_manager_or_owner() AND public.has_client_access(client_id)
+    );
+
+DROP POLICY IF EXISTS "task_launch_batches_direct_write" ON public.task_launch_batches;
+CREATE POLICY "task_launch_batches_direct_write" ON public.task_launch_batches
+    FOR ALL USING (false) WITH CHECK (false);
+
+-- ------------------------------------------------------------------------------
+-- 10. GRANTS & REVOKES
+-- ------------------------------------------------------------------------------
+GRANT SELECT ON public.service_templates TO authenticated;
+GRANT SELECT ON public.service_template_tasks TO authenticated;
+GRANT SELECT ON public.service_template_versions TO authenticated;
+GRANT SELECT ON public.client_work_plans TO authenticated;
+GRANT SELECT ON public.client_work_plan_weeks TO authenticated;
+GRANT SELECT ON public.client_work_plan_occurrences TO authenticated;
+GRANT SELECT ON public.task_launch_batches TO authenticated;
+
+-- Revoke default public / anon execution on SECURITY DEFINER functions
+REVOKE ALL ON FUNCTION public.fn_manage_service_template(TEXT, UUID, TEXT, TEXT, TEXT, JSONB, INTEGER, TEXT, INTEGER) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.fn_manage_service_template(TEXT, UUID, TEXT, TEXT, TEXT, JSONB, INTEGER, TEXT, INTEGER) FROM anon;
+GRANT EXECUTE ON FUNCTION public.fn_manage_service_template(TEXT, UUID, TEXT, TEXT, TEXT, JSONB, INTEGER, TEXT, INTEGER) TO authenticated;
+
+REVOKE ALL ON FUNCTION public.fn_save_draft_work_plan(UUID, UUID, TEXT, DATE, JSONB, INTEGER) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.fn_save_draft_work_plan(UUID, UUID, TEXT, DATE, JSONB, INTEGER) FROM anon;
+GRANT EXECUTE ON FUNCTION public.fn_save_draft_work_plan(UUID, UUID, TEXT, DATE, JSONB, INTEGER) TO authenticated;
+
+REVOKE ALL ON FUNCTION public.fn_delete_draft_work_plan(UUID) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.fn_delete_draft_work_plan(UUID) FROM anon;
+GRANT EXECUTE ON FUNCTION public.fn_delete_draft_work_plan(UUID) TO authenticated;
+
+REVOKE ALL ON FUNCTION public.fn_launch_task_batch(TEXT, UUID, TEXT, UUID, INTEGER, JSONB, JSONB) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.fn_launch_task_batch(TEXT, UUID, TEXT, UUID, INTEGER, JSONB, JSONB) FROM anon;
+GRANT EXECUTE ON FUNCTION public.fn_launch_task_batch(TEXT, UUID, TEXT, UUID, INTEGER, JSONB, JSONB) TO authenticated;
