@@ -355,14 +355,10 @@ describe('Phase 2B: Client Management & Dynamic LinkedIn Access Tests', () => {
   });
 
   // 9. SELECTED CLIENT HEADER & COMBINED LINKEDIN TRACKER
-  it('9. SelectedClientHeader displays quick-links and combined LinkedIn Profiles tracker', () => {
+  it('9. SelectedClientHeader displays client info and combined LinkedIn Profiles tracker', () => {
     render(<SelectedClientHeader client={mockClients[0]} />);
 
     expect(screen.getByText('Acme Logistics')).toBeInTheDocument();
-    expect(screen.getByTitle('Open Website / Landing Page')).toBeInTheDocument();
-    expect(screen.getByTitle('Open LinkedIn Company Page')).toBeInTheDocument();
-    expect(screen.getByTitle('Open Google Drive Folder')).toBeInTheDocument();
-    expect(screen.getByTitle('Open Slack Channel')).toBeInTheDocument();
 
     // Combined LinkedIn tracker button
     const linkedInBtn = screen.getByRole('button', { name: /linkedin profiles/i });

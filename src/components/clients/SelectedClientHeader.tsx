@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { 
-  Building2, User, ExternalLink, AlertTriangle,
-  CheckCircle2, Clock, Archive, Globe, HardDrive,
+  Building2, User, AlertTriangle,
+  CheckCircle2, Clock, Archive,
   X, ChevronDown, ChevronUp
 } from 'lucide-react';
 import { ClientRecord, ClientStatus } from '../../types';
@@ -68,46 +68,12 @@ export const SelectedClientHeader: React.FC<SelectedClientHeaderProps> = ({ clie
   const StatusIcon = statusCfg.icon;
   const packageStyle = PACKAGE_STYLES[client.package] || PACKAGE_STYLES.Basic;
 
-  const links = client.links || {};
   const readiness = calculateLinkedInReadiness(
     client.requiredLinkedinProfileCount,
     client.linkedinProfiles
   );
 
   const activeProfiles = (client.linkedinProfiles || []).filter((p) => p.status === 'active');
-
-  const linkButtons = [
-    {
-      key: 'website',
-      label: 'Website / Landing Page',
-      url: links.website,
-      icon: <Globe className="w-4 h-4" />
-    },
-    {
-      key: 'linkedin_company_page',
-      label: 'LinkedIn Company Page',
-      url: links.linkedin_company_page,
-      icon: <LinkedInIcon className="w-4 h-4" />
-    },
-    {
-      key: 'google_drive',
-      label: 'Google Drive Folder',
-      url: links.google_drive,
-      icon: <HardDrive className="w-4 h-4" />
-    },
-    {
-      key: 'slack_channel',
-      label: 'Slack Channel',
-      url: links.slack_channel,
-      icon: (
-        <svg className="w-4 h-4" viewBox="0 0 24 24" fill="currentColor">
-          <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z" />
-        </svg>
-      )
-    }
-  ];
-
-  const activeLinks = linkButtons.filter((b) => Boolean(b.url && b.url.trim()));
 
   return (
     <div className="bg-white dark:bg-dark-card border-b border-gray-200 dark:border-dark-border px-4 sm:px-6 py-3.5 sm:py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 select-none">
@@ -264,26 +230,6 @@ export const SelectedClientHeader: React.FC<SelectedClientHeaderProps> = ({ clie
             </div>
           )}
         </div>
-
-        {/* Quick-Access Communication & Workspace Links */}
-        {activeLinks.length > 0 && (
-          <div className="flex items-center gap-1.5 flex-wrap">
-            {activeLinks.map((link) => (
-              <a
-                key={link.key}
-                href={link.url}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="flex items-center gap-1.5 p-2 px-2.5 rounded-xl border border-gray-200 dark:border-dark-border text-gray-700 dark:text-gray-300 bg-white dark:bg-dark-card hover:bg-gray-100 dark:hover:bg-dark-100 hover:text-gray-900 dark:hover:text-white text-xs font-semibold shadow-xs transition-all cursor-pointer"
-                title={`Open ${link.label}`}
-              >
-                {link.icon}
-                <span className="text-xs">{link.label.split(' ')[0]}</span>
-                <ExternalLink className="w-3 h-3 text-gray-400" />
-              </a>
-            ))}
-          </div>
-        )}
       </div>
     </div>
   );

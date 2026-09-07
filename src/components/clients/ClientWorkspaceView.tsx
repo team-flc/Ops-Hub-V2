@@ -10,19 +10,23 @@ import {
 import { SelectedClientHeader } from './SelectedClientHeader';
 import { ClientDetailsTab } from './ClientDetailsTab';
 import { ClientTaskCard } from '../tasks/ClientTaskCard';
+import { TaskCreationModeModal } from '../tasks/TaskCreationModeModal';
 import { CreateClientTaskModal } from '../tasks/CreateClientTaskModal';
 import { EditClientTaskModal } from '../tasks/EditClientTaskModal';
 import { TaskTemplate } from '../../types';
 import { taskManagementService } from '../../lib/taskManagementService';
-import { TaskCreationModeModal } from '../tasks/TaskCreationModeModal';
-import { ApplyServiceTemplateModal } from '../tasks/ApplyServiceTemplateModal';
-import { ClientWorkPlanView } from '../workplans/ClientWorkPlanView';
 
 const TaskTemplatePickerModal = React.lazy(() =>
   import('../tasks/TaskTemplatePickerModal').then((m) => ({ default: m.TaskTemplatePickerModal }))
 );
+const ApplyServiceTemplateModal = React.lazy(() =>
+  import('../tasks/ApplyServiceTemplateModal').then((m) => ({ default: m.ApplyServiceTemplateModal }))
+);
 const ClientTaskDetailsModal = React.lazy(() =>
   import('../tasks/ClientTaskDetailsModal').then((m) => ({ default: m.ClientTaskDetailsModal }))
+);
+const ClientWorkPlanView = React.lazy(() =>
+  import('../workplans/ClientWorkPlanView').then((m) => ({ default: m.ClientWorkPlanView }))
 );
 
 interface ClientWorkspaceViewProps {
@@ -69,13 +73,11 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
     setIsModeModalOpen(true);
   };
 
-  const handleSelectMode = (mode: 'service_template' | 'template' | 'blank', week: 1 | 2 | 3 | 4) => {
+  const handleSelectMode = (mode: 'template' | 'blank' | 'service_template', week: 1 | 2 | 3 | 4) => {
     setModalWeekNumber(week);
     setIsModeModalOpen(false);
-    if (mode === 'service_template') {
+    if (mode === 'template' || mode === 'service_template') {
       setIsApplyTemplateOpen(true);
-    } else if (mode === 'template') {
-      setIsTemplatePickerOpen(true);
     } else {
       setSelectedTemplateForCreation(null);
       setIsCreateModalOpen(true);
@@ -354,17 +356,25 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
 
         {/* TAB 2: 90-DAY WORK PLANS (Phase 3D) */}
         {activeTab === 'workplans' && (
-          <ClientWorkPlanView
-            client={client}
-            currentUserProfile={currentUserProfile}
-            departments={departments}
-            onSelectWeek={(wk) => {
-              if (wk >= 1 && wk <= 4) {
-                setActiveWeek(`week${wk}` as WeekTab);
-                setActiveTab('setup');
-              }
-            }}
-          />
+          <React.Suspense
+            fallback={
+              <div className="p-12 flex items-center justify-center text-gray-400 text-xs">
+                <span className="animate-pulse">Loading 90-Day Work Plans...</span>
+              </div>
+            }
+          >
+            <ClientWorkPlanView
+              client={client}
+              currentUserProfile={currentUserProfile}
+              departments={departments}
+              onSelectWeek={(wk) => {
+                if (wk >= 1 && wk <= 4) {
+                  setActiveWeek(`week${wk}` as WeekTab);
+                  setActiveTab('setup');
+                }
+              }}
+            />
+          </React.Suspense>
         )}
 
         {/* TAB 3: CLIENT DETAILS */}
@@ -409,46 +419,54 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
 
       {/* Apply Multi-Task Service Template Modal (Phase 3D) */}
       {isApplyTemplateOpen && (
-        <ApplyServiceTemplateModal
-          isOpen={isApplyTemplateOpen}
-          onClose={() => setIsApplyTemplateOpen(false)}
-          onSuccess={() => {
-            setIsApplyTemplateOpen(false);
-            loadTasks();
-            showToast('Service template launched into Draft tasks.');
-          }}
-          client={client}
-          initialWeek={modalWeekNumber}
-          departments={departments}
-        />
+        <React.Suspense fallback={null}>
+          <ApplyServiceTemplateModal
+            isOpen={isApplyTemplateOpen}
+            onClose={() => setIsApplyTemplateOpen(false)}
+            onSuccess={() => {
+              setIsApplyTemplateOpen(false);
+              loadTasks();
+              showToast('Service template launched into Draft tasks.');
+            }}
+            client={client}
+            initialWeek={modalWeekNumber}
+            departments={departments}
+          />
+        </React.Suspense>
       )}
 
-      <CreateClientTaskModal
-        key={`create-modal-week-${modalWeekNumber}-${selectedTemplateForCreation?.id || 'blank'}`}
-        isOpen={isCreateModalOpen}
-        onClose={() => {
-          setIsCreateModalOpen(false);
-          setSelectedTemplateForCreation(null);
-        }}
-        onSuccess={(newTask) => {
-          handleTaskCreated(newTask);
-          setSelectedTemplateForCreation(null);
-        }}
-        client={client}
-        weekNumber={modalWeekNumber}
-        departments={departments}
-        eligibleAssignees={eligibleAssignees}
-        initialTemplate={selectedTemplateForCreation}
-      />
+      {isCreateModalOpen && (
+        <React.Suspense fallback={null}>
+          <CreateClientTaskModal
+            key={`create-modal-week-${modalWeekNumber}-${selectedTemplateForCreation?.id || 'blank'}`}
+            isOpen={isCreateModalOpen}
+            onClose={() => {
+              setIsCreateModalOpen(false);
+              setSelectedTemplateForCreation(null);
+            }}
+            onSuccess={(newTask) => {
+              handleTaskCreated(newTask);
+              setSelectedTemplateForCreation(null);
+            }}
+            client={client}
+            weekNumber={modalWeekNumber}
+            departments={departments}
+            eligibleAssignees={eligibleAssignees}
+            initialTemplate={selectedTemplateForCreation}
+          />
+        </React.Suspense>
+      )}
 
       {editingTask && (
-        <EditClientTaskModal
-          isOpen={Boolean(editingTask)}
-          onClose={() => setEditingTask(null)}
-          onSuccess={handleTaskUpdated}
-          task={editingTask}
-          departments={departments}
-        />
+        <React.Suspense fallback={null}>
+          <EditClientTaskModal
+            isOpen={Boolean(editingTask)}
+            onClose={() => setEditingTask(null)}
+            onSuccess={handleTaskUpdated}
+            task={editingTask}
+            departments={departments}
+          />
+        </React.Suspense>
       )}
 
       {selectedTaskDetails && (

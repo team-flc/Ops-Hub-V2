@@ -1,10 +1,10 @@
-﻿// ==============================================================================
+// ==============================================================================
 // UTILITY: workPlanCalendar
 // Location: src/lib/workPlanCalendar.ts
-// Phase: 3D â€” Exact 90-Calendar-Day Work Plan Calendar & Business-Day Math
+// Phase: 3D — Exact 90-Calendar-Day Work Plan Calendar & Business-Day Math
 // ==============================================================================
 
-import { isSunday, isSaturday, isWeekend } from './taskManagementService';
+import { isSaturday, isSunday, isWeekend, rollForwardToNextMonday } from './taskManagementService';
 import { WorkPlanWeek } from '../types';
 
 export interface PlanDateRange {
@@ -50,6 +50,7 @@ export function formatPlanDate(dateStr: string): string {
 
 /**
  * Computes exact 90-day boundary and checks weekend start
+ * Start date is Day 1; End date is Day 90 (start date + 89 calendar days).
  */
 export function compute90DayPlanRange(startDateInput: string): PlanDateRange {
   const startDate = startDateInput.trim();
@@ -59,11 +60,7 @@ export function compute90DayPlanRange(startDateInput: string): PlanDateRange {
   // Calculate next Monday if start date is Saturday or Sunday
   let suggestedMonday = startDate;
   if (isWeekendStart) {
-    const [y, m, d] = startDate.split('-').map(Number);
-    const dt = new Date(Date.UTC(y, m - 1, d));
-    const day = dt.getUTCDay(); // 0 = Sun, 6 = Sat
-    const daysToAdd = day === 6 ? 2 : 1;
-    suggestedMonday = addCalendarDays(startDate, daysToAdd);
+    suggestedMonday = rollForwardToNextMonday(startDate);
   }
 
   return {
@@ -75,9 +72,9 @@ export function compute90DayPlanRange(startDateInput: string): PlanDateRange {
 }
 
 /**
- * Generates the 13 week buckets for a 90-day plan:
- * Weeks 1â€“12: 7 calendar days each
- * Week 13: 6 calendar days
+ * Generates the 13 week buckets for an exact 90-day plan:
+ * Weeks 1–12: exactly 7 calendar days each (84 days)
+ * Week 13: exactly 6 calendar days (84 + 6 = 90 days total)
  */
 export function generate13PlanWeeks(startDate: string): Array<{
   weekNumber: number;
@@ -106,13 +103,13 @@ export function generate13PlanWeeks(startDate: string): Array<{
 }
 
 /**
- * Get all business days (excluding Sunday) inside a date range [rangeStart, rangeEnd] inclusive
+ * Get all Monday–Friday business days (excluding Saturday and Sunday) inside a date range [rangeStart, rangeEnd] inclusive
  */
 export function getBusinessDaysInRange(rangeStart: string, rangeEnd: string): string[] {
   const list: string[] = [];
   let curr = rangeStart;
   while (curr <= rangeEnd) {
-    if (!isSunday(curr)) {
+    if (!isWeekend(curr)) {
       list.push(curr);
     }
     curr = addCalendarDays(curr, 1);
@@ -124,7 +121,7 @@ export function getBusinessDaysInRange(rangeStart: string, rangeEnd: string): st
  * Calculates planned start and due dates for a task definition inside a specific week:
  * - plannedOffsetDays: 0 = first business day inside the target week
  * - durationBusinessDays: 1 = due on that same business day, 2 = due on next business day
- * Enforces that dates stay strictly within the target week and within the 90-day plan boundary.
+ * Enforces Monday–Friday business days (never falls on Saturday or Sunday) and stays strictly within the 90-day boundary.
  */
 export function calculateTaskDatesForWeek(params: {
   weekStartDate: string;
@@ -136,9 +133,10 @@ export function calculateTaskDatesForWeek(params: {
   const businessDays = getBusinessDaysInRange(params.weekStartDate, params.weekEndDate);
 
   if (businessDays.length === 0) {
+    const rolled = rollForwardToNextMonday(params.weekStartDate);
     return {
-      plannedStart: params.weekStartDate,
-      dueDate: params.weekStartDate,
+      plannedStart: rolled,
+      dueDate: rolled,
       isValid: false,
       error: 'No business days available in the selected week.'
     };
@@ -159,12 +157,9 @@ export function calculateTaskDatesForWeek(params: {
   const plannedStart = businessDays[offset];
 
   // Duration in business days starting from plannedStart
-  // E.g. Duration 1 -> due on plannedStart
-  // Duration 2 -> next business day
   const dueIndex = offset + duration - 1;
 
   if (dueIndex >= businessDays.length) {
-    // Cannot fit inside the week!
     return {
       plannedStart,
       dueDate: businessDays[businessDays.length - 1],
@@ -192,14 +187,17 @@ export function calculateTaskDatesForWeek(params: {
   };
 }
 
-
-export const isSundayKarachi = isSunday;
-
+/**
+ * Calculates a business due date starting from a date for N business days (excluding Saturday & Sunday)
+ */
 export function calculateBusinessDueDate(startDate: string, durationBusinessDays: number): string {
   let curr = startDate;
+  if (isWeekend(curr)) {
+    curr = rollForwardToNextMonday(curr);
+  }
   let count = 0;
   while (true) {
-    if (!isSunday(curr)) {
+    if (!isWeekend(curr)) {
       count++;
       if (count >= durationBusinessDays) {
         return curr;

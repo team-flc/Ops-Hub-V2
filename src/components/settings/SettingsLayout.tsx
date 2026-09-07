@@ -10,8 +10,8 @@ import { useOpsStore } from '../../store/opsStore';
 import { ClientDetailsTab } from '../clients/ClientDetailsTab';
 import { archiveService } from '../../lib/archiveService';
 
-const TaskTemplatesView = React.lazy(() =>
-  import('../templates/TaskTemplatesView').then((m) => ({ default: m.TaskTemplatesView }))
+const ServiceTemplatesView = React.lazy(() =>
+  import('../templates/ServiceTemplatesView').then((m) => ({ default: m.ServiceTemplatesView }))
 );
 const ArchiveCenterView = React.lazy(() =>
   import('../archive/ArchiveCenterView').then((m) => ({ default: m.ArchiveCenterView }))
@@ -59,7 +59,7 @@ export const SettingsLayout: React.FC<{ initialTab?: SettingsTab }> = ({ initial
   const tabs: { id: SettingsTab; label: string; icon: any }[] = [
     { id: 'team', label: 'Team Management', icon: Users },
     { id: 'clients', label: 'Client Management', icon: Building2 },
-    { id: 'templates', label: 'Task Templates', icon: BookTemplate },
+    { id: 'templates', label: 'Service Templates', icon: BookTemplate },
     { id: 'archive', label: 'Archive Center', icon: Archive },
     { id: 'audit', label: 'Audit Log', icon: Activity }
   ];
@@ -313,11 +313,11 @@ export const SettingsLayout: React.FC<{ initialTab?: SettingsTab }> = ({ initial
           <React.Suspense
             fallback={
               <div className="p-8 flex items-center justify-center text-gray-400 text-xs">
-                <span className="animate-pulse">Loading Task Templates...</span>
+                <span className="animate-pulse">Loading Service Templates...</span>
               </div>
             }
           >
-            <TaskTemplatesView currentUserProfile={profile} />
+            <ServiceTemplatesView currentUserProfile={profile} />
           </React.Suspense>
         )}
 

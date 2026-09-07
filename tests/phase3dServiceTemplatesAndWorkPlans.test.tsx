@@ -1,4 +1,4 @@
-﻿import React, { act } from 'react';
+import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { 
@@ -6,9 +6,9 @@ import {
   generate13PlanWeeks, 
   calculateTaskDatesForWeek,
   calculateBusinessDueDate,
-  formatDateISO,
-  isSundayKarachi
+  getBusinessDaysInRange
 } from '../src/lib/workPlanCalendar';
+import { isSaturday, isSunday, isWeekend, rollForwardToNextMonday } from '../src/lib/taskManagementService';
 import { serviceTemplateService } from '../src/lib/serviceTemplateService';
 import { taskLaunchEngine, generateRequestId } from '../src/lib/taskLaunchEngine';
 import { workPlanService } from '../src/lib/workPlanService';
@@ -21,9 +21,13 @@ import {
   WorkPlanWeek
 } from '../src/types';
 import { CreateEditServiceTemplateModal } from '../src/components/templates/CreateEditServiceTemplateModal';
+import { ServiceTemplatePreviewModal } from '../src/components/templates/ServiceTemplatePreviewModal';
+import { ServiceTemplatesView } from '../src/components/templates/ServiceTemplatesView';
 import { ApplyServiceTemplateModal } from '../src/components/tasks/ApplyServiceTemplateModal';
+import { TaskCreationModeModal } from '../src/components/tasks/TaskCreationModeModal';
 import { WorkPlanBuilderModal } from '../src/components/workplans/WorkPlanBuilderModal';
 import { ClientWorkPlanView } from '../src/components/workplans/ClientWorkPlanView';
+import { SelectedClientHeader } from '../src/components/clients/SelectedClientHeader';
 import { CreateTeamMemberModal } from '../src/components/team/CreateTeamMemberModal';
 import { Sidebar } from '../src/components/layout/Sidebar';
 import { AuthProvider } from '../src/context/AuthContext';
@@ -78,6 +82,13 @@ const mockPausedClient: ClientRecord = {
   companyName: 'Paused Client Ltd',
   status: 'Paused',
   pauseReason: 'Payment Delinquency'
+};
+
+const mockArchivedClient: ClientRecord = {
+  ...mockClient,
+  id: 'client-3d-archived',
+  companyName: 'Archived Client Ltd',
+  status: 'Archived'
 };
 
 const mockDepartments: Department[] = [
@@ -175,10 +186,11 @@ describe('Phase 3D: Service Templates, 90-Day Work Plans & Hardening Suite', () 
   describe('1. 90-Calendar-Day Work Plan Calendar & Business Days Math', () => {
     it('1.1 Computes exact 90 calendar days inclusive (Start to Start + 89)', () => {
       const start = '2026-04-01'; // April 1, 2026
-      const { startDate, endDate } = compute90DayPlanRange(start);
+      const { startDate, endDate, isStartDateWeekend } = compute90DayPlanRange(start);
 
       expect(startDate).toBe('2026-04-01');
       expect(endDate).toBe('2026-06-29');
+      expect(isStartDateWeekend).toBe(false);
 
       // Verify exact 90 calendar days inclusive
       const [y1, m1, d1] = startDate.split('-').map(Number);
@@ -207,38 +219,42 @@ describe('Phase 3D: Service Templates, 90-Day Work Plans & Hardening Suite', () 
       expect(totalDays).toBe(90);
     });
 
-    it('1.3 Business day offset calculations strictly skip Sunday (Asia/Karachi calendar)', () => {
-      // 2026-04-05 is a Sunday
-      expect(isSundayKarachi('2026-04-05')).toBe(true);
-      expect(isSundayKarachi('2026-04-06')).toBe(false); // Monday
+    it('1.3 Operational task scheduling strictly skips Saturday and Sunday (Monday-Friday business calendar in Asia/Karachi)', () => {
+      // 2026-04-04 is Saturday, 2026-04-05 is Sunday
+      expect(isSaturday('2026-04-04')).toBe(true);
+      expect(isSunday('2026-04-05')).toBe(true);
+      expect(isWeekend('2026-04-04')).toBe(true);
+      expect(isWeekend('2026-04-05')).toBe(true);
+      expect(isWeekend('2026-04-06')).toBe(false); // Monday
 
-      // 2 business days starting on Saturday 2026-04-04:
-      // Day 1: Saturday (2026-04-04)
-      // Sunday (2026-04-05) is excluded
-      // Day 2: Monday (2026-04-06)
-      const dueDate = calculateBusinessDueDate('2026-04-04', 2);
+      // Saturday rolls forward to next Monday
+      expect(rollForwardToNextMonday('2026-04-04')).toBe('2026-04-06');
+      expect(rollForwardToNextMonday('2026-04-05')).toBe('2026-04-06');
+
+      // getBusinessDaysInRange across 2026-04-03 (Fri) to 2026-04-07 (Tue)
+      const bDays = getBusinessDaysInRange('2026-04-03', '2026-04-07');
+      expect(bDays).toEqual(['2026-04-03', '2026-04-06', '2026-04-07']);
+      expect(bDays).not.toContain('2026-04-04');
+      expect(bDays).not.toContain('2026-04-05');
+
+      // 2 business days starting on Friday 2026-04-03 -> Friday (day 1), Monday (day 2)
+      const dueDate = calculateBusinessDueDate('2026-04-03', 2);
       expect(dueDate).toBe('2026-04-06');
     });
 
-    it('1.4 calculateTaskDatesForWeek calculates start and due dates within target week', () => {
-      const dates = calculateTaskDatesForWeek({
-        weekStartDate: '2026-04-01',
-        weekEndDate: '2026-04-07',
-        planEndDate: '2026-06-29',
-        plannedOffsetDays: 0,
-        durationBusinessDays: 2
-      });
-      expect(dates.plannedStart).toBe('2026-04-01');
-      expect(dates.dueDate).toBe('2026-04-02');
-      expect(dates.isValid).toBe(true);
+    it('1.4 Weekend plan start date suggests Monday adjustment', () => {
+      // 2026-04-04 is Saturday
+      const { isStartDateWeekend, suggestedMonday } = compute90DayPlanRange('2026-04-04');
+      expect(isStartDateWeekend).toBe(true);
+      expect(suggestedMonday).toBe('2026-04-06');
     });
   });
 
   // ==========================================================================
-  // 2. MULTI-TASK SERVICE TEMPLATE BUILDER & ORDERING
+  // 2. MULTI-TASK SERVICE TEMPLATE MANAGEMENT & PRESERVATION
   // ==========================================================================
-  describe('2. Multi-Task Service Template Builder & Ordering', () => {
-    it('2.1 CreateEditServiceTemplateModal renders initial form with child task controls', () => {
+  describe('2. Multi-Task Service Template Management & Preservation', () => {
+    it('2.1 CreateEditServiceTemplateModal renders form with child task controls and limits', () => {
       render(
         <CreateEditServiceTemplateModal
           isOpen={true}
@@ -250,7 +266,7 @@ describe('Phase 3D: Service Templates, 90-Day Work Plans & Hardening Suite', () 
       );
 
       expect(screen.getByRole('heading', { name: 'Create Service Template' })).toBeInTheDocument();
-      expect(screen.getByPlaceholderText(/e\.g\. social media weekly delivery/i)).toBeInTheDocument();
+      expect(screen.getByPlaceholderText(/e.g. social media weekly delivery/i)).toBeInTheDocument();
       expect(screen.getByText(/ordered child tasks/i)).toBeInTheDocument();
       expect(screen.getByRole('button', { name: /add task/i })).toBeInTheDocument();
     });
@@ -266,51 +282,129 @@ describe('Phase 3D: Service Templates, 90-Day Work Plans & Hardening Suite', () 
         />
       );
 
-      // Verify all 3 tasks from sampleServiceTemplate render
       expect(screen.getByDisplayValue('Pixel & CAPI Audit')).toBeInTheDocument();
       expect(screen.getByDisplayValue('Ad Creatives Review')).toBeInTheDocument();
       expect(screen.getByDisplayValue('Campaign Setup & Launch')).toBeInTheDocument();
 
-      // Click Move Down on the first task
       const moveDownBtns = screen.getAllByLabelText(/move task.*down/i);
       expect(moveDownBtns.length).toBeGreaterThan(0);
       fireEvent.click(moveDownBtns[0]);
 
-      // Click "+ Add Child Task"
       const addTaskBtn = screen.getByRole('button', { name: /add task/i });
       fireEvent.click(addTaskBtn);
 
-      // Now should have 4 tasks
-      const titleInputs = screen.getAllByPlaceholderText(/e\.g\. prepare content calendar/i);
+      const titleInputs = screen.getAllByPlaceholderText(/e.g. prepare content calendar/i);
       expect(titleInputs.length).toBe(4);
     });
 
-    it('2.3 Enforces 1-100 task limits and rejects saving with empty task titles', async () => {
+    it('2.3 ServiceTemplatePreviewModal displays all ordered tasks and business-day durations', () => {
       render(
-        <CreateEditServiceTemplateModal
+        <ServiceTemplatePreviewModal
           isOpen={true}
           onClose={vi.fn()}
-          onSuccess={vi.fn()}
-          template={null}
-          departments={mockDepartments}
+          template={sampleServiceTemplate}
         />
       );
 
-      const form = screen.getByRole('dialog').querySelector('form')!;
-      fireEvent.submit(form);
+      expect(screen.getByText('Meta Ads Launch Package')).toBeInTheDocument();
+      expect(screen.getByText('Ordered Package Tasks (3 tasks)')).toBeInTheDocument();
+      expect(screen.getByText('Pixel & CAPI Audit')).toBeInTheDocument();
+      expect(screen.getByText('Ad Creatives Review')).toBeInTheDocument();
+      expect(screen.getByText('Campaign Setup & Launch')).toBeInTheDocument();
+    });
 
-      // Expect validation error for empty name
-      await waitFor(() => {
-        expect(screen.getByText('Template name is required.')).toBeInTheDocument();
+    it('2.4 Preserves existing Phase 3C single-task template as a valid 1-task Service Template', async () => {
+      // Mock legacy taskTemplateService fallback
+      const mockLegacyTemplate = {
+        id: 'legacy-tpl-1',
+        name: 'Media Buying Campaign Setup & Launch',
+        description: 'Standard paid traffic launch SOP',
+        departmentId: 'dept-media',
+        departmentName: 'Media Buying',
+        defaultTaskTitle: 'Campaign Setup & Launch Checklist',
+        taskDetails: 'SOP instructions for paid ads launch',
+        defaultPriority: 'High',
+        defaultApprovalMode: 'Internal Only',
+        suggestedDurationDays: 3,
+        status: 'Active',
+        version: 1,
+        sortOrder: 1,
+        createdBy: 'user-1',
+        createdByName: 'Faseeh Lall',
+        createdAt: '2026-03-01T00:00:00Z',
+        updatedAt: '2026-03-01T00:00:00Z'
+      };
+
+      // Mock service_templates table missing -> fallback triggered
+      mockFrom.mockReturnValueOnce({
+        select: vi.fn().mockReturnValueOnce({
+          order: vi.fn().mockReturnValueOnce({
+            order: vi.fn().mockReturnValueOnce({
+              eq: vi.fn().mockResolvedValueOnce({
+                data: null,
+                error: { code: '42P01', message: 'relation "service_templates" does not exist' }
+              })
+            })
+          })
+        })
       });
+
+      // Mock legacy task_templates fetch
+      mockFrom.mockReturnValueOnce({
+        select: vi.fn().mockReturnValueOnce({
+          order: vi.fn().mockReturnValueOnce({
+            order: vi.fn().mockReturnValueOnce({
+              eq: vi.fn().mockResolvedValueOnce({
+                data: [mockLegacyTemplate],
+                error: null
+              })
+            })
+          })
+        })
+      });
+
+      const res = await serviceTemplateService.fetchTemplates(false);
+      expect(res.data).toHaveLength(1);
+      const migrated = res.data[0];
+      expect(migrated.name).toBe('Media Buying Campaign Setup & Launch');
+      expect(migrated.tasks).toHaveLength(1);
+      expect(migrated.tasks[0].title).toBe('Campaign Setup & Launch Checklist');
+      expect(migrated.tasks[0].durationBusinessDays).toBe(3);
     });
   });
 
   // ==========================================================================
-  // 3. SAFE BULK CREATION OF DRAFT, UNASSIGNED TASKS & LAUNCH ENGINE
+  // 3. TASK CREATION MODES & AUTHORITATIVE WORKFLOW
   // ==========================================================================
-  describe('3. Safe Bulk Creation of Tasks & Transactional Launch Engine', () => {
-    it('3.1 taskLaunchEngine launches tasks strictly in Draft status with assignee_id = null', async () => {
+  describe('3. Task Creation Modes & Authoritative Workflow', () => {
+    it('3.1 TaskCreationModeModal exposes exactly 2 modes: Apply Service Template vs Create Individual Task', () => {
+      const handleSelectMode = vi.fn();
+      render(
+        <TaskCreationModeModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onSelectMode={handleSelectMode}
+          client={mockClient}
+          weekNumber={1}
+        />
+      );
+
+      expect(screen.getByText('Apply Service Template')).toBeInTheDocument();
+      expect(screen.getByText('Multi-Task Package')).toBeInTheDocument();
+      expect(screen.getByText('Create Individual Task')).toBeInTheDocument();
+      expect(screen.queryByText(/start from template — sop/i)).not.toBeInTheDocument();
+
+      // Click Apply Service Template
+      fireEvent.click(screen.getByText('Apply Service Template'));
+      expect(handleSelectMode).toHaveBeenCalledWith('template', 1);
+    });
+  });
+
+  // ==========================================================================
+  // 4. SAFE BULK CREATION OF DRAFT, UNASSIGNED TASKS & LAUNCH ENGINE
+  // ==========================================================================
+  describe('4. Safe Bulk Creation of Tasks & Transactional Launch Engine', () => {
+    it('4.1 taskLaunchEngine launches tasks strictly in Draft status with assignee_id = null', async () => {
       mockRpc.mockResolvedValueOnce({
         data: {
           batch_id: 'batch-123',
@@ -344,7 +438,7 @@ describe('Phase 3D: Service Templates, 90-Day Work Plans & Hardening Suite', () 
       expect(res.taskIds).toHaveLength(3);
     });
 
-    it('3.2 Launch engine idempotency: replaying same requestId returns previous batch without duplication', async () => {
+    it('4.2 Launch engine idempotency: replaying same requestId returns previous batch without duplication', async () => {
       const testRequestId = 'idempotent-req-test-456';
       const cachedBatch = {
         batch_id: 'batch-cached-456',
@@ -380,7 +474,7 @@ describe('Phase 3D: Service Templates, 90-Day Work Plans & Hardening Suite', () 
       expect(res2.batchId).toBe('batch-cached-456');
     });
 
-    it('3.3 ApplyServiceTemplateModal displays warning for paused client and blocks launch', () => {
+    it('4.3 ApplyServiceTemplateModal displays plain guarantee of N Draft, Unassigned tasks and blocks paused client', () => {
       render(
         <ApplyServiceTemplateModal
           isOpen={true}
@@ -393,16 +487,17 @@ describe('Phase 3D: Service Templates, 90-Day Work Plans & Hardening Suite', () 
       );
 
       expect(screen.getByText(/client workspace paused/i)).toBeInTheDocument();
+      expect(screen.getByText(/this service template will create/i)).toBeInTheDocument();
       const launchBtn = screen.getByRole('button', { name: /launch service pack/i });
       expect(launchBtn).toBeDisabled();
     });
   });
 
   // ==========================================================================
-  // 4. 90-DAY WORK PLAN BUILDER & VIEW
+  // 5. 90-DAY WORK PLAN SAFETY & ISOLATION
   // ==========================================================================
-  describe('4. 90-Day Work Plan Builder & View', () => {
-    it('4.1 ClientWorkPlanView displays 90-calendar-day header and build button', async () => {
+  describe('5. 90-Day Work Plan Safety & Isolation', () => {
+    it('5.1 ClientWorkPlanView displays 90-calendar-day header and build button', async () => {
       render(
         <ClientWorkPlanView
           client={mockClient}
@@ -413,10 +508,10 @@ describe('Phase 3D: Service Templates, 90-Day Work Plans & Hardening Suite', () 
 
       expect(screen.getByText('90-Calendar-Day Work Plans')).toBeInTheDocument();
       expect(screen.getByText('13 Weeks')).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /\+ build 90-day plan/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /build 90-day plan/i })).toBeInTheDocument();
     });
 
-    it('4.2 WorkPlanBuilderModal renders 13 weekly columns and department distribution stats', () => {
+    it('5.2 WorkPlanBuilderModal renders 13 weekly columns and save/launch actions', () => {
       render(
         <WorkPlanBuilderModal
           isOpen={true}
@@ -424,7 +519,7 @@ describe('Phase 3D: Service Templates, 90-Day Work Plans & Hardening Suite', () 
           onSuccess={vi.fn()}
           client={mockClient}
           departments={mockDepartments}
-          planToEdit={null}
+          existingPlan={null}
         />
       );
 
@@ -434,21 +529,58 @@ describe('Phase 3D: Service Templates, 90-Day Work Plans & Hardening Suite', () 
       expect(screen.getByRole('button', { name: /launch 90-day plan/i })).toBeInTheDocument();
     });
 
-    it('4.3 Modifying an occurrence in a plan does not mutate master template', () => {
-      // Create a copy of tasks for plan occurrence
+    it('5.3 Modifying an occurrence in a plan does not mutate master template', () => {
       const occurrenceTasks = sampleServiceTemplate.tasks.map(t => ({ ...t, title: 'Customized Task Title' }));
-      
-      // Master template tasks remain unchanged
       expect(sampleServiceTemplate.tasks[0].title).toBe('Pixel & CAPI Audit');
       expect(occurrenceTasks[0].title).toBe('Customized Task Title');
+    });
+
+    it('5.4 Saving a draft plan creates zero operational client tasks', async () => {
+      mockGetUser.mockResolvedValueOnce({
+        data: { user: { id: 'user-owner-1' } },
+        error: null
+      });
+
+      mockFrom.mockReturnValueOnce({
+        insert: vi.fn().mockReturnValueOnce({
+          select: vi.fn().mockReturnValueOnce({
+            single: vi.fn().mockResolvedValueOnce({
+              data: {
+                id: 'plan-draft-1',
+                client_id: mockClient.id,
+                name: 'Q2 90-Day Growth Plan',
+                status: 'Draft',
+                revision: 1,
+                start_date: '2026-04-01',
+                end_date: '2026-06-29',
+                plan_data: { weeks: [] },
+                created_at: '2026-04-01T00:00:00Z',
+                updated_at: '2026-04-01T00:00:00Z'
+              },
+              error: null
+            })
+          })
+        })
+      });
+
+      const res = await workPlanService.saveDraftPlan({
+        clientId: mockClient.id,
+        name: 'Q2 90-Day Growth Plan',
+        startDate: '2026-04-01',
+        weeks: []
+      });
+
+      expect(res.data?.status).toBe('Draft');
+      // Verify RPC was NOT called for draft saving
+      expect(mockRpc).not.toHaveBeenCalled();
     });
   });
 
   // ==========================================================================
-  // 5. OWNER / OPERATIONAL MANAGER ROLE PROVISIONING MATRIX
+  // 6. OWNER / OPERATIONAL MANAGER ROLE PROVISIONING MATRIX
   // ==========================================================================
-  describe('5. Role Provisioning Matrix', () => {
-    it('5.1 CreateTeamMemberModal displays role selector (Team Member vs Operational Manager) for Owner', () => {
+  describe('6. Role Provisioning Matrix', () => {
+    it('6.1 CreateTeamMemberModal displays role selector (Team Member vs Operational Manager) for Owner', () => {
       render(
         <CreateTeamMemberModal
           isOpen={true}
@@ -469,7 +601,7 @@ describe('Phase 3D: Service Templates, 90-Day Work Plans & Hardening Suite', () 
       expect(screen.queryByRole('option', { name: /^owner$/i })).not.toBeInTheDocument();
     });
 
-    it('5.2 CreateTeamMemberModal locks role to Team Member for Operational Manager', () => {
+    it('6.2 CreateTeamMemberModal locks role to Team Member for Operational Manager', () => {
       render(
         <CreateTeamMemberModal
           isOpen={true}
@@ -489,10 +621,10 @@ describe('Phase 3D: Service Templates, 90-Day Work Plans & Hardening Suite', () 
   });
 
   // ==========================================================================
-  // 6. CLIENT WORKSPACE LINKS IN SIDEBAR & RESTRAINED RED/BLACK/WHITE PALETTE
+  // 7. CLIENT WORKSPACE LINKS IN SIDEBAR & RESTRAINED RED/BLACK/WHITE PALETTE
   // ==========================================================================
-  describe('6. Client Workspace Links in Sidebar & Restrained Monochrome Palette', () => {
-    it('6.1 Sidebar renders reactive client workspace links under selected client', async () => {
+  describe('7. Client Workspace Links in Sidebar & Header Cleanup', () => {
+    it('7.1 Sidebar renders reactive client workspace links with safe external attributes', async () => {
       useOpsStore.setState({
         clients: [mockClient],
         selectedClientId: mockClient.id,
@@ -514,34 +646,25 @@ describe('Phase 3D: Service Templates, 90-Day Work Plans & Hardening Suite', () 
         expect(screen.getByTitle('Open Slack')).toBeInTheDocument();
       });
 
-      // Verify external link attributes
       const websiteLink = screen.getByTitle('Open Website');
       expect(websiteLink).toHaveAttribute('href', 'https://novamarketing.co');
       expect(websiteLink).toHaveAttribute('target', '_blank');
       expect(websiteLink).toHaveAttribute('rel', 'noopener noreferrer');
     });
 
-    it('6.2 In collapsed mode, workspace links render with tooltips and touch targets', async () => {
-      useOpsStore.setState({
-        clients: [mockClient],
-        selectedClientId: mockClient.id,
-        sidebarCollapsed: true,
-        mobileSidebarOpen: false
-      });
+    it('7.2 SelectedClientHeader does not render duplicate external client link buttons', () => {
+      render(<SelectedClientHeader client={mockClient} />);
 
-      render(
-        <AuthProvider>
-          <Sidebar />
-        </AuthProvider>
-      );
+      expect(screen.getByText('Nova Marketing Co')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /linkedin profiles/i })).toBeInTheDocument();
 
-      await waitFor(() => {
-        expect(screen.getByLabelText('Website')).toBeInTheDocument();
-        expect(screen.getByLabelText('LinkedIn')).toBeInTheDocument();
-      });
+      // Quick links must NOT be in the header anymore
+      expect(screen.queryByTitle('Open Website / Landing Page')).not.toBeInTheDocument();
+      expect(screen.queryByTitle('Open Google Drive Folder')).not.toBeInTheDocument();
+      expect(screen.queryByTitle('Open Slack Channel')).not.toBeInTheDocument();
     });
 
-    it('6.3 Modals render direct to document.body via Portal outside transform containers', () => {
+    it('7.3 Modals render direct to document.body via Portal outside transform containers', () => {
       render(
         <ApplyServiceTemplateModal
           isOpen={true}
@@ -553,7 +676,6 @@ describe('Phase 3D: Service Templates, 90-Day Work Plans & Hardening Suite', () 
         />
       );
 
-      // The dialog must be a descendant of body (via createPortal)
       const dialog = screen.getByRole('dialog');
       expect(dialog.closest('body')).toBe(document.body);
     });

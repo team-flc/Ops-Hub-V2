@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- MIGRATION: 20260909000001_phase3d_service_templates_work_plans.sql
--- Phase: 3D — Multi-Task Service Templates, 90-Day Work Plans & Transactional Launch
+-- Phase: 3D â€” Multi-Task Service Templates, 90-Day Work Plans & Transactional Launch
 -- Database: PostgreSQL / Supabase
 -- ==============================================================================
 

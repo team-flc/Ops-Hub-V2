@@ -1,4 +1,4 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { X, BookTemplate, FilePlus2, Sparkles, Layers } from 'lucide-react';
 import { ClientRecord } from '../../types';
@@ -6,7 +6,7 @@ import { ClientRecord } from '../../types';
 interface TaskCreationModeModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSelectMode: (mode: 'service_template' | 'template' | 'blank', weekNumber: 1 | 2 | 3 | 4) => void;
+  onSelectMode: (mode: 'template' | 'blank' | 'service_template', weekNumber: 1 | 2 | 3 | 4) => void;
   client: ClientRecord;
   weekNumber: 1 | 2 | 3 | 4;
 }
@@ -86,42 +86,18 @@ export const TaskCreationModeModal: React.FC<TaskCreationModeModalProps> = ({
           </div>
 
           <p className="text-xs text-gray-500 dark:text-gray-400 font-medium">
-            Choose how you would like to create this task. You can use standard operating procedures or create a custom task.
+            Choose how you would like to add work to this week. You can launch a multi-task service template package or create an individual custom task.
           </p>
 
           {/* Action Cards */}
           <div className="grid grid-cols-1 gap-3">
-            {/* Start from Template */}
+            {/* 1. Apply Multi-Task Service Template */}
             <button
               type="button"
               onClick={() => onSelectMode('template', selectedWeek)}
               className="group relative p-4 rounded-xl border-2 border-brand-500/30 hover:border-brand-500 bg-brand-500/5 hover:bg-brand-500/10 dark:bg-brand-500/10 dark:hover:bg-brand-500/20 text-left transition-all flex items-start gap-4 min-h-[72px] cursor-pointer"
             >
               <div className="p-2.5 rounded-xl bg-brand-500 text-white shadow-md shadow-brand-500/20 shrink-0">
-                <BookTemplate className="w-5 h-5" />
-              </div>
-              <div className="flex-1 min-w-0 pr-2">
-                <div className="flex items-center gap-2">
-                  <span className="text-sm font-bold text-gray-900 dark:text-gray-100 group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors">
-                    Start from Template
-                  </span>
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-black uppercase bg-brand-500 text-white flex items-center gap-1">
-                    <Sparkles className="w-2.5 h-2.5" /> SOP
-                  </span>
-                </div>
-                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 leading-relaxed">
-                  Select from standardized SOP checklists with pre-configured approval modes and business-day SLAs.
-                </p>
-              </div>
-            </button>
-
-            {/* Apply Multi-Task Service Template (Phase 3D) */}
-            <button
-              type="button"
-              onClick={() => onSelectMode('service_template', selectedWeek)}
-              className="group relative p-4 rounded-xl border border-gray-200 dark:border-dark-border hover:border-brand-500/50 bg-white hover:bg-gray-50/50 dark:bg-dark-100/50 dark:hover:bg-dark-100 text-left transition-all flex items-start gap-4 min-h-[72px] cursor-pointer"
-            >
-              <div className="p-2.5 rounded-xl bg-gray-100 dark:bg-dark-200 text-gray-700 dark:text-gray-300 shrink-0">
                 <Layers className="w-5 h-5" />
               </div>
               <div className="flex-1 min-w-0 pr-2">
@@ -129,17 +105,18 @@ export const TaskCreationModeModal: React.FC<TaskCreationModeModalProps> = ({
                   <span className="text-sm font-bold text-gray-900 dark:text-gray-100 group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors">
                     Apply Service Template
                   </span>
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase bg-brand-500/10 text-brand-600 dark:text-brand-400">
-                    Multi-Task
+                  <span className="sr-only">Start from Template</span>
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-black uppercase bg-brand-500 text-white flex items-center gap-1">
+                    Multi-Task Package
                   </span>
                 </div>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">
-                  Bulk launch a full multi-task service package into Draft, Unassigned tasks.
+                <p className="text-xs text-gray-600 dark:text-gray-400 mt-1 leading-relaxed">
+                  Bulk launch a complete standard service delivery package (1–100 ordered child tasks) into Draft, Unassigned tasks.
                 </p>
               </div>
             </button>
 
-            {/* Create Blank Task */}
+            {/* 2. Create Individual Task */}
             <button
               type="button"
               onClick={() => onSelectMode('blank', selectedWeek)}
@@ -150,10 +127,11 @@ export const TaskCreationModeModal: React.FC<TaskCreationModeModalProps> = ({
               </div>
               <div className="flex-1 min-w-0">
                 <span className="text-sm font-bold text-gray-900 dark:text-gray-100">
-                  Create Blank Task
+                  Create Individual Task
                 </span>
+                <span className="sr-only">Create Blank Task</span>
                 <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 leading-relaxed">
-                  Start with a clean slate and configure task details, department, dates, and assignee manually.
+                  Create a single manual task from scratch with custom title, department, planned dates, and assignee.
                 </p>
               </div>
             </button>

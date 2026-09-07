@@ -281,7 +281,7 @@ export const ApplyServiceTemplateModal: React.FC<ApplyServiceTemplateModalProps>
                 Bulk Task Creation Guarantee
               </div>
               <div>
-                All tasks will be created with <strong>Status = Draft</strong> and <strong>Assignee = Unassigned</strong>. Task review, staff assignment, and scheduling can be managed after launch.
+                This Service Template will create <strong>{customizedTasks.length} separate Draft, Unassigned {customizedTasks.length === 1 ? 'task' : 'tasks'}</strong>. Task review, staff assignment, and scheduling can be managed after launch.
               </div>
             </div>
           </div>
@@ -309,7 +309,7 @@ export const ApplyServiceTemplateModal: React.FC<ApplyServiceTemplateModalProps>
                 >
                   {templates.map((t) => (
                     <option key={t.id} value={t.id}>
-                      {t.name} ({t.serviceLabel} â€” {t.tasks.length} tasks)
+                      {t.name} ({t.serviceLabel} — {t.tasks.length} {t.tasks.length === 1 ? 'task' : 'tasks'})
                     </option>
                   ))}
                 </select>
@@ -340,7 +340,7 @@ export const ApplyServiceTemplateModal: React.FC<ApplyServiceTemplateModalProps>
                 <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
                 <div>
                   <strong>Notice:</strong> This Service Template has already been applied to <strong>{client.companyName} (Week {targetWeek})</strong>.
-                  If this is an intentional second delivery pack, please confirm below.
+                  Creating this launch will create <strong>{customizedTasks.length} {customizedTasks.length === 1 ? 'additional Draft task' : 'additional Draft tasks'}</strong>. If this is an intentional second delivery pack, please confirm below.
                 </div>
               </div>
               <label className="flex items-center gap-2 cursor-pointer font-bold select-none">
@@ -360,7 +360,7 @@ export const ApplyServiceTemplateModal: React.FC<ApplyServiceTemplateModalProps>
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-600 dark:text-gray-400">
-                  Launch Tasks ({customizedTasks.length} tasks to be created)
+                  Launch Tasks ({customizedTasks.length} {customizedTasks.length === 1 ? 'task' : 'tasks'} to be created)
                 </h3>
                 <p className="text-[11px] text-slate-400">
                   Customizations here apply only to this launch batch and do not edit the master template
@@ -478,7 +478,7 @@ export const ApplyServiceTemplateModal: React.FC<ApplyServiceTemplateModalProps>
         {/* Footer Actions */}
         <div className="px-6 py-4 border-t border-slate-100 dark:border-dark-border flex items-center justify-between bg-slate-50/50 dark:bg-dark-sidebar">
           <div className="text-xs text-slate-500 dark:text-gray-400">
-            <strong>{customizedTasks.length}</strong> tasks will be created for <strong>Week {targetWeek}</strong>
+            <strong>{customizedTasks.length}</strong> {customizedTasks.length === 1 ? 'task' : 'tasks'} will be created for <strong>Week {targetWeek}</strong>
           </div>
 
           <div className="flex items-center gap-3">
