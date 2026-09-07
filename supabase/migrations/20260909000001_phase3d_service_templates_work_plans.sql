@@ -14,42 +14,42 @@
 DO $$
 BEGIN
     IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
+        SELECT 1 FROM information_schema.columns 
         WHERE table_schema = 'public' AND table_name = 'client_tasks' AND column_name = 'source_template_id'
     ) THEN
         ALTER TABLE public.client_tasks ADD COLUMN source_template_id UUID;
     END IF;
 
     IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
+        SELECT 1 FROM information_schema.columns 
         WHERE table_schema = 'public' AND table_name = 'client_tasks' AND column_name = 'source_template_version'
     ) THEN
         ALTER TABLE public.client_tasks ADD COLUMN source_template_version INTEGER DEFAULT 1;
     END IF;
 
     IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
+        SELECT 1 FROM information_schema.columns 
         WHERE table_schema = 'public' AND table_name = 'client_tasks' AND column_name = 'plan_id'
     ) THEN
         ALTER TABLE public.client_tasks ADD COLUMN plan_id UUID;
     END IF;
 
     IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
+        SELECT 1 FROM information_schema.columns 
         WHERE table_schema = 'public' AND table_name = 'client_tasks' AND column_name = 'plan_week'
     ) THEN
         ALTER TABLE public.client_tasks ADD COLUMN plan_week INTEGER CHECK (plan_week IS NULL OR (plan_week >= 1 AND plan_week <= 13));
     END IF;
 
     IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
+        SELECT 1 FROM information_schema.columns 
         WHERE table_schema = 'public' AND table_name = 'client_tasks' AND column_name = 'occurrence_id'
     ) THEN
         ALTER TABLE public.client_tasks ADD COLUMN occurrence_id UUID;
     END IF;
 
     IF NOT EXISTS (
-        SELECT 1 FROM information_schema.columns
+        SELECT 1 FROM information_schema.columns 
         WHERE table_schema = 'public' AND table_name = 'client_tasks' AND column_name = 'launch_batch_id'
     ) THEN
         ALTER TABLE public.client_tasks ADD COLUMN launch_batch_id UUID;
@@ -88,7 +88,7 @@ CREATE TABLE IF NOT EXISTS public.service_templates (
     CONSTRAINT uq_service_templates_legacy_id UNIQUE (legacy_task_template_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_service_templates_status_sort
+CREATE INDEX IF NOT EXISTS idx_service_templates_status_sort 
 ON public.service_templates(status, sort_order);
 
 -- 2.2 Service Template Tasks (Ordered Child Tasks 1..100)
@@ -109,7 +109,7 @@ CREATE TABLE IF NOT EXISTS public.service_template_tasks (
     CONSTRAINT chk_service_template_tasks_title CHECK (length(trim(title)) > 0 AND length(title) <= 200)
 );
 
-CREATE INDEX IF NOT EXISTS idx_service_template_tasks_tpl_order
+CREATE INDEX IF NOT EXISTS idx_service_template_tasks_tpl_order 
 ON public.service_template_tasks(template_id, display_order);
 
 -- 2.3 Service Template Version History (Audit Snapshots)
@@ -124,7 +124,7 @@ CREATE TABLE IF NOT EXISTS public.service_template_versions (
     CONSTRAINT uq_service_template_version UNIQUE (template_id, version)
 );
 
-CREATE INDEX IF NOT EXISTS idx_service_template_versions_lookup
+CREATE INDEX IF NOT EXISTS idx_service_template_versions_lookup 
 ON public.service_template_versions(template_id, version DESC);
 
 -- ------------------------------------------------------------------------------
@@ -154,7 +154,7 @@ CREATE TABLE IF NOT EXISTS public.client_work_plans (
     CONSTRAINT chk_client_work_plans_name CHECK (length(trim(name)) > 0 AND length(name) <= 200)
 );
 
-CREATE INDEX IF NOT EXISTS idx_client_work_plans_client_status
+CREATE INDEX IF NOT EXISTS idx_client_work_plans_client_status 
 ON public.client_work_plans(client_id, status);
 
 -- 3.2 Client Work Plan Normalized Weeks (13 Weeks)
@@ -181,7 +181,7 @@ CREATE TABLE IF NOT EXISTS public.client_work_plan_occurrences (
     created_at TIMESTAMPTZ NOT NULL DEFAULT timezone('utc'::text, now())
 );
 
-CREATE INDEX IF NOT EXISTS idx_work_plan_occurrences_lookup
+CREATE INDEX IF NOT EXISTS idx_work_plan_occurrences_lookup 
 ON public.client_work_plan_occurrences(work_plan_id, week_number);
 
 -- ------------------------------------------------------------------------------
@@ -206,42 +206,8 @@ CREATE TABLE IF NOT EXISTS public.task_launch_batches (
     CONSTRAINT uq_launch_batch_client_request UNIQUE (client_id, request_id)
 );
 
-CREATE INDEX IF NOT EXISTS idx_task_launch_batches_client_req
+CREATE INDEX IF NOT EXISTS idx_task_launch_batches_client_req 
 ON public.task_launch_batches(client_id, request_id);
-
--- Add Foreign Key Constraints to companion columns independently
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.table_constraints
-        WHERE constraint_name = 'fk_client_tasks_source_template' AND table_name = 'client_tasks'
-    ) THEN
-        ALTER TABLE public.client_tasks ADD CONSTRAINT fk_client_tasks_source_template
-            FOREIGN KEY (source_template_id) REFERENCES public.service_templates(id) ON DELETE SET NULL;
-    END IF;
-END $$;
-
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.table_constraints
-        WHERE constraint_name = 'fk_client_tasks_plan_id' AND table_name = 'client_tasks'
-    ) THEN
-        ALTER TABLE public.client_tasks ADD CONSTRAINT fk_client_tasks_plan_id
-            FOREIGN KEY (plan_id) REFERENCES public.client_work_plans(id) ON DELETE SET NULL;
-    END IF;
-END $$;
-
-DO $$
-BEGIN
-    IF NOT EXISTS (
-        SELECT 1 FROM information_schema.table_constraints
-        WHERE constraint_name = 'fk_client_tasks_launch_batch' AND table_name = 'client_tasks'
-    ) THEN
-        ALTER TABLE public.client_tasks ADD CONSTRAINT fk_client_tasks_launch_batch
-            FOREIGN KEY (launch_batch_id) REFERENCES public.task_launch_batches(id) ON DELETE SET NULL;
-    END IF;
-END $$;
 
 -- ------------------------------------------------------------------------------
 -- 5. REAL PHASE 3C IDEMPOTENT, NON-DESTRUCTIVE BACKFILL
@@ -250,26 +216,24 @@ DO $$
 DECLARE
     tpl RECORD;
     dept_name TEXT;
-    new_template_id UUID;
     v_order INTEGER := 0;
     v_dur INTEGER;
 BEGIN
     IF EXISTS (
-        SELECT 1 FROM information_schema.tables
+        SELECT 1 FROM information_schema.tables 
         WHERE table_schema = 'public' AND table_name = 'task_templates'
     ) THEN
-        FOR tpl IN
-            SELECT tt.*, d.name AS dept_name
+        FOR tpl IN 
+            SELECT tt.*, d.name AS dept_name 
             FROM public.task_templates tt
             LEFT JOIN public.departments d ON d.id = tt.department_id
             ORDER BY tt.created_at ASC
         LOOP
             IF NOT EXISTS (
-                SELECT 1 FROM public.service_templates
-                WHERE legacy_task_template_id = tpl.id
+                SELECT 1 FROM public.service_templates 
+                WHERE id = tpl.id OR legacy_task_template_id = tpl.id
             ) THEN
                 v_order := v_order + 1;
-                new_template_id := gen_random_uuid();
                 v_dur := COALESCE(tpl.suggested_duration_days, 1);
                 IF v_dur < 1 OR v_dur > 90 THEN v_dur := 1; END IF;
 
@@ -287,7 +251,7 @@ BEGIN
                     created_at,
                     updated_at
                 ) VALUES (
-                    new_template_id,
+                    tpl.id,
                     tpl.id,
                     tpl.name,
                     COALESCE(tpl.dept_name, 'General Service'),
@@ -316,7 +280,7 @@ BEGIN
                     created_at
                 ) VALUES (
                     gen_random_uuid(),
-                    new_template_id,
+                    tpl.id,
                     tpl.id,
                     tpl.default_task_title,
                     tpl.task_details,
@@ -338,10 +302,10 @@ BEGIN
                     created_at
                 ) VALUES (
                     gen_random_uuid(),
-                    new_template_id,
+                    tpl.id,
                     1,
                     jsonb_build_object(
-                        'template_id', new_template_id,
+                        'template_id', tpl.id,
                         'name', tpl.name,
                         'service_label', COALESCE(tpl.dept_name, 'General Service'),
                         'description', tpl.description,
@@ -368,7 +332,44 @@ BEGIN
 END $$;
 
 -- ------------------------------------------------------------------------------
--- 6. AUTHORITATIVE MUTATION RPC: fn_manage_service_template
+-- 6. ADD FOREIGN KEY CONSTRAINTS ON COMPANION COLUMNS (AFTER BACKFILL)
+-- ------------------------------------------------------------------------------
+ALTER TABLE public.client_tasks DROP CONSTRAINT IF EXISTS client_tasks_source_template_id_fkey;
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints 
+        WHERE constraint_name = 'fk_client_tasks_source_template' AND table_name = 'client_tasks'
+    ) THEN
+        ALTER TABLE public.client_tasks ADD CONSTRAINT fk_client_tasks_source_template
+            FOREIGN KEY (source_template_id) REFERENCES public.service_templates(id) ON DELETE SET NULL;
+    END IF;
+END $$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints 
+        WHERE constraint_name = 'fk_client_tasks_plan_id' AND table_name = 'client_tasks'
+    ) THEN
+        ALTER TABLE public.client_tasks ADD CONSTRAINT fk_client_tasks_plan_id
+            FOREIGN KEY (plan_id) REFERENCES public.client_work_plans(id) ON DELETE SET NULL;
+    END IF;
+END $$;
+
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM information_schema.table_constraints 
+        WHERE constraint_name = 'fk_client_tasks_launch_batch' AND table_name = 'client_tasks'
+    ) THEN
+        ALTER TABLE public.client_tasks ADD CONSTRAINT fk_client_tasks_launch_batch
+            FOREIGN KEY (launch_batch_id) REFERENCES public.task_launch_batches(id) ON DELETE SET NULL;
+    END IF;
+END $$;
+
+-- ------------------------------------------------------------------------------
+-- 7. AUTHORITATIVE MUTATION RPC: fn_manage_service_template
 -- ------------------------------------------------------------------------------
 DROP FUNCTION IF EXISTS public.fn_manage_service_template(TEXT, UUID, TEXT, TEXT, TEXT, JSONB, INTEGER, TEXT);
 DROP FUNCTION IF EXISTS public.fn_manage_service_template(TEXT, UUID, TEXT, TEXT, TEXT, JSONB, INTEGER, TEXT, INTEGER);
@@ -392,7 +393,7 @@ AS $$
 DECLARE
     v_caller_id UUID;
     v_caller_role TEXT;
-    v_is_suspended BOOLEAN;
+    v_caller_status TEXT;
     v_template RECORD;
     v_target_id UUID;
     v_new_version INTEGER;
@@ -414,11 +415,11 @@ BEGIN
         RETURN jsonb_build_object('error', 'Unauthorized: Missing active authentication session.');
     END IF;
 
-    SELECT role, is_suspended INTO v_caller_role, v_is_suspended
+    SELECT role, status INTO v_caller_role, v_caller_status
     FROM public.profiles
     WHERE id = v_caller_id;
 
-    IF v_caller_role IS NULL OR v_is_suspended = true THEN
+    IF v_caller_role IS NULL OR v_caller_status != 'active' THEN
         RETURN jsonb_build_object('error', 'Forbidden: User profile is suspended or does not exist.');
     END IF;
 
@@ -470,9 +471,9 @@ BEGIN
                 v_dept_id := (v_task_elem->>'department_id')::UUID;
             EXCEPTION WHEN OTHERS THEN
                 RETURN jsonb_build_object('error', format('Validation Error: Task #%s has an invalid department UUID.', v_idx + 1));
-            END IF;
+            END;
 
-            IF NOT EXISTS (SELECT 1 FROM public.departments WHERE id = v_dept_id AND is_active = true) THEN
+            IF NOT EXISTS (SELECT 1 FROM public.departments WHERE id = v_dept_id AND status = 'active') THEN
                 RETURN jsonb_build_object('error', format('Validation Error: Task #%s references an inactive or non-existent department.', v_idx + 1));
             END IF;
 
@@ -517,7 +518,7 @@ BEGIN
                 v_def_id := COALESCE((v_task_elem->>'definition_id')::UUID, gen_random_uuid());
             EXCEPTION WHEN OTHERS THEN
                 v_def_id := gen_random_uuid();
-            END IF;
+            END;
 
             INSERT INTO public.service_template_tasks (
                 id, template_id, definition_id, title, description, department_id,
@@ -602,9 +603,9 @@ BEGIN
                     v_dept_id := (v_task_elem->>'department_id')::UUID;
                 EXCEPTION WHEN OTHERS THEN
                     RETURN jsonb_build_object('error', format('Validation Error: Task #%s has an invalid department UUID.', v_idx + 1));
-                END IF;
+                END;
 
-                IF NOT EXISTS (SELECT 1 FROM public.departments WHERE id = v_dept_id AND is_active = true) THEN
+                IF NOT EXISTS (SELECT 1 FROM public.departments WHERE id = v_dept_id AND status = 'active') THEN
                     RETURN jsonb_build_object('error', format('Validation Error: Task #%s references an inactive or non-existent department.', v_idx + 1));
                 END IF;
 
@@ -656,7 +657,7 @@ BEGIN
                     v_def_id := COALESCE((v_task_elem->>'definition_id')::UUID, gen_random_uuid());
                 EXCEPTION WHEN OTHERS THEN
                     v_def_id := gen_random_uuid();
-                END IF;
+                END;
 
                 INSERT INTO public.service_template_tasks (
                     id, template_id, definition_id, title, description, department_id,
@@ -716,7 +717,7 @@ BEGIN
             'Active', 1, v_template.sort_order + 1, v_caller_id, v_caller_id
         );
 
-        FOR v_copied_task IN
+        FOR v_copied_task IN 
             SELECT * FROM public.service_template_tasks
             WHERE template_id = p_template_id
             ORDER BY display_order ASC
@@ -818,7 +819,7 @@ END;
 $$;
 
 -- ------------------------------------------------------------------------------
--- 7. AUTHORITATIVE MUTATION RPCS: fn_save_draft_work_plan & fn_delete_draft_work_plan
+-- 8. AUTHORITATIVE MUTATION RPCS: fn_save_draft_work_plan & fn_delete_draft_work_plan
 -- ------------------------------------------------------------------------------
 DROP FUNCTION IF EXISTS public.fn_save_draft_work_plan(UUID, UUID, TEXT, DATE, JSONB, INTEGER);
 
@@ -838,7 +839,7 @@ AS $$
 DECLARE
     v_caller_id UUID;
     v_caller_role TEXT;
-    v_is_suspended BOOLEAN;
+    v_caller_status TEXT;
     v_client RECORD;
     v_existing RECORD;
     v_target_id UUID;
@@ -874,11 +875,11 @@ BEGIN
         RETURN jsonb_build_object('error', 'Unauthorized: Missing active authentication session.');
     END IF;
 
-    SELECT role, is_suspended INTO v_caller_role, v_is_suspended
+    SELECT role, status INTO v_caller_role, v_caller_status
     FROM public.profiles
     WHERE id = v_caller_id;
 
-    IF v_caller_role IS NULL OR v_is_suspended = true THEN
+    IF v_caller_role IS NULL OR v_caller_status != 'active' THEN
         RETURN jsonb_build_object('error', 'Forbidden: User profile is suspended or does not exist.');
     END IF;
 
@@ -907,7 +908,7 @@ BEGIN
     FOR v_week_idx IN 0..12 LOOP
         v_week_obj := p_weeks->v_week_idx;
         v_week_num := COALESCE((v_week_obj->>'weekNumber')::INTEGER, (v_week_obj->>'week_number')::INTEGER);
-
+        
         IF v_week_num IS NULL OR v_week_num < 1 OR v_week_num > 13 THEN
             RETURN jsonb_build_object('error', format('Validation Error: Invalid week number at index %s.', v_week_idx));
         END IF;
@@ -934,7 +935,7 @@ BEGIN
                     v_occ_tpl_id := (v_occ_obj->>'templateId')::UUID;
                 EXCEPTION WHEN OTHERS THEN
                     v_occ_tpl_id := NULL;
-                END IF;
+                END;
 
                 IF v_occ_tpl_id IS NOT NULL THEN
                     SELECT * INTO v_occ_tpl FROM public.service_templates WHERE id = v_occ_tpl_id;
@@ -966,9 +967,9 @@ BEGIN
                     EXCEPTION WHEN OTHERS THEN
                         v_custom_dept_id := NULL;
                     END;
-                END IF;
+                END;
 
-                IF v_custom_dept_id IS NULL OR NOT EXISTS (SELECT 1 FROM public.departments WHERE id = v_custom_dept_id AND is_active = true) THEN
+                IF v_custom_dept_id IS NULL OR NOT EXISTS (SELECT 1 FROM public.departments WHERE id = v_custom_dept_id AND status = 'active') THEN
                     RETURN jsonb_build_object('error', format('Validation Error: Week %s custom task #%s has an invalid or inactive department.', v_week_num, v_custom_idx + 1));
                 END IF;
 
@@ -1012,9 +1013,9 @@ BEGIN
 
         IF v_caller_role = 'operational_manager' THEN
             IF NOT (
-                v_client.operational_manager_id = v_caller_id
+                v_client.operational_manager_id = v_caller_id 
                 OR EXISTS (
-                    SELECT 1 FROM public.client_team_access
+                    SELECT 1 FROM public.client_team_access 
                     WHERE client_id = p_client_id AND profile_id = v_caller_id
                 )
             ) THEN
@@ -1067,9 +1068,9 @@ BEGIN
 
         IF v_caller_role = 'operational_manager' THEN
             IF NOT (
-                v_client.operational_manager_id = v_caller_id
+                v_client.operational_manager_id = v_caller_id 
                 OR EXISTS (
-                    SELECT 1 FROM public.client_team_access
+                    SELECT 1 FROM public.client_team_access 
                     WHERE client_id = v_client.id AND profile_id = v_caller_id
                 )
             ) THEN
@@ -1125,7 +1126,7 @@ BEGIN
                     v_occ_tpl_id := (v_occ_obj->>'templateId')::UUID;
                 EXCEPTION WHEN OTHERS THEN
                     v_occ_tpl_id := NULL;
-                END IF;
+                END;
                 v_occ_tpl_ver := COALESCE((v_occ_obj->>'templateVersion')::INTEGER, 1);
 
                 INSERT INTO public.client_work_plan_occurrences (
@@ -1155,7 +1156,7 @@ AS $$
 DECLARE
     v_caller_id UUID;
     v_caller_role TEXT;
-    v_is_suspended BOOLEAN;
+    v_caller_status TEXT;
     v_plan RECORD;
     v_client RECORD;
 BEGIN
@@ -1164,11 +1165,11 @@ BEGIN
         RETURN jsonb_build_object('error', 'Unauthorized: Missing active authentication session.');
     END IF;
 
-    SELECT role, is_suspended INTO v_caller_role, v_is_suspended
+    SELECT role, status INTO v_caller_role, v_caller_status
     FROM public.profiles
     WHERE id = v_caller_id;
 
-    IF v_caller_role IS NULL OR v_is_suspended = true THEN
+    IF v_caller_role IS NULL OR v_caller_status != 'active' THEN
         RETURN jsonb_build_object('error', 'Forbidden: User profile is suspended or does not exist.');
     END IF;
 
@@ -1188,9 +1189,9 @@ BEGIN
 
     IF v_caller_role = 'operational_manager' THEN
         IF NOT (
-            v_client.operational_manager_id = v_caller_id
+            v_client.operational_manager_id = v_caller_id 
             OR EXISTS (
-                SELECT 1 FROM public.client_team_access
+                SELECT 1 FROM public.client_team_access 
                 WHERE client_id = v_client.id AND profile_id = v_caller_id
             )
         ) THEN
@@ -1206,7 +1207,7 @@ END;
 $$;
 
 -- ------------------------------------------------------------------------------
--- 8. AUTHORITATIVE LAUNCH MUTATION RPC: fn_launch_task_batch
+-- 9. AUTHORITATIVE LAUNCH MUTATION RPC: fn_launch_task_batch
 -- ------------------------------------------------------------------------------
 DROP FUNCTION IF EXISTS public.fn_launch_task_batch(UUID, TEXT, UUID, TEXT, UUID, INTEGER, JSONB, JSONB);
 DROP FUNCTION IF EXISTS public.fn_launch_task_batch(TEXT, UUID, TEXT, UUID, INTEGER, JSONB, JSONB);
@@ -1228,7 +1229,7 @@ AS $$
 DECLARE
     v_caller_id UUID;
     v_caller_role TEXT;
-    v_is_suspended BOOLEAN;
+    v_caller_status TEXT;
     v_client RECORD;
     v_existing_batch RECORD;
     v_payload_hash TEXT;
@@ -1270,11 +1271,11 @@ BEGIN
         RETURN jsonb_build_object('error', 'Validation Error: p_request_id must be a non-empty string with max length 128.');
     END IF;
 
-    SELECT role, is_suspended INTO v_caller_role, v_is_suspended
+    SELECT role, status INTO v_caller_role, v_caller_status
     FROM public.profiles
     WHERE id = v_caller_id;
 
-    IF v_caller_role IS NULL OR v_is_suspended = true THEN
+    IF v_caller_role IS NULL OR v_caller_status != 'active' THEN
         RETURN jsonb_build_object('error', 'Forbidden: User profile is suspended or does not exist.');
     END IF;
 
@@ -1295,9 +1296,9 @@ BEGIN
 
     IF v_caller_role = 'operational_manager' THEN
         IF NOT (
-            v_client.operational_manager_id = v_caller_id
+            v_client.operational_manager_id = v_caller_id 
             OR EXISTS (
-                SELECT 1 FROM public.client_team_access
+                SELECT 1 FROM public.client_team_access 
                 WHERE client_id = p_client_id AND profile_id = v_caller_id
             )
         ) THEN
@@ -1306,18 +1307,18 @@ BEGIN
     END IF;
 
     -- Canonical SHA-256 Payload Hash using PostgreSQL built-in sha256
-    v_canonical_string := v_caller_id::TEXT || ':' ||
-        p_client_id::TEXT || ':' ||
-        p_launch_type || ':' ||
-        COALESCE(p_source_id::TEXT, '') || ':' ||
-        COALESCE(p_target_week::TEXT, '') || ':' ||
+    v_canonical_string := v_caller_id::TEXT || ':' || 
+        p_client_id::TEXT || ':' || 
+        p_launch_type || ':' || 
+        COALESCE(p_source_id::TEXT, '') || ':' || 
+        COALESCE(p_target_week::TEXT, '') || ':' || 
         p_tasks::TEXT || ':' ||
         p_metadata::TEXT;
 
     v_payload_hash := encode(sha256(v_canonical_string::bytea), 'hex');
 
     -- Check Existing Launch Batch for Idempotency Replay
-    SELECT * INTO v_existing_batch
+    SELECT * INTO v_existing_batch 
     FROM public.task_launch_batches
     WHERE client_id = p_client_id AND request_id = p_request_id;
 
@@ -1412,7 +1413,7 @@ BEGIN
     GET DIAGNOSTICS v_affected_rows = ROW_COUNT;
     IF v_affected_rows = 0 THEN
         -- Concurrency collision: Another worker inserted this request concurrently
-        SELECT * INTO v_existing_batch
+        SELECT * INTO v_existing_batch 
         FROM public.task_launch_batches
         WHERE client_id = p_client_id AND request_id = p_request_id;
 
@@ -1436,7 +1437,7 @@ BEGIN
     FOR v_task_idx IN 0..(v_task_count - 1) LOOP
         v_task_elem := p_tasks->v_task_idx;
         v_new_task_id := gen_random_uuid();
-
+        
         v_task_title := trim(COALESCE(v_task_elem->>'title', ''));
         IF length(v_task_title) = 0 THEN
             RAISE EXCEPTION 'Task #% title cannot be empty.', v_task_idx + 1;
@@ -1449,9 +1450,9 @@ BEGIN
             v_dept_id := (v_task_elem->>'department_id')::UUID;
         EXCEPTION WHEN OTHERS THEN
             RAISE EXCEPTION 'Task #% has an invalid department UUID.', v_task_idx + 1;
-        END IF;
+        END;
 
-        IF NOT EXISTS (SELECT 1 FROM public.departments WHERE id = v_dept_id AND is_active = true) THEN
+        IF NOT EXISTS (SELECT 1 FROM public.departments WHERE id = v_dept_id AND status = 'active') THEN
             RAISE EXCEPTION 'Task #% department is invalid or inactive.', v_task_idx + 1;
         END IF;
 
@@ -1548,7 +1549,7 @@ BEGIN
             -- Service Template launch
             v_plan_week := NULL;
             v_task_week := p_target_week;
-
+            
             BEGIN
                 v_source_tpl_id := (v_task_elem->>'source_template_id')::UUID;
             EXCEPTION WHEN OTHERS THEN
@@ -1578,7 +1579,7 @@ BEGIN
         );
 
         INSERT INTO public.client_task_events (
-            id, task_id, client_id, actor_id, event_type, old_state, new_state, notes, created_at
+            id, task_id, client_id, actor_id, event_type, previous_state, new_state, notes, created_at
         ) VALUES (
             gen_random_uuid(), v_new_task_id, p_client_id, v_caller_id, 'created', NULL,
             jsonb_build_object(
@@ -1624,7 +1625,7 @@ END;
 $$;
 
 -- ------------------------------------------------------------------------------
--- 9. COMPLETE RLS SECURITY POLICY MATRIX
+-- 10. COMPLETE RLS SECURITY POLICY MATRIX
 -- ------------------------------------------------------------------------------
 
 ALTER TABLE public.service_templates ENABLE ROW LEVEL SECURITY;
@@ -1644,9 +1645,9 @@ STABLE
 SET search_path = ''
 AS $$
     SELECT EXISTS (
-        SELECT 1 FROM public.profiles
-        WHERE id = auth.uid()
-          AND is_suspended = false
+        SELECT 1 FROM public.profiles 
+        WHERE id = auth.uid() 
+          AND status = 'active' 
           AND role IN ('owner', 'operational_manager', 'team_member')
     );
 $$;
@@ -1659,9 +1660,9 @@ STABLE
 SET search_path = ''
 AS $$
     SELECT EXISTS (
-        SELECT 1 FROM public.profiles
-        WHERE id = auth.uid()
-          AND is_suspended = false
+        SELECT 1 FROM public.profiles 
+        WHERE id = auth.uid() 
+          AND status = 'active' 
           AND role IN ('owner', 'operational_manager')
     );
 $$;
@@ -1674,9 +1675,9 @@ STABLE
 SET search_path = ''
 AS $$
     SELECT EXISTS (
-        SELECT 1 FROM public.profiles
-        WHERE id = auth.uid()
-          AND is_suspended = false
+        SELECT 1 FROM public.profiles 
+        WHERE id = auth.uid() 
+          AND status = 'active' 
           AND role = 'owner'
     );
 $$;
@@ -1690,15 +1691,15 @@ SET search_path = ''
 AS $$
     SELECT EXISTS (
         SELECT 1 FROM public.profiles p
-        WHERE p.id = auth.uid()
-          AND p.is_suspended = false
+        WHERE p.id = auth.uid() 
+          AND p.status = 'active' 
           AND (
               p.role = 'owner'
               OR (
-                  p.role = 'operational_manager'
+                  p.role = 'operational_manager' 
                   AND EXISTS (
                       SELECT 1 FROM public.clients c
-                      WHERE c.id = p_client_id
+                      WHERE c.id = p_client_id 
                         AND (
                             c.operational_manager_id = p.id
                             OR EXISTS (
@@ -1709,25 +1710,25 @@ AS $$
                   )
               )
               OR (
-                  p.role = 'team_member'
+                  p.role = 'team_member' 
                   AND EXISTS (
                       SELECT 1 FROM public.client_team_access cta
                       WHERE cta.client_id = p_client_id AND cta.profile_id = p.id
                   )
               )
               OR (
-                  p.role = 'client'
+                  p.role = 'client' 
                   AND p.id = p_client_id
               )
           )
     );
 $$;
 
--- 9.1 service_templates RLS
+-- 10.1 service_templates RLS
 DROP POLICY IF EXISTS "service_templates_select_policy" ON public.service_templates;
 CREATE POLICY "service_templates_select_policy" ON public.service_templates
     FOR SELECT USING (
-        public.is_owner()
+        public.is_owner() 
         OR (public.is_manager_or_owner() AND status = 'Active')
     );
 
@@ -1743,7 +1744,7 @@ DROP POLICY IF EXISTS "service_templates_delete_policy" ON public.service_templa
 CREATE POLICY "service_templates_delete_policy" ON public.service_templates
     FOR DELETE USING (false);
 
--- 9.2 service_template_tasks RLS
+-- 10.2 service_template_tasks RLS
 DROP POLICY IF EXISTS "service_template_tasks_select_policy" ON public.service_template_tasks;
 CREATE POLICY "service_template_tasks_select_policy" ON public.service_template_tasks
     FOR SELECT USING (
@@ -1766,7 +1767,7 @@ DROP POLICY IF EXISTS "service_template_tasks_delete_policy" ON public.service_t
 CREATE POLICY "service_template_tasks_delete_policy" ON public.service_template_tasks
     FOR DELETE USING (false);
 
--- 9.3 service_template_versions RLS
+-- 10.3 service_template_versions RLS
 DROP POLICY IF EXISTS "service_template_versions_select_policy" ON public.service_template_versions;
 CREATE POLICY "service_template_versions_select_policy" ON public.service_template_versions
     FOR SELECT USING (public.is_manager_or_owner());
@@ -1775,7 +1776,7 @@ DROP POLICY IF EXISTS "service_template_versions_write_policy" ON public.service
 CREATE POLICY "service_template_versions_write_policy" ON public.service_template_versions
     FOR ALL USING (false) WITH CHECK (false);
 
--- 9.4 client_work_plans RLS
+-- 10.4 client_work_plans RLS
 DROP POLICY IF EXISTS "client_work_plans_select_policy" ON public.client_work_plans;
 CREATE POLICY "client_work_plans_select_policy" ON public.client_work_plans
     FOR SELECT USING (
@@ -1786,14 +1787,14 @@ DROP POLICY IF EXISTS "client_work_plans_direct_write_policy" ON public.client_w
 CREATE POLICY "client_work_plans_direct_write_policy" ON public.client_work_plans
     FOR ALL USING (false) WITH CHECK (false);
 
--- 9.5 client_work_plan_weeks RLS
+-- 10.5 client_work_plan_weeks RLS
 DROP POLICY IF EXISTS "client_work_plan_weeks_select_policy" ON public.client_work_plan_weeks;
 CREATE POLICY "client_work_plan_weeks_select_policy" ON public.client_work_plan_weeks
     FOR SELECT USING (
         EXISTS (
             SELECT 1 FROM public.client_work_plans cwp
             WHERE cwp.id = client_work_plan_weeks.work_plan_id
-              AND public.is_manager_or_owner()
+              AND public.is_manager_or_owner() 
               AND public.has_client_access(cwp.client_id)
         )
     );
@@ -1802,14 +1803,14 @@ DROP POLICY IF EXISTS "client_work_plan_weeks_direct_write" ON public.client_wor
 CREATE POLICY "client_work_plan_weeks_direct_write" ON public.client_work_plan_weeks
     FOR ALL USING (false) WITH CHECK (false);
 
--- 9.6 client_work_plan_occurrences RLS
+-- 10.6 client_work_plan_occurrences RLS
 DROP POLICY IF EXISTS "client_work_plan_occurrences_select_policy" ON public.client_work_plan_occurrences;
 CREATE POLICY "client_work_plan_occurrences_select_policy" ON public.client_work_plan_occurrences
     FOR SELECT USING (
         EXISTS (
             SELECT 1 FROM public.client_work_plans cwp
             WHERE cwp.id = client_work_plan_occurrences.work_plan_id
-              AND public.is_manager_or_owner()
+              AND public.is_manager_or_owner() 
               AND public.has_client_access(cwp.client_id)
         )
     );
@@ -1818,7 +1819,7 @@ DROP POLICY IF EXISTS "client_work_plan_occurrences_direct_write" ON public.clie
 CREATE POLICY "client_work_plan_occurrences_direct_write" ON public.client_work_plan_occurrences
     FOR ALL USING (false) WITH CHECK (false);
 
--- 9.7 task_launch_batches RLS
+-- 10.7 task_launch_batches RLS
 DROP POLICY IF EXISTS "task_launch_batches_select_policy" ON public.task_launch_batches;
 CREATE POLICY "task_launch_batches_select_policy" ON public.task_launch_batches
     FOR SELECT USING (
@@ -1830,7 +1831,7 @@ CREATE POLICY "task_launch_batches_direct_write" ON public.task_launch_batches
     FOR ALL USING (false) WITH CHECK (false);
 
 -- ------------------------------------------------------------------------------
--- 10. GRANTS & REVOKES
+-- 11. GRANTS & REVOKES
 -- ------------------------------------------------------------------------------
 GRANT SELECT ON public.service_templates TO authenticated;
 GRANT SELECT ON public.service_template_tasks TO authenticated;
