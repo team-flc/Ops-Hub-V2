@@ -83,7 +83,7 @@ export const serviceTemplateService = {
 
       // Graceful fallback if service_templates table does not exist yet (e.g. un-migrated preview)
       if (error && (error.code === '42P01' || error.message?.includes('service_templates'))) {
-        // Fall back to legacy taskTemplateService and map single-task templates into ServiceTemplate format
+        // Fall back to legacy taskTemplateService and map single-task templates into ServiceTemplate format for read-only preview
         const legacyRes = await taskTemplateService.fetchTemplates(includeArchived);
         if (legacyRes.data) {
           const mapped: ServiceTemplate[] = legacyRes.data.map((tpl) => ({
@@ -113,7 +113,7 @@ export const serviceTemplateService = {
             createdAt: tpl.createdAt,
             updatedAt: tpl.updatedAt
           }));
-          return { data: mapped, error: null, isUnavailable: false };
+          return { data: mapped, error: null, isUnavailable: true };
         }
         return { data: [], error: null, isUnavailable: true };
       }

@@ -365,11 +365,38 @@ describe('Phase 3D: Service Templates, 90-Day Work Plans & Hardening Suite', () 
 
       const res = await serviceTemplateService.fetchTemplates(false);
       expect(res.data).toHaveLength(1);
+      expect(res.isUnavailable).toBe(true);
       const migrated = res.data[0];
       expect(migrated.name).toBe('Media Buying Campaign Setup & Launch');
       expect(migrated.tasks).toHaveLength(1);
       expect(migrated.tasks[0].title).toBe('Campaign Setup & Launch Checklist');
       expect(migrated.tasks[0].durationBusinessDays).toBe(3);
+    });
+
+    it('2.5 ServiceTemplatesView disables New/Edit/Duplicate/Archive/Restore when backend is unavailable', async () => {
+      // Mock fetchTemplates returning isUnavailable = true
+      vi.spyOn(serviceTemplateService, 'fetchTemplates').mockResolvedValueOnce({
+        data: [sampleServiceTemplate],
+        error: null,
+        isUnavailable: true
+      });
+
+      render(
+        <ServiceTemplatesView
+          currentUserProfile={mockOwner}
+          onOpenTaskTemplates={vi.fn()}
+        />
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText(/phase 3d backend is not enabled in this environment yet. preview is read-only./i)).toBeInTheDocument();
+      });
+
+      const disabledActions = screen.getAllByTitle(/phase 3d backend is not enabled in this environment yet. preview is read-only./i);
+      expect(disabledActions.length).toBeGreaterThanOrEqual(4);
+      disabledActions.forEach((btn) => {
+        expect(btn).toBeDisabled();
+      });
     });
   });
 
@@ -490,6 +517,87 @@ describe('Phase 3D: Service Templates, 90-Day Work Plans & Hardening Suite', () 
       expect(screen.getByText(/this service template will create/i)).toBeInTheDocument();
       const launchBtn = screen.getByRole('button', { name: /launch service pack/i });
       expect(launchBtn).toBeDisabled();
+    });
+
+    it('4.4 RPC launch rejects archived and paused clients', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: { error: 'Forbidden: Cannot launch tasks for an archived client' },
+        error: null
+      });
+
+      const resArchived = await taskLaunchEngine.launchServiceTemplate({
+        clientId: mockArchivedClient.id,
+        templateId: sampleServiceTemplate.id,
+        templateVersion: 1,
+        targetWeek: 1,
+        tasks: [{ title: 'Task 1', departmentId: 'dept-media' }]
+      });
+      expect(resArchived.success).toBe(false);
+      expect(resArchived.error).toContain('archived client');
+
+      mockRpc.mockResolvedValueOnce({
+        data: { error: 'Forbidden: Cannot launch tasks for a paused client' },
+        error: null
+      });
+
+      const resPaused = await taskLaunchEngine.launchServiceTemplate({
+        clientId: mockPausedClient.id,
+        templateId: sampleServiceTemplate.id,
+        templateVersion: 1,
+        targetWeek: 1,
+        tasks: [{ title: 'Task 1', departmentId: 'dept-media' }]
+      });
+      expect(resPaused.success).toBe(false);
+      expect(resPaused.error).toContain('paused client');
+    });
+
+    it('4.5 Replaying same requestId with different payload is rejected with conflict error', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: { error: 'Conflict: Request ID already used with a different task payload' },
+        error: null
+      });
+
+      const resConflict = await taskLaunchEngine.launchServiceTemplate({
+        clientId: mockClient.id,
+        templateId: sampleServiceTemplate.id,
+        templateVersion: 1,
+        targetWeek: 1,
+        tasks: [{ title: 'Modified Task Title', departmentId: 'dept-media' }],
+        requestId: 'reused-req-different-payload'
+      });
+
+      expect(resConflict.success).toBe(false);
+      expect(resConflict.error).toContain('different task payload');
+    });
+
+    it('4.6 Work Plan launch rejects client mismatch and stale revision', async () => {
+      mockRpc.mockResolvedValueOnce({
+        data: { error: 'Conflict: Work Plan does not belong to the target client' },
+        error: null
+      });
+
+      const resMismatch = await taskLaunchEngine.launchWorkPlan({
+        clientId: 'wrong-client-id',
+        planId: 'plan-123',
+        expectedRevision: 1,
+        tasks: [{ title: 'Plan Task 1', departmentId: 'dept-tech', planWeek: 1 }]
+      });
+      expect(resMismatch.success).toBe(false);
+      expect(resMismatch.error).toContain('does not belong');
+
+      mockRpc.mockResolvedValueOnce({
+        data: { error: 'Conflict: Work Plan revision has changed. Please refresh and review.' },
+        error: null
+      });
+
+      const resStale = await taskLaunchEngine.launchWorkPlan({
+        clientId: mockClient.id,
+        planId: 'plan-123',
+        expectedRevision: 1,
+        tasks: [{ title: 'Plan Task 1', departmentId: 'dept-tech', planWeek: 1 }]
+      });
+      expect(resStale.success).toBe(false);
+      expect(resStale.error).toContain('revision has changed');
     });
   });
 

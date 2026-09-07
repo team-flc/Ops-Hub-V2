@@ -313,7 +313,9 @@ export const ServiceTemplatesView: React.FC<ServiceTemplatesViewProps> = ({ curr
             <button
               type="button"
               onClick={handleOpenCreate}
-              className="mt-2 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-500 text-white text-xs font-bold shadow-md hover:bg-brand-600 transition-colors cursor-pointer"
+              disabled={isUnavailable}
+              title={isUnavailable ? 'Phase 3D backend is not enabled in this environment yet. Preview is read-only.' : 'Create new service template'}
+              className="mt-2 inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold shadow-md transition-colors cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>Create First Service Template</span>
