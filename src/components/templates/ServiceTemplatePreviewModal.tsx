@@ -67,8 +67,8 @@ export const ServiceTemplatePreviewModal: React.FC<ServiceTemplatePreviewModalPr
                 </span>
                 <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
                   template.status === 'Active'
-                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                    : 'bg-gray-200 text-gray-600 dark:bg-dark-200 dark:text-gray-400'
+                    ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400'
+                    : 'bg-gray-100 text-gray-600 dark:bg-dark-100 dark:text-gray-400 border border-gray-200 dark:border-dark-border'
                 }`}>
                   {template.status}
                 </span>

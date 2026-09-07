@@ -28,10 +28,11 @@ import {
 interface WorkPlanBuilderModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSuccess: (plan: ClientWorkPlan) => void;
+  onSuccess: (plan?: ClientWorkPlan) => void;
   client: ClientRecord;
-  existingPlan?: ClientWorkPlan | null;
   departments: Department[];
+  existingPlan?: ClientWorkPlan | null;
+  isBackendUnavailable?: boolean;
 }
 
 export const WorkPlanBuilderModal: React.FC<WorkPlanBuilderModalProps> = ({
@@ -39,8 +40,9 @@ export const WorkPlanBuilderModal: React.FC<WorkPlanBuilderModalProps> = ({
   onClose,
   onSuccess,
   client,
+  departments,
   existingPlan,
-  departments
+  isBackendUnavailable = false
 }) => {
   const isEditing = !!existingPlan;
 
@@ -552,6 +554,13 @@ export const WorkPlanBuilderModal: React.FC<WorkPlanBuilderModalProps> = ({
 
         {/* Body Container */}
         <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-5">
+          {isBackendUnavailable && (
+            <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-gray-100 dark:bg-dark-100 border border-gray-200 dark:border-dark-border text-gray-800 dark:text-gray-200 text-xs font-medium">
+              <AlertCircle className="w-4 h-4 text-brand-500 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">Phase 3D backend is not enabled in this environment yet. Preview is read-only.</div>
+            </div>
+          )}
+
           {errorMessage && (
             <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium animate-shake">
               <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
@@ -559,8 +568,8 @@ export const WorkPlanBuilderModal: React.FC<WorkPlanBuilderModalProps> = ({
             </div>
           )}
 
-          {/* Plan Settings Bar */}
-          <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 p-4 rounded-2xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border">
+          {/* Form Top Controls */}
+          <div className="grid grid-cols-1 sm:grid-cols-12 gap-4 bg-slate-50 dark:bg-dark-sidebar p-4 rounded-2xl border border-slate-200 dark:border-dark-border">
             <div className="sm:col-span-8 space-y-1">
               <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
                 Work Plan Name <span className="text-rose-500">*</span>
@@ -570,7 +579,7 @@ export const WorkPlanBuilderModal: React.FC<WorkPlanBuilderModalProps> = ({
                 required
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="e.g. Q4 Growth & Content Delivery Plan"
+                placeholder="e.g. Q2 Growth & Social Execution Plan"
                 className="w-full px-3 py-2 text-xs bg-white dark:bg-dark-200 border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 font-bold"
               />
             </div>
@@ -589,15 +598,15 @@ export const WorkPlanBuilderModal: React.FC<WorkPlanBuilderModalProps> = ({
             </div>
 
             {weekendWarning && (
-              <div className="sm:col-span-12 p-3 rounded-xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 text-amber-900 dark:text-amber-300 text-xs flex items-center justify-between gap-3">
+              <div className="sm:col-span-12 p-3 rounded-xl bg-gray-100 dark:bg-dark-100 border border-gray-200 dark:border-dark-border text-gray-800 dark:text-gray-200 text-xs flex items-center justify-between gap-3 shadow-xs">
                 <div className="flex items-center gap-2">
-                  <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+                  <AlertTriangle className="w-4 h-4 text-brand-500 flex-shrink-0" />
                   <span>The selected start date falls on a weekend. Starting on Monday is recommended.</span>
                 </div>
                 <button
                   type="button"
                   onClick={handleApplySuggestedMonday}
-                  className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-[11px] whitespace-nowrap cursor-pointer"
+                  className="px-3 py-1 bg-brand-600 hover:bg-brand-700 text-white rounded-lg font-bold text-[11px] whitespace-nowrap cursor-pointer shadow-xs"
                 >
                   Change to Monday ({formatPlanDate(weekendWarning.suggestedMonday)})
                 </button>
@@ -1057,16 +1066,18 @@ export const WorkPlanBuilderModal: React.FC<WorkPlanBuilderModalProps> = ({
             <button
               type="button"
               onClick={handleSaveDraft}
-              disabled={isSaving || isLaunching}
-              className="px-4 py-2 text-xs font-bold rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-dark-100 dark:hover:bg-dark-200 text-slate-800 dark:text-gray-200 transition-colors disabled:opacity-50 cursor-pointer"
+              disabled={isBackendUnavailable || isSaving || isLaunching}
+              title={isBackendUnavailable ? 'Phase 3D backend is not enabled in this environment yet. Preview is read-only.' : undefined}
+              className="px-4 py-2 text-xs font-bold rounded-xl bg-slate-200 hover:bg-slate-300 dark:bg-dark-100 dark:hover:bg-dark-200 text-slate-800 dark:text-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               {isSaving ? 'Saving Draft...' : 'Save Draft Plan'}
             </button>
             <button
               type="button"
               onClick={handleLaunchPlan}
-              disabled={isSaving || isLaunching || allTasksFlat.length === 0 || schedulingErrors.length > 0}
-              className="flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white bg-brand-500 hover:bg-brand-600 rounded-xl shadow-md shadow-brand-500/20 transition-colors disabled:opacity-50 cursor-pointer"
+              disabled={isBackendUnavailable || isSaving || isLaunching || allTasksFlat.length === 0 || schedulingErrors.length > 0}
+              title={isBackendUnavailable ? 'Phase 3D backend is not enabled in this environment yet. Preview is read-only.' : undefined}
+              className="flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white bg-brand-500 hover:bg-brand-600 rounded-xl shadow-md shadow-brand-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               {isLaunching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
               <span>Launch 90-Day Plan</span>

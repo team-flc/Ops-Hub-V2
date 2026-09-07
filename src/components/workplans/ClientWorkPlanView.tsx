@@ -145,7 +145,8 @@ export const ClientWorkPlanView: React.FC<ClientWorkPlanViewProps> = ({
             <button
               type="button"
               onClick={handleOpenNewBuilder}
-              disabled={client.status === 'Paused'}
+              disabled={client.status === 'Paused' || isUnavailable}
+              title={isUnavailable ? 'Phase 3D backend is not enabled in this environment yet. Preview is read-only.' : undefined}
               className="flex items-center gap-1.5 px-4 py-2.5 min-h-[44px] bg-brand-500 hover:bg-brand-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold shadow-md shadow-brand-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
             >
               <Plus className="w-4 h-4" />
@@ -158,21 +159,21 @@ export const ClientWorkPlanView: React.FC<ClientWorkPlanViewProps> = ({
       {/* Action Success Toast */}
       {actionSuccessMessage && (
         <div className="p-3 rounded-xl bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-xs font-bold flex items-center gap-2 shadow-lg animate-fade-in">
-          <CheckCircle2 className="w-4 h-4 text-emerald-400" />
+          <CheckCircle2 className="w-4 h-4 text-brand-500" />
           <span>{actionSuccessMessage}</span>
         </div>
       )}
 
       {/* Backend Migration Notice Banner */}
       {isUnavailable && (
-        <div className="p-4 rounded-2xl bg-gray-50 dark:bg-dark-card border border-gray-200 dark:border-dark-border text-xs text-gray-700 dark:text-gray-300 flex items-start gap-3">
+        <div className="p-4 rounded-2xl bg-gray-100 dark:bg-dark-100 border border-gray-200 dark:border-dark-border text-xs text-gray-800 dark:text-gray-200 flex items-start gap-3 shadow-sm">
           <AlertCircle className="w-5 h-5 text-brand-500 shrink-0 mt-0.5" />
           <div className="space-y-1">
             <div className="font-bold text-gray-900 dark:text-gray-100">
-              Phase 3D Work Plan System Initialized
+              Notice: Read-Only Preview
             </div>
             <p className="text-gray-500 dark:text-gray-400 leading-relaxed">
-              The 90-Day Work Plan engine is fully compiled in the application shell. Persistent database records will sync when the Phase 3D migration is applied to the production database. You can still test plan building and validation directly.
+              Phase 3D backend is not enabled in this environment yet. Preview is read-only.
             </p>
           </div>
         </div>
@@ -358,7 +359,8 @@ export const ClientWorkPlanView: React.FC<ClientWorkPlanViewProps> = ({
             <button
               type="button"
               onClick={handleOpenNewBuilder}
-              disabled={client.status === 'Paused'}
+              disabled={client.status === 'Paused' || isUnavailable}
+              title={isUnavailable ? 'Phase 3D backend is not enabled in this environment yet. Preview is read-only.' : undefined}
               className="flex items-center gap-1.5 px-4 py-2.5 min-h-[44px] bg-brand-500 hover:bg-brand-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold shadow-md shadow-brand-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
             >
               <Plus className="w-4 h-4" />
@@ -380,6 +382,7 @@ export const ClientWorkPlanView: React.FC<ClientWorkPlanViewProps> = ({
           client={client}
           departments={departments}
           existingPlan={selectedPlanForEdit}
+          isBackendUnavailable={isUnavailable}
         />
       )}
     </div>

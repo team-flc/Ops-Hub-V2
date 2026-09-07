@@ -44,8 +44,8 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
               <span
                 className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
                   template.status === 'Active'
-                    ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                    : 'bg-gray-500/10 text-gray-600 dark:text-gray-400'
+                    ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400'
+                    : 'bg-gray-100 text-gray-600 dark:bg-dark-100 dark:text-gray-400 border border-gray-200 dark:border-dark-border'
                 }`}
               >
                 {template.status}
@@ -86,7 +86,7 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
             </div>
 
             <div className="flex items-center gap-2.5">
-              <ShieldCheck className="w-4 h-4 text-amber-500 shrink-0" />
+              <ShieldCheck className="w-4 h-4 text-gray-400 shrink-0" />
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Approval Flow</p>
                 <p className="text-xs font-bold text-gray-800 dark:text-gray-200">
@@ -96,7 +96,7 @@ export const TemplatePreviewModal: React.FC<TemplatePreviewModalProps> = ({
             </div>
 
             <div className="flex items-center gap-2.5">
-              <Tag className="w-4 h-4 text-blue-500 shrink-0" />
+              <Tag className="w-4 h-4 text-gray-400 shrink-0" />
               <div>
                 <p className="text-[10px] font-bold uppercase tracking-wider text-gray-400">Default Priority</p>
                 <p className="text-xs font-bold text-gray-800 dark:text-gray-200">

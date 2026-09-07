@@ -171,11 +171,11 @@ export const TaskTemplatePickerModal: React.FC<TaskTemplatePickerModalProps> = (
           <div className="p-4 sm:p-6 overflow-y-auto flex-1 space-y-4">
             {/* Backend Unavailable Notice */}
             {isUnavailable && (
-              <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-start gap-3 text-amber-700 dark:text-amber-300">
-                <AlertTriangle className="w-5 h-5 shrink-0 text-amber-500 mt-0.5" />
+              <div className="p-4 rounded-xl bg-gray-100 dark:bg-dark-100 border border-gray-200 dark:border-dark-border flex items-start gap-3 text-gray-800 dark:text-gray-200">
+                <AlertTriangle className="w-5 h-5 shrink-0 text-brand-500 mt-0.5" />
                 <div>
-                  <p className="text-xs font-bold">Template library is currently synchronizing or awaiting backend rollout.</p>
-                  <p className="text-[11px] text-amber-600/80 dark:text-amber-400/80 mt-0.5">
+                  <p className="text-xs font-bold text-gray-900 dark:text-gray-100">Template library is currently synchronizing or awaiting backend rollout.</p>
+                  <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
                     You can continue creating your operational task directly without delay.
                   </p>
                 </div>
@@ -196,101 +196,76 @@ export const TaskTemplatePickerModal: React.FC<TaskTemplatePickerModalProps> = (
                 <span className="text-xs font-medium">Loading templates...</span>
               </div>
             ) : filteredTemplates.length === 0 ? (
-              <div className="py-12 text-center space-y-3">
-                <BookTemplate className="w-8 h-8 mx-auto text-gray-400 opacity-60" />
-                <h3 className="text-sm font-bold text-gray-700 dark:text-gray-300">
-                  {isUnavailable ? 'Template library unavailable' : 'No matching templates found'}
-                </h3>
-                <p className="text-xs text-gray-400 max-w-sm mx-auto">
-                  {isUnavailable
-                    ? 'Templates will be available following backend database deployment.'
-                    : searchQuery || selectedDepartmentId !== 'all'
-                    ? 'Try adjusting your search query or department filter.'
-                    : 'No active templates are currently configured in the library.'}
-                </p>
-                {!isUnavailable && (
-                  <div className="pt-2">
-                    <button
-                      type="button"
-                      onClick={onCreateBlankInstead}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-gray-100 hover:bg-gray-200 dark:bg-dark-100 dark:hover:bg-dark-200 text-gray-700 dark:text-gray-300 text-xs font-bold transition-colors"
-                    >
-                      Create Blank Task Instead
-                    </button>
-                  </div>
-                )}
+              /* Empty State */
+              <div className="text-center py-12 px-4 space-y-3">
+                <div className="w-12 h-12 rounded-2xl bg-gray-100 dark:bg-dark-100 text-gray-400 flex items-center justify-center mx-auto">
+                  <BookTemplate className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">No Task Templates Available</h3>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-1 max-w-sm mx-auto">
+                    {searchQuery || selectedDepartmentId !== 'all'
+                      ? 'No templates match your search filter criteria.'
+                      : 'Create reusable operational templates from Settings > Service Templates.'}
+                  </p>
+                </div>
               </div>
             ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              /* Templates List */
+              <div className="grid grid-cols-1 gap-2.5">
                 {filteredTemplates.map((template) => (
                   <div
                     key={template.id}
-                    className="p-4 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-card hover:border-brand-500/50 dark:hover:border-brand-500/50 hover:shadow-md transition-all flex flex-col justify-between"
+                    className="group p-4 rounded-2xl border border-gray-200 dark:border-dark-border hover:border-brand-500/50 bg-white dark:bg-dark-card hover:bg-brand-500/[0.02] transition-all flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs"
                   >
-                    <div className="space-y-2">
-                      <div className="flex items-center justify-between gap-2">
-                        <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-gray-100 dark:bg-dark-100 text-gray-700 dark:text-gray-300">
-                          {template.departmentName || 'Department'}
-                        </span>
-                        <span className="px-1.5 py-0.5 rounded text-[10px] font-mono text-gray-400">
-                          v{template.version}
-                        </span>
-                      </div>
-
-                      <h4 className="text-sm font-bold text-gray-900 dark:text-gray-100 leading-snug">
+                  <div className="space-y-1.5 flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold text-gray-900 dark:text-gray-100 group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors">
                         {template.name}
-                      </h4>
-
-                      {template.description && (
-                        <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-2 leading-relaxed">
-                          {template.description}
-                        </p>
-                      )}
-
-                      {/* Specs pills */}
-                      <div className="flex flex-wrap gap-1.5 pt-1">
-                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-brand-500/10 text-brand-600 dark:text-brand-400 flex items-center gap-1">
-                          <Clock className="w-2.5 h-2.5" /> {template.suggestedDurationDays}d SLA
-                        </span>
-                        <span
-                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 ${
-                            template.defaultApprovalMode === 'Client Approval Required'
-                              ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                              : 'bg-gray-500/10 text-gray-600 dark:text-gray-400'
-                          }`}
-                        >
-                          <ShieldCheck className="w-2.5 h-2.5" /> {template.defaultApprovalMode}
-                        </span>
-                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center gap-1">
-                          <Tag className="w-2.5 h-2.5" /> {template.defaultPriority}
-                        </span>
-                      </div>
+                      </span>
+                      <span className="text-[10px] font-mono text-gray-400">v{template.version}</span>
                     </div>
 
-                    {/* Card Actions */}
-                    <div className="pt-4 mt-3 border-t border-gray-100 dark:border-dark-border flex items-center justify-between gap-2">
-                      <button
-                        type="button"
-                        onClick={() => setPreviewTemplate(template)}
-                        className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors flex items-center gap-1"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        <span>Preview SOP</span>
-                      </button>
+                    {template.description && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400 line-clamp-1">{template.description}</p>
+                    )}
 
-                      <button
-                        type="button"
-                        onClick={() => onSelectTemplate(template)}
-                        className="px-3.5 py-1.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold flex items-center gap-1 shadow-sm transition-all"
-                      >
-                        <span>Use Template</span>
-                        <ArrowRight className="w-3.5 h-3.5" />
-                      </button>
+                    <div className="flex flex-wrap gap-1.5 pt-1">
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-brand-500/10 text-brand-600 dark:text-brand-400 flex items-center gap-1">
+                        <Clock className="w-2.5 h-2.5" /> {template.suggestedDurationDays}d SLA
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-gray-100 dark:bg-dark-200 text-gray-600 dark:text-gray-400 flex items-center gap-1">
+                        <ShieldCheck className="w-2.5 h-2.5" /> {template.defaultApprovalMode}
+                      </span>
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-gray-100 dark:bg-dark-200 text-gray-600 dark:text-gray-400 flex items-center gap-1">
+                        <Tag className="w-2.5 h-2.5" /> {template.defaultPriority}
+                      </span>
                     </div>
                   </div>
-                ))}
-              </div>
-            )}
+
+                  <div className="flex items-center gap-2 shrink-0">
+                    <button
+                      type="button"
+                      onClick={() => setPreviewTemplate(template)}
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors flex items-center gap-1 cursor-pointer"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span>Preview SOP</span>
+                    </button>
+
+                    <button
+                      type="button"
+                      onClick={() => onSelectTemplate(template)}
+                      className="px-3.5 py-1.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold flex items-center gap-1 shadow-sm transition-all cursor-pointer"
+                    >
+                      <span>Use Template</span>
+                      <ArrowRight className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
           </div>
 
           {/* Footer */}

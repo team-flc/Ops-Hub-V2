@@ -35,18 +35,16 @@ export const ApplyServiceTemplateModal: React.FC<ApplyServiceTemplateModalProps>
   departments
 }) => {
   const [templates, setTemplates] = useState<ServiceTemplate[]>([]);
-  const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
-  const [targetWeek, setTargetWeek] = useState<number>(initialWeek);
-  
-  // Launch-specific adjustable tasks
   const [customizedTasks, setCustomizedTasks] = useState<ServiceTemplateTask[]>([]);
-  const [requestId, setRequestId] = useState<string>('');
-  const [hasExistingApplication, setHasExistingApplication] = useState<boolean>(false);
-  const [allowDuplicateApplication, setAllowDuplicateApplication] = useState<boolean>(false);
-
+  const [targetWeek, setTargetWeek] = useState<number>(initialWeek);
+  const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
   const [isLaunching, setIsLaunching] = useState(false);
+  const [hasExistingApplication, setHasExistingApplication] = useState(false);
+  const [allowDuplicateApplication, setAllowDuplicateApplication] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [requestId, setRequestId] = useState<string>('');
+  const [isUnavailable, setIsUnavailable] = useState(false);
 
   // Load templates on open
   useEffect(() => {
@@ -56,10 +54,14 @@ export const ApplyServiceTemplateModal: React.FC<ApplyServiceTemplateModalProps>
     setHasExistingApplication(false);
     setAllowDuplicateApplication(false);
     setErrorMessage(null);
+    setIsUnavailable(false);
 
     async function load() {
       setIsLoadingTemplates(true);
       const res = await serviceTemplateService.fetchTemplates(false);
+      if (res.isUnavailable) {
+        setIsUnavailable(true);
+      }
       if (res.data && res.data.length > 0) {
         setTemplates(res.data);
         setSelectedTemplateId(res.data[0].id);
@@ -261,9 +263,15 @@ export const ApplyServiceTemplateModal: React.FC<ApplyServiceTemplateModalProps>
         {/* Body */}
         <div className="p-6 overflow-y-auto flex-1 space-y-6">
           {client.status === 'Paused' && (
-            <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-300 text-xs font-semibold animate-fade-in">
-              <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+            <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-brand-500/10 border border-brand-500/30 text-brand-800 dark:text-brand-300 text-xs font-semibold animate-fade-in">
+              <AlertTriangle className="w-4 h-4 text-brand-600 flex-shrink-0 mt-0.5" />
               <div>Client Workspace Paused: Task creation is blocked while client organization is paused.</div>
+            </div>
+          )}
+          {isUnavailable && (
+            <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-gray-100 dark:bg-dark-100 border border-gray-200 dark:border-dark-border text-gray-800 dark:text-gray-200 text-xs font-medium">
+              <AlertCircle className="w-4 h-4 text-brand-500 flex-shrink-0 mt-0.5" />
+              <div className="flex-1">Phase 3D backend is not enabled in this environment yet. Preview is read-only.</div>
             </div>
           )}
           {errorMessage && (
@@ -335,9 +343,9 @@ export const ApplyServiceTemplateModal: React.FC<ApplyServiceTemplateModalProps>
 
           {/* Duplicate Application Warning */}
           {hasExistingApplication && (
-            <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 text-amber-900 dark:text-amber-300 text-xs space-y-3">
+            <div className="p-4 rounded-2xl bg-gray-100 dark:bg-dark-100 border border-gray-200 dark:border-dark-border text-gray-800 dark:text-gray-200 text-xs space-y-3">
               <div className="flex items-start gap-2.5">
-                <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
+                <AlertTriangle className="w-4 h-4 text-brand-500 flex-shrink-0 mt-0.5" />
                 <div>
                   <strong>Notice:</strong> This Service Template has already been applied to <strong>{client.companyName} (Week {targetWeek})</strong>.
                   Creating this launch will create <strong>{customizedTasks.length} {customizedTasks.length === 1 ? 'additional Draft task' : 'additional Draft tasks'}</strong>. If this is an intentional second delivery pack, please confirm below.
@@ -492,8 +500,9 @@ export const ApplyServiceTemplateModal: React.FC<ApplyServiceTemplateModalProps>
             <button
               type="button"
               onClick={handleLaunch}
-              disabled={isLaunching || client.status === 'Paused' || client.status === 'Archived' || (hasExistingApplication && !allowDuplicateApplication) || customizedTasks.length === 0}
-              className="flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white bg-brand-500 hover:bg-brand-600 rounded-xl shadow-md shadow-brand-500/20 transition-colors disabled:opacity-50 cursor-pointer"
+              disabled={isLaunching || isUnavailable || client.status === 'Paused' || client.status === 'Archived' || (hasExistingApplication && !allowDuplicateApplication) || customizedTasks.length === 0}
+              title={isUnavailable ? 'Phase 3D backend is not enabled in this environment yet. Preview is read-only.' : undefined}
+              className="flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white bg-brand-500 hover:bg-brand-600 rounded-xl shadow-md shadow-brand-500/20 transition-colors disabled:opacity-50 disabled:cursor-not-allowed cursor-pointer"
             >
               {isLaunching ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
               <span>Launch Service Pack</span>

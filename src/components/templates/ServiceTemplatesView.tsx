@@ -188,14 +188,14 @@ export const ServiceTemplatesView: React.FC<ServiceTemplatesViewProps> = ({ curr
         </div>
       )}
 
-      {/* Backend Unavailable / Migration Warning Banner */}
+      {/* Backend Unavailable / Read-Only Preview Warning Banner */}
       {isUnavailable && (
-        <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-300 text-xs flex items-start gap-3 shadow-sm">
-          <AlertTriangle className="w-5 h-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+        <div className="p-4 rounded-2xl bg-gray-100 dark:bg-dark-100 border border-gray-200 dark:border-dark-border text-gray-800 dark:text-gray-200 text-xs flex items-start gap-3 shadow-sm">
+          <AlertTriangle className="w-5 h-5 text-brand-500 flex-shrink-0 mt-0.5" />
           <div className="space-y-1">
-            <div className="font-bold">Notice: Backend Database Migration Pending</div>
+            <div className="font-bold text-gray-900 dark:text-gray-100">Notice: Read-Only Preview</div>
             <div className="text-[11px] leading-relaxed opacity-90">
-              The remote production database has not deployed Phase 3D migrations yet. Existing single-task templates are safely presented as 1-task Service Templates. Changes created in Preview mode are maintained locally.
+              Phase 3D backend is not enabled in this environment yet. Preview is read-only.
             </div>
           </div>
         </div>
@@ -221,7 +221,9 @@ export const ServiceTemplatesView: React.FC<ServiceTemplatesViewProps> = ({ curr
         <button
           type="button"
           onClick={handleOpenCreate}
-          className="flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold shadow-lg shadow-brand-500/25 transition-all cursor-pointer flex-shrink-0 min-h-[44px]"
+          disabled={isUnavailable}
+          title={isUnavailable ? 'Phase 3D backend is not enabled in this environment yet. Preview is read-only.' : 'Create new service template'}
+          className="flex items-center justify-center gap-2 px-5 py-3 rounded-2xl bg-brand-500 hover:bg-brand-600 disabled:opacity-50 disabled:cursor-not-allowed text-white text-xs font-bold shadow-lg shadow-brand-500/25 transition-all cursor-pointer flex-shrink-0 min-h-[44px]"
         >
           <Plus className="w-4 h-4" />
           <span>New Service Template</span>
@@ -405,8 +407,9 @@ export const ServiceTemplatesView: React.FC<ServiceTemplatesViewProps> = ({ curr
                         <button
                           type="button"
                           onClick={() => handleOpenEdit(template)}
-                          className="p-2 rounded-xl text-gray-500 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors cursor-pointer"
-                          title="Edit Service Template"
+                          disabled={isUnavailable || isActionLoading}
+                          className="p-2 rounded-xl text-gray-500 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-dark-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                          title={isUnavailable ? 'Phase 3D backend is not enabled in this environment yet. Preview is read-only.' : 'Edit Service Template'}
                         >
                           <Edit3 className="w-4 h-4" />
                         </button>
@@ -414,9 +417,9 @@ export const ServiceTemplatesView: React.FC<ServiceTemplatesViewProps> = ({ curr
                         <button
                           type="button"
                           onClick={() => handleDuplicate(template)}
-                          disabled={isActionLoading}
-                          className="p-2 rounded-xl text-gray-500 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors cursor-pointer disabled:opacity-50"
-                          title="Duplicate Service Template"
+                          disabled={isUnavailable || isActionLoading}
+                          className="p-2 rounded-xl text-gray-500 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-dark-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                          title={isUnavailable ? 'Phase 3D backend is not enabled in this environment yet. Preview is read-only.' : 'Duplicate Service Template'}
                         >
                           <Copy className="w-4 h-4" />
                         </button>
@@ -433,7 +436,9 @@ export const ServiceTemplatesView: React.FC<ServiceTemplatesViewProps> = ({ curr
                             setTemplateToArchive(template);
                             setArchiveReason('');
                           }}
-                          className="px-3 py-1.5 rounded-xl text-xs font-bold text-amber-600 dark:text-amber-400 hover:bg-amber-50 dark:hover:bg-amber-950/30 transition-colors border border-transparent hover:border-amber-200 dark:hover:border-amber-800 cursor-pointer"
+                          disabled={isUnavailable || isActionLoading}
+                          title={isUnavailable ? 'Phase 3D backend is not enabled in this environment yet. Preview is read-only.' : 'Archive Service Template'}
+                          className="px-3 py-1.5 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 hover:text-brand-600 hover:bg-brand-500/10 disabled:opacity-40 disabled:cursor-not-allowed transition-colors border border-gray-200 dark:border-dark-border cursor-pointer"
                         >
                           Archive
                         </button>
@@ -443,8 +448,9 @@ export const ServiceTemplatesView: React.FC<ServiceTemplatesViewProps> = ({ curr
                         <button
                           type="button"
                           onClick={() => handleRestore(template)}
-                          disabled={isActionLoading}
-                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 dark:text-emerald-400 hover:bg-emerald-100 transition-colors border border-emerald-200 dark:border-emerald-800 cursor-pointer"
+                          disabled={isUnavailable || isActionLoading}
+                          title={isUnavailable ? 'Phase 3D backend is not enabled in this environment yet. Preview is read-only.' : 'Restore Service Template'}
+                          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl text-xs font-bold bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-colors border border-transparent cursor-pointer"
                         >
                           <RotateCcw className="w-3.5 h-3.5" />
                           <span>Restore</span>
@@ -464,7 +470,7 @@ export const ServiceTemplatesView: React.FC<ServiceTemplatesViewProps> = ({ curr
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-in fade-in duration-150">
           <div className="bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-2xl bg-amber-500/10 text-amber-500 flex items-center justify-center flex-shrink-0">
+              <div className="w-10 h-10 rounded-2xl bg-brand-500/10 text-brand-500 flex items-center justify-center flex-shrink-0 border border-brand-500/20">
                 <Archive className="w-5 h-5" />
               </div>
               <div>
@@ -495,7 +501,7 @@ export const ServiceTemplatesView: React.FC<ServiceTemplatesViewProps> = ({ curr
                 type="button"
                 onClick={() => setTemplateToArchive(null)}
                 disabled={isArchiving}
-                className="px-4 py-2 rounded-xl border border-gray-200 text-xs font-bold text-gray-600 hover:bg-gray-100"
+                className="px-4 py-2 rounded-xl border border-gray-200 text-xs font-bold text-gray-600 hover:bg-gray-100 cursor-pointer"
               >
                 Cancel
               </button>
@@ -503,7 +509,7 @@ export const ServiceTemplatesView: React.FC<ServiceTemplatesViewProps> = ({ curr
                 type="button"
                 onClick={handleArchiveConfirm}
                 disabled={isArchiving || !archiveReason.trim()}
-                className="px-5 py-2 rounded-xl bg-amber-500 hover:bg-amber-600 text-white text-xs font-bold shadow-md disabled:opacity-50"
+                className="px-5 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold shadow-md shadow-brand-500/20 disabled:opacity-50 cursor-pointer"
               >
                 {isArchiving ? 'Archiving...' : 'Confirm Archive'}
               </button>

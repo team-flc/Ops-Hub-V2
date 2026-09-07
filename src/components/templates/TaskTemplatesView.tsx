@@ -243,11 +243,11 @@ export const TaskTemplatesView: React.FC<TaskTemplatesViewProps> = ({ currentUse
 
       {/* Backend Unavailable Notice */}
       {isUnavailable && (
-        <div className="p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center gap-3 text-amber-700 dark:text-amber-300">
-          <AlertTriangle className="w-5 h-5 shrink-0 text-amber-500" />
+        <div className="p-4 rounded-xl bg-gray-100 dark:bg-dark-100 border border-gray-200 dark:border-dark-border flex items-center gap-3 text-gray-800 dark:text-gray-200">
+          <AlertTriangle className="w-5 h-5 shrink-0 text-brand-500" />
           <div className="text-xs">
-            <p className="font-bold">Template backend table is currently offline or awaiting database migration.</p>
-            <p className="text-[11px] text-amber-600/80 dark:text-amber-400/80 mt-0.5">
+            <p className="font-bold text-gray-900 dark:text-gray-100">Template backend table is currently offline or awaiting database migration.</p>
+            <p className="text-[11px] text-gray-500 dark:text-gray-400 mt-0.5">
               Template management becomes available after backend rollout. Task creation in client workspaces continues to function normally via blank manual entry.
             </p>
           </div>
@@ -269,7 +269,7 @@ export const TaskTemplatesView: React.FC<TaskTemplatesViewProps> = ({ currentUse
             onClick={() => setActiveTab('active')}
             className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
               activeTab === 'active'
-                ? 'bg-white dark:bg-dark-card text-brand-600 dark:text-brand-400 shadow-sm'
+                ? 'bg-white dark:bg-dark-card text-gray-900 dark:text-gray-100 shadow-sm'
                 : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
             }`}
           >
@@ -282,7 +282,7 @@ export const TaskTemplatesView: React.FC<TaskTemplatesViewProps> = ({ currentUse
               onClick={() => setActiveTab('archived')}
               className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-all ${
                 activeTab === 'archived'
-                  ? 'bg-white dark:bg-dark-card text-amber-600 dark:text-amber-400 shadow-sm'
+                  ? 'bg-white dark:bg-dark-card text-gray-900 dark:text-gray-100 shadow-sm'
                   : 'text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
               }`}
             >
@@ -385,8 +385,8 @@ export const TaskTemplatesView: React.FC<TaskTemplatesViewProps> = ({ currentUse
                     <span
                       className={`px-2 py-0.5 rounded-md text-[10px] font-bold ${
                         template.status === 'Active'
-                          ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400'
-                          : 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                          ? 'bg-brand-500/10 text-brand-600 dark:text-brand-400'
+                          : 'bg-gray-100 text-gray-600 dark:bg-dark-100 dark:text-gray-400 border border-gray-200 dark:border-dark-border'
                       }`}
                     >
                       {template.status}
@@ -417,23 +417,17 @@ export const TaskTemplatesView: React.FC<TaskTemplatesViewProps> = ({ currentUse
                   <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-brand-500/10 text-brand-600 dark:text-brand-400 flex items-center gap-1">
                     <Clock className="w-2.5 h-2.5" /> {template.suggestedDurationDays} Business Days
                   </span>
-                  <span
-                    className={`px-2 py-0.5 rounded-md text-[10px] font-bold flex items-center gap-1 ${
-                      template.defaultApprovalMode === 'Client Approval Required'
-                        ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
-                        : 'bg-gray-500/10 text-gray-600 dark:text-gray-400'
-                    }`}
-                  >
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-gray-100 dark:bg-dark-200 text-gray-600 dark:text-gray-400 flex items-center gap-1">
                     <ShieldCheck className="w-2.5 h-2.5" /> {template.defaultApprovalMode}
                   </span>
-                  <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-blue-500/10 text-blue-600 dark:text-blue-400 flex items-center gap-1">
+                  <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-gray-100 dark:bg-dark-200 text-gray-600 dark:text-gray-400 flex items-center gap-1">
                     <Tag className="w-2.5 h-2.5" /> {template.defaultPriority}
                   </span>
                 </div>
 
                 {/* Archive Info if Archived */}
                 {template.status === 'Archived' && template.archiveReason && (
-                  <div className="p-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20 text-[11px] text-amber-700 dark:text-amber-300">
+                  <div className="p-2.5 rounded-xl bg-gray-100 dark:bg-dark-100 border border-gray-200 dark:border-dark-border text-[11px] text-gray-700 dark:text-gray-300">
                     <span className="font-bold block">Archive Reason:</span>
                     <span className="italic">{template.archiveReason}</span>
                   </div>
@@ -475,7 +469,7 @@ export const TaskTemplatesView: React.FC<TaskTemplatesViewProps> = ({ currentUse
                         <button
                           type="button"
                           onClick={() => setArchivingTemplate(template)}
-                          className="p-1.5 text-gray-500 hover:text-amber-600 hover:bg-amber-500/10 rounded-lg transition-colors"
+                          className="p-1.5 text-gray-500 hover:text-brand-600 hover:bg-brand-500/10 rounded-lg transition-colors"
                           title="Archive template"
                         >
                           <Archive className="w-3.5 h-3.5" />
@@ -486,7 +480,7 @@ export const TaskTemplatesView: React.FC<TaskTemplatesViewProps> = ({ currentUse
                         type="button"
                         onClick={() => handleRestore(template)}
                         disabled={isActionLoading}
-                        className="px-2.5 py-1.5 rounded-lg text-xs font-bold text-amber-700 dark:text-amber-400 hover:bg-amber-500/10 flex items-center gap-1 transition-colors"
+                        className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-gray-800 flex items-center gap-1 transition-colors"
                       >
                         <RotateCcw className="w-3.5 h-3.5" />
                         <span>Restore</span>
