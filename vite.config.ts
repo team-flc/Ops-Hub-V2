@@ -18,6 +18,9 @@ export default defineConfig({
             if (id.includes('@hello-pangea/dnd')) {
               return 'vendor-dnd';
             }
+            if (id.includes('jspdf')) {
+              return 'vendor-pdf';
+            }
             if (id.includes('react') || id.includes('react-dom') || id.includes('react-router-dom') || id.includes('zustand')) {
               return 'vendor-react';
             }

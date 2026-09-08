@@ -765,3 +765,77 @@ export interface ArchivedRecord {
   previousStatus: string;
   metadata?: Record<string, any> | null;
 }
+
+// ==============================================================================
+// CLIENT EXPERIENCE PORTAL TYPES
+// ==============================================================================
+
+export interface ClientPortalRecipient {
+  id: string;
+  clientId: string;
+  profileId?: string | null;
+  email: string;
+  fullName: string;
+  status: 'active' | 'revoked';
+  lastSignInAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ClientPublishedResult {
+  id: string;
+  clientId: string;
+  metricName: string;
+  metricValue: string;
+  metricDefinition: string;
+  reportingPeriod: string;
+  periodStartDate?: string | null;
+  periodEndDate?: string | null;
+  source: string;
+  publishedAt: string;
+  publishedBy?: string | null;
+  status: 'published' | 'archived';
+}
+
+export type PortalDateRangePreset = 'this_week' | 'this_month' | 'last_month' | 'custom';
+
+export interface PortalDateRange {
+  preset: PortalDateRangePreset;
+  startDate: string; // YYYY-MM-DD
+  endDate: string; // YYYY-MM-DD
+  label: string;
+}
+
+export interface ClientDeliverableItem {
+  id: string;
+  title: string;
+  url: string;
+  taskId: string;
+  taskTitle: string;
+  departmentName: string;
+  sharedAt: string;
+}
+
+export interface ClientRoadmapMilestone {
+  id: string;
+  title: string;
+  weekNumber: number;
+  status: 'completed' | 'in_progress' | 'upcoming';
+  plannedStart: string;
+  dueDate: string;
+  completedAt?: string | null;
+  taskCount: number;
+  completedTaskCount: number;
+}
+
+export interface ClientPortalOverviewData {
+  client: ClientRecord;
+  factualSummary: string;
+  completedInPeriodCount: number;
+  inProgressCount: number;
+  needsInputCount: number;
+  upcomingCount: number;
+  publishedResults: ClientPublishedResult[];
+  publishedDeliverablesRatio: { completed: number; total: number };
+}
+

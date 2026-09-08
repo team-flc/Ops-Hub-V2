@@ -6,6 +6,8 @@ import {
 } from 'lucide-react';
 import { ClientRecord, ClientStatus } from '../../types';
 import { calculateLinkedInReadiness } from '../../lib/clientManagementService';
+import { useAuth } from '../../context/AuthContext';
+import { ClientLinkSharingModal } from '../portal/ClientLinkSharingModal';
 
 const LinkedInIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" }) => (
   <svg className={className} viewBox="0 0 24 24" fill="currentColor">

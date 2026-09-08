@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Building2, ChevronDown, ChevronUp, Search, 
-  Plus, Copy, AlertCircle, RefreshCw, Loader2, X
+  Plus, Copy, AlertCircle, RefreshCw, Loader2, X, Link2
 } from 'lucide-react';
 import { ClientRecord } from '../../types';
 import { useSignedUrl } from '../../lib/storageService';
@@ -298,21 +298,37 @@ export const ClientSwitcher: React.FC<ClientSwitcherProps> = ({
                           </div>
                         </div>
 
-                        {/* Right: Small Duplicate Icon + Package Label */}
+                        {/* Right: Small Duplicate & Link Icons + Package Label */}
                         <div className="flex items-center gap-1.5 flex-shrink-0">
                           {isManagerOrOwner && (
-                            <button
-                              type="button"
-                              onClick={(e) => {
-                                e.stopPropagation();
-                                setIsOpen(false);
-                                onOpenDuplicateModal(client);
-                              }}
-                              className="p-2 sm:p-1 rounded-md text-gray-400 hover:text-brand-600 hover:bg-brand-500/10 transition-colors touch-target sm:touch-auto flex items-center justify-center"
-                              title={`Duplicate Client: ${client.companyName}`}
-                            >
-                              <Copy className="w-3.5 h-3.5" />
-                            </button>
+                            <>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  const url = `${window.location.origin}/portal/${client.id}`;
+                                  if (navigator.clipboard) {
+                                    navigator.clipboard.writeText(url).catch(() => {});
+                                  }
+                                }}
+                                className="p-2 sm:p-1 rounded-md text-gray-400 hover:text-brand-600 hover:bg-brand-500/10 transition-colors touch-target sm:touch-auto flex items-center justify-center"
+                                title={`Copy Client Link: ${client.companyName}`}
+                              >
+                                <Link2 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                type="button"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setIsOpen(false);
+                                  onOpenDuplicateModal(client);
+                                }}
+                                className="p-2 sm:p-1 rounded-md text-gray-400 hover:text-brand-600 hover:bg-brand-500/10 transition-colors touch-target sm:touch-auto flex items-center justify-center"
+                                title={`Duplicate Client: ${client.companyName}`}
+                              >
+                                <Copy className="w-3.5 h-3.5" />
+                              </button>
+                            </>
                           )}
 
                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${badgeStyle}`}>

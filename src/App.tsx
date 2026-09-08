@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Routes, Route, useParams, useLocation } from 'react-router-dom';
+import { Routes, Route, useParams, useLocation, Navigate } from 'react-router-dom';
 import { useOpsStore } from './store/opsStore';
 import { clientManagementService } from './lib/clientManagementService';
 import { useAuth } from './context/AuthContext';
@@ -8,6 +8,7 @@ import { LoginPage } from './components/auth/LoginPage';
 import { ForgotPasswordPage } from './components/auth/ForgotPasswordPage';
 import { UpdatePasswordPage } from './components/auth/UpdatePasswordPage';
 import { ClientPortalHoldingPage } from './components/auth/ClientPortalHoldingPage';
+import { ClientPortalGate } from './components/portal/ClientPortalGate';
 
 // Internal Workspace Views
 import { Sidebar } from './components/layout/Sidebar';
@@ -187,6 +188,15 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
 /**
  * Top-Level Root Application with Mutually Exclusive Role Routing
  */
+
+const ClientRedirect: React.FC = () => {
+  const { profile } = useAuth();
+  if (profile?.organizationId) {
+    return <Navigate to={`/portal/${profile.organizationId}`} replace />;
+  }
+  return <ClientPortalHoldingPage />;
+};
+
 export const App: React.FC = () => {
   return (
     <Routes>
