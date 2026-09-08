@@ -7,6 +7,17 @@ import { ClientPortalRecipient, UserProfile } from '../../types';
 import { clientPortalService } from '../../lib/clientPortalService';
 import { useAuth } from '../../context/AuthContext';
 
+export const PRODUCTION_PORTAL_BASE = 'https://obshub2.pages.dev';
+
+export function getProductionPortalUrl(clientId: string): string {
+  return `${PRODUCTION_PORTAL_BASE}/portal/${clientId}`;
+}
+
+export function getPreviewPortalUrl(clientId: string): string {
+  const origin = typeof window !== 'undefined' ? window.location.origin : PRODUCTION_PORTAL_BASE;
+  return `${origin}/portal/${clientId}?preview=true`;
+}
+
 interface ClientLinkSharingModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -37,8 +48,8 @@ export const ClientLinkSharingModal: React.FC<ClientLinkSharingModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const productionUrl = `${window.location.origin}/portal/${clientId}`;
-  const previewUrl = `${window.location.origin}/portal/${clientId}?preview=true`;
+  const productionUrl = getProductionPortalUrl(clientId);
+  const previewUrl = getPreviewPortalUrl(clientId);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -192,11 +203,20 @@ export const ClientLinkSharingModal: React.FC<ClientLinkSharingModalProps> = ({
             {recipients.length === 0 && !isLoadingRecipients && (
               <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-3">
                 <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
-                <div className="space-y-1">
-                  <p className="font-bold">Set up client access</p>
-                  <p className="text-[11px] opacity-90">
-                    No authorized client contacts have been registered yet. Switch to the <strong>Authorized Recipients</strong> tab to add your client's designated contacts.
-                  </p>
+                <div className="space-y-2 flex-1">
+                  <div>
+                    <p className="font-bold">Set up client access</p>
+                    <p className="text-[11px] opacity-90">
+                      No authorized client contacts have been registered yet. Add designated client users so they can authenticate and view their deliverables.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('recipients')}
+                    className="inline-flex items-center gap-1 px-3 py-1.5 rounded-xl bg-amber-600 hover:bg-amber-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                  >
+                    <span>Set up client access</span>
+                  </button>
                 </div>
               </div>
             )}

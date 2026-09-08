@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { ClientRecord } from '../../types';
 import { useSignedUrl } from '../../lib/storageService';
+import { ClientLinkSharingModal } from '../portal/ClientLinkSharingModal';
 
 interface ClientSwitcherProps {
   clients: ClientRecord[];
@@ -77,6 +78,7 @@ export const ClientSwitcher: React.FC<ClientSwitcherProps> = ({
   const isManagerOrOwner = currentUserRole ? (currentUserRole === 'owner' || currentUserRole === 'operational_manager') : true;
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [sharingClient, setSharingClient] = useState<ClientRecord | null>(null);
   const popoverRef = useRef<HTMLDivElement>(null);
 
   // Close on outside click
@@ -306,13 +308,11 @@ export const ClientSwitcher: React.FC<ClientSwitcherProps> = ({
                                 type="button"
                                 onClick={(e) => {
                                   e.stopPropagation();
-                                  const url = `${window.location.origin}/portal/${client.id}`;
-                                  if (navigator.clipboard) {
-                                    navigator.clipboard.writeText(url).catch(() => {});
-                                  }
+                                  setIsOpen(false);
+                                  setSharingClient(client);
                                 }}
                                 className="p-2 sm:p-1 rounded-md text-gray-400 hover:text-brand-600 hover:bg-brand-500/10 transition-colors touch-target sm:touch-auto flex items-center justify-center"
-                                title={`Copy Client Link: ${client.companyName}`}
+                                title={`Client Portal Link & Access: ${client.companyName}`}
                               >
                                 <Link2 className="w-3.5 h-3.5" />
                               </button>
@@ -358,6 +358,18 @@ export const ClientSwitcher: React.FC<ClientSwitcherProps> = ({
             </div>
           </div>
         </>
+      )}
+
+      {/* Client Link Sharing & Recipient Governance Modal */}
+      {sharingClient && (
+        <ClientLinkSharingModal
+          isOpen={Boolean(sharingClient)}
+          onClose={() => setSharingClient(null)}
+          clientId={sharingClient.id}
+          clientName={sharingClient.clientName}
+          companyName={sharingClient.companyName}
+          currentUserRole={currentUserRole}
+        />
       )}
     </div>
   );

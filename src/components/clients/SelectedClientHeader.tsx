@@ -2,9 +2,9 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   Building2, User, AlertTriangle,
   CheckCircle2, Clock, Archive,
-  X, ChevronDown, ChevronUp
+  X, ChevronDown, ChevronUp, Link2, Eye
 } from 'lucide-react';
-import { ClientRecord, ClientStatus } from '../../types';
+import { ClientRecord, ClientStatus, UserProfile } from '../../types';
 import { calculateLinkedInReadiness } from '../../lib/clientManagementService';
 import { useAuth } from '../../context/AuthContext';
 import { ClientLinkSharingModal } from '../portal/ClientLinkSharingModal';
@@ -17,6 +17,8 @@ const LinkedInIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" 
 
 interface SelectedClientHeaderProps {
   client: ClientRecord;
+  currentUserProfile?: UserProfile | null;
+  currentUserRole?: string;
 }
 
 // Restrained Color Palette: Brand Red, Black, White, Neutral Grayscale
@@ -49,8 +51,17 @@ const PACKAGE_STYLES: Record<string, string> = {
   Advanced: 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 border-transparent'
 };
 
-export const SelectedClientHeader: React.FC<SelectedClientHeaderProps> = ({ client }) => {
+export const SelectedClientHeader: React.FC<SelectedClientHeaderProps> = ({ 
+  client,
+  currentUserProfile,
+  currentUserRole
+}) => {
+  const auth = useAuth();
+  const profile = currentUserProfile ?? auth?.profile;
+  const role = currentUserRole ?? profile?.role;
   const [isLinkedInPopoverOpen, setIsLinkedInPopoverOpen] = useState(false);
+  const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+  const isManagerOrOwner = role === 'owner' || role === 'operational_manager';
   const popoverRef = useRef<HTMLDivElement>(null);
 
   // Close LinkedIn popover on outside click
@@ -124,7 +135,35 @@ export const SelectedClientHeader: React.FC<SelectedClientHeaderProps> = ({ clie
       </div>
 
       {/* Right Area: LinkedIn Readiness Tracker Popover & Quick Links */}
-      <div className="flex items-center gap-3 flex-wrap">
+      <div className="flex items-center gap-2.5 flex-wrap">
+        {/* Owner & Manager Portal Entry Points */}
+        {isManagerOrOwner && (
+          <>
+            {/* Client Link Sharing Modal Trigger */}
+            <button
+              type="button"
+              onClick={() => setIsLinkModalOpen(true)}
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-gray-50 hover:bg-gray-100 dark:bg-dark-100 dark:hover:bg-dark-200 text-xs font-bold text-gray-800 dark:text-gray-200 transition-all shadow-xs cursor-pointer"
+              title="Share Client Portal Link & Manage Authorized Recipients"
+            >
+              <Link2 className="w-3.5 h-3.5 text-brand-500" />
+              <span>Client Link</span>
+            </button>
+
+            {/* View as Client (Read-Only Preview) */}
+            <a
+              href={`/portal/${client.id}?preview=true`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gray-900 hover:bg-black text-white dark:bg-white dark:hover:bg-gray-100 dark:text-gray-900 text-xs font-bold transition-all shadow-xs"
+              title="View Client Experience Portal in Read-Only Preview Mode"
+            >
+              <Eye className="w-3.5 h-3.5" />
+              <span>View as Client</span>
+            </a>
+          </>
+        )}
+
         <div className="relative" ref={popoverRef}>
           <button
             type="button"
@@ -233,6 +272,18 @@ export const SelectedClientHeader: React.FC<SelectedClientHeaderProps> = ({ clie
           )}
         </div>
       </div>
+
+      {/* Client Link Sharing & Recipient Governance Modal */}
+      {isLinkModalOpen && (
+        <ClientLinkSharingModal
+          isOpen={isLinkModalOpen}
+          onClose={() => setIsLinkModalOpen(false)}
+          clientId={client.id}
+          clientName={client.clientName}
+          companyName={client.companyName}
+          currentUserRole={role}
+        />
+      )}
     </div>
   );
 };

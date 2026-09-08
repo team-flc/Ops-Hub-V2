@@ -205,12 +205,32 @@ export const App: React.FC = () => {
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/update-password" element={<UpdatePasswordPage />} />
 
-      {/* Protected Client Portal Route (Strictly Client Role Only) */}
+      {/* Dedicated Client Portal Route with Strict Role Isolation & Server Authorization */}
+      <Route
+        path="/portal/:clientId"
+        element={
+          <ProtectedRoute allowedRoles={['client', 'owner', 'operational_manager']}>
+            <ClientPortalGate />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Portal root fallback (redirects to client's portal or shows holding page) */}
+      <Route
+        path="/portal"
+        element={
+          <ProtectedRoute allowedRoles={['client', 'owner', 'operational_manager']}>
+            <ClientRedirect />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Protected Client Portal Route (Redirects authenticated client to their portal) */}
       <Route
         path="/client"
         element={
           <ProtectedRoute allowedRoles={['client']}>
-            <ClientPortalHoldingPage />
+            <ClientRedirect />
           </ProtectedRoute>
         }
       />

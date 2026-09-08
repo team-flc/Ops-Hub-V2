@@ -194,7 +194,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
   return (
     <div className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto bg-gray-50/50 dark:bg-dark-400 select-none">
       {/* 1. Selected Client Top Header */}
-      <SelectedClientHeader client={client} />
+      <SelectedClientHeader client={client} currentUserProfile={currentUserProfile} />
 
       {/* Paused Client Warning Banner */}
       {client.status === 'Paused' && (

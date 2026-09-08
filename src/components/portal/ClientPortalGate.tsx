@@ -11,7 +11,7 @@ import { clientPortalService, PortalDataResult } from '../../lib/clientPortalSer
 import { ClientPortalLayout } from './ClientPortalLayout';
 import { 
   Building2, ShieldAlert, AlertTriangle, 
-  Loader2, LogOut, ArrowLeft, Eye
+  Loader2, LogOut, ArrowLeft, Eye, Sparkles
 } from 'lucide-react';
 import { getPresetDateRanges } from '../../lib/clientPdfReportService';
 import { PortalDateRange } from '../../types';
@@ -38,7 +38,7 @@ export const ClientPortalGate: React.FC = () => {
 
   // Determine if this is a staff read-only preview
   const isStaffRole = profile?.role === 'owner' || profile?.role === 'operational_manager';
-  const isReadOnlyPreview = isStaffRole && (isPreviewRequested || Boolean(paramClientId));
+  const isReadOnlyPreview = isStaffRole && isPreviewRequested;
 
   const loadData = useCallback(async () => {
     if (!effectiveClientId) {
@@ -206,7 +206,20 @@ export const ClientPortalGate: React.FC = () => {
         </div>
       )}
 
-      {/* 2. PERSISTENT CLIENT PAUSED NOTICE */}
+      {/* 2. PERSISTENT SETUP PENDING NOTICE (when remote migration is pending) */}
+      {portalData.isSetupPending && isStaffRole && (
+        <div 
+          role="status"
+          className="bg-sky-500/10 border-b border-sky-500/20 text-sky-700 dark:text-sky-300 px-4 py-2 text-xs font-semibold flex items-center justify-center gap-2 text-center"
+        >
+          <Sparkles className="w-4 h-4 shrink-0 text-sky-500" />
+          <span>
+            Client Portal Setup Pending: Remote database tables are currently being configured. Deliverables are displayed in fallback mode.
+          </span>
+        </div>
+      )}
+
+      {/* 3. PERSISTENT CLIENT PAUSED NOTICE */}
       {portalData.client.status === 'Paused' && (
         <div 
           role="alert"

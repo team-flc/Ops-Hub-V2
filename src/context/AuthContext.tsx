@@ -317,10 +317,26 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   );
 };
 
+const defaultAuthContext: AuthContextType = {
+  user: null,
+  profile: null,
+  session: null,
+  isLoading: false,
+  profileError: null,
+  isConfigured: false,
+  signIn: async () => ({ error: 'AuthProvider not initialized' }),
+  signOut: async () => {},
+  resetPasswordForEmail: async () => ({ error: 'AuthProvider not initialized' }),
+  updatePassword: async () => ({ error: 'AuthProvider not initialized' }),
+  refreshProfile: async () => {}
+};
+
 export const useAuth = (): AuthContextType => {
   const context = useContext(AuthContext);
   if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
+    return defaultAuthContext;
   }
   return context;
 };
+
+

@@ -24,6 +24,7 @@ export interface PortalDataResult {
   overview: ClientPortalOverviewData | null;
   deliverables: ClientDeliverableItem[];
   roadmapMilestones: ClientRoadmapMilestone[];
+  isSetupPending?: boolean;
   error: string | null;
 }
 
@@ -113,9 +114,12 @@ export const clientPortalService = {
         return { client: clientRecord, tasks: [], overview: null, deliverables: [], roadmapMilestones: [], error: 'WORKSPACE_ARCHIVED' };
       }
 
-      // 3. Fetch Tasks within Publication Boundary
+      // 3. Fetch Tasks within Publication Boundary (with migration fallback)
       // Excludes internal-only draft tasks before data reaches presentation
-      const { data: rawTasks, error: tErr } = await supabase
+      let rawTasks: any[] | null = null;
+      let isSetupPending = false;
+
+      const { data: tasksWithVisibility, error: tErr1 } = await supabase
         .from('client_tasks')
         .select(`
           id, client_id, week_number, title, details, department_id,
@@ -130,6 +134,30 @@ export const clientPortalService = {
         .order('week_number', { ascending: true })
         .order('sort_order', { ascending: true })
         .order('created_at', { ascending: true });
+
+      if (tErr1) {
+        // Fallback gracefully if is_client_visible column is missing on remote DB
+        isSetupPending = true;
+        const { data: fallbackTasks } = await supabase
+          .from('client_tasks')
+          .select(`
+            id, client_id, week_number, title, details, department_id,
+            assignee_id, priority, planned_start, due_date, status,
+            approval_mode, completed_at, completed_by, reopened_at, reopened_by,
+            reopen_reason, blocked_reason, sort_order, created_at, updated_at,
+            archived_at,
+            departments(id, name)
+          `)
+          .eq('client_id', clientId)
+          .is('archived_at', null)
+          .order('week_number', { ascending: true })
+          .order('sort_order', { ascending: true })
+          .order('created_at', { ascending: true });
+
+        rawTasks = fallbackTasks || [];
+      } else {
+        rawTasks = tasksWithVisibility || [];
+      }
 
       const allTasks: ClientTask[] = (rawTasks || []).map((t: any) => ({
         id: t.id,
