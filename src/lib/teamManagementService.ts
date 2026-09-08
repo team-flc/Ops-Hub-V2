@@ -43,6 +43,21 @@ export interface UpdateTeamMemberPayload {
   clientIds?: string[];
 }
 
+async function extractFunctionsError(error: any, fallbackMessage: string): Promise<string> {
+  if (!error) return fallbackMessage;
+  try {
+    if (error.context && typeof error.context.json === 'function') {
+      const errorBody = await error.context.json();
+      if (errorBody?.error) {
+        return errorBody.error;
+      }
+    }
+  } catch (_) {
+    // Ignore JSON parsing errors and fallback to error.message
+  }
+  return error.message || fallbackMessage;
+}
+
 export const teamManagementService = {
   /**
    * Fetch all visible team members scoped to caller's role
@@ -305,7 +320,8 @@ export const teamManagementService = {
       });
 
       if (error) {
-        return { error: error.message || 'Failed to create team member.' };
+        const errorMsg = await extractFunctionsError(error, 'Failed to create team member.');
+        return { error: errorMsg };
       }
 
       if (data?.error) {
@@ -339,7 +355,8 @@ export const teamManagementService = {
       });
 
       if (error) {
-        return { error: error.message || 'Failed to update team member.' };
+        const errorMsg = await extractFunctionsError(error, 'Failed to update team member.');
+        return { error: errorMsg };
       }
 
       if (data?.error) {
@@ -368,7 +385,10 @@ export const teamManagementService = {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      if (error) return { error: error.message };
+      if (error) {
+        const errorMsg = await extractFunctionsError(error, 'Failed to reset password.');
+        return { error: errorMsg };
+      }
       if (data?.error) return { error: data.error };
 
       return {};
@@ -470,7 +490,10 @@ export const teamManagementService = {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      if (error) return { error: error.message };
+      if (error) {
+        const errorMsg = await extractFunctionsError(error, 'Failed to suspend team member.');
+        return { error: errorMsg };
+      }
       if (data?.error) return { error: data.error };
 
       return {};
@@ -495,7 +518,10 @@ export const teamManagementService = {
         headers: { Authorization: `Bearer ${token}` }
       });
 
-      if (error) return { error: error.message };
+      if (error) {
+        const errorMsg = await extractFunctionsError(error, 'Failed to reactivate team member.');
+        return { error: errorMsg };
+      }
       if (data?.error) return { error: data.error };
 
       return {};

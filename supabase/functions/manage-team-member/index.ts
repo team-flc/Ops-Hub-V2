@@ -180,6 +180,20 @@ serve(async (req: Request) => {
         );
       }
 
+      // Pre-check whether submitted email already exists in profiles
+      const { data: existingProfiles } = await supabaseAdmin
+        .from('profiles')
+        .select('id')
+        .or(`work_email.eq.${cleanEmail},contact_email.eq.${cleanEmail}`)
+        .limit(1);
+
+      if (existingProfiles && existingProfiles.length > 0) {
+        return new Response(
+          JSON.stringify({ error: 'A team member with this email already exists in profiles.' }),
+          { status: 400, headers: corsHeaders }
+        );
+      }
+
       // Optional fields validation
       let cleanLinkedinUrl = linkedinUrl?.trim() || null;
       if (cleanLinkedinUrl && !/^https?:\/\//i.test(cleanLinkedinUrl)) {
@@ -282,7 +296,7 @@ serve(async (req: Request) => {
         const { data: managerClients } = await supabaseAdmin
           .from('client_team_access')
           .select('client_id')
-          .eq('user_id', callerProfile.id);
+          .eq('profile_id', callerProfile.id);
         const allowedSet = new Set((managerClients || []).map((mc: any) => mc.client_id));
         const unauthorizedClients = clientIds.filter((cid: string) => !allowedSet.has(cid));
         if (unauthorizedClients.length > 0) {
@@ -314,8 +328,8 @@ serve(async (req: Request) => {
       const newUserId = newAuthData.user.id;
 
       try {
-        // 2. Insert Profile
-        const { error: insertProfileError } = await supabaseAdmin.from('profiles').insert({
+        // 2. Upsert Profile (merges with row pre-created by DB trigger on_auth_user_created)
+        const { error: upsertProfileError } = await supabaseAdmin.from('profiles').upsert({
           id: newUserId,
           full_name: fullName.trim(),
           work_email: cleanEmail,
@@ -330,12 +344,11 @@ serve(async (req: Request) => {
           designation_id: designationId,
           reporting_manager_id: targetManagerId,
           start_date: startDate || new Date().toISOString().split('T')[0],
-          created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
-        });
+        }, { onConflict: 'id' });
 
-        if (insertProfileError) {
-          throw new Error(`Profile creation failed: ${insertProfileError.message}`);
+        if (upsertProfileError) {
+          throw new Error(`Profile creation failed: ${upsertProfileError.message}`);
         }
 
         // 3. Link Departments
@@ -371,7 +384,7 @@ serve(async (req: Request) => {
           safe_changes: {
             fullName: fullName.trim(),
             workEmail: cleanEmail,
-            role: 'team_member',
+            role: targetRole,
             reportingManagerId: targetManagerId,
             departmentCount: departmentIds.length,
             clientAccessCount: clientIds?.length || 0
@@ -385,7 +398,7 @@ serve(async (req: Request) => {
               id: newUserId,
               fullName: fullName.trim(),
               workEmail: cleanEmail,
-              role: 'team_member',
+              role: targetRole,
               reportingManagerId: targetManagerId,
               status: 'active'
             }

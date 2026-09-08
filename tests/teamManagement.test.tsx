@@ -372,4 +372,91 @@ describe('Phase 2A Team & User Management Tests', () => {
     expect(import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY).toBeUndefined();
     expect(import.meta.env.SUPABASE_SERVICE_ROLE_KEY).toBeUndefined();
   });
+
+  // 7. REGRESSION TESTS: OPERATIONAL MANAGER CREATION & DETAILED ERROR EXTRACTION
+  it('10. Owner provisioning an Operational Manager sends correct role and payload to Edge Function', async () => {
+    mockInvoke.mockResolvedValue({
+      data: {
+        success: true,
+        user: {
+          id: 'new-om-id',
+          fullName: 'Muhammad Atif Naseer',
+          workEmail: 'atifrajpoot134@gmail.com',
+          role: 'operational_manager',
+          reportingManagerId: 'owner-id',
+          status: 'active'
+        }
+      },
+      error: null
+    });
+
+    const result = await teamManagementService.createTeamMember({
+      fullName: 'Muhammad Atif Naseer',
+      workEmail: 'atifrajpoot134@gmail.com',
+      role: 'operational_manager',
+      startDate: '2026-09-08',
+      departmentIds: ['dept-ops'],
+      designationId: 'desig-ops-mgr',
+      reportingManagerId: 'owner-id',
+      password: 'SecurePassword123!@#'
+    });
+
+    expect(result.error).toBeUndefined();
+    expect(result.user).toBeDefined();
+    expect(result.user?.role).toBe('operational_manager');
+    expect(mockInvoke).toHaveBeenCalledWith(
+      'manage-team-member',
+      expect.objectContaining({
+        body: expect.objectContaining({
+          action: 'create',
+          fullName: 'Muhammad Atif Naseer',
+          workEmail: 'atifrajpoot134@gmail.com',
+          role: 'operational_manager'
+        })
+      })
+    );
+  });
+
+  it('11. Error handling parses JSON response body from Edge Function non-2xx status code', async () => {
+    const mockHttpError = {
+      message: 'Edge Function returned a non-2xx status code',
+      context: {
+        json: vi.fn().mockResolvedValue({ error: 'A team member with this email already exists in profiles.' })
+      }
+    };
+    mockInvoke.mockResolvedValue({ data: null, error: mockHttpError });
+
+    const result = await teamManagementService.createTeamMember({
+      fullName: 'Duplicate User',
+      workEmail: 'existing@faseehlall.com',
+      startDate: '2026-09-08',
+      departmentIds: ['dept-ops'],
+      designationId: 'desig-1',
+      password: 'SecurePassword123!@#'
+    });
+
+    expect(result.error).toBe('A team member with this email already exists in profiles.');
+  });
+
+  it('12. Error handling falls back gracefully when Edge Function context JSON cannot be parsed', async () => {
+    const mockHttpError = {
+      message: 'Edge Function returned a non-2xx status code',
+      context: {
+        json: vi.fn().mockRejectedValue(new Error('Invalid JSON'))
+      }
+    };
+    mockInvoke.mockResolvedValue({ data: null, error: mockHttpError });
+
+    const result = await teamManagementService.createTeamMember({
+      fullName: 'User',
+      workEmail: 'test@faseehlall.com',
+      startDate: '2026-09-08',
+      departmentIds: ['dept-ops'],
+      designationId: 'desig-1',
+      password: 'SecurePassword123!@#'
+    });
+
+    expect(result.error).toBe('Edge Function returned a non-2xx status code');
+  });
 });
+
