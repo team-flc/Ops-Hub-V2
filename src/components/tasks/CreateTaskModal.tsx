@@ -15,7 +15,6 @@ export const CreateTaskModal: React.FC = () => {
   const createTask = useOpsStore((state) => state.createTask);
   const setSelectedTaskId = useOpsStore((state) => state.setSelectedTaskId);
   const clientsVendors = useOpsStore((state) => state.clientsVendors);
-  const createClientVendor = useOpsStore((state) => state.createClientVendor);
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');

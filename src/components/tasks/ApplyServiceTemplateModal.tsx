@@ -1,21 +1,19 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
-  X, Layers, Calendar, Check, AlertTriangle, 
-  AlertCircle, Loader2, ArrowUp, ArrowDown, Plus, Trash2, Building2, Clock, ShieldAlert
+  X, Layers, Check, AlertTriangle, 
+  AlertCircle, Loader2, ArrowUp, ArrowDown, Plus, Trash2, ShieldAlert
 } from 'lucide-react';
 import { 
   ServiceTemplate, 
   ServiceTemplateTask, 
   Department, 
   ClientRecord, 
-  UserProfile,
   ClientTaskPriority,
   TaskApprovalMode
 } from '../../types';
 import { serviceTemplateService } from '../../lib/serviceTemplateService';
 import { taskLaunchEngine, generateRequestId } from '../../lib/taskLaunchEngine';
-import { calculateTaskDatesForWeek } from '../../lib/workPlanCalendar';
 
 interface ApplyServiceTemplateModalProps {
   isOpen: boolean;

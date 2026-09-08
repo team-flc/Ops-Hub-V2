@@ -53,7 +53,7 @@ export const ResetPasswordModal: React.FC<ResetPasswordModalProps> = ({
     const hasUpper = /[A-Z]/.test(pwd);
     const hasLower = /[a-z]/.test(pwd);
     const hasNumber = /[0-9]/.test(pwd);
-    const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pwd);
+    const hasSpecial = /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(pwd);
     return { hasMinLen, hasUpper, hasLower, hasNumber, hasSpecial, isValid: hasMinLen && hasUpper && hasLower && hasNumber && hasSpecial };
   };
 

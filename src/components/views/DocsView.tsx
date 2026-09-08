@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import { useOpsStore } from '../../store/opsStore';
-import { SOPDocument } from '../../types';
 import { 
   BookOpen, Plus, Star, Search, Trash2, Edit3, 
-  Eye, Tag, User, Clock, Download, FileText, Check 
+  Eye, Tag, User, Download, FileText 
 } from 'lucide-react';
 
 export const DocsView: React.FC = () => {

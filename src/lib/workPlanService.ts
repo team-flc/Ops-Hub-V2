@@ -6,7 +6,6 @@
 
 import { supabase, isSupabaseConfigured } from './supabase';
 import { ClientWorkPlan, WorkPlanWeek, TaskLaunchBatchResult } from '../types';
-import { compute90DayPlanRange } from './workPlanCalendar';
 import { taskLaunchEngine } from './taskLaunchEngine';
 
 function mapPlanRow(row: any): ClientWorkPlan {

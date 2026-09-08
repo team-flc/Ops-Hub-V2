@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  X, Archive, AlertTriangle, AlertCircle, Loader2, 
-  CheckCircle2, ListTodo, ShieldAlert 
+  X, Archive, AlertCircle, Loader2, 
+  CheckCircle2, ShieldAlert 
 } from 'lucide-react';
 import { TeamMemberRecord, UserProfile } from '../../types';
 import { archiveService } from '../../lib/archiveService';
@@ -11,7 +11,7 @@ interface ArchiveTeamMemberModalProps {
   onClose: () => void;
   onSuccess: () => void;
   member: TeamMemberRecord | null;
-  currentUserProfile: UserProfile | null;
+  currentUserProfile?: UserProfile | null;
 }
 
 export const ArchiveTeamMemberModal: React.FC<ArchiveTeamMemberModalProps> = ({
@@ -19,7 +19,7 @@ export const ArchiveTeamMemberModal: React.FC<ArchiveTeamMemberModalProps> = ({
   onClose,
   onSuccess,
   member,
-  currentUserProfile
+  currentUserProfile: _currentUserProfile
 }) => {
   const [isLoadingCheck, setIsLoadingCheck] = useState(false);
   const [hasOpenTasks, setHasOpenTasks] = useState(false);

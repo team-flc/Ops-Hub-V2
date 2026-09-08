@@ -5,28 +5,21 @@ import {
   compute90DayPlanRange,
   generate13PlanWeeks,
   calculateTaskDatesForWeek,
-  calculateBusinessDueDate,
-  getBusinessDaysInRange
+  calculateBusinessDueDate
 } from '../src/lib/workPlanCalendar';
 import { isSaturday, isSunday, isWeekend, rollForwardToNextMonday } from '../src/lib/taskManagementService';
 import { serviceTemplateService } from '../src/lib/serviceTemplateService';
-import { taskLaunchEngine, generateRequestId } from '../src/lib/taskLaunchEngine';
+import { taskLaunchEngine } from '../src/lib/taskLaunchEngine';
 import { workPlanService } from '../src/lib/workPlanService';
 import {
   ServiceTemplate,
-  ServiceTemplateTask,
   ClientRecord,
   Department,
-  UserProfile,
-  WorkPlanWeek
+  UserProfile
 } from '../src/types';
-import { CreateEditServiceTemplateModal } from '../src/components/templates/CreateEditServiceTemplateModal';
-import { ServiceTemplatePreviewModal } from '../src/components/templates/ServiceTemplatePreviewModal';
 import { ServiceTemplatesView } from '../src/components/templates/ServiceTemplatesView';
 import { ApplyServiceTemplateModal } from '../src/components/tasks/ApplyServiceTemplateModal';
 import { TaskCreationModeModal } from '../src/components/tasks/TaskCreationModeModal';
-import { WorkPlanBuilderModal } from '../src/components/workplans/WorkPlanBuilderModal';
-import { ClientWorkPlanView } from '../src/components/workplans/ClientWorkPlanView';
 import { SelectedClientHeader } from '../src/components/clients/SelectedClientHeader';
 import { CreateTeamMemberModal } from '../src/components/team/CreateTeamMemberModal';
 import { Sidebar } from '../src/components/layout/Sidebar';
@@ -76,7 +69,7 @@ const mockClient: ClientRecord = {
   updatedAt: '2026-04-01T00:00:00Z'
 };
 
-const mockPausedClient: ClientRecord = {
+const _mockPausedClient: ClientRecord = {
   ...mockClient,
   id: 'client-3d-paused',
   companyName: 'Paused Client Ltd',

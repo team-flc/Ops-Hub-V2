@@ -26,7 +26,7 @@ const getCorsHeaders = (origin: string | null) => {
   };
 };
 
-const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]).{12,}$/;
+const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{12,}$/;
 
 function redactAuditPayload(obj: any): any {
   if (obj === null || obj === undefined) return obj;

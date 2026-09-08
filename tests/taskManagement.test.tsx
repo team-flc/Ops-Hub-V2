@@ -9,8 +9,6 @@ import {
 } from '../src/lib/taskManagementService';
 import { ClientTask, ClientRecord, Department, UserProfile } from '../src/types';
 import { CreateClientTaskModal } from '../src/components/tasks/CreateClientTaskModal';
-import { EditClientTaskModal } from '../src/components/tasks/EditClientTaskModal';
-import { ClientTaskDetailsModal } from '../src/components/tasks/ClientTaskDetailsModal';
 import { ClientTaskCard } from '../src/components/tasks/ClientTaskCard';
 import { ClientWorkspaceView } from '../src/components/clients/ClientWorkspaceView';
 

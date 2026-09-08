@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { X, Search, Filter, BookTemplate, Clock, ShieldCheck, Tag, ArrowRight, Eye, AlertTriangle, Loader2, Sparkles } from 'lucide-react';
+import { X, Search, Filter, BookTemplate, Clock, ShieldCheck, Tag, ArrowRight, Eye, AlertTriangle, Loader2 } from 'lucide-react';
 import { ClientRecord, Department, TaskTemplate } from '../../types';
 import { taskTemplateService } from '../../lib/taskTemplateService';
 import { TemplatePreviewModal } from '../templates/TemplatePreviewModal';

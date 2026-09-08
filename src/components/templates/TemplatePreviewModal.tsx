@@ -1,6 +1,6 @@
 import React from 'react';
 import { createPortal } from 'react-dom';
-import { X, Clock, ShieldCheck, Tag, CheckSquare, Layers, ArrowRight } from 'lucide-react';
+import { X, Clock, ShieldCheck, Tag, CheckSquare, ArrowRight } from 'lucide-react';
 import { TaskTemplate } from '../../types';
 
 interface TemplatePreviewModalProps {

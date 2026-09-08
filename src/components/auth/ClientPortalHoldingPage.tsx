@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/AuthContext';
-import { LogOut, Clock, ShieldCheck, CheckCircle2, AlertCircle, ChevronRight, MessageSquare, ArrowRight } from 'lucide-react';
+import { LogOut, Clock, ShieldCheck, ChevronRight, ArrowRight } from 'lucide-react';
 import { taskManagementService } from '../../lib/taskManagementService';
 import { ClientTask, ClientRecord } from '../../types';
 import { supabase } from '../../lib/supabase';
@@ -14,14 +14,12 @@ export const ClientPortalHoldingPage: React.FC = () => {
   const [tasks, setTasks] = useState<ClientTask[]>([]);
   const [clientRecord, setClientRecord] = useState<ClientRecord | null>(null);
   const [selectedTask, setSelectedTask] = useState<ClientTask | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
     const orgId = userProfile?.organizationId;
     if (!orgId) return;
 
     const loadClientData = async () => {
-      setIsLoading(true);
       try {
         if (supabase) {
           const { data: cData } = await supabase
@@ -54,8 +52,6 @@ export const ClientPortalHoldingPage: React.FC = () => {
         }
       } catch {
         // Non-blocking fallback
-      } finally {
-        setIsLoading(false);
       }
     };
 

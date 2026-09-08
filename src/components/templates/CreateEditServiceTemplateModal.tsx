@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   X, Layers, Plus, Trash2, ArrowUp, ArrowDown, 
-  Check, AlertCircle, Loader2, Sparkles, Building2, Clock, ShieldCheck
+  Check, AlertCircle, Loader2
 } from 'lucide-react';
 import { 
   ServiceTemplate, 

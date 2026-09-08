@@ -34,7 +34,6 @@ export const TaskReviewActions: React.FC<TaskReviewActionsProps> = ({
   onRequestReasonModal
 }) => {
   const isOwner = activeUser?.role === 'owner';
-  const isManager = activeUser?.role === 'operational_manager';
   const disabled = isUpdatingStatus || isClientPaused || isTaskArchived;
 
   return (

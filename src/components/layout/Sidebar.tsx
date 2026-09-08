@@ -1,12 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useSafeNavigate } from '../../lib/safeRouterHooks';
 import { useOpsStore } from '../../store/opsStore';
 import { 
-  Building2, Users, ChevronsLeft, ChevronsRight, LogOut, Briefcase, X,
+  Building2, ChevronsLeft, ChevronsRight, Briefcase, X,
   Globe, HardDrive, MessageCircle, ExternalLink
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
-import { ROLE_DISPLAY_NAMES, ClientRecord, UserProfile } from '../../types';
+import { ClientRecord, UserProfile } from '../../types';
 import { ClientSwitcher } from '../clients/ClientSwitcher';
 import { CreateClientModal } from '../clients/CreateClientModal';
 import { DuplicateClientModal } from '../clients/DuplicateClientModal';
@@ -43,7 +43,6 @@ export const Sidebar: React.FC = () => {
   const setViewMode = useOpsStore((state) => state.setViewMode);
   const sidebarCollapsed = useOpsStore((state) => state.sidebarCollapsed);
   const toggleSidebar = useOpsStore((state) => state.toggleSidebar);
-  const currentUser = useOpsStore((state) => state.currentUser);
   
   // Phase 2B Clients
   const clients = useOpsStore((state) => state.clients);
@@ -52,15 +51,7 @@ export const Sidebar: React.FC = () => {
   const setSelectedClientId = useOpsStore((state) => state.setSelectedClientId);
   const addClientRecord = useOpsStore((state) => state.addClientRecord);
 
-  const { signOut, profile, user } = useAuth();
-  const displayName = profile?.fullName || user?.email?.split('@')[0] || currentUser.name || 'Team Member';
-  const displayRole = profile?.role ? ROLE_DISPLAY_NAMES[profile.role] : 'Team Member';
-  const displayInitials = displayName
-    .split(' ')
-    .map((n: string) => n[0])
-    .join('')
-    .substring(0, 2)
-    .toUpperCase() || 'FL';
+  const { profile } = useAuth();
 
   // Client Modals & Loading State
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
@@ -70,7 +61,7 @@ export const Sidebar: React.FC = () => {
   const [isClientsLoading, setIsClientsLoading] = useState(true);
   const [clientsError, setClientsError] = useState<string | null>(null);
 
-  const loadClientData = async () => {
+  const loadClientData = useCallback(async () => {
     setIsClientsLoading(true);
     setClientsError(null);
     try {
@@ -92,12 +83,12 @@ export const Sidebar: React.FC = () => {
     } finally {
       setIsClientsLoading(false);
     }
-  };
+  }, [selectedClientId, setClients, setSelectedClientId]);
 
   // Fetch Clients & Managers on mount
   useEffect(() => {
     loadClientData();
-  }, [setClients]);
+  }, [loadClientData]);
 
   const selectedClient = clients.find((c) => c.id === selectedClientId) || clients[0] || null;
 

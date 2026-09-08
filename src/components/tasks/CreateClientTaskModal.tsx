@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { createPortal } from 'react-dom';
-import { X, Calendar, AlertCircle, Loader2, CheckCircle2, UserCheck, ShieldAlert, BookTemplate } from 'lucide-react';
+import { X, AlertCircle, Loader2, BookTemplate } from 'lucide-react';
 import {
   ClientRecord,
   ClientTask,
@@ -104,8 +104,8 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
         setPriority('Normal');
         setApprovalMode('Internal Only');
 
-        if (departments.length > 0 && !departmentId) {
-          setDepartmentId(departments[0].id);
+        if (departments.length > 0) {
+          setDepartmentId((prev) => prev || departments[0].id);
         }
 
         // Default due date = 3 days later (skip weekend)

@@ -1,8 +1,8 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
-  Users, UserPlus, Search, ShieldCheck, 
-  Building2, Briefcase, UserCheck, Key, UserX, 
-  RotateCcw, MoreVertical, Loader2, Edit3, Archive 
+  Users, UserPlus, Search, 
+  Briefcase, Key, UserX, 
+  RotateCcw, Loader2, Edit3, Archive 
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { 
@@ -44,9 +44,6 @@ export const TeamManagementView: React.FC = () => {
   const [suspendingMember, setSuspendingMember] = useState<TeamMemberRecord | null>(null);
   const [archivingMember, setArchivingMember] = useState<TeamMemberRecord | null>(null);
   const [isDesignationModalOpen, setIsDesignationModalOpen] = useState(false);
-
-  // Action Menu State
-  const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
 
   const loadData = useCallback(async () => {
     if (!currentUserProfile) return;

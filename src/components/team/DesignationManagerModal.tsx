@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   X, Briefcase, Plus, Archive, RefreshCw, AlertCircle, 
-  Loader2, Check, Tag 
+  Loader2, Tag 
 } from 'lucide-react';
 import { Designation, UserProfile } from '../../types';
 import { teamManagementService } from '../../lib/teamManagementService';

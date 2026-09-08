@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
-  X, UserCheck, Shield, Building2, Briefcase, Check, 
+  X, UserCheck, Building2, Briefcase, Check, 
   AlertCircle, Loader2, Edit3 
 } from 'lucide-react';
 import { Department, Designation, TeamMemberRecord, UserProfile } from '../../types';

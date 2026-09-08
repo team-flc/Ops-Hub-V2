@@ -1,14 +1,12 @@
-﻿import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  Archive, RotateCcw, AlertTriangle, Building2, Users, 
+  Archive, RotateCcw, Building2, Users, 
   CheckSquare, Loader2, AlertCircle, Check, Info, ShieldAlert 
 } from 'lucide-react';
 import { ArchivedRecord } from '../../types';
 import { archiveService } from '../../lib/archiveService';
-import { useAuth } from '../../context/AuthContext';
 
 export const ArchiveCenterView: React.FC = () => {
-  const { profile } = useAuth();
   const [activeTab, setActiveTab] = useState<'client' | 'team_member' | 'task'>('client');
   const [records, setRecords] = useState<ArchivedRecord[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -19,7 +17,7 @@ export const ArchiveCenterView: React.FC = () => {
   const [itemToRestore, setItemToRestore] = useState<ArchivedRecord | null>(null);
   const [isRestoring, setIsRestoring] = useState(false);
 
-  const loadArchivedRecords = async () => {
+  const loadArchivedRecords = useCallback(async () => {
     setIsLoading(true);
     setErrorMessage(null);
     const res = await archiveService.fetchArchivedEntities(activeTab);
@@ -30,11 +28,11 @@ export const ArchiveCenterView: React.FC = () => {
     } else {
       setRecords(res.data);
     }
-  };
+  }, [activeTab]);
 
   useEffect(() => {
     loadArchivedRecords();
-  }, [activeTab]);
+  }, [loadArchivedRecords]);
 
   const handleConfirmRestore = async () => {
     if (!itemToRestore) return;

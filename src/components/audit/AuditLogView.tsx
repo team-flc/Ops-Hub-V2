@@ -1,14 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  FileText, Search, Filter, Calendar, User, Building2, 
+  FileText, Search, 
   Eye, RefreshCw, X, Shield, Activity, Loader2, AlertCircle 
 } from 'lucide-react';
 import { SystemAuditEvent } from '../../types';
 import { auditService } from '../../lib/auditService';
-import { useAuth } from '../../context/AuthContext';
 
 export const AuditLogView: React.FC = () => {
-  const { profile } = useAuth();
   const [events, setEvents] = useState<SystemAuditEvent[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -18,7 +16,7 @@ export const AuditLogView: React.FC = () => {
   const [selectedEntityType, setSelectedEntityType] = useState('');
   const [selectedEvent, setSelectedEvent] = useState<SystemAuditEvent | null>(null);
 
-  const loadAuditEvents = async () => {
+  const loadAuditEvents = useCallback(async () => {
     setIsLoading(true);
     setErrorMessage(null);
     const res = await auditService.fetchAuditEvents({
@@ -32,7 +30,7 @@ export const AuditLogView: React.FC = () => {
     } else {
       setEvents(res.data);
     }
-  };
+  }, [searchAction, selectedEntityType]);
 
   useEffect(() => {
     loadAuditEvents();
@@ -45,7 +43,7 @@ export const AuditLogView: React.FC = () => {
     return () => {
       unsubscribe();
     };
-  }, [selectedEntityType]);
+  }, [loadAuditEvents]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();

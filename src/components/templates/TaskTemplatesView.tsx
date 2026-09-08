@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Search, Filter, Plus, BookTemplate, Eye, Edit3, Copy, Archive, RotateCcw,
-  Clock, ShieldCheck, Tag, AlertTriangle, Loader2, Sparkles, CheckCircle2, ShieldAlert
+  Clock, ShieldCheck, Tag, AlertTriangle, Loader2, Sparkles, ShieldAlert
 } from 'lucide-react';
 import { TaskTemplate, Department, UserProfile } from '../../types';
 import { taskTemplateService } from '../../lib/taskTemplateService';
@@ -50,7 +50,8 @@ export const TaskTemplatesView: React.FC<TaskTemplatesViewProps> = ({ currentUse
     }, 4000);
   };
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
+    if (!hasAccess) return;
     setIsLoading(true);
     setError(null);
     setIsUnavailable(false);
@@ -74,30 +75,13 @@ export const TaskTemplatesView: React.FC<TaskTemplatesViewProps> = ({ currentUse
     } finally {
       setIsLoading(false);
     }
-  };
-
-  useEffect(() => {
-    if (hasAccess) {
-      loadData();
-    }
   }, [hasAccess, isOwner]);
 
-  // Access denial for Clients / Team Members
-  if (!hasAccess) {
-    return (
-      <div className="p-8 max-w-xl mx-auto text-center space-y-4">
-        <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-500 mx-auto flex items-center justify-center">
-          <ShieldAlert className="w-6 h-6" />
-        </div>
-        <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">Access Restricted</h3>
-        <p className="text-xs text-gray-500 dark:text-gray-400">
-          The Task Template Library is governed by organization management. You do not have permissions to access template configurations.
-        </p>
-      </div>
-    );
-  }
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
-  // Filter templates
+  // Filter templates (Unconditional hook call)
   const filteredTemplates = useMemo(() => {
     return templates.filter((tpl) => {
       // Tab filter
@@ -125,6 +109,21 @@ export const TaskTemplatesView: React.FC<TaskTemplatesViewProps> = ({ currentUse
       return true;
     });
   }, [templates, activeTab, selectedDepartmentId, searchQuery]);
+
+  // Access denial for Clients / Team Members
+  if (!hasAccess) {
+    return (
+      <div className="p-8 max-w-xl mx-auto text-center space-y-4">
+        <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-500 mx-auto flex items-center justify-center">
+          <ShieldAlert className="w-6 h-6" />
+        </div>
+        <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">Access Restricted</h3>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          The Task Template Library is governed by organization management. You do not have permissions to access template configurations.
+        </p>
+      </div>
+    );
+  }
 
   // Handlers
   const handleCreateNew = () => {

@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { useOpsStore } from '../../store/opsStore';
 import { 
-  Search, CheckSquare, BookOpen, Layers, Zap, Plus, 
-  ArrowRight, Moon, Sun, RefreshCw, Download 
+  Search, CheckSquare, BookOpen, Zap, Plus, 
+  ArrowRight, Download 
 } from 'lucide-react';
 
 export const CommandPalette: React.FC = () => {

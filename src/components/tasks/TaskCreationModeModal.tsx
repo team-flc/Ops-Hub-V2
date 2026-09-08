@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, BookTemplate, FilePlus2, Sparkles, Layers } from 'lucide-react';
+import { X, FilePlus2, Layers } from 'lucide-react';
 import { ClientRecord } from '../../types';
 
 interface TaskCreationModeModalProps {

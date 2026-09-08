@@ -9,12 +9,10 @@ import {
   rollForwardToNextMonday,
   validateHttpsLink,
   validateMessageLinks,
-  validateTaskDates,
-  isTaskOverdue
+  validateTaskDates
 } from '../src/lib/taskManagementService';
 import { ClientTask, ClientRecord, Department, UserProfile, TaskMessage } from '../src/types';
 import { ClientTaskDetailsModal } from '../src/components/tasks/ClientTaskDetailsModal';
-import { CreateClientTaskModal } from '../src/components/tasks/CreateClientTaskModal';
 import { ClientPortalHoldingPage } from '../src/components/auth/ClientPortalHoldingPage';
 import { AuthProvider } from '../src/context/AuthContext';
 import { MemoryRouter } from 'react-router-dom';
@@ -62,7 +60,7 @@ const mockClient: ClientRecord = {
   updatedAt: '2026-02-01T00:00:00Z'
 };
 
-const mockDepartments: Department[] = [
+const _mockDepartments: Department[] = [
   { id: 'dept-1', name: 'Operations', slug: 'operations', status: 'active', sortOrder: 1 },
   { id: 'dept-2', name: 'Creative & Media', slug: 'creative', status: 'active', sortOrder: 2 }
 ];
@@ -139,7 +137,7 @@ describe('Phase 3B: Task Conversation Feed, Review & Approval Comprehensive Test
     };
     mockChannel.mockReturnValue(channelObj);
 
-    mockFrom.mockImplementation((table: string) => {
+    mockFrom.mockImplementation((_table: string) => {
       const builder: any = {
         select: vi.fn().mockReturnThis(),
         eq: vi.fn().mockReturnThis(),
@@ -841,7 +839,7 @@ describe('Phase 3B: Task Conversation Feed, Review & Approval Comprehensive Test
     });
 
     it('7.2 fetchTaskFeed enforces 30 items default limit with cursor support', async () => {
-      mockFrom.mockImplementation((table: string) => {
+      mockFrom.mockImplementation((_table: string) => {
         return {
           select: vi.fn().mockReturnThis(),
           eq: vi.fn().mockReturnThis(),
@@ -1008,7 +1006,7 @@ describe('Phase 3B: Task Conversation Feed, Review & Approval Comprehensive Test
 
     // 9.3 Client internal-feed isolation & internal event/reason isolation
     it('9.3 Client internal-feed isolation hides internal notes, internal events, and staff emails', async () => {
-      const internalNoteMsg: TaskMessage = {
+      const _internalNoteMsg: TaskMessage = {
         id: 'msg-internal-1',
         taskId: baseClientApprovalTask.id,
         clientId: mockClient.id,
@@ -1270,6 +1268,11 @@ describe('Phase 3B: Task Conversation Feed, Review & Approval Comprehensive Test
         archivedAt: '2026-09-06T10:00:00Z'
       };
 
+      mockFunctionsInvoke.mockResolvedValueOnce({
+        data: { error: 'Task not found or is archived.' },
+        error: null
+      });
+
       const msgRes = await taskManagementService.createTaskMessage({
         taskId: archivedTask.id,
         clientId: archivedTask.clientId,
@@ -1277,7 +1280,7 @@ describe('Phase 3B: Task Conversation Feed, Review & Approval Comprehensive Test
         content: 'This should be blocked'
       });
 
-      expect(msgRes.error).toBeNull; // Verified via UI read-only guard
+      expect(msgRes.error).toContain('archived');
     });
 
     // 9.8 Atomic stale transition rejection (409 Conflict)

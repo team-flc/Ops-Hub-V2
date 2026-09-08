@@ -1,6 +1,5 @@
 import { supabase } from './supabase';
-import { ArchivedRecord, ClientRecord, ClientTask, UserProfile } from '../types';
-import { auditService } from './auditService';
+import { ArchivedRecord } from '../types';
 
 export const archiveService = {
   /**

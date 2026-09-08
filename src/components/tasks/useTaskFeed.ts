@@ -75,7 +75,7 @@ export function useTaskFeed({ taskId, activeUser, isOpen }: UseTaskFeedProps) {
       setHasMoreFeed(false);
       setNextCursor(null);
     }
-  }, [isOpen, taskId]);
+  }, [isOpen, taskId, activeUser?.id]);
 
   return {
     feed,

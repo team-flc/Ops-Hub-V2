@@ -1,7 +1,6 @@
 import React from 'react';
 import { 
-  Calendar, Clock, User, AlertCircle, AlertTriangle, 
-  ArrowRight, Play, Ban, Send, CheckCircle2, MoreVertical, Edit3, Archive 
+  Calendar, AlertTriangle, Play, Send, CheckCircle2, Edit3 
 } from 'lucide-react';
 import { 
   ClientTask, 

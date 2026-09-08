@@ -383,6 +383,29 @@ export const teamManagementService = {
   async fetchOpenTasksForUser(userId: string): Promise<Task[]> {
     if (!supabase) return [];
     try {
+      // 1. Check real client_tasks table first
+      const { data: clientTasks, error: ctError } = await supabase
+        .from('client_tasks')
+        .select('*')
+        .eq('assignee_id', userId)
+        .neq('status', 'Completed');
+
+      if (!ctError && clientTasks && clientTasks.length > 0) {
+        return clientTasks.map((ct: any) => mapDbTaskToTask({
+          id: ct.id,
+          task_number: ct.task_number || `TSK-${ct.id.slice(0, 6)}`,
+          title: ct.title,
+          description: ct.details || ct.description || '',
+          status: ct.status === 'Completed' ? 'completed' : 'in_progress',
+          priority: ct.priority?.toLowerCase() || 'normal',
+          assignee_ids: ct.assignee_id ? [ct.assignee_id] : [],
+          due_date: ct.due_date,
+          created_at: ct.created_at,
+          updated_at: ct.updated_at
+        }));
+      }
+
+      // 2. Fallback to prototype tasks table if present/mocked
       const { data, error } = await supabase
         .from('tasks')
         .select('*')

@@ -3,8 +3,8 @@ import { DragDropContext, Droppable, Draggable, DropResult } from '@hello-pangea
 import { useOpsStore } from '../../store/opsStore';
 import { PriorityBadge } from '../common/PriorityBadge';
 import { AvatarGroup } from '../common/AvatarGroup';
-import { Plus, CheckSquare, Calendar, Clock, Play, Square, AlertCircle } from 'lucide-react';
-import { formatDate, formatTimeMinutes, isOverdue } from '../../utils/helpers';
+import { Plus, CheckSquare, Calendar } from 'lucide-react';
+import { formatDate, isOverdue } from '../../utils/helpers';
 
 export const BoardView: React.FC = () => {
   const tasks = useOpsStore((state) => state.tasks);
@@ -16,8 +16,6 @@ export const BoardView: React.FC = () => {
   const moveTaskStatus = useOpsStore((state) => state.moveTaskStatus);
   const createTask = useOpsStore((state) => state.createTask);
   const activeTimer = useOpsStore((state) => state.activeTimer);
-  const startTimer = useOpsStore((state) => state.startTimer);
-  const stopTimer = useOpsStore((state) => state.stopTimer);
 
   const [addingInColumn, setAddingInColumn] = useState<string | null>(null);
   const [newCardTitle, setNewCardTitle] = useState('');

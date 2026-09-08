@@ -1,6 +1,5 @@
 import { supabase } from './supabase';
 import { UserProfile } from '../types';
-import { auditService } from './auditService';
 
 export const profileService = {
   /**

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, BookTemplate, AlertCircle, Loader2, Clock, ShieldCheck, Tag, Building2 } from 'lucide-react';
+import { X, BookTemplate, AlertCircle, Loader2 } from 'lucide-react';
 import {
   Department,
   TaskTemplate,

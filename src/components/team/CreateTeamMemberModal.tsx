@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import { 
   X, UserPlus, Shield, Building2, Briefcase, UserCheck, 
   Key, Eye, EyeOff, Sparkles, Check, Copy, AlertCircle, 
-  Loader2, CheckCircle2, Camera, Upload, Trash2 
+  Loader2, CheckCircle2, Camera, Trash2 
 } from 'lucide-react';
 import { Department, Designation, UserProfile } from '../../types';
 import { useOpsStore } from '../../store/opsStore';
@@ -70,8 +70,8 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
     if (currentUserProfile) {
       if (currentUserProfile.role === 'operational_manager') {
         setSelectedManagerId(currentUserProfile.id);
-      } else if (currentUserProfile.role === 'owner' && !selectedManagerId) {
-        setSelectedManagerId(currentUserProfile.id);
+      } else if (currentUserProfile.role === 'owner') {
+        setSelectedManagerId((prev) => prev || currentUserProfile.id);
       }
     }
   }, [currentUserProfile]);
@@ -144,7 +144,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
     const hasUpper = /[A-Z]/.test(pwd);
     const hasLower = /[a-z]/.test(pwd);
     const hasNumber = /[0-9]/.test(pwd);
-    const hasSpecial = /[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pwd);
+    const hasSpecial = /[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]/.test(pwd);
     return { hasMinLen, hasUpper, hasLower, hasNumber, hasSpecial, isValid: hasMinLen && hasUpper && hasLower && hasNumber && hasSpecial };
   };
 

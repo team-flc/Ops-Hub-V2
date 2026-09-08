@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
-  Copy, Building2, User, Package, Calendar, Activity, 
+  Copy, Building2, 
   Link2, Check, AlertCircle, X, Loader2 
 } from 'lucide-react';
 import { 

@@ -1,14 +1,13 @@
 import React, { useState } from 'react';
 import { useOpsStore } from '../../store/opsStore';
-import { Task, StatusConfig, Priority } from '../../types';
-import { StatusBadge } from '../common/StatusBadge';
+import { Task, Priority } from '../../types';
 import { PriorityBadge } from '../common/PriorityBadge';
 import { AvatarGroup } from '../common/AvatarGroup';
 import { 
   ChevronDown, ChevronRight, Plus, CheckSquare, Calendar, 
-  Clock, Tag, Play, Square, AlertTriangle, ShieldCheck
+  Play, Square
 } from 'lucide-react';
-import { formatDate, formatTimeMinutes, formatSecondsToDigital, isOverdue } from '../../utils/helpers';
+import { formatDate, isOverdue } from '../../utils/helpers';
 
 export const ListView: React.FC = () => {
   const tasks = useOpsStore((state) => state.tasks);
@@ -188,7 +187,6 @@ export const ListView: React.FC = () => {
                   )}
 
                   {group.tasks.map((task) => {
-                    const taskSpace = spaces.find((s) => s.id === task.spaceId);
                     const isTaskOverdue = isOverdue(task.dueDate, task.status);
                     const isTimerRunning = activeTimer?.taskId === task.id;
                     const subtasksDone = task.subtasks.filter((s) => s.completed).length;

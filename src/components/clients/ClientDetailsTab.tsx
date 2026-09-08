@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  Building2, User, Package, Calendar, Activity, 
+  Building2, 
   Link2, Check, AlertCircle, Save, Loader2, Plus, 
-  Trash2, Globe, ShieldCheck, ExternalLink, RefreshCw,
-  Camera, Upload, Archive, Briefcase, X
+  Trash2, ExternalLink,
+  Camera, Archive, X
 } from 'lucide-react';
 
 const LinkedInIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" }) => (

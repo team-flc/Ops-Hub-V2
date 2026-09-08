@@ -1,9 +1,8 @@
 import React, { useState } from 'react';
 import { useOpsStore } from '../../store/opsStore';
-import { ClientVendor } from '../../types';
 import { 
-  Users, Building2, ShieldCheck, Mail, Phone, 
-  Plus, CheckCircle, Clock, Search, FileText 
+  Users, Building2, Mail, Phone, 
+  Plus, Search 
 } from 'lucide-react';
 import { Modal } from '../common/Modal';
 
@@ -25,7 +24,7 @@ export const OperationsDirectory: React.FC = () => {
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [slaTier, setSlaTier] = useState('Platinum (99.9%)');
-  const [monthlyValue, setMonthlyValue] = useState('$25,000/mo');
+  const [monthlyValue] = useState('$25,000/mo');
   const [notes, setNotes] = useState('');
 
   const handleCreateClientVendor = (e: React.FormEvent) => {

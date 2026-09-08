@@ -2,13 +2,12 @@ import React from 'react';
 import { useOpsStore } from '../../store/opsStore';
 import { 
   Activity, CheckCircle2, AlertTriangle, Clock, TrendingUp, 
-  Users, ShieldCheck, Zap, ArrowUpRight, CheckSquare, Layers 
+  Users, ShieldCheck, Zap, CheckSquare, Layers 
 } from 'lucide-react';
 import { formatTimeMinutes } from '../../utils/helpers';
 
 export const DashboardView: React.FC = () => {
   const tasks = useOpsStore((state) => state.tasks);
-  const spaces = useOpsStore((state) => state.spaces);
   const users = useOpsStore((state) => state.users);
   const setSelectedTaskId = useOpsStore((state) => state.setSelectedTaskId);
 

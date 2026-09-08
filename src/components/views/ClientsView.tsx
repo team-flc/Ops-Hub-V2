@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
 import { useOpsStore } from '../../store/opsStore';
-import { ClientVendor } from '../../types';
 import { 
-  Building2, Users, Plus, Mail, Phone, ShieldCheck, 
-  Search, ExternalLink, Trash2, Edit3, DollarSign, 
-  CheckCircle2, Clock, AlertTriangle, ArrowUpRight 
+  Building2, Plus, Mail, Phone, ShieldCheck, 
+  Search, DollarSign, 
+  CheckCircle2, Clock, ArrowUpRight 
 } from 'lucide-react';
 import { Modal } from '../common/Modal';
 

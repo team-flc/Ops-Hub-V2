@@ -1,14 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { useOpsStore } from '../../store/opsStore';
-import { Priority, Task } from '../../types';
+import { Priority } from '../../types';
 import { StatusBadge } from '../common/StatusBadge';
 import { PriorityBadge } from '../common/PriorityBadge';
 import { 
   X, CheckSquare, Plus, Trash2, Clock, Play, Square, 
-  MessageSquare, History, Tag, DollarSign, 
-  ShieldAlert, Send, Sparkles, AlertCircle
+  History, Send, Sparkles
 } from 'lucide-react';
-import { formatDate, formatTimeMinutes, formatSecondsToDigital, triggerConfetti } from '../../utils/helpers';
+import { formatTimeMinutes, formatSecondsToDigital, triggerConfetti } from '../../utils/helpers';
 
 export const TaskModal: React.FC = () => {
   const selectedTaskId = useOpsStore((state) => state.selectedTaskId);

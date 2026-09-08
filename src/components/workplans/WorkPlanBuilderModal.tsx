@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
-  X, Calendar, Layers, Plus, Trash2, ArrowUp, ArrowDown, 
+  X, Calendar, Layers, Plus, Trash2, 
   Copy, Check, AlertCircle, AlertTriangle, Loader2, Clock, 
-  Building2, ShieldAlert, Eye, MoveRight
+  ShieldAlert, Eye
 } from 'lucide-react';
 import { 
   ClientRecord, 
@@ -13,8 +13,7 @@ import {
   ServiceTemplate, 
   ServiceTemplateTask, 
   Department, 
-  ClientTaskPriority, 
-  TaskApprovalMode 
+  ClientTaskPriority 
 } from '../../types';
 import { serviceTemplateService } from '../../lib/serviceTemplateService';
 import { workPlanService } from '../../lib/workPlanService';

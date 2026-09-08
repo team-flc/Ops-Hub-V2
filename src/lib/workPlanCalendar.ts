@@ -4,8 +4,7 @@
 // Phase: 3D — Exact 90-Calendar-Day Work Plan Calendar & Business-Day Math
 // ==============================================================================
 
-import { isSaturday, isSunday, isWeekend, rollForwardToNextMonday } from './taskManagementService';
-import { WorkPlanWeek } from '../types';
+import { isWeekend, rollForwardToNextMonday } from './taskManagementService';
 
 export interface PlanDateRange {
   startDate: string; // YYYY-MM-DD

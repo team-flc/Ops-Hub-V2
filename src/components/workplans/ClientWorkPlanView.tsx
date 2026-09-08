@@ -5,11 +5,11 @@
 // Restrained Palette: Brand Red (#D32F2F), Black, White, Neutral Grayscale
 // ==============================================================================
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  Calendar, Layers, Plus, Clock, CheckCircle2, 
-  AlertCircle, ChevronRight, Edit3, Trash2, 
-  Rocket, Archive, Loader2, Building2, Eye
+  Calendar, Plus, Clock, CheckCircle2, 
+  AlertCircle, Edit3, Trash2, 
+  Rocket, Loader2
 } from 'lucide-react';
 import { ClientRecord, ClientWorkPlan, Department, UserProfile } from '../../types';
 import { workPlanService } from '../../lib/workPlanService';
@@ -26,7 +26,7 @@ export const ClientWorkPlanView: React.FC<ClientWorkPlanViewProps> = ({
   client,
   currentUserProfile,
   departments,
-  onSelectWeek
+  onSelectWeek: _onSelectWeek
 }) => {
   const [plans, setPlans] = useState<ClientWorkPlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -40,7 +40,7 @@ export const ClientWorkPlanView: React.FC<ClientWorkPlanViewProps> = ({
 
   const isOwnerOrManager = currentUserProfile?.role === 'owner' || currentUserProfile?.role === 'operational_manager';
 
-  const loadPlans = async () => {
+  const loadPlans = useCallback(async () => {
     setIsLoading(true);
     setErrorMessage(null);
     try {
@@ -58,11 +58,11 @@ export const ClientWorkPlanView: React.FC<ClientWorkPlanViewProps> = ({
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [client.id]);
 
   useEffect(() => {
     loadPlans();
-  }, [client.id]);
+  }, [loadPlans]);
 
   const handleOpenNewBuilder = () => {
     setSelectedPlanForEdit(null);

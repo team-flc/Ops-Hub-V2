@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { Calendar, Info, Plus, Sparkles, Loader2, Layers, AlertTriangle } from 'lucide-react';
 import { 
   ClientRecord, 
@@ -52,7 +52,6 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
   // Phase 3A Tasks State
   const [tasks, setTasks] = useState<ClientTask[]>([]);
   const [isLoadingTasks, setIsLoadingTasks] = useState(false);
-  const [tasksError, setTasksError] = useState<string | null>(null);
 
   // Departments & Eligible Assignees
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -131,27 +130,24 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
   }, [client.id]);
 
   // Fetch Tasks for the selected week
-  const loadTasks = async () => {
+  const loadTasks = useCallback(async () => {
     if (!client.id) return;
     setIsLoadingTasks(true);
-    setTasksError(null);
     try {
       const res = await taskManagementService.fetchClientTasks(client.id, currentWeekNum);
-      if (res.error) {
-        setTasksError(res.error);
-      } else {
+      if (!res.error && res.data) {
         setTasks(res.data);
       }
-    } catch (err: any) {
-      setTasksError(err?.message || 'Failed to load tasks.');
+    } catch {
+      // Keep current tasks on failure
     } finally {
       setIsLoadingTasks(false);
     }
-  };
+  }, [client.id, currentWeekNum]);
 
   useEffect(() => {
     loadTasks();
-  }, [client.id, currentWeekNum]);
+  }, [loadTasks]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);

@@ -7,7 +7,6 @@ import {
 import { TeamManagementView } from '../views/TeamManagementView';
 import { SettingsTab, ClientRecord } from '../../types';
 import { useOpsStore } from '../../store/opsStore';
-import { ClientDetailsTab } from '../clients/ClientDetailsTab';
 import { archiveService } from '../../lib/archiveService';
 
 const ServiceTemplatesView = React.lazy(() =>

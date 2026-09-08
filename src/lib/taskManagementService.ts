@@ -792,7 +792,7 @@ export const taskManagementService = {
         if (clientRec && clientRec.status === 'Paused') {
           return { data: null, error: 'Cannot create tasks for a paused client.' };
         }
-      } catch (err) {
+      } catch {
         // Continue if unable to query
       }
     }

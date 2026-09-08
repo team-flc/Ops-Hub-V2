@@ -6,7 +6,6 @@ import { Header } from '../src/components/layout/Header';
 import { ProfileDropdown } from '../src/components/profile/ProfileDropdown';
 import { MyProfileView } from '../src/components/profile/MyProfileView';
 import { ArchiveCenterView } from '../src/components/archive/ArchiveCenterView';
-import { AuditLogView } from '../src/components/audit/AuditLogView';
 import { SettingsLayout } from '../src/components/settings/SettingsLayout';
 import { CreateTeamMemberModal } from '../src/components/team/CreateTeamMemberModal';
 import { ArchiveTeamMemberModal } from '../src/components/team/ArchiveTeamMemberModal';

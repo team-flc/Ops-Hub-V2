@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Modal } from '../common/Modal';
 import { useOpsStore } from '../../store/opsStore';
 import { AutomationRule } from '../../types';
-import { Zap, Plus, Trash2, CheckCircle2, AlertCircle, ArrowRight, ToggleLeft, ToggleRight } from 'lucide-react';
+import { Zap, Plus, Trash2, ArrowRight, ToggleLeft, ToggleRight } from 'lucide-react';
 
 export const AutomationsModal: React.FC = () => {
   const isAutomationsModalOpen = useOpsStore((state) => state.isAutomationsModalOpen);

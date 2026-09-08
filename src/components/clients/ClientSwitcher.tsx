@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { 
   Building2, ChevronDown, ChevronUp, Search, 
-  Plus, Copy, Check, AlertCircle, RefreshCw, Loader2, X
+  Plus, Copy, AlertCircle, RefreshCw, Loader2, X
 } from 'lucide-react';
 import { ClientRecord } from '../../types';
 import { useSignedUrl } from '../../lib/storageService';
@@ -112,16 +112,6 @@ export const ClientSwitcher: React.FC<ClientSwitcherProps> = ({
       c.package.toLowerCase().includes(q)
     );
   });
-
-  const getClientInitials = (name: string) => {
-    if (!name) return 'CL';
-    return name
-      .split(' ')
-      .map((w) => w[0])
-      .join('')
-      .substring(0, 2)
-      .toUpperCase();
-  };
 
   return (
     <div className="relative w-full" ref={popoverRef}>

@@ -1,15 +1,13 @@
 import React, { act } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from '../src/context/AuthContext';
 import { ProtectedRoute } from '../src/components/auth/ProtectedRoute';
-import { TeamManagementView } from '../src/components/views/TeamManagementView';
 import { CreateTeamMemberModal } from '../src/components/team/CreateTeamMemberModal';
 import { SuspendUserModal } from '../src/components/team/SuspendUserModal';
 import { Header } from '../src/components/layout/Header';
 import { teamManagementService } from '../src/lib/teamManagementService';
-import { supabase } from '../src/lib/supabase';
 import { TeamMemberRecord, UserProfile } from '../src/types';
 
 // Mock Supabase & Services
@@ -33,7 +31,7 @@ vi.mock('../src/lib/supabase', () => {
         invoke: (fn: string, opts: any) => mockInvoke(fn, opts)
       },
       from: (table: string) => ({
-        select: (...args: any[]) => ({
+        select: (..._args: any[]) => ({
           eq: (...eqArgs: any[]) => ({
             single: () => mockFromSelect(table, eqArgs),
             maybeSingle: () => mockFromSelect(table, eqArgs),

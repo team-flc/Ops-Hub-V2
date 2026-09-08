@@ -1,7 +1,7 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import {
-  Search, Filter, Plus, Layers, Eye, Edit3, Copy, Archive, RotateCcw,
-  Clock, ShieldCheck, Building2, Tag, AlertTriangle, Loader2, Sparkles, CheckCircle2, ShieldAlert
+  Search, Plus, Layers, Eye, Edit3, Copy, Archive, RotateCcw,
+  AlertTriangle, Loader2, Sparkles, ShieldAlert
 } from 'lucide-react';
 import { ServiceTemplate, Department, UserProfile } from '../../types';
 import { serviceTemplateService } from '../../lib/serviceTemplateService';
@@ -27,7 +27,6 @@ export const ServiceTemplatesView: React.FC<ServiceTemplatesViewProps> = ({ curr
   const [departments, setDepartments] = useState<Department[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isUnavailable, setIsUnavailable] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const [activeTab, setActiveTab] = useState<'active' | 'archived'>('active');
   const [searchQuery, setSearchQuery] = useState('');
@@ -50,9 +49,9 @@ export const ServiceTemplatesView: React.FC<ServiceTemplatesViewProps> = ({ curr
     }, 4000);
   };
 
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
+    if (!hasAccess) return;
     setIsLoading(true);
-    setError(null);
     setIsUnavailable(false);
     try {
       const [tplRes, depts] = await Promise.all([
@@ -63,41 +62,20 @@ export const ServiceTemplatesView: React.FC<ServiceTemplatesViewProps> = ({ curr
       if (tplRes.isUnavailable) {
         setIsUnavailable(true);
       }
-      if (tplRes.error) {
-        setError(tplRes.error);
-      }
       setTemplates(tplRes.data || []);
       setDepartments(depts || []);
-    } catch (err: any) {
+    } catch {
       setIsUnavailable(true);
-      setError(err?.message || 'Failed to load service templates.');
     } finally {
       setIsLoading(false);
     }
-  };
-
-  useEffect(() => {
-    if (hasAccess) {
-      loadData();
-    }
   }, [hasAccess, isOwner]);
 
-  // Access denial for Clients / Team Members
-  if (!hasAccess) {
-    return (
-      <div className="p-8 max-w-xl mx-auto text-center space-y-4">
-        <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-500 mx-auto flex items-center justify-center">
-          <ShieldAlert className="w-6 h-6" />
-        </div>
-        <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">Access Restricted</h3>
-        <p className="text-xs text-gray-500 dark:text-gray-400">
-          The Service Template Library is governed by organization management. You do not have permissions to access template configurations.
-        </p>
-      </div>
-    );
-  }
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
 
-  // Categories list
+  // Categories list (Unconditional hook call)
   const categories = useMemo(() => {
     const set = new Set<string>();
     templates.forEach((t) => {
@@ -106,7 +84,7 @@ export const ServiceTemplatesView: React.FC<ServiceTemplatesViewProps> = ({ curr
     return Array.from(set).sort();
   }, [templates]);
 
-  // Filter templates
+  // Filter templates (Unconditional hook call)
   const filteredTemplates = useMemo(() => {
     return templates.filter((t) => {
       const matchesTab = activeTab === 'active' ? t.status !== 'Archived' : t.status === 'Archived';
@@ -124,6 +102,21 @@ export const ServiceTemplatesView: React.FC<ServiceTemplatesViewProps> = ({ curr
       return matchesSearch && matchesCategory;
     });
   }, [templates, activeTab, searchQuery, selectedCategory]);
+
+  // Access denial for Clients / Team Members
+  if (!hasAccess) {
+    return (
+      <div className="p-8 max-w-xl mx-auto text-center space-y-4">
+        <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-500 mx-auto flex items-center justify-center">
+          <ShieldAlert className="w-6 h-6" />
+        </div>
+        <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">Access Restricted</h3>
+        <p className="text-xs text-gray-500 dark:text-gray-400">
+          The Service Template Library is governed by organization management. You do not have permissions to access template configurations.
+        </p>
+      </div>
+    );
+  }
 
   // Actions
   const handleOpenCreate = () => {

@@ -1,13 +1,10 @@
 import React, { useState } from 'react';
 import { useOpsStore } from '../../store/opsStore';
-import { Task, Priority } from '../../types';
+import { Priority } from '../../types';
 import { StatusBadge } from '../common/StatusBadge';
 import { PriorityBadge } from '../common/PriorityBadge';
 import { AvatarGroup } from '../common/AvatarGroup';
-import { 
-  Download, ArrowUpDown, Table as TableIcon, 
-  Calendar, Clock, DollarSign, ShieldAlert 
-} from 'lucide-react';
+import { Download, ArrowUpDown, Table as TableIcon } from 'lucide-react';
 import { formatDate, formatTimeMinutes, isOverdue } from '../../utils/helpers';
 import { exportTasksToCSV } from '../../utils/exportUtils';
 

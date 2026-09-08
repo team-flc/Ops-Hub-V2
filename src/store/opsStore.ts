@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { persist, createJSONStorage } from 'zustand/middleware';
 import { 
   Task, Space, User, SOPDocument, AutomationRule, ClientVendor, 
-  ViewMode, FilterState, Priority, Subtask
+  ViewMode, FilterState, Subtask
 } from '../types';
 import { 
   INITIAL_USERS, INITIAL_SPACES, INITIAL_TASKS, 

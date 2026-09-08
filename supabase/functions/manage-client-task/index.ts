@@ -271,7 +271,7 @@ serve(async (req: Request) => {
       const {
         client_id, week_number, title, details, department_id,
         assignee_id, priority = 'Normal', approval_mode = 'Internal Only', planned_start, due_date,
-        source_template_id, source_template_version
+        source_template_id, _source_template_version
       } = body;
 
       if (!client_id || !week_number || !title || !department_id || !planned_start || !due_date) {

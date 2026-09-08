@@ -9,8 +9,7 @@ import {
   taskManagementService,
   isSunday,
   isSaturday,
-  isWeekend,
-  rollForwardToNextMonday
+  isWeekend
 } from '../src/lib/taskManagementService';
 import {
   TaskTemplate,
@@ -1226,7 +1225,7 @@ describe('Phase 3C: Task Templates System Comprehensive Suite', () => {
 
       function simulateTransactionalRPC(action: string, shouldFailMutation: boolean) {
         // Step 1: Claim
-        const claimStatus = 'processing';
+        const _claimStatus = 'processing';
         // Step 2: Mutation
         if (shouldFailMutation) {
           // Transaction aborts - no audit log is committed

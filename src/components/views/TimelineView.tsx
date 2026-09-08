@@ -1,8 +1,7 @@
 import React from 'react';
 import { useOpsStore } from '../../store/opsStore';
-import { PriorityBadge } from '../common/PriorityBadge';
 import { AvatarGroup } from '../common/AvatarGroup';
-import { Clock, Calendar, AlertTriangle } from 'lucide-react';
+import { Clock } from 'lucide-react';
 import { formatDate } from '../../utils/helpers';
 
 export const TimelineView: React.FC = () => {

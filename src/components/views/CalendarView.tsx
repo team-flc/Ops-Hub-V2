@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { useOpsStore } from '../../store/opsStore';
-import { Task } from '../../types';
 import { 
   ChevronLeft, ChevronRight, Plus, Calendar as CalendarIcon, 
   Flag, CheckCircle2 

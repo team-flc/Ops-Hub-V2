@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
-  Building2, User, Package, Calendar, Activity, 
+  Building2, 
   Link2, Check, AlertCircle, X, Loader2, Plus, 
-  Trash2, Globe, ShieldCheck 
+  Trash2 
 } from 'lucide-react';
 
 const LinkedInIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" }) => (

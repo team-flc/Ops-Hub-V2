@@ -1,11 +1,8 @@
 import React, { act } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, waitFor } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from '../src/context/AuthContext';
-import { LoginPage } from '../src/components/auth/LoginPage';
-import { ForgotPasswordPage } from '../src/components/auth/ForgotPasswordPage';
-import { UpdatePasswordPage } from '../src/components/auth/UpdatePasswordPage';
 import { ClientPortalHoldingPage } from '../src/components/auth/ClientPortalHoldingPage';
 import { ProtectedRoute } from '../src/components/auth/ProtectedRoute';
 
@@ -33,7 +30,7 @@ vi.mock('../src/lib/supabase', () => {
         updateUser: (attrs: any) => mockUpdateUser(attrs)
       },
       from: (table: string) => ({
-        select: (...args: any[]) => ({
+        select: (..._args: any[]) => ({
           eq: (...eqArgs: any[]) => ({
             maybeSingle: () => mockFromSelect(table, eqArgs),
             single: () => mockFromSelect(table, eqArgs)

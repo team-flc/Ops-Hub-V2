@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React from 'react';
 import { Modal } from '../common/Modal';
-import { Database, CheckCircle2, AlertCircle, Copy, ExternalLink, RefreshCw } from 'lucide-react';
+import { Database, CheckCircle2, ExternalLink } from 'lucide-react';
 import { isSupabaseConfigured } from '../../lib/supabase';
 
 interface SupabaseModalProps {
@@ -9,20 +9,6 @@ interface SupabaseModalProps {
 }
 
 export const SupabaseModal: React.FC<SupabaseModalProps> = ({ isOpen, onClose }) => {
-  const [copiedSql, setCopiedSql] = useState(false);
-
-  const handleCopySql = async () => {
-    try {
-      const response = await fetch('/supabase_schema.sql');
-      const text = await response.text();
-      navigator.clipboard.writeText(text);
-      setCopiedSql(true);
-      setTimeout(() => setCopiedSql(false), 2000);
-    } catch {
-      setCopiedSql(true);
-      setTimeout(() => setCopiedSql(false), 2000);
-    }
-  };
 
   return (
     <Modal

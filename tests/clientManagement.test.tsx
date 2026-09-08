@@ -11,7 +11,6 @@ import { SelectedClientHeader } from '../src/components/clients/SelectedClientHe
 import { ClientWorkspaceView } from '../src/components/clients/ClientWorkspaceView';
 import { Header } from '../src/components/layout/Header';
 import { 
-  clientManagementService, 
   sanitizeUrl, 
   isValidLinkedInUrl, 
   calculateLinkedInReadiness 
@@ -23,7 +22,6 @@ const mockGetUser = vi.fn();
 const mockGetSession = vi.fn();
 const mockOnAuthStateChange = vi.fn();
 const mockFromSelect = vi.fn();
-const mockInsert = vi.fn();
 
 vi.mock('../src/lib/supabase', () => {
   return {
@@ -36,7 +34,7 @@ vi.mock('../src/lib/supabase', () => {
         signOut: vi.fn()
       },
       from: (table: string) => ({
-        select: (...args: any[]) => ({
+        select: (..._args: any[]) => ({
           eq: (...eqArgs: any[]) => ({
             single: () => mockFromSelect(table, eqArgs),
             maybeSingle: () => mockFromSelect(table, eqArgs),
