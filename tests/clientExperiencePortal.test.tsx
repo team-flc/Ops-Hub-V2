@@ -3,7 +3,12 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { clientPortalService } from '../src/lib/clientPortalService';
-import { ClientLinkSharingModal } from '../src/components/portal/ClientLinkSharingModal';
+import {
+  ClientLinkSharingModal,
+  PRODUCTION_PORTAL_BASE,
+  getProductionPortalUrl,
+  getPreviewPortalUrl
+} from '../src/components/portal/ClientLinkSharingModal';
 import { ClientPortalLayout } from '../src/components/portal/ClientPortalLayout';
 import { getPresetDateRanges } from '../src/lib/clientPdfReportService';
 import { 
@@ -378,7 +383,20 @@ describe('Ops Hub Client Experience Portal - Automated Test Suite', () => {
   });
 
   describe('5. Link Sharing Modal & Recipient Governance', () => {
-    it('renders production and preview links with proper badges and zero-recipient warning', async () => {
+    it('generates permanent production URL and staff preview URL correctly', () => {
+      const clientId = 'client-111';
+      const prodUrl = getProductionPortalUrl(clientId);
+      const previewUrl = getPreviewPortalUrl(clientId);
+
+      expect(PRODUCTION_PORTAL_BASE).toBe('https://obshub2.pages.dev');
+      expect(prodUrl).toBe('https://obshub2.pages.dev/portal/client-111');
+      expect(previewUrl).toContain('/portal/client-111?preview=true');
+      expect(prodUrl).not.toContain('feature-client-experience-po');
+    });
+
+    it('defaults to Authorized Recipients tab when no active recipients exist', async () => {
+      vi.spyOn(clientPortalService, 'fetchApprovedRecipients').mockResolvedValueOnce([]);
+
       render(
         <ClientLinkSharingModal
           isOpen={true}
@@ -390,12 +408,104 @@ describe('Ops Hub Client Experience Portal - Automated Test Suite', () => {
         />
       );
 
+      // Should default to Authorized Recipients tab
+      expect(await screen.findByText('Authorize New Client Recipient')).toBeDefined();
+      expect(screen.getByText('No recipients registered yet. Add authorized contacts above.')).toBeDefined();
+    });
+
+    it('renders production and preview links with proper badges and zero-recipient warning on links tab', async () => {
+      vi.spyOn(clientPortalService, 'fetchApprovedRecipients').mockResolvedValueOnce([]);
+
+      render(
+        <ClientLinkSharingModal
+          isOpen={true}
+          onClose={vi.fn()}
+          clientId="client-111"
+          clientName="Alice Alpha"
+          companyName="Alpha Logistics"
+          currentUserRole="owner"
+          initialTab="links"
+        />
+      );
+
       expect(screen.getByText('[PRODUCTION LINK]')).toBeDefined();
       expect(screen.getByText('[PREVIEW LINK]')).toBeDefined();
-      expect(screen.getByText('Copy Client Link')).toBeDefined();
       expect(screen.getByText('Owner Read-Only Preview')).toBeDefined();
 
+      const copyClientBtn = screen.getByRole('button', { name: /Copy Client Link/i });
+      expect(copyClientBtn).toBeDefined();
+      expect((copyClientBtn as HTMLButtonElement).disabled).toBe(true);
+
+      const staffCopyBtn = screen.getByRole('button', { name: /^Copy$/i });
+      expect(staffCopyBtn).toBeDefined();
+      expect((staffCopyBtn as HTMLButtonElement).disabled).toBe(false);
+
+      const openPreviewBtn = screen.getByRole('link', { name: /Open Preview/i });
+      expect(openPreviewBtn).toBeDefined();
+
       await screen.findByText('Set up client access before sharing');
+    });
+
+    it('enables Copy Client Link when active recipients exist', async () => {
+      vi.spyOn(clientPortalService, 'fetchApprovedRecipients').mockResolvedValueOnce([
+        {
+          id: 'rec-1',
+          clientId: 'client-111',
+          profileId: 'prof-1',
+          email: 'alice@alpha.com',
+          fullName: 'Alice Alpha',
+          status: 'active',
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z'
+        }
+      ]);
+
+      render(
+        <ClientLinkSharingModal
+          isOpen={true}
+          onClose={vi.fn()}
+          clientId="client-111"
+          clientName="Alice Alpha"
+          companyName="Alpha Logistics"
+          currentUserRole="owner"
+          initialTab="links"
+        />
+      );
+
+      const copyClientBtn = await screen.findByRole('button', { name: /Copy Client Link/i });
+      expect((copyClientBtn as HTMLButtonElement).disabled).toBe(false);
+      expect(screen.queryByText('Set up client access before sharing')).toBeNull();
+    });
+
+    it('keeps Copy Client Link disabled when only revoked recipients exist', async () => {
+      vi.spyOn(clientPortalService, 'fetchApprovedRecipients').mockResolvedValueOnce([
+        {
+          id: 'rec-revoked-1',
+          clientId: 'client-111',
+          profileId: 'prof-rev',
+          email: 'revoked@alpha.com',
+          fullName: 'Revoked User',
+          status: 'revoked',
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z'
+        }
+      ]);
+
+      render(
+        <ClientLinkSharingModal
+          isOpen={true}
+          onClose={vi.fn()}
+          clientId="client-111"
+          clientName="Alice Alpha"
+          companyName="Alpha Logistics"
+          currentUserRole="owner"
+          initialTab="links"
+        />
+      );
+
+      const copyClientBtn = await screen.findByRole('button', { name: /Copy Client Link/i });
+      expect((copyClientBtn as HTMLButtonElement).disabled).toBe(true);
+      expect(screen.getByText('Set up client access before sharing')).toBeDefined();
     });
 
     it('validates email format when owner adds portal recipient', async () => {

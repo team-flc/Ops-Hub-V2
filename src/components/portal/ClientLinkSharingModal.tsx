@@ -6,6 +6,20 @@ import { ClientPortalRecipient } from '../../types';
 import { clientPortalService } from '../../lib/clientPortalService';
 import { useAuth } from '../../context/AuthContext';
 
+export const PRODUCTION_PORTAL_BASE =
+  (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_PUBLIC_APP_URL)
+    ? import.meta.env.VITE_PUBLIC_APP_URL.replace(/\/+$/, '')
+    : 'https://obshub2.pages.dev';
+
+export function getProductionPortalUrl(clientId: string): string {
+  return `${PRODUCTION_PORTAL_BASE}/portal/${clientId}`;
+}
+
+export function getPreviewPortalUrl(clientId: string): string {
+  const origin = typeof window !== 'undefined' ? window.location.origin : PRODUCTION_PORTAL_BASE;
+  return `${origin}/portal/${clientId}?preview=true`;
+}
+
 interface ClientLinkSharingModalProps {
   isOpen: boolean;
   onClose: () => void;
@@ -13,6 +27,7 @@ interface ClientLinkSharingModalProps {
   clientName: string;
   companyName: string;
   currentUserRole?: string;
+  initialTab?: 'links' | 'recipients';
 }
 
 export const ClientLinkSharingModal: React.FC<ClientLinkSharingModalProps> = ({
@@ -21,10 +36,11 @@ export const ClientLinkSharingModal: React.FC<ClientLinkSharingModalProps> = ({
   clientId,
   clientName,
   companyName,
-  currentUserRole: _currentUserRole
+  currentUserRole: _currentUserRole,
+  initialTab
 }) => {
   const { profile } = useAuth();
-  const [activeTab, setActiveTab] = useState<'links' | 'recipients'>('links');
+  const [activeTab, setActiveTab] = useState<'links' | 'recipients'>(initialTab || 'recipients');
   const [copiedProd, setCopiedProd] = useState(false);
   const [copiedPreview, setCopiedPreview] = useState(false);
   const [recipients, setRecipients] = useState<ClientPortalRecipient[]>([]);
@@ -36,20 +52,28 @@ export const ClientLinkSharingModal: React.FC<ClientLinkSharingModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const productionUrl = `${window.location.origin}/portal/${clientId}`;
-  const previewUrl = `${window.location.origin}/portal/${clientId}?preview=true`;
+  const productionUrl = getProductionPortalUrl(clientId);
+  const previewUrl = getPreviewPortalUrl(clientId);
+
+  const activeRecipients = recipients.filter((r) => r.status === 'active');
+  const activeRecipientCount = activeRecipients.length;
+  const hasActiveRecipients = activeRecipientCount > 0;
 
   const loadRecipients = useCallback(async () => {
     setIsLoadingRecipients(true);
     try {
       const recs = await clientPortalService.fetchApprovedRecipients(clientId);
       setRecipients(recs);
+      const activeCount = recs.filter((r) => r.status === 'active').length;
+      if (!initialTab && activeCount === 0) {
+        setActiveTab('recipients');
+      }
     } catch {
       // Handled gracefully
     } finally {
       setIsLoadingRecipients(false);
     }
-  }, [clientId]);
+  }, [clientId, initialTab]);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -179,7 +203,7 @@ export const ClientLinkSharingModal: React.FC<ClientLinkSharingModalProps> = ({
           >
             <span>Authorized Recipients</span>
             <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-gray-100 dark:bg-dark-200 text-gray-700 dark:text-gray-300">
-              {recipients.length}
+              {activeRecipientCount}
             </span>
           </button>
         </div>
@@ -187,14 +211,14 @@ export const ClientLinkSharingModal: React.FC<ClientLinkSharingModalProps> = ({
         {/* Tab 1: Links */}
         {activeTab === 'links' && (
           <div className="p-6 space-y-6 overflow-y-auto">
-            {/* Set up access alert if 0 recipients */}
-            {recipients.length === 0 && !isLoadingRecipients && (
+            {/* Set up access alert if 0 active recipients */}
+            {!hasActiveRecipients && !isLoadingRecipients && (
               <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-3">
                 <AlertTriangle className="w-5 h-5 text-amber-500 flex-shrink-0 mt-0.5" />
                 <div className="space-y-1">
                   <p className="font-bold">Set up client access before sharing</p>
                   <p className="text-[11px] opacity-90">
-                    No authorized client contacts have been registered yet. Switch to the <strong>Authorized Recipients</strong> tab to add your client's designated contacts before sharing.
+                    No active authorized client contacts have been registered yet. The portal link alone does not grant access; at least one authorized recipient is required. Switch to the <strong className="underline cursor-pointer" onClick={() => setActiveTab('recipients')}>Authorized Recipients</strong> tab to register client contacts before sharing.
                   </p>
                 </div>
               </div>
@@ -222,7 +246,9 @@ export const ClientLinkSharingModal: React.FC<ClientLinkSharingModalProps> = ({
                 <button
                   type="button"
                   onClick={handleCopyProd}
-                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gray-900 hover:bg-black text-white dark:bg-white dark:hover:bg-gray-100 dark:text-gray-900 text-xs font-bold transition-all flex-shrink-0 shadow-sm cursor-pointer"
+                  disabled={!hasActiveRecipients}
+                  title={!hasActiveRecipients ? 'Set up client access before sharing. Add at least one authorized recipient to enable client link copying.' : 'Copy Client Link'}
+                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-gray-900 hover:bg-black text-white dark:bg-white dark:hover:bg-gray-100 dark:text-gray-900 text-xs font-bold transition-all flex-shrink-0 shadow-sm cursor-pointer disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-gray-900 dark:disabled:hover:bg-white"
                 >
                   {copiedProd ? (
                     <>
@@ -239,9 +265,9 @@ export const ClientLinkSharingModal: React.FC<ClientLinkSharingModalProps> = ({
               </div>
 
               <p className="text-[11px] text-gray-400">
-                {recipients.length === 0 ? (
+                {!hasActiveRecipients ? (
                   <span className="text-amber-600 dark:text-amber-400 font-semibold">
-                    Set up client access before sharing. Clients must have an authorized account in Authorized Recipients to access this link.
+                    Set up client access before sharing. Clients must have an active authorized account in Authorized Recipients to access this link.
                   </span>
                 ) : (
                   <span>
