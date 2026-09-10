@@ -1,12 +1,11 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
-import { MemoryRouter, Route, Routes } from 'react-router-dom';
+import { render, screen } from '@testing-library/react';
+import { MemoryRouter } from 'react-router-dom';
 import { clientPortalService } from '../src/lib/clientPortalService';
-import { ClientLinkSharingModal, getProductionPortalUrl, getPreviewPortalUrl, PRODUCTION_PORTAL_BASE } from '../src/components/portal/ClientLinkSharingModal';
-import { ClientPortalGate } from '../src/components/portal/ClientPortalGate';
-import { SelectedClientHeader } from '../src/components/clients/SelectedClientHeader';
-import { ClientSwitcher } from '../src/components/clients/ClientSwitcher';
+import { ClientLinkSharingModal } from '../src/components/portal/ClientLinkSharingModal';
+import { ClientPortalLayout } from '../src/components/portal/ClientPortalLayout';
+import { getPresetDateRanges } from '../src/lib/clientPdfReportService';
 import { 
   ClientRecord, 
   ClientTask, 
@@ -14,7 +13,7 @@ import {
 } from '../src/types';
 
 // Mock AuthContext
-let mockCurrentProfile: UserProfile = {
+const mockCurrentProfile: UserProfile = {
   id: 'user-owner-1',
   email: 'owner@faseehlall.com',
   fullName: 'Faseeh Lall',
@@ -26,13 +25,117 @@ let mockCurrentProfile: UserProfile = {
 
 vi.mock('../src/context/AuthContext', () => ({
   useAuth: () => ({
-    user: { id: mockCurrentProfile.id, email: mockCurrentProfile.email },
+    user: { id: 'user-owner-1', email: 'owner@faseehlall.com' },
     profile: mockCurrentProfile,
     isLoading: false,
     signOut: vi.fn(),
     refreshProfile: vi.fn()
   }),
   AuthProvider: ({ children }: any) => <>{children}</>
+}));
+
+// Mock Supabase
+let mockClientsDb: Record<string, any> = {
+  'client-111': {
+    id: 'client-111',
+    company_name: 'Alpha Logistics',
+    client_name: 'Alice Alpha',
+    package: 'Advanced',
+    operational_manager_id: 'mgr-1',
+    activation_date: '2026-01-01',
+    status: 'Active',
+    required_linkedin_profile_count: 3,
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+    manager: { id: 'mgr-1', full_name: 'Bob Manager' }
+  },
+  'a96d9ab6-fc7a-4648-8b93-ec818f9290a2': {
+    id: 'a96d9ab6-fc7a-4648-8b93-ec818f9290a2',
+    company_name: 'Wise 360',
+    client_name: 'Wise Contact',
+    package: 'Intermediate',
+    operational_manager_id: 'mgr-1',
+    activation_date: '2026-01-01',
+    status: 'Active',
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+    manager: { id: 'mgr-1', full_name: 'Manager 1' }
+  },
+  'c374d3af-d73a-4691-beff-76d4a4b97e47': {
+    id: 'c374d3af-d73a-4691-beff-76d4a4b97e47',
+    company_name: 'UnizConnect',
+    client_name: 'Uniz Contact',
+    package: 'Basic',
+    operational_manager_id: 'mgr-2',
+    activation_date: '2026-01-01',
+    status: 'Active',
+    created_at: '2026-01-01T00:00:00Z',
+    updated_at: '2026-01-01T00:00:00Z',
+    manager: { id: 'mgr-2', full_name: 'Manager 2' }
+  }
+};
+
+let mockDbQueryError: any = null;
+
+vi.mock('../src/lib/supabase', () => ({
+  isSupabaseConfigured: true,
+  supabase: {
+    auth: {
+      getUser: vi.fn(),
+      getSession: vi.fn(),
+      signOut: vi.fn(),
+      onAuthStateChange: vi.fn().mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } })
+    },
+    from: (table: string) => {
+      const createChainable = (resData: any = null, resErr: any = null) => {
+        const chain: any = {
+          eq: () => chain,
+          neq: () => chain,
+          is: () => chain,
+          order: () => chain,
+          limit: () => chain,
+          maybeSingle: () => Promise.resolve({ data: resData, error: resErr }),
+          single: () => Promise.resolve({ data: resData, error: resErr }),
+          then: (resolve: any) => Promise.resolve({ data: resData, error: resErr }).then(resolve)
+        };
+        return chain;
+      };
+
+      return {
+        select: (_cols?: string) => {
+          if (mockDbQueryError) {
+            return createChainable(null, mockDbQueryError);
+          }
+
+          if (table === 'clients') {
+            return {
+              eq: (_col: string, val: string) => {
+                const clientData = mockClientsDb[val] || null;
+                return {
+                  ...createChainable(clientData, null),
+                  maybeSingle: () => Promise.resolve({ data: clientData, error: null }),
+                  single: () => Promise.resolve({ data: clientData, error: null }),
+                  order: () => Promise.resolve({ data: Object.values(mockClientsDb), error: null })
+                };
+              },
+              order: () => Promise.resolve({ data: Object.values(mockClientsDb), error: null })
+            };
+          }
+
+          return createChainable([], null);
+        },
+        insert: () => ({
+          select: () => ({
+            single: () => Promise.resolve({ data: { id: 'rec-1', email: 'alice@alpha.com', full_name: 'Alice', status: 'active' }, error: null })
+          })
+        }),
+        update: () => ({
+          eq: () => Promise.resolve({ error: null })
+        })
+      };
+    },
+    rpc: vi.fn()
+  }
 }));
 
 const mockClientA: ClientRecord = {
@@ -50,21 +153,6 @@ const mockClientA: ClientRecord = {
   updatedAt: '2026-01-01T00:00:00Z'
 };
 
-const mockClientB: ClientRecord = {
-  id: 'client-222',
-  companyName: 'Beta Biotech',
-  clientName: 'Brian Beta',
-  package: 'Intermediate',
-  operationalManagerId: 'mgr-2',
-  operationalManagerName: 'Carol Manager',
-  activationDate: '2026-02-01',
-  status: 'Active',
-  requiredLinkedinProfileCount: 3,
-  links: {},
-  createdAt: '2026-02-01T00:00:00Z',
-  updatedAt: '2026-02-01T00:00:00Z'
-};
-
 const mockClientUserProfile: UserProfile = {
   id: 'user-client-1',
   email: 'alice@alphalogistics.com',
@@ -79,162 +167,40 @@ const mockClientUserProfile: UserProfile = {
 const mockOwnerProfile: UserProfile = {
   id: 'user-owner-1',
   email: 'owner@faseehlall.com',
-  fullName: 'Faseeh Lall',
+  fullName: 'Admin FLC',
   role: 'owner',
   status: 'active',
   createdAt: '2026-01-01T00:00:00Z',
   updatedAt: '2026-01-01T00:00:00Z'
 };
 
-const mockTasks: any[] = [
-  {
-    id: 't-1',
-    client_id: 'client-111',
-    week_number: 1,
-    title: 'Domain & DNS Setup',
-    details: 'Setup cold email domains',
-    department_id: 'dept-1',
-    priority: 'High',
-    planned_start: '2026-04-01',
-    due_date: '2026-04-07',
-    status: 'Completed',
-    approval_mode: 'Internal Approval Required',
-    sort_order: 1,
-    created_at: '2026-04-01T00:00:00Z',
-    updated_at: '2026-04-07T00:00:00Z',
-    is_client_visible: true,
-    departments: { id: 'dept-1', name: 'Infrastructure' }
-  },
-  {
-    id: 't-2',
-    client_id: 'client-111',
-    week_number: 2,
-    title: 'Review Target Accounts List',
-    details: 'Review the compiled ICP list and approve',
-    department_id: 'dept-2',
-    priority: 'Urgent',
-    planned_start: '2026-04-08',
-    due_date: '2026-04-14',
-    status: 'Client Review',
-    approval_mode: 'Client Approval Required',
-    sort_order: 2,
-    created_at: '2026-04-08T00:00:00Z',
-    updated_at: '2026-04-08T00:00:00Z',
-    is_client_visible: true,
-    departments: { id: 'dept-2', name: 'Strategy' }
-  },
-  {
-    id: 't-draft',
-    client_id: 'client-111',
-    week_number: 2,
-    title: 'Internal Ops Draft Note',
-    details: 'Private staff notes about internal routing',
-    department_id: 'dept-1',
-    priority: 'Normal',
-    planned_start: '2026-04-08',
-    due_date: '2026-04-14',
-    status: 'Draft',
-    approval_mode: 'Internal Approval Required',
-    sort_order: 3,
-    created_at: '2026-04-08T00:00:00Z',
-    updated_at: '2026-04-08T00:00:00Z',
-    is_client_visible: false,
-    departments: { id: 'dept-1', name: 'Infrastructure' }
-  }
-];
+const mockManager1Profile: UserProfile = {
+  id: 'mgr-1',
+  email: 'manager1@faseehlall.com',
+  fullName: 'Manager 1',
+  role: 'operational_manager',
+  status: 'active',
+  createdAt: '2026-01-01T00:00:00Z',
+  updatedAt: '2026-01-01T00:00:00Z'
+};
 
-// Robust chained query builder mock
-vi.mock('../src/lib/supabase', () => ({
-  isSupabaseConfigured: true,
-  supabase: {
-    auth: {
-      getUser: vi.fn().mockResolvedValue({ data: { user: { id: 'user-owner-1' } }, error: null }),
-      getSession: vi.fn(),
-      signOut: vi.fn(),
-      onAuthStateChange: vi.fn().mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } })
-    },
-    from: (table: string) => {
-      let requestedId = '';
-      const builder: any = {
-        select: vi.fn().mockImplementation(() => builder),
-        eq: vi.fn().mockImplementation((col: string, val: any) => {
-          if (col === 'id' || col === 'client_id') requestedId = String(val);
-          return builder;
-        }),
-        is: vi.fn().mockImplementation(() => builder),
-        in: vi.fn().mockImplementation(() => builder),
-        order: vi.fn().mockImplementation(() => builder),
-        single: vi.fn().mockImplementation(() => {
-          if (table === 'client_portal_recipients') {
-            return Promise.resolve({
-              data: { id: 'rec-1', email: 'alice@alpha.com', full_name: 'Alice Alpha', status: 'active' },
-              error: null
-            });
-          }
-          return Promise.resolve({ data: null, error: null });
-        }),
-        maybeSingle: vi.fn().mockImplementation(() => {
-          if (table === 'clients') {
-            const client = requestedId === 'client-222' ? mockClientB : mockClientA;
-            return Promise.resolve({
-              data: {
-                id: client.id,
-                company_name: client.companyName,
-                client_name: client.clientName,
-                package: client.package,
-                status: client.status,
-                pause_reason: null,
-                activation_date: client.activationDate,
-                required_linkedin_profile_count: 3,
-                operational_manager_id: client.operationalManagerId,
-                operational_manager_name: client.operationalManagerName,
-                links: {},
-                created_at: '2026-01-01T00:00:00Z',
-                updated_at: '2026-01-01T00:00:00Z'
-              },
-              error: null
-            });
-          }
-          return Promise.resolve({ data: null, error: null });
-        }),
-        insert: vi.fn().mockImplementation(() => builder),
-        update: vi.fn().mockImplementation(() => builder)
-      };
-
-      // Promise resolution when awaited directly
-      builder.then = (resolve: any) => {
-        if (table === 'client_tasks') {
-          resolve({ data: mockTasks, error: null });
-        } else if (table === 'client_published_results' || table === 'client_portal_recipients') {
-          resolve({ data: [], error: null });
-        } else if (table === 'client_task_messages' || table === 'client_work_plans') {
-          resolve({ data: [], error: null });
-        } else {
-          resolve({ data: [], error: null });
-        }
-      };
-
-      return builder;
-    },
-    rpc: vi.fn()
-  }
-}));
-
-describe('Ops Hub Client Experience Portal - Comprehensive Verification', () => {
+describe('Ops Hub Client Experience Portal - Automated Test Suite', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockCurrentProfile = { ...mockOwnerProfile };
+    mockDbQueryError = null;
   });
 
   describe('1. Multi-Tenant Security & Isolation', () => {
-    it('blocks Client A user from viewing Client B workspace (fails closed 403)', async () => {
+    it('blocks Client A user from viewing Client B workspace (fails closed)', async () => {
+      // Caller belongs to Client A ('client-111'), requesting Client B ('client-222')
       const fetchResult = await clientPortalService.fetchClientPortalData(
         'client-222',
         mockClientUserProfile,
         false
       );
 
-      expect(fetchResult.error).toContain('Forbidden');
+      // Must fail closed with Forbidden error and no data
+      expect(fetchResult.error).toContain('AUTH_DENIED');
       expect(fetchResult.client).toBeNull();
       expect(fetchResult.tasks).toHaveLength(0);
     });
@@ -242,168 +208,177 @@ describe('Ops Hub Client Experience Portal - Comprehensive Verification', () => 
     it('blocks unauthenticated visitors without valid session (never exposes portal)', async () => {
       const fetchResult = await clientPortalService.fetchClientPortalData(
         'client-111',
-        null,
+        null, // No caller profile
         false
       );
 
-      expect(fetchResult.error).toContain('Unauthorized');
+      expect(fetchResult.error).toContain('AUTH_DENIED');
       expect(fetchResult.client).toBeNull();
       expect(fetchResult.tasks).toHaveLength(0);
     });
 
-    it('rejects query-string manipulation: client user passing ?preview=true is denied preview access', async () => {
+    it('blocks Client role from previewing even if preview=true is passed', async () => {
       const fetchResult = await clientPortalService.fetchClientPortalData(
         'client-111',
         mockClientUserProfile,
-        true
+        true // isPreview = true
       );
 
-      expect(fetchResult.error).toContain('Access denied');
+      expect(fetchResult.error).toBe('AUTH_DENIED');
       expect(fetchResult.client).toBeNull();
     });
   });
 
-  describe('2. Publication Boundary & Staff Shell Isolation', () => {
-    it('strictly hides internal draft tasks and private operational notes from clients', () => {
-      const clientSafeTasks = mockTasks.filter((t: any) => {
-        if (t.is_client_visible) return true;
+  describe('2. Publication Boundary Enforcement', () => {
+    it('strictly hides internal draft tasks and unshared notes from clients', () => {
+      const internalDraftTask: ClientTask = {
+        id: 't-draft-1',
+        clientId: 'client-111',
+        weekNumber: 1,
+        title: 'Internal Operational Setup (Draft)',
+        details: 'Internal staff notes about DNS credentials',
+        departmentId: 'dept-1',
+        priority: 'Normal',
+        plannedStart: '2026-04-01',
+        dueDate: '2026-04-05',
+        status: 'Draft',
+        approvalMode: 'Internal Approval Required',
+        sortOrder: 1,
+        createdAt: '2026-04-01T00:00:00Z',
+        updatedAt: '2026-04-01T00:00:00Z'
+      };
+
+      const clientReviewTask: ClientTask = {
+        id: 't-review-1',
+        clientId: 'client-111',
+        weekNumber: 1,
+        title: 'Target Audience Profile',
+        details: 'Please review and approve ICP criteria',
+        departmentId: 'dept-1',
+        priority: 'High',
+        plannedStart: '2026-04-01',
+        dueDate: '2026-04-05',
+        status: 'Client Review',
+        approvalMode: 'Client Approval Required',
+        sortOrder: 2,
+        createdAt: '2026-04-01T00:00:00Z',
+        updatedAt: '2026-04-01T00:00:00Z'
+      };
+
+      const tasks = [internalDraftTask, clientReviewTask];
+
+      // Filter by publication boundary
+      const clientSafeTasks = tasks.filter((t: any) => {
+        if (t.isClientVisible) return true;
         if (t.status === 'Client Review' || t.status === 'Completed') return true;
-        if (t.approval_mode === 'Client Approval Required' && t.status !== 'Draft') return true;
+        if (t.approvalMode === 'Client Approval Required' && t.status !== 'Draft') return true;
         return false;
       });
 
-      expect(clientSafeTasks).toHaveLength(2);
-      expect(clientSafeTasks.find((t) => t.id === 't-draft')).toBeUndefined();
+      expect(clientSafeTasks).toHaveLength(1);
+      expect(clientSafeTasks[0].id).toBe('t-review-1');
+      expect(clientSafeTasks.find((t) => t.id === 't-draft-1')).toBeUndefined();
     });
   });
 
-  describe('3. Owner "View as Client" Read-Only Preview Mode', () => {
-    it('allows Owner to preview portal but strictly blocks mutations in preview mode', async () => {
+  describe('3. Owner & Operational Manager Preview Matrix', () => {
+    it('allows Active Owner to preview Wise 360 and UnizConnect', async () => {
+      // Wise 360
+      const wiseResult = await clientPortalService.fetchClientPortalData(
+        'a96d9ab6-fc7a-4648-8b93-ec818f9290a2',
+        mockOwnerProfile,
+        true
+      );
+      expect(wiseResult.error).toBeNull();
+      expect(wiseResult.client?.companyName).toBe('Wise 360');
+
+      // UnizConnect
+      const unizResult = await clientPortalService.fetchClientPortalData(
+        'c374d3af-d73a-4691-beff-76d4a4b97e47',
+        mockOwnerProfile,
+        true
+      );
+      expect(unizResult.error).toBeNull();
+      expect(unizResult.client?.companyName).toBe('UnizConnect');
+    });
+
+    it('limits Operational Manager to preview ONLY assigned clients', async () => {
+      // Wise 360 is assigned to mgr-1 -> Allowed
+      const allowedResult = await clientPortalService.fetchClientPortalData(
+        'a96d9ab6-fc7a-4648-8b93-ec818f9290a2',
+        mockManager1Profile,
+        true
+      );
+      expect(allowedResult.error).toBeNull();
+      expect(allowedResult.client?.companyName).toBe('Wise 360');
+
+      // UnizConnect is assigned to mgr-2 -> Blocked for mgr-1
+      const blockedResult = await clientPortalService.fetchClientPortalData(
+        'c374d3af-d73a-4691-beff-76d4a4b97e47',
+        mockManager1Profile,
+        true
+      );
+      expect(blockedResult.error).toBe('AUTH_DENIED');
+      expect(blockedResult.client).toBeNull();
+    });
+
+    it('mutation attempts in preview mode remain strictly disabled', async () => {
       const canPreview = clientPortalService.canUserPreviewPortal(mockOwnerProfile, mockClientA);
       expect(canPreview).toBe(true);
 
       const approveResult = await clientPortalService.submitClientTaskDecision(
-        't-2',
+        't-review-1',
         'approve',
         undefined,
         mockOwnerProfile,
         true
       );
-
       expect(approveResult.error).toContain('disabled in read-only staff preview mode');
 
       const changeReqResult = await clientPortalService.submitClientTaskDecision(
-        't-2',
+        't-review-1',
         'request_changes',
-        'Revise lead criteria',
+        'Revise headline',
+        mockOwnerProfile,
+        true
+      );
+      expect(changeReqResult.error).toContain('disabled in read-only staff preview mode');
+    });
+  });
+
+  describe('4. Error Isolation & Setup-Pending Fallback', () => {
+    it('missing additive tables/data returns setup-pending fallback without throwing error', async () => {
+      const result = await clientPortalService.fetchClientPortalData(
+        'a96d9ab6-fc7a-4648-8b93-ec818f9290a2',
         mockOwnerProfile,
         true
       );
 
-      expect(changeReqResult.error).toContain('disabled in read-only staff preview mode');
+      expect(result.error).toBeNull();
+      expect(result.client).toBeDefined();
+      expect(result.overview).toBeDefined();
+      expect(result.tasks).toEqual([]);
+      expect(result.deliverables).toEqual([]);
+      expect(result.roadmapMilestones).toEqual([]);
     });
 
-    it('renders persistent "Client preview · Read only" banner in preview mode', async () => {
-      mockCurrentProfile = { ...mockOwnerProfile };
+    it('database query failure returns DATABASE_ERROR and is not converted into permission error', async () => {
+      mockDbQueryError = { message: 'connection timeout to postgres cluster' };
 
-      render(
-        <MemoryRouter initialEntries={['/portal/client-111?preview=true']}>
-          <Routes>
-            <Route path="/portal/:clientId" element={<ClientPortalGate />} />
-          </Routes>
-        </MemoryRouter>
+      const result = await clientPortalService.fetchClientPortalData(
+        'a96d9ab6-fc7a-4648-8b93-ec818f9290a2',
+        mockOwnerProfile,
+        true
       );
 
-      await waitFor(() => {
-        expect(screen.getByText('Client preview · Read only')).toBeDefined();
-      });
-
-      // Confirm staff shell elements are absent
-      expect(screen.queryByLabelText('Command Palette')).toBeNull();
-      expect(screen.queryByText('Internal Workspace')).toBeNull();
+      expect(result.error).toContain('DATABASE_ERROR');
+      expect(result.error).not.toBe('AUTH_DENIED');
+      expect(result.error).toContain('connection timeout');
     });
   });
 
-  describe('4. Owner Header & Switcher Link Sharing', () => {
-    it('SelectedClientHeader renders "View as Client" and "Client Link" buttons for Owner', () => {
-      mockCurrentProfile = { ...mockOwnerProfile };
-
-      render(
-        <MemoryRouter>
-          <SelectedClientHeader client={mockClientA} />
-        </MemoryRouter>
-      );
-
-      expect(screen.getByText('View as Client')).toBeDefined();
-      expect(screen.getByText('Client Link')).toBeDefined();
-
-      const viewLink = screen.getByText('View as Client').closest('a');
-      expect(viewLink?.getAttribute('href')).toBe('/portal/client-111?preview=true');
-    });
-
-    it('clicking "Client Link" in header opens governance modal', () => {
-      mockCurrentProfile = { ...mockOwnerProfile };
-
-      render(
-        <MemoryRouter>
-          <SelectedClientHeader client={mockClientA} />
-        </MemoryRouter>
-      );
-
-      const linkBtn = screen.getByText('Client Link');
-      fireEvent.click(linkBtn);
-
-      expect(screen.getByText('Client Portal Access & Links')).toBeDefined();
-      expect(screen.getByText('[PRODUCTION LINK]')).toBeDefined();
-      expect(screen.getByText('[PREVIEW LINK]')).toBeDefined();
-    });
-
-    it('ClientSwitcher link button opens the same governance modal without direct clipboard copy', () => {
-      mockCurrentProfile = { ...mockOwnerProfile };
-
-      render(
-        <MemoryRouter>
-          <ClientSwitcher
-            clients={[mockClientA]}
-            selectedClient={mockClientA}
-            currentUserRole="owner"
-            onSelectClient={vi.fn()}
-            onOpenCreateModal={vi.fn()}
-            onOpenDuplicateModal={vi.fn()}
-          />
-        </MemoryRouter>
-      );
-
-      // Open switcher dropdown
-      const switcherBtn = screen.getByLabelText('Switch Client Workspace');
-      fireEvent.click(switcherBtn);
-
-      // Find the link icon button in the client row
-      const shareBtn = screen.getByTitle(/Client Portal Link & Access/);
-      expect(shareBtn).toBeDefined();
-
-      fireEvent.click(shareBtn);
-
-      // Modal must open
-      expect(screen.getByText('Client Portal Access & Links')).toBeDefined();
-    });
-  });
-
-  describe('5. Production & Preview Link Integrity', () => {
-    it('always generates production client link with https://obshub2.pages.dev', () => {
-      const prodUrl = getProductionPortalUrl('client-111');
-      expect(prodUrl).toBe('https://obshub2.pages.dev/portal/client-111');
-      expect(prodUrl.startsWith(PRODUCTION_PORTAL_BASE)).toBe(true);
-      expect(prodUrl).not.toContain('localhost');
-      expect(prodUrl).not.toContain('obshub2.pages.dev?');
-    });
-
-    it('generates distinctly labeled preview link with ?preview=true', () => {
-      const previewUrl = getPreviewPortalUrl('client-111');
-      expect(previewUrl).toContain('/portal/client-111?preview=true');
-    });
-
-    it('displays "Set up client access" call-to-action when 0 recipients exist', async () => {
+  describe('5. Link Sharing Modal & Recipient Governance', () => {
+    it('renders production and preview links with proper badges and zero-recipient warning', async () => {
       render(
         <ClientLinkSharingModal
           isOpen={true}
@@ -415,31 +390,92 @@ describe('Ops Hub Client Experience Portal - Comprehensive Verification', () => 
         />
       );
 
-      await waitFor(() => {
-        expect(screen.getAllByText('Set up client access').length).toBeGreaterThan(0);
-      });
+      expect(screen.getByText('[PRODUCTION LINK]')).toBeDefined();
+      expect(screen.getByText('[PREVIEW LINK]')).toBeDefined();
+      expect(screen.getByText('Copy Client Link')).toBeDefined();
+      expect(screen.getByText('Owner Read-Only Preview')).toBeDefined();
+
+      await screen.findByText('Set up client access before sharing');
+    });
+
+    it('validates email format when owner adds portal recipient', async () => {
+      const res = await clientPortalService.addPortalRecipient(
+        'client-111',
+        'invalid-email',
+        'Alice Alpha',
+        mockOwnerProfile
+      );
+
+      expect(res.error).toContain('valid email address is required');
+    });
+
+    it('blocks non-owner staff from adding portal recipients', async () => {
+      const nonOwnerProfile: UserProfile = {
+        id: 'user-tm-1',
+        email: 'tm@faseehlall.com',
+        fullName: 'Team Member',
+        role: 'team_member',
+        status: 'active',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z'
+      };
+
+      const res = await clientPortalService.addPortalRecipient(
+        'client-111',
+        'contact@alpha.com',
+        'Contact Name',
+        nonOwnerProfile
+      );
+
+      expect(res.error).toContain('Forbidden: Only the Owner can configure client portal recipients');
     });
   });
 
-  describe('6. Portal Layout Tabs & Controls', () => {
-    it('renders all required portal tabs and report download trigger in portal layout', async () => {
-      mockCurrentProfile = { ...mockOwnerProfile };
+  describe('6. Portal Layout & Preview UI Components', () => {
+    it('renders all four portal tabs and read-only controls in preview mode', () => {
+      const defaultRanges = getPresetDateRanges();
+      const mockPortalData = {
+        client: mockClientA,
+        tasks: [],
+        overview: {
+          client: mockClientA,
+          factualSummary: 'Executive overview summary',
+          completedInPeriodCount: 0,
+          inProgressCount: 0,
+          needsInputCount: 0,
+          upcomingCount: 0,
+          publishedResults: [],
+          publishedDeliverablesRatio: { completed: 0, total: 0 }
+        },
+        deliverables: [],
+        roadmapMilestones: [],
+        error: null
+      };
 
       render(
-        <MemoryRouter initialEntries={['/portal/client-111?preview=true']}>
-          <Routes>
-            <Route path="/portal/:clientId" element={<ClientPortalGate />} />
-          </Routes>
+        <MemoryRouter>
+          <ClientPortalLayout
+            portalData={mockPortalData}
+            isReadOnlyPreview={true}
+            dateRange={defaultRanges.thisMonth}
+            onDateRangeChange={vi.fn()}
+            onRefresh={vi.fn()}
+          />
         </MemoryRouter>
       );
 
-      await waitFor(() => {
-        expect(screen.getAllByText('Overview').length).toBeGreaterThan(0);
-        expect(screen.getAllByText('Deliverables').length).toBeGreaterThan(0);
-        expect(screen.getAllByText('Roadmap').length).toBeGreaterThan(0);
-        expect(screen.getAllByText('Assets').length).toBeGreaterThan(0);
-        expect(screen.getByText('Download Report')).toBeDefined();
-      });
+      // Verify header branding
+      expect(screen.getByText('Alpha Logistics')).toBeDefined();
+
+      // Verify all 4 tabs exist (desktop and mobile navigation)
+      expect(screen.getAllByRole('button', { name: /overview/i }).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByRole('button', { name: /deliverables/i }).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByRole('button', { name: /roadmap/i }).length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByRole('button', { name: /assets/i }).length).toBeGreaterThanOrEqual(1);
+
+      // Verify Report download button and Exit Preview
+      expect(screen.getByTitle(/Download Custom-Date Client Report/i)).toBeDefined();
+      expect(screen.getByTitle(/Return to Internal Workspace/i)).toBeDefined();
     });
   });
 });

@@ -24,7 +24,6 @@ export interface PortalDataResult {
   overview: ClientPortalOverviewData | null;
   deliverables: ClientDeliverableItem[];
   roadmapMilestones: ClientRoadmapMilestone[];
-  isSetupPending?: boolean;
   error: string | null;
 }
 
@@ -57,55 +56,90 @@ export const clientPortalService = {
 
     // Immediate multi-tenant check: fail closed if unauthenticated
     if (!callerProfile) {
-      return { client: null, tasks: [], overview: null, deliverables: [], roadmapMilestones: [], error: 'Unauthorized: Authentication required.' };
+      return { client: null, tasks: [], overview: null, deliverables: [], roadmapMilestones: [], error: 'AUTH_DENIED: Authentication required.' };
     }
 
     // Immediate multi-tenant check: client role cannot access another client's workspace
     if (!isPreview && callerProfile.role === 'client' && callerProfile.organizationId !== clientId) {
-      return { client: null, tasks: [], overview: null, deliverables: [], roadmapMilestones: [], error: 'Forbidden: You do not have access to this client workspace.' };
+      return { client: null, tasks: [], overview: null, deliverables: [], roadmapMilestones: [], error: 'AUTH_DENIED: Forbidden' };
     }
 
     if (!isSupabaseConfigured || !supabase) {
-      return { client: null, tasks: [], overview: null, deliverables: [], roadmapMilestones: [], error: 'Database service unconfigured.' };
+      return { client: null, tasks: [], overview: null, deliverables: [], roadmapMilestones: [], error: 'DATABASE_ERROR: Database service unconfigured.' };
     }
 
     try {
-      // 1. Fetch Client Entity
-      const { data: cData, error: cErr } = await supabase
+      // 1. Fetch Client Entity using confirmed production schema columns
+      let cData: any = null;
+      const { data: rawClient, error: cErr } = await supabase
         .from('clients')
-        .select('id, company_name, client_name, package, status, pause_reason, activation_date, required_linkedin_profile_count, operational_manager_id, operational_manager_name, links, created_at, updated_at')
+        .select(`
+          id,
+          company_name,
+          client_name,
+          package,
+          status,
+          pause_reason,
+          activation_date,
+          required_linkedin_profile_count,
+          operational_manager_id,
+          created_at,
+          updated_at,
+          manager:operational_manager_id (
+            id,
+            full_name
+          )
+        `)
         .eq('id', clientId)
         .maybeSingle();
 
-      if (cErr || !cData) {
-        return { client: null, tasks: [], overview: null, deliverables: [], roadmapMilestones: [], error: 'Client workspace not found.' };
+      if (cErr) {
+        // Fallback query with basic core columns in case foreign key join fails
+        const { data: fallbackClient, error: fallbackErr } = await supabase
+          .from('clients')
+          .select('id, company_name, client_name, package, status, operational_manager_id, activation_date, created_at, updated_at')
+          .eq('id', clientId)
+          .maybeSingle();
+
+        if (fallbackErr) {
+          return { client: null, tasks: [], overview: null, deliverables: [], roadmapMilestones: [], error: `DATABASE_ERROR: ${fallbackErr.message}` };
+        }
+        if (!fallbackClient) {
+          return { client: null, tasks: [], overview: null, deliverables: [], roadmapMilestones: [], error: 'CLIENT_NOT_FOUND' };
+        }
+        cData = fallbackClient;
+      } else {
+        if (!rawClient) {
+          return { client: null, tasks: [], overview: null, deliverables: [], roadmapMilestones: [], error: 'CLIENT_NOT_FOUND' };
+        }
+        cData = rawClient;
       }
 
       const clientRecord: ClientRecord = {
         id: cData.id,
-        companyName: cData.company_name,
-        clientName: cData.client_name,
-        package: cData.package,
-        status: cData.status,
+        companyName: cData.company_name || 'Client Workspace',
+        clientName: cData.client_name || 'Client',
+        package: cData.package || 'Basic',
+        status: cData.status || 'Active',
         pauseReason: cData.pause_reason,
-        activationDate: cData.activation_date,
+        activationDate: cData.activation_date || cData.created_at?.split('T')[0] || new Date().toISOString().split('T')[0],
         requiredLinkedinProfileCount: cData.required_linkedin_profile_count || 3,
         operationalManagerId: cData.operational_manager_id || '',
-        operationalManagerName: cData.operational_manager_name || undefined,
-        links: cData.links || {},
-        createdAt: cData.created_at,
-        updatedAt: cData.updated_at
+        operationalManagerName: cData.manager?.full_name || undefined,
+        links: {},
+        createdAt: cData.created_at || new Date().toISOString(),
+        updatedAt: cData.updated_at || new Date().toISOString()
       };
 
       // 2. Access Authorization Check
       if (isPreview) {
         if (!this.canUserPreviewPortal(callerProfile, clientRecord)) {
-          return { client: null, tasks: [], overview: null, deliverables: [], roadmapMilestones: [], error: 'Access denied: You do not have permission to preview this client workspace.' };
+          return { client: null, tasks: [], overview: null, deliverables: [], roadmapMilestones: [], error: 'AUTH_DENIED' };
         }
       } else {
         // Authenticated client check: caller must be client role and mapped to this clientId
         if (!callerProfile || callerProfile.role !== 'client' || callerProfile.organizationId !== clientId) {
-          return { client: null, tasks: [], overview: null, deliverables: [], roadmapMilestones: [], error: 'Access denied: Unauthorized client session.' };
+          return { client: null, tasks: [], overview: null, deliverables: [], roadmapMilestones: [], error: 'AUTH_DENIED' };
         }
       }
 
@@ -114,38 +148,18 @@ export const clientPortalService = {
         return { client: clientRecord, tasks: [], overview: null, deliverables: [], roadmapMilestones: [], error: 'WORKSPACE_ARCHIVED' };
       }
 
-      // 3. Fetch Tasks within Publication Boundary (with migration fallback)
+      // 3. Fetch Tasks within Publication Boundary
       // Excludes internal-only draft tasks before data reaches presentation
-      let rawTasks: any[] | null = null;
-      let isSetupPending = false;
-
-      const { data: tasksWithVisibility, error: tErr1 } = await supabase
-        .from('client_tasks')
-        .select(`
-          id, client_id, week_number, title, details, department_id,
-          assignee_id, priority, planned_start, due_date, status,
-          approval_mode, completed_at, completed_by, reopened_at, reopened_by,
-          reopen_reason, blocked_reason, sort_order, created_at, updated_at,
-          archived_at, is_client_visible,
-          departments(id, name)
-        `)
-        .eq('client_id', clientId)
-        .is('archived_at', null)
-        .order('week_number', { ascending: true })
-        .order('sort_order', { ascending: true })
-        .order('created_at', { ascending: true });
-
-      if (tErr1) {
-        // Fallback gracefully if is_client_visible column is missing on remote DB
-        isSetupPending = true;
-        const { data: fallbackTasks } = await supabase
+      let allTasks: ClientTask[] = [];
+      try {
+        const { data: rawTasks, error: tErr } = await supabase
           .from('client_tasks')
           .select(`
             id, client_id, week_number, title, details, department_id,
             assignee_id, priority, planned_start, due_date, status,
             approval_mode, completed_at, completed_by, reopened_at, reopened_by,
             reopen_reason, blocked_reason, sort_order, created_at, updated_at,
-            archived_at,
+            archived_at, is_client_visible,
             departments(id, name)
           `)
           .eq('client_id', clientId)
@@ -154,36 +168,71 @@ export const clientPortalService = {
           .order('sort_order', { ascending: true })
           .order('created_at', { ascending: true });
 
-        rawTasks = fallbackTasks || [];
-      } else {
-        rawTasks = tasksWithVisibility || [];
-      }
+        if (tErr) {
+          // Fallback query if additive column or join not yet migrated
+          const { data: fallbackTasks } = await supabase
+            .from('client_tasks')
+            .select('*')
+            .eq('client_id', clientId)
+            .is('archived_at', null);
 
-      const allTasks: ClientTask[] = (rawTasks || []).map((t: any) => ({
-        id: t.id,
-        clientId: t.client_id,
-        weekNumber: t.week_number as 1 | 2 | 3 | 4,
-        title: t.title,
-        details: t.details || '',
-        departmentId: t.department_id,
-        departmentName: t.departments?.name,
-        assigneeId: t.assignee_id,
-        priority: t.priority,
-        plannedStart: t.planned_start,
-        dueDate: t.due_date,
-        status: t.status,
-        approvalMode: t.approval_mode,
-        completedAt: t.completed_at,
-        completedBy: t.completed_by,
-        reopenedAt: t.reopened_at,
-        reopenedBy: t.reopened_by,
-        reopenReason: t.reopen_reason,
-        blockedReason: t.blocked_reason,
-        sortOrder: t.sort_order,
-        createdAt: t.created_at,
-        updatedAt: t.updated_at,
-        isClientVisible: t.is_client_visible
-      }));
+          if (fallbackTasks) {
+            allTasks = fallbackTasks.map((t: any) => ({
+              id: t.id,
+              clientId: t.client_id,
+              weekNumber: (t.week_number || 1) as 1 | 2 | 3 | 4,
+              title: t.title,
+              details: t.details || t.description || '',
+              departmentId: t.department_id,
+              assigneeId: t.assignee_id,
+              priority: t.priority || 'Normal',
+              plannedStart: t.planned_start,
+              dueDate: t.due_date,
+              status: t.status || 'Assigned',
+              approvalMode: t.approval_mode,
+              completedAt: t.completed_at,
+              completedBy: t.completed_by,
+              reopenedAt: t.reopened_at,
+              reopenedBy: t.reopened_by,
+              reopenReason: t.reopen_reason,
+              blockedReason: t.blocked_reason,
+              sortOrder: t.sort_order || 0,
+              createdAt: t.created_at,
+              updatedAt: t.updated_at,
+              isClientVisible: t.is_client_visible ?? true
+            }));
+          }
+        } else if (rawTasks) {
+          allTasks = rawTasks.map((t: any) => ({
+            id: t.id,
+            clientId: t.client_id,
+            weekNumber: t.week_number as 1 | 2 | 3 | 4,
+            title: t.title,
+            details: t.details || '',
+            departmentId: t.department_id,
+            departmentName: t.departments?.name,
+            assigneeId: t.assignee_id,
+            priority: t.priority,
+            plannedStart: t.planned_start,
+            dueDate: t.due_date,
+            status: t.status,
+            approvalMode: t.approval_mode,
+            completedAt: t.completed_at,
+            completedBy: t.completed_by,
+            reopenedAt: t.reopened_at,
+            reopenedBy: t.reopened_by,
+            reopenReason: t.reopen_reason,
+            blockedReason: t.blocked_reason,
+            sortOrder: t.sort_order,
+            createdAt: t.created_at,
+            updatedAt: t.updated_at,
+            isClientVisible: t.is_client_visible
+          }));
+        }
+      } catch (tEx) {
+        console.warn('client_tasks query fallback caught:', tEx);
+        allTasks = [];
+      }
 
       // Filter tasks by publication boundary:
       // A client sees a task IF:
@@ -398,7 +447,7 @@ export const clientPortalService = {
       };
     } catch (err: any) {
       console.error('Failed to load client portal data:', err);
-      return { client: null, tasks: [], overview: null, deliverables: [], roadmapMilestones: [], error: err.message || 'Failed to load client portal data.' };
+      return { client: null, tasks: [], overview: null, deliverables: [], roadmapMilestones: [], error: `DATABASE_ERROR: ${err?.message || 'Failed to load client portal data.'}` };
     }
   },
 

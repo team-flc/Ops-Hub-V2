@@ -11,7 +11,7 @@ import { clientPortalService, PortalDataResult } from '../../lib/clientPortalSer
 import { ClientPortalLayout } from './ClientPortalLayout';
 import { 
   Building2, ShieldAlert, AlertTriangle, 
-  Loader2, LogOut, ArrowLeft, Eye, Sparkles
+  Loader2, ArrowLeft, Eye
 } from 'lucide-react';
 import { getPresetDateRanges } from '../../lib/clientPdfReportService';
 import { PortalDateRange } from '../../types';
@@ -38,7 +38,7 @@ export const ClientPortalGate: React.FC = () => {
 
   // Determine if this is a staff read-only preview
   const isStaffRole = profile?.role === 'owner' || profile?.role === 'operational_manager';
-  const isReadOnlyPreview = isStaffRole && isPreviewRequested;
+  const isReadOnlyPreview = isStaffRole && (isPreviewRequested || Boolean(paramClientId));
 
   const loadData = useCallback(async () => {
     if (!effectiveClientId) {
@@ -135,8 +135,123 @@ export const ClientPortalGate: React.FC = () => {
     );
   }
 
-  // Handle Access Denied (Without revealing client names or existence)
-  if (loadError || !portalData?.client) {
+  // Handle Client Not Found State
+  if (loadError === 'CLIENT_NOT_FOUND') {
+    return (
+      <div className="min-h-screen w-screen bg-slate-50 dark:bg-dark-400 flex flex-col items-center justify-center p-6 font-sans">
+        <div className="w-full max-w-md bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-3xl p-8 shadow-card text-center space-y-4">
+          <div className="w-12 h-12 rounded-2xl bg-gray-100 dark:bg-dark-100 text-gray-500 flex items-center justify-center mx-auto">
+            <Building2 className="w-6 h-6" />
+          </div>
+          <div className="space-y-1">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+              Workspace Not Found
+            </h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              The requested client workspace could not be found or has been removed.
+            </p>
+          </div>
+          {isStaffRole ? (
+            <button
+              type="button"
+              onClick={() => navigate('/')}
+              className="w-full py-2.5 px-4 rounded-xl bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-xs font-bold transition-all min-h-[44px]"
+            >
+              Back to Dashboard
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => signOut()}
+              className="w-full py-2.5 px-4 rounded-xl border border-gray-200 dark:border-dark-border text-gray-700 dark:text-gray-300 text-xs font-bold transition-all min-h-[44px]"
+            >
+              Sign Out
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Handle Database Query Failure / Communication Error
+  if (loadError && loadError.startsWith('DATABASE_ERROR')) {
+    return (
+      <div className="min-h-screen w-screen bg-slate-50 dark:bg-dark-400 flex flex-col items-center justify-center p-6 font-sans">
+        <div className="w-full max-w-md bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-3xl p-8 shadow-card text-center space-y-4">
+          <div className="w-12 h-12 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto border border-amber-200">
+            <AlertTriangle className="w-6 h-6" />
+          </div>
+          <div className="space-y-1">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+              Unable to Load Client Portal
+            </h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              A database communication issue occurred while loading this workspace. Please retry.
+            </p>
+          </div>
+          <div className="pt-2 flex flex-col gap-2">
+            <button
+              type="button"
+              onClick={() => loadData()}
+              className="w-full py-2.5 px-4 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold transition-all min-h-[44px] cursor-pointer"
+            >
+              Try Again
+            </button>
+            {isStaffRole && (
+              <button
+                type="button"
+                onClick={() => navigate('/')}
+                className="w-full py-2.5 px-4 rounded-xl border border-gray-200 dark:border-dark-border text-gray-700 dark:text-gray-300 text-xs font-bold transition-all min-h-[44px] cursor-pointer"
+              >
+                Back to Dashboard
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // Handle Client Portal Setup Pending
+  if (loadError === 'SETUP_PENDING') {
+    return (
+      <div className="min-h-screen w-screen bg-slate-50 dark:bg-dark-400 flex flex-col items-center justify-center p-6 font-sans">
+        <div className="w-full max-w-md bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-3xl p-8 shadow-card text-center space-y-4">
+          <div className="w-12 h-12 rounded-2xl bg-blue-50 text-blue-600 flex items-center justify-center mx-auto border border-blue-200">
+            <Building2 className="w-6 h-6" />
+          </div>
+          <div className="space-y-1">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-gray-100">
+              Client Portal Setup Pending
+            </h2>
+            <p className="text-xs text-gray-500 dark:text-gray-400">
+              This client workspace is active, but its portal deliverables and work plan are currently being configured.
+            </p>
+          </div>
+          {isStaffRole ? (
+            <button
+              type="button"
+              onClick={() => navigate('/clients/' + effectiveClientId)}
+              className="w-full py-2.5 px-4 rounded-xl bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-xs font-bold transition-all min-h-[44px] cursor-pointer"
+            >
+              Return to Staff Operations
+            </button>
+          ) : (
+            <button
+              type="button"
+              onClick={() => signOut()}
+              className="w-full py-2.5 px-4 rounded-xl border border-gray-200 dark:border-dark-border text-gray-700 dark:text-gray-300 text-xs font-bold transition-all min-h-[44px] cursor-pointer"
+            >
+              Sign Out
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
+  // Handle Genuine Access Denied (Strict Role Isolation)
+  if (loadError === 'AUTH_DENIED' || loadError?.startsWith('AUTH_DENIED') || loadError || !portalData?.client) {
     return (
       <div className="min-h-screen w-screen bg-slate-50 dark:bg-dark-400 flex flex-col items-center justify-center p-6 font-sans">
         <div className="w-full max-w-md bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-3xl p-8 shadow-card text-center space-y-4">
@@ -158,7 +273,7 @@ export const ClientPortalGate: React.FC = () => {
               <button
                 type="button"
                 onClick={() => navigate('/')}
-                className="w-full py-2.5 px-4 rounded-xl bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-xs font-bold transition-all min-h-[44px]"
+                className="w-full py-2.5 px-4 rounded-xl bg-gray-900 text-white dark:bg-white dark:text-gray-900 text-xs font-bold transition-all min-h-[44px] cursor-pointer"
               >
                 Back to Dashboard
               </button>
@@ -166,7 +281,7 @@ export const ClientPortalGate: React.FC = () => {
               <button
                 type="button"
                 onClick={() => signOut()}
-                className="w-full py-2.5 px-4 rounded-xl border border-gray-200 dark:border-dark-border text-gray-700 dark:text-gray-300 text-xs font-bold transition-all min-h-[44px]"
+                className="w-full py-2.5 px-4 rounded-xl border border-gray-200 dark:border-dark-border text-gray-700 dark:text-gray-300 text-xs font-bold transition-all min-h-[44px] cursor-pointer"
               >
                 Sign Out
               </button>
@@ -206,20 +321,7 @@ export const ClientPortalGate: React.FC = () => {
         </div>
       )}
 
-      {/* 2. PERSISTENT SETUP PENDING NOTICE (when remote migration is pending) */}
-      {portalData.isSetupPending && isStaffRole && (
-        <div 
-          role="status"
-          className="bg-sky-500/10 border-b border-sky-500/20 text-sky-700 dark:text-sky-300 px-4 py-2 text-xs font-semibold flex items-center justify-center gap-2 text-center"
-        >
-          <Sparkles className="w-4 h-4 shrink-0 text-sky-500" />
-          <span>
-            Client Portal Setup Pending: Remote database tables are currently being configured. Deliverables are displayed in fallback mode.
-          </span>
-        </div>
-      )}
-
-      {/* 3. PERSISTENT CLIENT PAUSED NOTICE */}
+      {/* 2. PERSISTENT CLIENT PAUSED NOTICE */}
       {portalData.client.status === 'Paused' && (
         <div 
           role="alert"
