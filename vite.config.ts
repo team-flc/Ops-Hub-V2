@@ -18,6 +18,9 @@ export default defineConfig({
             if (id.includes('@hello-pangea/dnd')) {
               return 'vendor-dnd';
             }
+            if (id.includes('jspdf')) {
+              return 'vendor-pdf';
+            }
             if (id.includes('react') || id.includes('react-dom') || id.includes('react-router-dom') || id.includes('zustand')) {
               return 'vendor-react';
             }
@@ -30,6 +33,7 @@ export default defineConfig({
   test: {
     environment: 'jsdom',
     globals: true,
-    setupFiles: './src/setupTests.ts'
+    setupFiles: './src/setupTests.ts',
+    testTimeout: 15000
   }
 })

@@ -1315,7 +1315,7 @@ BEGIN
         p_tasks::TEXT || ':' ||
         p_metadata::TEXT;
 
-    v_payload_hash := encode(sha256(v_canonical_string::bytea), 'hex');
+    v_payload_hash := encode(sha256(convert_to(v_canonical_string, 'UTF8')), 'hex');
 
     -- Check Existing Launch Batch for Idempotency Replay
     SELECT * INTO v_existing_batch 
