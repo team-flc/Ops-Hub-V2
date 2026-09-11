@@ -3,7 +3,7 @@ import { useSafeNavigate } from '../../lib/safeRouterHooks';
 import { useOpsStore } from '../../store/opsStore';
 import { 
   Building2, ChevronsLeft, ChevronsRight, Briefcase, X,
-  Globe, HardDrive, MessageCircle, ExternalLink
+  Globe, HardDrive, MessageCircle, ExternalLink, Clock, Users, UserCheck
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { ClientRecord, UserProfile } from '../../types';
@@ -202,6 +202,44 @@ export const Sidebar: React.FC = () => {
             <Briefcase className="w-5 h-5" />
           </button>
 
+          {/* Employee Attendance & Portal button */}
+          <button
+            type="button"
+            onClick={() => {
+              navigate('/employee/dashboard');
+              setViewMode('employee_dashboard');
+              setMobileSidebarOpen(false);
+            }}
+            className={`p-2.5 rounded-xl transition-colors touch-target flex items-center justify-center cursor-pointer ${
+              viewMode === 'employee_dashboard'
+                ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
+                : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-100'
+            }`}
+            title="Employee Attendance Portal"
+          >
+            <Clock className="w-5 h-5" />
+          </button>
+
+          {/* Employee Operations Management (Owner / Manager) */}
+          {isManagerOrOwner && (
+            <button
+              type="button"
+              onClick={() => {
+                navigate('/operations/employees');
+                setViewMode('employee_operations');
+                setMobileSidebarOpen(false);
+              }}
+              className={`p-2.5 rounded-xl transition-colors touch-target flex items-center justify-center cursor-pointer ${
+                viewMode === 'employee_operations' || viewMode === 'employee_dossier'
+                  ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
+                  : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-100'
+              }`}
+              title="Employee Operations & HR"
+            >
+              <Users className="w-5 h-5" />
+            </button>
+          )}
+
           {/* Collapsed Workspace Links Icons with Tooltips (Phase 3D) */}
           {activeWorkspaceLinks.length > 0 && (
             <div className="flex flex-col items-center gap-1.5 py-2 border-y border-gray-100 dark:border-dark-border/60 w-full">
@@ -361,8 +399,57 @@ export const Sidebar: React.FC = () => {
             </div>
           )}
 
-          {/* Space reserved for future operational modules */}
-          <div className="flex-1 overflow-y-auto p-3" />
+          {/* Staff & Management Operational Modules */}
+          <div className="flex-1 overflow-y-auto p-3 space-y-4">
+            {/* Operational Workspace Links */}
+            <div className="space-y-1">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1 px-1">
+                Employee Operations
+              </div>
+
+              {/* My Employee Portal */}
+              <button
+                type="button"
+                onClick={() => {
+                  navigate('/employee/dashboard');
+                  setViewMode('employee_dashboard');
+                  setMobileSidebarOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+                  viewMode === 'employee_dashboard'
+                    ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 truncate">
+                  <Clock className="w-4 h-4 shrink-0" />
+                  <span className="truncate">My Attendance & Portal</span>
+                </div>
+              </button>
+
+              {/* Operations & HR Management (Owner / Manager) */}
+              {isManagerOrOwner && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    navigate('/operations/employees');
+                    setViewMode('employee_operations');
+                    setMobileSidebarOpen(false);
+                  }}
+                  className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+                    viewMode === 'employee_operations' || viewMode === 'employee_dossier'
+                      ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
+                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5 truncate">
+                    <Users className="w-4 h-4 shrink-0" />
+                    <span className="truncate">Employee Operations</span>
+                  </div>
+                </button>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Bottom Section: Single Settings Action for Owner/Manager */}

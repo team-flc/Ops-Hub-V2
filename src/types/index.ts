@@ -315,7 +315,10 @@ export type ViewMode =
   | 'client_workspace'
   | 'automations'
   | 'settings'
-  | 'profile';
+  | 'profile'
+  | 'employee_dashboard'
+  | 'employee_operations'
+  | 'employee_dossier';
 
 export type SettingsTab = 'team' | 'clients' | 'templates' | 'archive' | 'audit';
 
@@ -838,4 +841,288 @@ export interface ClientPortalOverviewData {
   publishedResults: ClientPublishedResult[];
   publishedDeliverablesRatio: { completed: number; total: number };
 }
+
+// ==============================================================================
+// EMPLOYEE OPERATIONS SYSTEM TYPES
+// ==============================================================================
+
+export type EmploymentType = 'full_time' | 'part_time' | 'contractor' | 'contract' | 'intern' | 'probation';
+export type EmploymentStatus = 'active' | 'inactive' | 'probation' | 'resigned' | 'terminated' | 'suspended';
+
+export interface WorkShift {
+  id: string;
+  name: string;
+  code: string;
+  startTime: string; // HH:mm:ss
+  endTime: string; // HH:mm:ss
+  crossesMidnight: boolean;
+  timezone: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CompanyWorkSchedule {
+  id: string;
+  effectiveFrom: string; // YYYY-MM-DD
+  effectiveTo?: string | null;
+  workingDays: number[]; // 1=Mon, 2=Tue, 3=Wed, 4=Thu, 5=Fri, 6=Sat (Sunday=0/7)
+  description?: string;
+  createdAt: string;
+  createdBy?: string | null;
+}
+
+export interface EmployeeRecord {
+  id: string; // maps 1:1 to profile.id
+  employeeId?: string | null;
+  employmentType: EmploymentType;
+  dateOfBirth?: string | null; // YYYY-MM-DD
+  salary: number; // Gross monthly salary in PKR
+  jobDescription?: string | null;
+  shiftId?: string | null;
+  shift?: WorkShift | null;
+  customCheckInTime?: string | null; // HH:mm
+  customCheckOutTime?: string | null; // HH:mm
+  employmentStatus: EmploymentStatus;
+  sopAcknowledged: boolean;
+  sopAcknowledgedAt?: string | null;
+  sopVersion?: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy?: string | null;
+  updatedBy?: string | null;
+}
+
+export type AttendanceStatus = 'on_time' | 'present' | 'late' | 'absent' | 'incomplete' | 'early_checkout' | 'corrected';
+export type AttendanceEvidenceType = 'screen_capture' | 'manual_upload';
+
+export interface EmployeeAttendance {
+  id: string;
+  employeeId: string;
+  workDate: string; // YYYY-MM-DD
+  shiftId?: string | null;
+  shift?: WorkShift | null;
+  scheduledCheckIn: string;
+  scheduledCheckOut: string;
+  checkInTime?: string | null;
+  checkOutTime?: string | null;
+  status: AttendanceStatus;
+  minutesLate: number;
+  lateDeduction: number; // PKR 500 when late
+  absenceDeduction: number; // Monthly salary / actual month calendar days
+  checkInScreenshotPath?: string | null;
+  checkOutScreenshotPath?: string | null;
+  screenCaptureUrl?: string | null;
+  checkInEvidenceType?: AttendanceEvidenceType | null;
+  checkOutEvidenceType?: AttendanceEvidenceType | null;
+  checkInMetadata?: any;
+  checkOutMetadata?: any;
+  totalHours?: number;
+  workMode?: string;
+  earlyCheckoutReason?: string | null;
+  earlyCheckoutStatus?: 'pending_review' | 'approved' | 'warning_issued' | 'deduction_applied' | null;
+  correctionReason?: string | null;
+  correctedBy?: string | null;
+  correctedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type AssetStatus = 'assigned' | 'receipt_pending' | 'received' | 'returned' | 'damaged' | 'lost' | 'available';
+
+export interface CompanyAsset {
+  id: string;
+  employeeId: string;
+  assignedTo?: string;
+  itemName: string;
+  assetName?: string;
+  assetTag?: string;
+  serialNumber?: string;
+  category?: string;
+  condition?: string;
+  issueDate: string; // YYYY-MM-DD
+  price: number;
+  replacementValue?: number;
+  status: AssetStatus;
+  acknowledgedAt?: string | null;
+  acknowledgedBy?: string | null;
+  returnDate?: string | null;
+  damageLossReason?: string | null;
+  damageLossEvidenceUrl?: string | null;
+  financialRecoveryApproved: boolean;
+  financialRecoveryAmount: number;
+  recoveryPayrollPeriod?: string | null;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  createdBy?: string | null;
+  updatedBy?: string | null;
+}
+
+export interface EmployeeBankDetails {
+  id: string;
+  employeeId: string;
+  bankName: string;
+  accountTitle: string;
+  accountNumberOrIban: string;
+  accountNumber?: string;
+  iban?: string;
+  branchCode?: string;
+  status: 'active' | 'pending_change' | 'archived';
+  createdAt: string;
+  updatedAt: string;
+  createdBy?: string | null;
+  updatedBy?: string | null;
+}
+
+export interface EmployeeProfileChangeRequest {
+  id: string;
+  employeeId: string;
+  requestType: 'profile_details' | 'bank_details' | 'contact_info' | 'emergency_contact' | 'bank_info' | 'tax_info';
+  requestedChanges: Record<string, any>;
+  currentValues?: Record<string, any> | null;
+  reason?: string | null;
+  status: 'pending' | 'approved' | 'rejected';
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  reviewNotes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type PayrollStatus = 'Draft' | 'Under Review' | 'Approved' | 'Paid' | 'Concern Raised' | 'draft' | 'under_review' | 'approved' | 'paid' | 'concern_raised';
+
+export interface EmployeePayrollRecord {
+  id: string;
+  employeeId: string;
+  payrollPeriod: string; // YYYY-MM
+  payrollMonth?: string;
+  grossSalary: number;
+  baseSalary?: number;
+  lateDeductionsTotal: number;
+  lateDeductions?: number;
+  absenceDeductionsTotal: number;
+  unapprovedAbsenceDeductions?: number;
+  manualAdjustmentsTotal: number;
+  bonuses?: number;
+  allowances?: number;
+  otherAdjustments?: number;
+  assetRecoveryDeduction: number;
+  assetDeductions?: number;
+  netPayable: number;
+  scheduledPaymentDate: string; // YYYY-MM-DD (15th of next month)
+  status: PayrollStatus;
+  paymentProofPath?: string | null;
+  paymentProofUrl?: string | null;
+  paymentDate?: string | null;
+  paidAt?: string | null;
+  paidBy?: string | null;
+  managementNotes?: string | null;
+  notes?: string | null;
+  concernNotes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  createdBy?: string | null;
+  updatedBy?: string | null;
+}
+
+export type PerformanceRecordType = 
+  | 'goal' 
+  | 'achievement' 
+  | 'incident_coaching' 
+  | 'incident'
+  | 'coaching'
+  | 'commendation'
+  | 'warning' 
+  | 'salary_hike' 
+  | 'contract_document' 
+  | 'status_change' 
+  | 'exit_settlement';
+
+export interface EmployeePerformanceRecord {
+  id: string;
+  employeeId: string;
+  recordType: PerformanceRecordType;
+  title: string;
+  description?: string | null;
+  date: string; // YYYY-MM-DD
+  severity: 'info' | 'low' | 'medium' | 'high' | 'critical';
+  documentUrl?: string | null;
+  previousSalary?: number | null;
+  newSalary?: number | null;
+  rating?: number | null;
+  actionPlan?: string | null;
+  status: 'active' | 'acknowledged' | 'resolved' | 'cancelled';
+  concernStatus: 'none' | 'concern_raised' | 'concern_resolved' | 'concern_rejected';
+  concernText?: string | null;
+  createdAt: string;
+  updatedAt: string;
+  createdBy?: string | null;
+}
+
+export type EmployeeTaskType = 
+  | 'missing_checkin_60m' 
+  | 'early_checkout_review' 
+  | 'missing_checkout' 
+  | 'employee_concern' 
+  | 'profile_change_request' 
+  | 'payroll_approval' 
+  | 'asset_review';
+
+export interface EmployeeManagementTask {
+  id: string;
+  taskType: EmployeeTaskType;
+  employeeId: string;
+  employeeName?: string;
+  title: string;
+  description?: string | null;
+  status: 'open' | 'in_progress' | 'resolved' | 'dismissed' | 'completed';
+  priority: 'low' | 'normal' | 'high' | 'urgent';
+  referenceId?: string | null;
+  assignedTo?: string | null;
+  resolutionNotes?: string | null;
+  resolvedBy?: string | null;
+  resolvedAt?: string | null;
+  idempotencyKey?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EmployeeFinalSettlement {
+  id: string;
+  employeeId: string;
+  lastWorkingDate: string; // YYYY-MM-DD
+  noticePeriodStatus: 'served' | 'waived' | 'short' | 'not_served';
+  pendingEarnedSalary: number;
+  currentAccruedAmount: number;
+  approvedDeductions: number;
+  assetClearanceStatus: 'pending' | 'cleared' | 'charges_applied';
+  finalPayableAmount: number;
+  netFinalPayable?: number | null;
+  separationReason?: string | null;
+  paymentProofPath?: string | null;
+  status: 'draft' | 'under_review' | 'approved' | 'settled';
+  settledAt?: string | null;
+  settledBy?: string | null;
+  notes?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EmployeeFullDossier {
+  profile: UserProfile;
+  employeeRecord: EmployeeRecord | null;
+  record?: EmployeeRecord | null;
+  bankDetails: EmployeeBankDetails | null;
+  attendanceHistory: EmployeeAttendance[];
+  attendance?: EmployeeAttendance[];
+  assets: CompanyAsset[];
+  payrollRecords: EmployeePayrollRecord[];
+  payroll?: EmployeePayrollRecord[];
+  performanceRecords: EmployeePerformanceRecord[];
+  performance?: EmployeePerformanceRecord[];
+  changeRequests: EmployeeProfileChangeRequest[];
+  tasks: EmployeeManagementTask[];
+  settlement: EmployeeFinalSettlement | null;
+}
+
 

@@ -3,11 +3,13 @@ import { createPortal } from 'react-dom';
 import { 
   X, UserPlus, Shield, Building2, Briefcase, UserCheck, 
   Key, Eye, EyeOff, Sparkles, Check, Copy, AlertCircle, 
-  Loader2, CheckCircle2, Camera, Trash2 
+  Loader2, CheckCircle2, Camera, Trash2, Clock, DollarSign,
+  UserCog, Award
 } from 'lucide-react';
-import { Department, Designation, UserProfile } from '../../types';
+import { Department, Designation, UserProfile, WorkShift, EmploymentType, EmploymentStatus } from '../../types';
 import { useOpsStore } from '../../store/opsStore';
 import { teamManagementService } from '../../lib/teamManagementService';
+import { employeeOperationsService } from '../../lib/employeeOperationsService';
 import { storageService, useSignedUrl } from '../../lib/storageService';
 
 interface CreateTeamMemberModalProps {
@@ -54,6 +56,18 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
 
+  // Companion Employee Record Fields
+  const [empId, setEmpId] = useState('');
+  const [employmentType, setEmploymentType] = useState<EmploymentType>('full_time');
+  const [dob, setDob] = useState('');
+  const [salary, setSalary] = useState<number | ''>('');
+  const [shifts, setShifts] = useState<WorkShift[]>([]);
+  const [selectedShiftId, setSelectedShiftId] = useState('');
+  const [customCheckInTime, setCustomCheckInTime] = useState('');
+  const [customCheckOutTime, setCustomCheckOutTime] = useState('');
+  const [jobDescription, setJobDescription] = useState('');
+  const [employmentStatus, setEmploymentStatus] = useState<EmploymentStatus>('active');
+
   // UI State
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -64,6 +78,23 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
     password: string;
   } | null>(null);
   const [copied, setCopied] = useState(false);
+
+  // Load Work Shifts
+  useEffect(() => {
+    async function loadShifts() {
+      const fetchedShifts = await employeeOperationsService.fetchWorkShifts();
+      setShifts(fetchedShifts);
+      if (fetchedShifts.length > 0 && !selectedShiftId) {
+        setSelectedShiftId(fetchedShifts[0].id);
+      }
+    }
+    if (isOpen) {
+      loadShifts();
+      if (!empId) {
+        setEmpId(`EMP-${Math.floor(100 + Math.random() * 900)}`);
+      }
+    }
+  }, [isOpen, selectedShiftId, empId]);
 
   // Default Reporting Manager logic
   useEffect(() => {
@@ -224,6 +255,22 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
         setErrorMessage(result.error);
         setIsSubmitting(false);
       } else {
+        // Upsert companion employee record
+        if (result.user?.id && currentUserProfile?.id) {
+          await employeeOperationsService.upsertEmployeeRecord({
+            id: result.user.id,
+            employeeId: empId.trim() || undefined,
+            employmentType,
+            dateOfBirth: dob || undefined,
+            salary: salary ? Number(salary) : 0,
+            jobDescription: jobDescription.trim() || undefined,
+            shiftId: selectedShiftId || undefined,
+            customCheckInTime: customCheckInTime.trim() || undefined,
+            customCheckOutTime: customCheckOutTime.trim() || undefined,
+            employmentStatus
+          }, currentUserProfile.id);
+        }
+
         // Display single-time in-memory credentials screen
         setCreatedCredentials({
           fullName: fullName.trim(),
@@ -249,10 +296,6 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
   };
 
   const handleModalClose = () => {
-    // Wipe memory cleanly
-    setCreatedCredentials(null);
-    setPassword('');
-    setConfirmPassword('');
     setFullName('');
     setWorkEmail('');
     setPhone('');
@@ -261,29 +304,33 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
     setLinkedinUrl('');
     setBio('');
     setAvatarUrl(null);
+    setStartDate(new Date().toISOString().split('T')[0]);
     setSelectedDeptIds([]);
+    setSelectedDesignationId('');
+    setSelectedClientIds([]);
+    setPassword('');
+    setConfirmPassword('');
     setErrorMessage(null);
+    setCreatedCredentials(null);
     onClose();
   };
 
   const modalContent = (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border rounded-3xl shadow-2xl w-full max-w-2xl max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+      <div className="bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
         
-        {/* Modal Header */}
-        <div className="px-6 py-5 border-b border-slate-100 dark:border-dark-border flex items-center justify-between bg-slate-50/50 dark:bg-dark-sidebar">
+        {/* Header */}
+        <div className="px-6 py-5 border-b border-slate-100 dark:border-dark-border flex items-center justify-between bg-slate-50/60 dark:bg-dark-sidebar">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-200 text-brand-600 flex items-center justify-center shadow-sm">
+            <div className="w-10 h-10 rounded-2xl bg-brand-500/10 text-brand-600 flex items-center justify-center border border-brand-500/20">
               <UserPlus className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-gray-100">
-                {createdCredentials ? 'Account Created Successfully' : 'Create New Team Member'}
+              <h2 className="text-base font-bold text-slate-900 dark:text-gray-100">
+                {createdCredentials ? 'Team Member Created' : 'Create New Team Member'}
               </h2>
               <p className="text-xs text-slate-500 dark:text-gray-400">
-                {createdCredentials 
-                  ? 'One-time credential confirmation screen' 
-                  : 'Provision account and configure permissions for a new team member'}
+                {createdCredentials ? 'Copy login credentials securely' : 'Provision internal staff with role, departments & compensation'}
               </p>
             </div>
           </div>
@@ -297,146 +344,120 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
         </div>
 
         {/* Modal Body */}
-        <div className="p-6 overflow-y-auto flex-1 space-y-6">
+        <div className="overflow-y-auto flex-1 p-6">
           {createdCredentials ? (
-            /* SUCCESS CONFIRMATION SCREEN */
-            <div className="space-y-6 animate-fade-in">
-              <div className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs flex items-start gap-3">
-                <CheckCircle2 className="w-5 h-5 text-emerald-600 flex-shrink-0 mt-0.5" />
+            /* Single-Time Credentials Screen */
+            <div className="space-y-6 py-2">
+              <div className="p-4 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-800/40 flex items-start gap-3">
+                <CheckCircle2 className="w-5 h-5 text-emerald-600 shrink-0 mt-0.5" />
                 <div className="space-y-1">
-                  <div className="font-bold text-emerald-950">Team Member Provisioned in Supabase Auth</div>
-                  <div>Account is active and ready for immediate sign-in.</div>
+                  <h4 className="text-xs font-bold text-emerald-900 dark:text-emerald-200">
+                    Account Provisioned Successfully!
+                  </h4>
+                  <p className="text-[11px] text-emerald-800 dark:text-emerald-300">
+                    The credentials below are displayed once in memory. Copy and securely share them with the team member.
+                  </p>
                 </div>
               </div>
 
-              <div className="bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-2xl p-5 space-y-4">
-                <div className="grid grid-cols-2 gap-4 text-xs">
-                  <div>
-                    <span className="text-slate-400 uppercase tracking-wider font-semibold block text-[10px]">Full Name</span>
-                    <span className="font-bold text-slate-800 dark:text-gray-200">{createdCredentials.fullName}</span>
-                  </div>
-                  <div>
-                    <span className="text-slate-400 uppercase tracking-wider font-semibold block text-[10px]">Assigned Role</span>
-                    <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-bold bg-brand-50 text-brand-700 border border-brand-200">
-                      Team Member
-                    </span>
-                  </div>
-                  <div className="col-span-2">
-                    <span className="text-slate-400 uppercase tracking-wider font-semibold block text-[10px]">Work Email</span>
-                    <span className="font-mono font-medium text-slate-800 dark:text-gray-200">{createdCredentials.workEmail}</span>
-                  </div>
-                  <div className="col-span-2">
-                    <span className="text-slate-400 uppercase tracking-wider font-semibold block text-[10px]">Permanent Password</span>
-                    <div className="flex items-center justify-between p-2.5 rounded-xl bg-white dark:bg-dark-100 border border-slate-200 dark:border-dark-border font-mono text-sm font-bold text-slate-900 dark:text-gray-100 select-all">
-                      <span>{createdCredentials.password}</span>
-                    </div>
-                  </div>
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border space-y-3 font-mono text-xs">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Name:</span>
+                  <span className="font-bold text-slate-800 dark:text-gray-200">{createdCredentials.fullName}</span>
                 </div>
-              </div>
-
-              <div className="p-3.5 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-[11px] flex items-start gap-2.5">
-                <AlertCircle className="w-4 h-4 text-amber-600 flex-shrink-0 mt-0.5" />
-                <span>
-                  <strong>Important Security Notice:</strong> This permanent password will <em>never</em> be displayed again. Copy and share it securely with the user now.
-                </span>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Email:</span>
+                  <span className="font-bold text-slate-800 dark:text-gray-200">{createdCredentials.workEmail}</span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Role:</span>
+                  <span className="font-bold text-slate-800 dark:text-gray-200">{createdCredentials.role}</span>
+                </div>
+                <div className="flex justify-between items-center pt-2 border-t border-slate-200 dark:border-dark-border">
+                  <span className="text-slate-400">Password:</span>
+                  <span className="font-bold text-brand-600 dark:text-brand-400 bg-brand-50 dark:bg-brand-950/40 px-2 py-0.5 rounded-md">
+                    {createdCredentials.password}
+                  </span>
+                </div>
               </div>
 
               <div className="flex items-center justify-end gap-3 pt-2">
                 <button
                   type="button"
                   onClick={handleCopyCredentials}
-                  className="flex items-center gap-1.5 px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold shadow-md shadow-brand-500/20 transition-colors"
+                  className="px-4 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold flex items-center gap-2 shadow-md shadow-brand-500/20"
                 >
                   {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-                  <span>{copied ? 'Copied to Clipboard!' : 'Copy Login Details'}</span>
+                  <span>{copied ? 'Copied to Clipboard!' : 'Copy Credentials'}</span>
                 </button>
                 <button
                   type="button"
                   onClick={handleModalClose}
-                  className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-dark-100 hover:bg-slate-200 text-slate-700 dark:text-gray-300 text-xs font-bold transition-colors"
+                  className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-dark-border text-slate-700 dark:text-gray-300 text-xs font-semibold hover:bg-slate-100"
                 >
                   Done
                 </button>
               </div>
             </div>
           ) : (
-            /* CREATION FORM */
-            <form onSubmit={handleSubmit} className="space-y-6" noValidate>
+            <form onSubmit={handleSubmit} className="space-y-6">
               {errorMessage && (
-                <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium animate-shake">
-                  <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
-                  <div className="flex-1">{errorMessage}</div>
+                <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium">
+                  <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  <span>{errorMessage}</span>
                 </div>
               )}
 
               {/* 1. PERSONAL INFORMATION */}
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-gray-400 flex items-center gap-1.5">
                   <UserCheck className="w-3.5 h-3.5 text-brand-600" />
-                  <span>1. Personal Information</span>
+                  <span>1. Personal & Contact Information</span>
                 </h3>
 
-                {/* Profile Avatar Upload (Optional) */}
-                <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border flex items-center gap-4">
-                  <div className="relative group flex-shrink-0">
-                    {displayAvatarUrl ? (
-                      <img
-                        src={displayAvatarUrl}
-                        alt="Avatar Preview"
-                        className="w-14 h-14 rounded-2xl object-cover border border-slate-200 dark:border-dark-border shadow-sm"
-                      />
-                    ) : (
-                      <div className="w-14 h-14 rounded-2xl bg-slate-700 text-white font-bold text-sm flex items-center justify-center shadow-sm">
-                        {fullName
-                          ? fullName.split(' ').map((n) => n[0]).join('').substring(0, 2).toUpperCase()
-                          : 'FL'}
-                      </div>
-                    )}
-                    <label
-                      htmlFor="team-avatar-upload"
-                      className="absolute inset-0 bg-black/50 backdrop-blur-[1px] rounded-2xl opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white cursor-pointer transition-opacity text-[9px] font-bold"
-                    >
-                      {isUploadingAvatar ? (
-                        <Loader2 className="w-4 h-4 animate-spin" />
-                      ) : (
-                        <>
-                          <Camera className="w-4 h-4 mb-0.5" />
-                          <span>Change</span>
-                        </>
-                      )}
-                    </label>
-                    <input
-                      id="team-avatar-upload"
-                      type="file"
-                      accept="image/jpeg,image/png,image/webp"
-                      onChange={handleAvatarUpload}
-                      className="hidden"
-                      disabled={isUploadingAvatar || isSubmitting}
-                    />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <span className="text-xs font-bold text-slate-800 dark:text-gray-200">
-                        Profile Avatar (Optional)
-                      </span>
-                      {avatarUrl && (
-                        <button
-                          type="button"
-                          onClick={handleRemoveAvatar}
-                          className="text-[11px] text-rose-500 hover:text-rose-600 font-semibold flex items-center gap-1"
-                        >
-                          <Trash2 className="w-3 h-3" />
-                          <span>Remove</span>
-                        </button>
-                      )}
-                    </div>
-                    <p className="text-[11px] text-slate-400">
-                      Private storage. JPG, PNG or WebP up to 5 MB.
-                    </p>
-                  </div>
-                </div>
-
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  {/* Profile Avatar Upload */}
+                  <div className="space-y-1 sm:col-span-2">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                      Profile Avatar (Optional)
+                    </label>
+                    <div className="flex items-center gap-3">
+                      {displayAvatarUrl ? (
+                        <div className="relative w-12 h-12 rounded-2xl overflow-hidden border border-slate-200 dark:border-dark-border">
+                          <img src={displayAvatarUrl} alt="Avatar Preview" className="w-full h-full object-cover" />
+                          <button
+                            type="button"
+                            onClick={handleRemoveAvatar}
+                            className="absolute inset-0 bg-black/50 text-white flex items-center justify-center opacity-0 hover:opacity-100 transition-opacity"
+                          >
+                            <Trash2 className="w-4 h-4" />
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="w-12 h-12 rounded-2xl bg-slate-100 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border flex items-center justify-center text-slate-400">
+                          <Camera className="w-5 h-5" />
+                        </div>
+                      )}
+                      <div>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          id="avatar-upload"
+                          onChange={handleAvatarUpload}
+                          disabled={isUploadingAvatar}
+                          className="hidden"
+                        />
+                        <label
+                          htmlFor="avatar-upload"
+                          className="px-3 py-1.5 rounded-xl border border-slate-200 dark:border-dark-border text-slate-700 dark:text-gray-300 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-dark-100 cursor-pointer inline-block"
+                        >
+                          {isUploadingAvatar ? 'Uploading...' : 'Choose Image'}
+                        </label>
+                        <span className="text-[10px] text-slate-400 block mt-0.5">JPEG, PNG, WebP up to 2MB</span>
+                      </div>
+                    </div>
+                  </div>
+
                   <div className="space-y-1">
                     <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
                       Full Name <span className="text-rose-500">*</span>
@@ -453,7 +474,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
 
                   <div className="space-y-1">
                     <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
-                      Work Email <span className="text-rose-500">*</span>
+                      Official Work Email <span className="text-rose-500">*</span>
                     </label>
                     <input
                       type="email"
@@ -467,7 +488,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
 
                   <div className="space-y-1">
                     <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
-                      Primary Phone (Optional)
+                      Primary Phone (Pakistan / International)
                     </label>
                     <input
                       type="tel"
@@ -480,7 +501,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
 
                   <div className="space-y-1">
                     <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
-                      Backup Phone (Optional)
+                      Backup / WhatsApp Number
                     </label>
                     <input
                       type="tel"
@@ -493,7 +514,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
 
                   <div className="space-y-1">
                     <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
-                      Connected Contact Gmail (Optional)
+                      Personal Gmail / Contact Email
                     </label>
                     <input
                       type="email"
@@ -567,7 +588,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
                         id="create-member-role-select"
                         aria-label="System Role"
                         value={selectedRole}
-                        onChange={(e) => setSelectedRole(e.target.value as 'operational_manager' | 'team_member')}
+                        onChange={(e) => setSelectedRole(e.target.value as any)}
                         className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 font-bold"
                       >
                         <option value="team_member">Team Member</option>
@@ -589,7 +610,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
                       <button
                         type="button"
                         onClick={onOpenDesignationManager}
-                        className="text-[11px] font-semibold text-brand-600 hover:text-brand-700 hover:underline"
+                        className="text-[11px] font-semibold text-brand-600 hover:underline"
                       >
                         + Add Designation
                       </button>
@@ -610,13 +631,10 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
 
               {/* 3. DEPARTMENTS */}
               <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-dark-border">
-                <div className="flex items-center justify-between">
-                  <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-gray-400 flex items-center gap-1.5">
-                    <Building2 className="w-3.5 h-3.5 text-brand-600" />
-                    <span>3. Assigned Departments <span className="text-rose-500">*</span></span>
-                  </h3>
-                  <span className="text-[11px] text-slate-400">Multiple allowed (Equal)</span>
-                </div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-gray-400 flex items-center gap-1.5">
+                  <Building2 className="w-3.5 h-3.5 text-brand-600" />
+                  <span>3. Assigned Departments <span className="text-rose-500">*</span></span>
+                </h3>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                   {departments.map((dept) => {
                     const isSelected = selectedDeptIds.includes(dept.id);
@@ -711,12 +729,125 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
                 )}
               </div>
 
-              {/* 6. LOGIN CREDENTIALS */}
+              {/* 6. EMPLOYEE OPERATIONS & COMPENSATION (PARITY SECTION) */}
+              <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-dark-border">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-gray-400 flex items-center gap-1.5">
+                  <UserCog className="w-3.5 h-3.5 text-brand-600" />
+                  <span>6. Employee Operations & Compensation Details</span>
+                </h3>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                      Employee ID (Badge / Code)
+                    </label>
+                    <input
+                      type="text"
+                      value={empId}
+                      onChange={(e) => setEmpId(e.target.value)}
+                      placeholder="e.g. EMP-101"
+                      className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 font-mono focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                      Employment Type
+                    </label>
+                    <select
+                      value={employmentType}
+                      onChange={(e) => setEmploymentType(e.target.value as any)}
+                      className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 capitalize"
+                    >
+                      <option value="full_time">Full Time</option>
+                      <option value="part_time">Part Time</option>
+                      <option value="probation">Probationary</option>
+                      <option value="intern">Internship</option>
+                      <option value="contract">Contractual</option>
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                      Base Monthly Salary (PKR)
+                    </label>
+                    <input
+                      type="number"
+                      min="0"
+                      value={salary}
+                      onChange={(e) => setSalary(e.target.value ? Number(e.target.value) : '')}
+                      placeholder="e.g. 150000"
+                      className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 font-mono focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                      Assigned Work Shift
+                    </label>
+                    <select
+                      value={selectedShiftId}
+                      onChange={(e) => setSelectedShiftId(e.target.value)}
+                      className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    >
+                      {shifts.map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.name} ({s.startTime.slice(0, 5)} - {s.endTime.slice(0, 5)} PKT)
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                      Date of Birth
+                    </label>
+                    <input
+                      type="date"
+                      value={dob}
+                      onChange={(e) => setDob(e.target.value)}
+                      className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                      Employment Status
+                    </label>
+                    <select
+                      value={employmentStatus}
+                      onChange={(e) => setEmploymentStatus(e.target.value as any)}
+                      className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 capitalize"
+                    >
+                      <option value="active">Active</option>
+                      <option value="probation">Probation</option>
+                      <option value="suspended">Suspended</option>
+                      <option value="terminated">Terminated</option>
+                      <option value="resigned">Resigned</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                    Job Description & Operational Scope
+                  </label>
+                  <textarea
+                    rows={2}
+                    value={jobDescription}
+                    onChange={(e) => setJobDescription(e.target.value)}
+                    placeholder="Key deliverables, client responsibilities, and operational duties..."
+                    className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
+                  />
+                </div>
+              </div>
+
+              {/* 7. LOGIN CREDENTIALS */}
               <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-dark-border">
                 <div className="flex items-center justify-between">
                   <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-gray-400 flex items-center gap-1.5">
                     <Key className="w-3.5 h-3.5 text-brand-600" />
-                    <span>6. Login Credentials <span className="text-rose-500">*</span></span>
+                    <span>7. Login Credentials <span className="text-rose-500">*</span></span>
                   </h3>
                   <button
                     type="button"
@@ -797,7 +928,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
                 <button
                   type="submit"
                   disabled={isSubmitting}
-                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold shadow-md shadow-brand-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-md shadow-brand-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {isSubmitting ? (
                     <>

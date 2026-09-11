@@ -2,12 +2,14 @@ import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
 import { 
   X, UserCheck, Building2, Briefcase, Check, 
-  AlertCircle, Loader2, Edit3 
+  AlertCircle, Loader2, Edit3, Clock, DollarSign,
+  UserCog, ShieldCheck
 } from 'lucide-react';
-import { Department, Designation, TeamMemberRecord, UserProfile } from '../../types';
+import { Department, Designation, TeamMemberRecord, UserProfile, WorkShift, EmployeeRecord, EmploymentType, EmploymentStatus } from '../../types';
 import { useOpsStore } from '../../store/opsStore';
 import { teamManagementService } from '../../lib/teamManagementService';
 import { archiveService } from '../../lib/archiveService';
+import { employeeOperationsService } from '../../lib/employeeOperationsService';
 
 interface EditTeamMemberModalProps {
   isOpen: boolean;
@@ -32,6 +34,7 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
 }) => {
   const clients = useOpsStore((state) => state.clients);
 
+  // Form State
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -41,11 +44,25 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
   const [selectedClientIds, setSelectedClientIds] = useState<string[]>([]);
   const [checkingTasksForClientId, setCheckingTasksForClientId] = useState<string | null>(null);
 
+  // Companion Employee Record Fields
+  const [empId, setEmpId] = useState('');
+  const [employmentType, setEmploymentType] = useState<EmploymentType>('full_time');
+  const [dob, setDob] = useState('');
+  const [salary, setSalary] = useState<number | ''>('');
+  const [shifts, setShifts] = useState<WorkShift[]>([]);
+  const [selectedShiftId, setSelectedShiftId] = useState('');
+  const [customCheckInTime, setCustomCheckInTime] = useState('');
+  const [customCheckOutTime, setCustomCheckOutTime] = useState('');
+  const [jobDescription, setJobDescription] = useState('');
+  const [employmentStatus, setEmploymentStatus] = useState<EmploymentStatus>('active');
+  const [sopAcknowledged, setSopAcknowledged] = useState(false);
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   useEffect(() => {
-    if (member) {
+    async function loadCompanionData() {
+      if (!member) return;
       setFullName(member.fullName);
       setPhone(member.phone || '');
       setStartDate(member.startDate || new Date().toISOString().split('T')[0]);
@@ -54,8 +71,37 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
       setSelectedManagerId(member.reportingManagerId || '');
       setSelectedClientIds(member.clientIds || []);
       setErrorMessage(null);
+
+      try {
+        const [fetchedShifts, employeeRec] = await Promise.all([
+          employeeOperationsService.fetchWorkShifts(),
+          employeeOperationsService.fetchEmployeeRecord(member.id)
+        ]);
+
+        setShifts(fetchedShifts);
+        if (employeeRec) {
+          setEmpId(employeeRec.employeeId || '');
+          setEmploymentType(employeeRec.employmentType || 'full_time');
+          setDob(employeeRec.dateOfBirth || '');
+          setSalary(employeeRec.salary || '');
+          setSelectedShiftId(employeeRec.shiftId || (fetchedShifts[0]?.id || ''));
+          setCustomCheckInTime(employeeRec.customCheckInTime || '');
+          setCustomCheckOutTime(employeeRec.customCheckOutTime || '');
+          setJobDescription(employeeRec.jobDescription || '');
+          setEmploymentStatus(employeeRec.employmentStatus || 'active');
+          setSopAcknowledged(Boolean(employeeRec.sopAcknowledged));
+        } else if (fetchedShifts.length > 0) {
+          setSelectedShiftId(fetchedShifts[0].id);
+        }
+      } catch (err) {
+        console.error('Failed to load companion employee data:', err);
+      }
     }
-  }, [member]);
+
+    if (isOpen && member) {
+      loadCompanionData();
+    }
+  }, [member, isOpen]);
 
   if (!isOpen || !member) return null;
 
@@ -149,6 +195,20 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
         return;
       }
 
+      // Sync companion employee record
+      await employeeOperationsService.upsertEmployeeRecord({
+        id: member.id,
+        employeeId: empId.trim() || undefined,
+        employmentType,
+        dateOfBirth: dob || undefined,
+        salary: salary ? Number(salary) : 0,
+        jobDescription: jobDescription.trim() || undefined,
+        shiftId: selectedShiftId || undefined,
+        customCheckInTime: customCheckInTime.trim() || undefined,
+        customCheckOutTime: customCheckOutTime.trim() || undefined,
+        employmentStatus
+      }, currentUserProfile.id);
+
       setIsSubmitting(false);
       onSuccess();
       onClose();
@@ -159,18 +219,18 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
   };
 
   const modalContent = (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-      <div className="bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border rounded-3xl shadow-2xl w-full max-w-2xl max-h-[calc(100dvh-2rem)] flex flex-col overflow-hidden">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
+      <div className="bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
         
         {/* Header */}
-        <div className="px-6 py-5 border-b border-slate-100 dark:border-dark-border flex items-center justify-between bg-slate-50/50 dark:bg-dark-sidebar">
+        <div className="px-6 py-5 border-b border-slate-100 dark:border-dark-border flex items-center justify-between bg-slate-50/60 dark:bg-dark-sidebar">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-200 text-brand-600 flex items-center justify-center shadow-sm">
+            <div className="w-10 h-10 rounded-2xl bg-brand-50 border border-brand-200 text-brand-600 flex items-center justify-center shadow-xs">
               <Edit3 className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-lg font-bold text-slate-900 dark:text-gray-100">
-                Edit Team Member
+              <h2 className="text-base sm:text-lg font-bold text-slate-900 dark:text-gray-100">
+                Edit Team Member Profile
               </h2>
               <p className="text-xs text-slate-500 dark:text-gray-400 font-mono">
                 {member.workEmail}
@@ -190,16 +250,16 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto flex-1 space-y-6">
           {errorMessage && (
             <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium">
-              <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
+              <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
               <div className="flex-1">{errorMessage}</div>
             </div>
           )}
 
-          {/* Personal Info */}
+          {/* 1. Personal Info */}
           <div className="space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-gray-400 flex items-center gap-1.5">
               <UserCheck className="w-3.5 h-3.5 text-brand-600" />
-              <span>Personal Information</span>
+              <span>1. Personal & Contact Information</span>
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
               <div className="space-y-1">
@@ -252,18 +312,131 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
                 >
                   <option value="">Select Designation...</option>
                   {designations.map((d) => (
-                    <option key={d.id} value={d.id}>{d.name} {d.status === 'archived' ? '(Archived)' : ''}</option>
+                    <option key={d.id} value={d.id}>{d.name}</option>
                   ))}
                 </select>
               </div>
             </div>
           </div>
 
-          {/* Departments */}
+          {/* 2. EMPLOYEE OPERATIONS & COMPENSATION (PARITY SECTION) */}
+          <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-dark-border">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-gray-400 flex items-center gap-1.5">
+              <UserCog className="w-3.5 h-3.5 text-brand-600" />
+              <span>2. Employee Operations & Compensation</span>
+            </h3>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                  Employee ID (Badge / Code)
+                </label>
+                <input
+                  type="text"
+                  value={empId}
+                  onChange={(e) => setEmpId(e.target.value)}
+                  placeholder="e.g. EMP-101"
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 font-mono focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                  Employment Type
+                </label>
+                <select
+                  value={employmentType}
+                  onChange={(e) => setEmploymentType(e.target.value as any)}
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 capitalize"
+                >
+                  <option value="full_time">Full Time</option>
+                  <option value="part_time">Part Time</option>
+                  <option value="probation">Probationary</option>
+                  <option value="intern">Internship</option>
+                  <option value="contract">Contractual</option>
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                  Base Monthly Salary (PKR)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  value={salary}
+                  onChange={(e) => setSalary(e.target.value ? Number(e.target.value) : '')}
+                  placeholder="e.g. 150000"
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 font-mono focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                  Assigned Work Shift
+                </label>
+                <select
+                  value={selectedShiftId}
+                  onChange={(e) => setSelectedShiftId(e.target.value)}
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                  {shifts.map((s) => (
+                    <option key={s.id} value={s.id}>
+                      {s.name} ({s.startTime.slice(0, 5)} - {s.endTime.slice(0, 5)} PKT)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                  Date of Birth
+                </label>
+                <input
+                  type="date"
+                  value={dob}
+                  onChange={(e) => setDob(e.target.value)}
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                  Employment Status
+                </label>
+                <select
+                  value={employmentStatus}
+                  onChange={(e) => setEmploymentStatus(e.target.value as any)}
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 capitalize"
+                >
+                  <option value="active">Active</option>
+                  <option value="probation">Probation</option>
+                  <option value="suspended">Suspended</option>
+                  <option value="terminated">Terminated</option>
+                  <option value="resigned">Resigned</option>
+                </select>
+              </div>
+            </div>
+
+            <div className="space-y-1">
+              <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                Job Description & Scope
+              </label>
+              <textarea
+                rows={2}
+                value={jobDescription}
+                onChange={(e) => setJobDescription(e.target.value)}
+                placeholder="Key deliverables, client responsibilities, and operational duties..."
+                className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
+              />
+            </div>
+          </div>
+
+          {/* 3. Departments */}
           <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-dark-border">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-gray-400 flex items-center gap-1.5">
               <Building2 className="w-3.5 h-3.5 text-brand-600" />
-              <span>Assigned Departments <span className="text-rose-500">*</span></span>
+              <span>3. Assigned Departments <span className="text-rose-500">*</span></span>
             </h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {departments.map((dept) => {
@@ -287,87 +460,85 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
             </div>
           </div>
 
-          {/* Reporting Manager */}
-          {currentUserProfile?.role === 'owner' && (
-            <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-dark-border">
-              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-gray-400 flex items-center gap-1.5">
-                <UserCheck className="w-3.5 h-3.5 text-brand-600" />
-                <span>Reporting Manager</span>
-              </h3>
+          {/* 4. Reporting Manager */}
+          <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-dark-border">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-gray-400 flex items-center gap-1.5">
+              <UserCheck className="w-3.5 h-3.5 text-brand-600" />
+              <span>4. Reporting Manager</span>
+            </h3>
+            {currentUserProfile?.role === 'operational_manager' ? (
+              <div className="p-3 bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-xs">
+                <span className="text-slate-500">Assigned Manager: </span>
+                <strong className="text-slate-900 dark:text-gray-100">{currentUserProfile.fullName} (You)</strong>
+              </div>
+            ) : (
               <select
                 value={selectedManagerId}
                 onChange={(e) => setSelectedManagerId(e.target.value)}
                 className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
               >
-                <option value="">Select Manager...</option>
-                {eligibleManagers.map((mgr) => (
-                  <option key={mgr.id} value={mgr.id}>
-                    {mgr.fullName} ({mgr.role === 'owner' ? 'Owner' : 'Operational Manager'})
-                  </option>
-                ))}
+                <option value="">Select Active Manager...</option>
+                {eligibleManagers
+                  .filter((m) => m.id !== member.id)
+                  .map((mgr) => (
+                    <option key={mgr.id} value={mgr.id}>
+                      {mgr.fullName} ({mgr.role === 'owner' ? 'Owner' : 'Operational Manager'})
+                    </option>
+                  ))}
               </select>
-            </div>
-          )}
-
-          {/* Client Access */}
-          <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-dark-border">
-            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-gray-400 flex items-center gap-1.5">
-              <Briefcase className="w-3.5 h-3.5 text-brand-600" />
-              <span>Client Access</span>
-            </h3>
-            {clients.filter((c) => c.status !== 'Archived').length === 0 ? (
-              <p className="text-xs text-slate-400 italic">No active clients available.</p>
-            ) : (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-40 overflow-y-auto p-1">
-                {clients
-                  .filter((c) => c.status !== 'Archived')
-                  .map((client) => {
-                    const isSelected = selectedClientIds.includes(client.id);
-                    const isChecking = checkingTasksForClientId === client.id;
-                    return (
-                      <button
-                        key={client.id}
-                        type="button"
-                        onClick={() => handleClientToggle(client.id)}
-                        disabled={isChecking || isSubmitting}
-                        className={`flex items-center justify-between p-2.5 rounded-xl border text-xs font-medium transition-all text-left ${
-                          isSelected
-                            ? 'bg-brand-50/70 border-brand-300 text-brand-700 dark:bg-brand-900/20 dark:border-brand-700 dark:text-brand-300'
-                            : 'bg-slate-50 dark:bg-dark-sidebar border-slate-200 dark:border-dark-border text-slate-700 dark:text-gray-300 hover:bg-slate-100'
-                        }`}
-                      >
-                        <div className="truncate flex items-center gap-2">
-                          <span className="truncate">{client.companyName}</span>
-                          <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-gray-200/60 dark:bg-dark-border text-gray-600 dark:text-gray-300">
-                            {client.package}
-                          </span>
-                        </div>
-                        {isChecking ? (
-                          <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-600 flex-shrink-0 ml-1" />
-                        ) : isSelected ? (
-                          <Check className="w-3.5 h-3.5 text-brand-600 flex-shrink-0 ml-1" />
-                        ) : null}
-                      </button>
-                    );
-                  })}
-              </div>
             )}
           </div>
 
-          {/* Footer */}
+          {/* 5. Client Access */}
+          <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-dark-border">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-gray-400 flex items-center gap-1.5">
+              <Briefcase className="w-3.5 h-3.5 text-brand-600" />
+              <span>5. Client Access</span>
+            </h3>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-36 overflow-y-auto p-1">
+              {clients
+                .filter((c) => c.status !== 'Archived')
+                .map((client) => {
+                  const isSelected = selectedClientIds.includes(client.id);
+                  const isChecking = checkingTasksForClientId === client.id;
+                  return (
+                    <button
+                      key={client.id}
+                      type="button"
+                      disabled={isChecking}
+                      onClick={() => handleClientToggle(client.id)}
+                      className={`flex items-center justify-between p-2.5 rounded-xl border text-xs font-medium transition-all text-left ${
+                        isSelected
+                          ? 'bg-brand-50/70 border-brand-300 text-brand-700 dark:bg-brand-900/20 dark:border-brand-700 dark:text-brand-300'
+                          : 'bg-slate-50 dark:bg-dark-sidebar border-slate-200 dark:border-dark-border text-slate-700 dark:text-gray-300 hover:bg-slate-100'
+                      }`}
+                    >
+                      <span className="truncate">{client.companyName}</span>
+                      {isChecking ? (
+                        <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-600" />
+                      ) : isSelected ? (
+                        <Check className="w-3.5 h-3.5 text-brand-600 flex-shrink-0 ml-1" />
+                      ) : null}
+                    </button>
+                  );
+                })}
+            </div>
+          </div>
+
+          {/* Submit */}
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-dark-border">
             <button
               type="button"
               onClick={onClose}
               disabled={isSubmitting}
-              className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-dark-border text-slate-600 dark:text-gray-300 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-dark-100 transition-colors disabled:opacity-50"
+              className="px-4 py-2.5 rounded-xl border border-slate-200 dark:border-dark-border text-slate-600 dark:text-gray-300 text-xs font-semibold hover:bg-slate-50 dark:hover:bg-dark-100 transition-colors"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={isSubmitting}
-              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold shadow-md shadow-brand-500/25 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white text-xs font-bold shadow-md shadow-brand-500/25 transition-all disabled:opacity-50"
             >
               {isSubmitting ? (
                 <>
