@@ -85,6 +85,7 @@ export const PayrollAdjustmentModal: React.FC<PayrollAdjustmentModalProps> = ({
         proofUrl = uploadRes.path;
       }
 
+      const isPaid = status === 'paid' || status === 'Paid';
       const res = await employeeOperationsService.updatePayrollRecord(payrollRecord.id, {
         bonuses,
         allowances,
@@ -92,7 +93,8 @@ export const PayrollAdjustmentModal: React.FC<PayrollAdjustmentModalProps> = ({
         otherAdjustments,
         netPayable: Math.max(0, calculatedNetPay),
         status,
-        paidAt: (status === 'paid' || status === 'Paid') ? new Date().toISOString() : undefined,
+        paidAt: isPaid ? (payrollRecord.paidAt || new Date().toISOString()) : undefined,
+        paidBy: isPaid ? (payrollRecord.paidBy || callerId) : undefined,
         paymentProofUrl: proofUrl || undefined,
         notes: notes.trim() || undefined
       }, callerId);
@@ -225,9 +227,10 @@ export const PayrollAdjustmentModal: React.FC<PayrollAdjustmentModalProps> = ({
               className="w-full px-3.5 py-2 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 font-bold"
             >
               <option value="draft">Draft (Calculating)</option>
+              <option value="under_review">Under Review</option>
               <option value="approved">Approved (Ready for 15th Payout)</option>
               <option value="paid">Paid (Disbursed to Bank)</option>
-              <option value="disputed">Disputed / Under Review</option>
+              <option value="concern_raised">Concern Raised / Disputed</option>
             </select>
           </div>
 

@@ -4,22 +4,25 @@ import {
   Calculator, AlertTriangle, CheckCircle2, Search, Filter, 
   Plus, Eye, Edit3, UserCheck, ChevronRight, RefreshCw, 
   ExternalLink, FileText, Check, X, ShieldAlert, ArrowUpRight,
-  TrendingDown, TrendingUp
+  TrendingDown, TrendingUp, Settings, Shield
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useSafeNavigate } from '../../lib/safeRouterHooks';
 import { 
   TeamMemberRecord, UserProfile, EmployeeRecord, WorkShift, 
   EmployeeAttendance, CompanyAsset, EmployeePayrollRecord, 
-  EmployeePerformanceRecord, EmployeeManagementTask, EmployeeFinalSettlement 
+  EmployeePerformanceRecord, EmployeeManagementTask, EmployeeFinalSettlement,
+  Department, Designation, ROLE_DISPLAY_NAMES
 } from '../../types';
 import { teamManagementService } from '../../lib/teamManagementService';
 import { employeeOperationsService } from '../../lib/employeeOperationsService';
+import { getPKTTodayDateString, getPKTCurrentMonthString, getPKTDateTimeParts } from '../../lib/pktDateUtils';
 import { AssignAssetModal } from './AssignAssetModal';
 import { LogIncidentModal } from './LogIncidentModal';
 import { PayrollAdjustmentModal } from './PayrollAdjustmentModal';
 import { AttendanceCorrectionModal } from './AttendanceCorrectionModal';
 import { FinalSettlementModal } from './FinalSettlementModal';
+import { EditTeamMemberModal } from '../team/EditTeamMemberModal';
 
 export const EmployeeManagementDashboardView: React.FC = () => {
   const { profile: currentUserProfile } = useAuth();
@@ -30,6 +33,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
 
   // Core Data
   const [teamMembers, setTeamMembers] = useState<TeamMemberRecord[]>([]);
+  const [employeeRecords, setEmployeeRecords] = useState<EmployeeRecord[]>([]);
   const [shifts, setShifts] = useState<WorkShift[]>([]);
   const [todayAttendanceList, setTodayAttendanceList] = useState<EmployeeAttendance[]>([]);
   const [missingCheckIns, setMissingCheckIns] = useState<Array<{ employee: UserProfile | TeamMemberRecord; shift: WorkShift; minutesLate: number }>>([]);
@@ -38,14 +42,14 @@ export const EmployeeManagementDashboardView: React.FC = () => {
   const [performanceRecords, setPerformanceRecords] = useState<EmployeePerformanceRecord[]>([]);
   const [concerns, setConcerns] = useState<EmployeeManagementTask[]>([]);
   const [settlements, setSettlements] = useState<EmployeeFinalSettlement[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [designations, setDesignations] = useState<Designation[]>([]);
+  const [eligibleManagers, setEligibleManagers] = useState<UserProfile[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Filters & Month Selectors
+  // Filters & Month Selectors (authoritative PKT month string)
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedMonth, setSelectedMonth] = useState<string>(() => {
-    const d = new Date();
-    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
-  });
+  const [selectedMonth, setSelectedMonth] = useState<string>(() => getPKTCurrentMonthString());
 
   // Modals State
   const [isAssignAssetModalOpen, setIsAssignAssetModalOpen] = useState(false);
@@ -56,6 +60,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
   const [selectedAttendanceCorrection, setSelectedAttendanceCorrection] = useState<EmployeeAttendance | null>(null);
   const [settlementTargetEmployee, setSettlementTargetEmployee] = useState<TeamMemberRecord | null>(null);
   const [settlementTargetEmployeeRecord, setSettlementTargetEmployeeRecord] = useState<EmployeeRecord | null>(null);
+  const [editingMemberForSetup, setEditingMemberForSetup] = useState<TeamMemberRecord | null>(null);
 
   // Evidence Preview Lightbox
   const [previewEvidenceUrl, setPreviewEvidenceUrl] = useState<string | null>(null);
@@ -65,63 +70,82 @@ export const EmployeeManagementDashboardView: React.FC = () => {
     setIsLoading(true);
 
     try {
-      // Work date in PKT format
-      const todayDate = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Asia/Karachi',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      }).format(new Date());
+      // Authoritative Work Date in PKT format (YYYY-MM-DD)
+      const todayDate = getPKTTodayDateString();
 
       const [
         members,
+        empRecs,
         allShifts,
         allAssets,
         payrolls,
         perfs,
         tasks,
-        allSettlements
+        allSettlements,
+        depts,
+        desigs,
+        managers
       ] = await Promise.all([
         teamManagementService.fetchTeamMembers(currentUserProfile.role, currentUserProfile.id),
+        employeeOperationsService.fetchAllEmployeeRecords(),
         employeeOperationsService.fetchWorkShifts(),
         employeeOperationsService.fetchAllAssets(),
         employeeOperationsService.fetchMonthlyPayrollSummary(selectedMonth),
         employeeOperationsService.fetchPerformanceRecords(),
         employeeOperationsService.fetchManagementTasks('employee_concern'),
-        employeeOperationsService.fetchFinalSettlements()
+        employeeOperationsService.fetchFinalSettlements(),
+        teamManagementService.fetchDepartments(),
+        teamManagementService.fetchDesignations(),
+        teamManagementService.fetchEligibleManagers()
       ]);
 
       setTeamMembers(members);
+      setEmployeeRecords(empRecs);
       setShifts(allShifts);
       setAssets(allAssets);
       setPayrollRecords(payrolls);
       setPerformanceRecords(perfs);
       setConcerns(tasks);
       setSettlements(allSettlements);
+      setDepartments(depts);
+      setDesignations(desigs);
+      setEligibleManagers(managers);
 
       // Fetch genuine today's attendance in a single batch query
       const todayAttendance = await employeeOperationsService.fetchAllTodayAttendance(todayDate);
       setTodayAttendanceList(todayAttendance);
 
-      // Check missing check-ins for active members
+      // Build employee record map to isolate configured vs setup-pending staff
+      const empRecMap = new Map<string, EmployeeRecord>();
+      empRecs.forEach(r => empRecMap.set(r.id, r));
+
+      // Configured active staff ONLY are tracked for live attendance & missing check-in audits
+      const configuredActiveStaff = members.filter(
+        m => m.status === 'active' && Boolean(empRecMap.get(m.id)?.setupCompletedAt)
+      );
+
       const checkedInMemberIds = new Set(todayAttendance.filter(a => a.checkInTime).map(a => a.employeeId));
       const missingList: Array<{ employee: UserProfile | TeamMemberRecord; shift: WorkShift; minutesLate: number }> = [];
 
-      for (const m of members) {
-        if (m.status === 'active' && !checkedInMemberIds.has(m.id)) {
-          const defaultShift = allShifts[0];
-          const [startH, startM] = (defaultShift?.startTime || '11:00:00').split(':').map(Number);
-          const now = new Date();
-          const scheduledStart = new Date();
-          scheduledStart.setHours(startH, startM, 0, 0);
+      // Check missing check-ins only for configured active staff with assigned shifts
+      for (const m of configuredActiveStaff) {
+        if (!checkedInMemberIds.has(m.id)) {
+          const empRec = empRecMap.get(m.id);
+          const shift = empRec?.shift || allShifts.find(s => s.id === empRec?.shiftId) || allShifts[0];
+          if (shift) {
+            const [startH, startM] = (shift.startTime || '11:00:00').split(':').map(Number);
+            const pktParts = getPKTDateTimeParts();
+            const nowMinutes = pktParts.hour * 60 + pktParts.minute;
+            const scheduledMinutes = startH * 60 + startM;
+            const diffMinutes = nowMinutes - scheduledMinutes;
 
-          const diffMinutes = Math.floor((now.getTime() - scheduledStart.getTime()) / 60000);
-          if (diffMinutes >= 60 && defaultShift) {
-            missingList.push({
-              employee: m,
-              shift: defaultShift,
-              minutesLate: diffMinutes
-            });
+            if (diffMinutes >= 60) {
+              missingList.push({
+                employee: m,
+                shift,
+                minutesLate: diffMinutes
+              });
+            }
           }
         }
       }
@@ -167,11 +191,38 @@ export const EmployeeManagementDashboardView: React.FC = () => {
     loadAllData();
   };
 
-  // Active Staff & Stats
-  const activeStaffCount = teamMembers.filter(m => m.status === 'active').length;
-  const checkedInTodayCount = todayAttendanceList.filter(a => a.checkInTime).length;
-  const lateTodayCount = todayAttendanceList.filter(a => a.status === 'late' && a.checkInTime).length;
-  const pendingPayrollCount = payrollRecords.filter(p => p.status === 'draft' || p.status === 'approved').length;
+  // Companion Record Lookup Map
+  const empRecordMap = useMemo(() => {
+    const map = new Map<string, EmployeeRecord>();
+    employeeRecords.forEach(r => map.set(r.id, r));
+    return map;
+  }, [employeeRecords]);
+
+  // Partition Active Staff into Configured vs Setup Pending
+  const { configuredActiveStaff, setupPendingStaff } = useMemo(() => {
+    const configured: TeamMemberRecord[] = [];
+    const pending: TeamMemberRecord[] = [];
+    teamMembers.forEach(m => {
+      if (m.status === 'active') {
+        const rec = empRecordMap.get(m.id);
+        if (rec?.setupCompletedAt) {
+          configured.push(m);
+        } else {
+          pending.push(m);
+        }
+      }
+    });
+    return { configuredActiveStaff: configured, setupPendingStaff: pending };
+  }, [teamMembers, empRecordMap]);
+
+  // Governed Stats
+  const activeStaffCount = configuredActiveStaff.length;
+  const setupPendingCount = setupPendingStaff.length;
+  const checkedInTodayCount = todayAttendanceList.filter(a => a.checkInTime && configuredActiveStaff.some(cs => cs.id === a.employeeId)).length;
+  const lateTodayCount = todayAttendanceList.filter(a => a.status === 'late' && a.checkInTime && configuredActiveStaff.some(cs => cs.id === a.employeeId)).length;
+  const onTimeTodayCount = Math.max(0, checkedInTodayCount - lateTodayCount);
+  const pendingCheckInCount = Math.max(0, activeStaffCount - checkedInTodayCount);
+  const pendingPayrollCount = payrollRecords.filter(p => p.status === 'draft' || p.status === 'approved' || p.status === 'under_review').length;
   const openConcernsCount = concerns.filter(c => c.status !== 'completed').length;
 
   return (
@@ -187,7 +238,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
               Employee Operations & HR Governance
             </h1>
             <p className="text-xs text-slate-500 dark:text-gray-400">
-              Attendance tracking, authoritative payroll, asset control & employee dossiers
+              Attendance tracking, authoritative payroll, asset control & employee dossiers (Asia/Karachi PKT)
             </p>
           </div>
         </div>
@@ -204,13 +255,13 @@ export const EmployeeManagementDashboardView: React.FC = () => {
         </div>
       </div>
 
-      {/* 60-Minute Missing Check-Ins Alert Banner */}
+      {/* 60-Minute Missing Check-Ins Alert Banner (Configured Staff Only) */}
       {missingCheckIns.length > 0 && (
         <div className="p-4 sm:p-5 rounded-3xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 text-rose-900 dark:text-rose-200 space-y-3 shadow-xs">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5 font-bold text-sm">
               <ShieldAlert className="w-5 h-5 text-rose-600 animate-bounce" />
-              <span>60-Minute Missing Check-In Escalation ({missingCheckIns.length} Staff Member(s))</span>
+              <span>60-Minute Missing Check-In Escalation ({missingCheckIns.length} Configured Staff Member(s))</span>
             </div>
             <span className="text-[10px] uppercase font-mono px-2 py-0.5 rounded-md bg-rose-200/80 text-rose-900 font-extrabold">
               Action Required
@@ -224,7 +275,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
                     {'fullName' in employee ? employee.fullName : (employee as any).full_name}
                   </div>
                   <div className="text-[11px] text-rose-600 font-medium">
-                    {minutesLate}m past {shift.startTime.slice(0, 5)} PKT
+                    {minutesLate}m past {shift.startTime.slice(0, 5)} PKT ({shift.name})
                   </div>
                 </div>
                 <button
@@ -233,7 +284,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
                     setSelectedAttendanceCorrection({
                       id: '',
                       employeeId: employee.id,
-                      workDate: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()),
+                      workDate: getPKTTodayDateString(),
                       scheduledCheckIn: shift.startTime,
                       scheduledCheckOut: shift.endTime,
                       minutesLate: 0,
@@ -257,7 +308,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
       {/* KPI Counters Bar */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="p-4 rounded-2xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border space-y-1">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Active Staff</span>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Configured Staff</span>
           <div className="text-xl font-black text-slate-900 dark:text-gray-100 font-mono">{activeStaffCount}</div>
         </div>
         <div className="p-4 rounded-2xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border space-y-1">
@@ -277,8 +328,8 @@ export const EmployeeManagementDashboardView: React.FC = () => {
           <div className="text-xl font-black text-indigo-600 font-mono">{pendingPayrollCount}</div>
         </div>
         <div className="p-4 rounded-2xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border space-y-1">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Open Concerns</span>
-          <div className="text-xl font-black text-slate-800 dark:text-gray-200 font-mono">{openConcernsCount}</div>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Setup Pending</span>
+          <div className="text-xl font-black text-amber-700 dark:text-amber-400 font-mono">{setupPendingCount}</div>
         </div>
       </div>
 
@@ -383,12 +434,12 @@ export const EmployeeManagementDashboardView: React.FC = () => {
           <div className="p-4 sm:p-5 rounded-3xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border shadow-xs space-y-3">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
               <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-gray-400">
-                Today's Attendance Composition (Active Staff: {activeStaffCount})
+                Today's Attendance Composition (Configured Staff: {activeStaffCount})
               </span>
               <div className="flex items-center gap-4 text-xs font-mono">
                 <span className="flex items-center gap-1.5 text-emerald-600 font-bold">
                   <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-                  On-Time: {checkedInTodayCount - lateTodayCount}
+                  On-Time: {onTimeTodayCount}
                 </span>
                 <span className="flex items-center gap-1.5 text-amber-600 font-bold">
                   <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
@@ -396,19 +447,19 @@ export const EmployeeManagementDashboardView: React.FC = () => {
                 </span>
                 <span className="flex items-center gap-1.5 text-slate-500 font-bold">
                   <span className="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
-                  Pending Check-In: {Math.max(0, activeStaffCount - checkedInTodayCount)}
+                  Pending Check-In: {pendingCheckInCount}
                 </span>
               </div>
             </div>
 
             {/* Distribution Bar */}
             <div className="h-3 w-full rounded-full bg-slate-100 dark:bg-dark-100 overflow-hidden flex">
-              {activeStaffCount > 0 && (
+              {activeStaffCount > 0 ? (
                 <>
                   <div
-                    style={{ width: `${((checkedInTodayCount - lateTodayCount) / activeStaffCount) * 100}%` }}
+                    style={{ width: `${(onTimeTodayCount / activeStaffCount) * 100}%` }}
                     className="h-full bg-emerald-500 transition-all"
-                    title={`On-Time: ${checkedInTodayCount - lateTodayCount}`}
+                    title={`On-Time: ${onTimeTodayCount}`}
                   />
                   <div
                     style={{ width: `${(lateTodayCount / activeStaffCount) * 100}%` }}
@@ -416,11 +467,13 @@ export const EmployeeManagementDashboardView: React.FC = () => {
                     title={`Late: ${lateTodayCount}`}
                   />
                   <div
-                    style={{ width: `${(Math.max(0, activeStaffCount - checkedInTodayCount) / activeStaffCount) * 100}%` }}
+                    style={{ width: `${(pendingCheckInCount / activeStaffCount) * 100}%` }}
                     className="h-full bg-slate-300 dark:bg-dark-border transition-all"
-                    title={`Pending: ${Math.max(0, activeStaffCount - checkedInTodayCount)}`}
+                    title={`Pending: ${pendingCheckInCount}`}
                   />
                 </>
+              ) : (
+                <div className="h-full w-full bg-slate-200 dark:bg-dark-border" />
               )}
             </div>
           </div>
@@ -431,10 +484,10 @@ export const EmployeeManagementDashboardView: React.FC = () => {
               <div>
                 <h2 className="text-sm font-bold text-slate-900 dark:text-gray-100 flex items-center gap-2">
                   <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span>Checked-In Staff Today ({todayAttendanceList.filter(a => a.checkInTime).length})</span>
+                  <span>Checked-In Staff Today ({checkedInTodayCount})</span>
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-gray-400">
-                  Verified desktop screen capture check-in records
+                  Verified desktop screen capture check-in records (PKT)
                 </p>
               </div>
               <button
@@ -442,7 +495,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
                 onClick={() => setSelectedAttendanceCorrection({
                   id: '',
                   employeeId: '',
-                  workDate: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()),
+                  workDate: getPKTTodayDateString(),
                   scheduledCheckIn: '11:00:00',
                   scheduledCheckOut: '20:00:00',
                   minutesLate: 0,
@@ -546,16 +599,16 @@ export const EmployeeManagementDashboardView: React.FC = () => {
             </div>
           </div>
 
-          {/* Section 2: Pending Check-In Staff */}
+          {/* Section 2: Pending Check-In Staff (Configured Staff Only) */}
           <div className="p-5 sm:p-6 rounded-3xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border shadow-xs space-y-4">
             <div className="flex items-center justify-between">
               <div>
                 <h2 className="text-sm font-bold text-slate-900 dark:text-gray-100 flex items-center gap-2">
                   <Clock className="w-4 h-4 text-slate-500" />
-                  <span>Pending Check-In Staff ({teamMembers.filter(m => m.status === 'active' && !todayAttendanceList.some(a => a.employeeId === m.id && a.checkInTime)).length})</span>
+                  <span>Pending Check-In Staff ({pendingCheckInCount})</span>
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-gray-400">
-                  Active team members who have not yet logged attendance today
+                  Configured active team members who have not yet logged attendance today
                 </p>
               </div>
             </div>
@@ -565,35 +618,39 @@ export const EmployeeManagementDashboardView: React.FC = () => {
                 <thead>
                   <tr className="border-b border-slate-200 dark:border-dark-border text-slate-400 uppercase text-[10px] font-bold tracking-wider">
                     <th className="py-2.5 px-3">Employee</th>
-                    <th className="py-2.5 px-3">Role</th>
+                    <th className="py-2.5 px-3">Governed Role</th>
                     <th className="py-2.5 px-3">Scheduled Shift</th>
                     <th className="py-2.5 px-3">Status</th>
                     <th className="py-2.5 px-3 text-right">Action</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200 dark:divide-dark-border">
-                  {teamMembers.filter(m => m.status === 'active' && !todayAttendanceList.some(a => a.employeeId === m.id && a.checkInTime)).length === 0 ? (
+                  {configuredActiveStaff.filter(m => !todayAttendanceList.some(a => a.employeeId === m.id && a.checkInTime)).length === 0 ? (
                     <tr>
                       <td colSpan={5} className="py-6 text-center text-slate-400 italic">
-                        All active staff members have checked in for today.
+                        All configured active staff members have checked in for today.
                       </td>
                     </tr>
                   ) : (
-                    teamMembers
-                      .filter(m => m.status === 'active' && !todayAttendanceList.some(a => a.employeeId === m.id && a.checkInTime))
+                    configuredActiveStaff
+                      .filter(m => !todayAttendanceList.some(a => a.employeeId === m.id && a.checkInTime))
                       .map((member) => {
                         const isLateEscalated = missingCheckIns.some(mc => mc.employee.id === member.id);
+                        const empRec = empRecordMap.get(member.id);
+                        const shift = empRec?.shift || shifts.find(s => s.id === empRec?.shiftId) || shifts[0];
+                        const roleTitle = ROLE_DISPLAY_NAMES[member.role] || member.role.replace('_', ' ');
+
                         return (
                           <tr key={member.id} className="hover:bg-white/60 dark:hover:bg-dark-card transition-colors">
                             <td className="py-2.5 px-3">
                               <div className="font-bold text-slate-900 dark:text-gray-100">{member.fullName}</div>
                               <div className="text-[10px] text-slate-400">{member.workEmail}</div>
                             </td>
-                            <td className="py-2.5 px-3 capitalize text-slate-600 dark:text-gray-400">
-                              {member.role.replace('_', ' ')}
+                            <td className="py-2.5 px-3 text-slate-600 dark:text-gray-400 font-medium">
+                              {roleTitle} {member.designationName ? `• ${member.designationName}` : ''}
                             </td>
                             <td className="py-2.5 px-3 text-slate-600 dark:text-gray-400 font-mono">
-                              11:00 AM – 08:00 PM PKT
+                              {shift ? `${shift.name} (${shift.startTime.slice(0, 5)} - ${shift.endTime.slice(0, 5)} PKT)` : '11:00 AM – 08:00 PM PKT'}
                             </td>
                             <td className="py-2.5 px-3">
                               {isLateEscalated ? (
@@ -612,9 +669,9 @@ export const EmployeeManagementDashboardView: React.FC = () => {
                                 onClick={() => setSelectedAttendanceCorrection({
                                   id: '',
                                   employeeId: member.id,
-                                  workDate: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()),
-                                  scheduledCheckIn: '11:00:00',
-                                  scheduledCheckOut: '20:00:00',
+                                  workDate: getPKTTodayDateString(),
+                                  scheduledCheckIn: shift?.startTime || '11:00:00',
+                                  scheduledCheckOut: shift?.endTime || '20:00:00',
                                   minutesLate: 0,
                                   status: 'on_time',
                                   lateDeduction: 0,
@@ -635,6 +692,63 @@ export const EmployeeManagementDashboardView: React.FC = () => {
               </table>
             </div>
           </div>
+
+          {/* Section 3: Dedicated Employee Setup Required Section (Neutral Isolation) */}
+          {setupPendingStaff.length > 0 && (
+            <div className="p-5 sm:p-6 rounded-3xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border shadow-xs space-y-4">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-gray-100 flex items-center gap-2">
+                    <Settings className="w-4 h-4 text-amber-600" />
+                    <span>Employee Setup Required ({setupPendingStaff.length} Staff Member(s))</span>
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-gray-400">
+                    The following active team members require operational onboarding (work shift assignment, baseline compensation, and shift schedule) before automated attendance audit tracking and monthly payroll generation begin.
+                  </p>
+                </div>
+              </div>
+
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead>
+                    <tr className="border-b border-slate-200 dark:border-dark-border text-slate-400 uppercase text-[10px] font-bold tracking-wider">
+                      <th className="py-2.5 px-3">Employee</th>
+                      <th className="py-2.5 px-3">System Role</th>
+                      <th className="py-2.5 px-3">Onboarding State</th>
+                      <th className="py-2.5 px-3 text-right">Action</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200 dark:divide-dark-border">
+                    {setupPendingStaff.map((member) => (
+                      <tr key={member.id} className="hover:bg-white/60 dark:hover:bg-dark-card transition-colors">
+                        <td className="py-2.5 px-3">
+                          <div className="font-bold text-slate-900 dark:text-gray-100">{member.fullName}</div>
+                          <div className="text-[10px] text-slate-400">{member.workEmail}</div>
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-600 dark:text-gray-400 font-medium">
+                          {ROLE_DISPLAY_NAMES[member.role] || member.role.replace('_', ' ')}
+                        </td>
+                        <td className="py-2.5 px-3">
+                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-200 text-slate-700 dark:bg-dark-border dark:text-gray-300">
+                            Setup Pending — Shift Unconfigured
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3 text-right">
+                          <button
+                            type="button"
+                            onClick={() => setEditingMemberForSetup(member)}
+                            className="px-3 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-[11px] transition-colors shadow-xs"
+                          >
+                            Configure Setup
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
@@ -664,52 +778,80 @@ export const EmployeeManagementDashboardView: React.FC = () => {
                 <tr className="border-b border-slate-100 dark:border-dark-border text-slate-400 uppercase text-[10px] font-bold tracking-wider">
                   <th className="py-3 px-3">Employee</th>
                   <th className="py-3 px-3">Role / Designation</th>
-                  <th className="py-3 px-3">Shift</th>
+                  <th className="py-3 px-3">Assigned Shift</th>
+                  <th className="py-3 px-3">Setup State</th>
                   <th className="py-3 px-3">Status</th>
                   <th className="py-3 px-3 text-right">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100 dark:divide-dark-border">
-                {teamMembers.filter(m => !searchQuery || m.fullName.toLowerCase().includes(searchQuery.toLowerCase()) || m.workEmail.toLowerCase().includes(searchQuery.toLowerCase())).map((member) => (
-                  <tr key={member.id} className="hover:bg-slate-50/50 dark:hover:bg-dark-sidebar transition-colors">
-                    <td className="py-3 px-3">
-                      <div className="font-bold text-slate-900 dark:text-gray-100">{member.fullName}</div>
-                      <div className="text-[10px] text-slate-400 font-mono">{member.workEmail}</div>
-                    </td>
-                    <td className="py-3 px-3 text-slate-700 dark:text-gray-300">
-                      {member.role === 'owner' ? 'Owner' : member.role === 'operational_manager' ? 'Operational Manager' : 'Team Member'}
-                    </td>
-                    <td className="py-3 px-3 text-slate-600 dark:text-gray-400">
-                      Morning (11am-8pm)
-                    </td>
-                    <td className="py-3 px-3">
-                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold capitalize ${
-                        member.status === 'active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'
-                      }`}>
-                        {member.status}
-                      </span>
-                    </td>
-                    <td className="py-3 px-3 text-right">
-                      <div className="flex items-center justify-end gap-2">
-                        <button
-                          type="button"
-                          onClick={() => navigate(`/operations/employees/${member.id}`)}
-                          className="px-2.5 py-1 rounded-xl bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/30 text-brand-700 dark:text-brand-300 text-xs font-bold transition-colors flex items-center gap-1"
-                        >
-                          <Eye className="w-3.5 h-3.5" /> Dossier
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleOpenSettlement(member)}
-                          className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                          title="Final Settlement"
-                        >
-                          <Calculator className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
+                {teamMembers.filter(m => !searchQuery || m.fullName.toLowerCase().includes(searchQuery.toLowerCase()) || m.workEmail.toLowerCase().includes(searchQuery.toLowerCase())).map((member) => {
+                  const empRec = empRecordMap.get(member.id);
+                  const isSetup = Boolean(empRec?.setupCompletedAt);
+                  const shift = empRec?.shift || shifts.find(s => s.id === empRec?.shiftId);
+                  const roleName = ROLE_DISPLAY_NAMES[member.role] || member.role.replace('_', ' ');
+
+                  return (
+                    <tr key={member.id} className="hover:bg-slate-50/50 dark:hover:bg-dark-sidebar transition-colors">
+                      <td className="py-3 px-3">
+                        <div className="font-bold text-slate-900 dark:text-gray-100">{member.fullName}</div>
+                        <div className="text-[10px] text-slate-400 font-mono">{member.workEmail}</div>
+                      </td>
+                      <td className="py-3 px-3 text-slate-700 dark:text-gray-300">
+                        <span className="font-semibold">{roleName}</span>
+                        {member.designationName ? <span className="text-slate-400 block text-[10px]">{member.designationName}</span> : null}
+                      </td>
+                      <td className="py-3 px-3 text-slate-600 dark:text-gray-400">
+                        {shift ? `${shift.name} (${shift.startTime.slice(0, 5)} - ${shift.endTime.slice(0, 5)} PKT)` : isSetup ? 'Configured Shift' : 'Unconfigured'}
+                      </td>
+                      <td className="py-3 px-3">
+                        {isSetup ? (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/30 dark:text-emerald-300">
+                            Completed
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-200 text-slate-700 dark:bg-dark-border dark:text-gray-300">
+                            Setup Pending
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-3">
+                        <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold capitalize ${
+                          member.status === 'active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-700'
+                        }`}>
+                          {member.status}
+                        </span>
+                      </td>
+                      <td className="py-3 px-3 text-right">
+                        <div className="flex items-center justify-end gap-2">
+                          <button
+                            type="button"
+                            onClick={() => navigate(`/operations/employees/${member.id}`)}
+                            className="px-2.5 py-1 rounded-xl bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/30 text-brand-700 dark:text-brand-300 text-xs font-bold transition-colors flex items-center gap-1"
+                          >
+                            <Eye className="w-3.5 h-3.5" /> Dossier
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => setEditingMemberForSetup(member)}
+                            className="p-1 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-slate-100 dark:hover:bg-dark-100 transition-colors"
+                            title="Edit / Configure Employee"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleOpenSettlement(member)}
+                            className="p-1 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+                            title="Final Settlement"
+                          >
+                            <Calculator className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -726,7 +868,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
                 <span>Monthly Payroll Cycles & Disbursements</span>
               </h2>
               <p className="text-xs text-slate-500 dark:text-gray-400">
-                Cycle: 1st – End of Month • Paid on the 15th of following month
+                Cycle: 1st – End of Month • Disbursed on the 15th of following month (Asia/Karachi PKT)
               </p>
             </div>
 
@@ -804,9 +946,13 @@ export const EmployeeManagementDashboardView: React.FC = () => {
                               ? 'bg-emerald-100 text-emerald-800'
                               : pay.status === 'approved' || pay.status === 'Approved'
                               ? 'bg-blue-100 text-blue-800'
+                              : pay.status === 'under_review' || pay.status === 'Under Review'
+                              ? 'bg-indigo-100 text-indigo-800'
+                              : pay.status === 'concern_raised' || pay.status === 'Concern Raised'
+                              ? 'bg-rose-100 text-rose-800'
                               : 'bg-amber-100 text-amber-800'
                           }`}>
-                            {pay.status}
+                            {pay.status.replace('_', ' ')}
                           </span>
                         </td>
                         <td className="py-3 px-3 text-right">
@@ -892,11 +1038,15 @@ export const EmployeeManagementDashboardView: React.FC = () => {
                           <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold capitalize ${
                             asset.status === 'assigned'
                               ? 'bg-blue-100 text-blue-800'
-                              : asset.status === 'available'
+                              : asset.status === 'acknowledged'
                               ? 'bg-emerald-100 text-emerald-800'
+                              : asset.status === 'available'
+                              ? 'bg-emerald-50 text-emerald-700'
+                              : asset.status === 'under_review'
+                              ? 'bg-amber-100 text-amber-800'
                               : 'bg-rose-100 text-rose-800'
                           }`}>
-                            {asset.status}
+                            {asset.status.replace('_', ' ')}
                           </span>
                         </td>
                         <td className="py-3 px-3 text-right">
@@ -1045,7 +1195,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
                     </td>
                   </tr>
                 ) : (
-                    settlements.map((s) => {
+                  settlements.map((s) => {
                     const member = teamMembers.find(m => m.id === s.employeeId);
                     return (
                       <tr key={s.id} className="hover:bg-slate-50/50 dark:hover:bg-dark-sidebar transition-colors">
@@ -1123,6 +1273,22 @@ export const EmployeeManagementDashboardView: React.FC = () => {
             callerId={currentUserProfile.id}
             onSuccess={loadAllData}
           />
+
+          {editingMemberForSetup && (
+            <EditTeamMemberModal
+              isOpen={!!editingMemberForSetup}
+              onClose={() => setEditingMemberForSetup(null)}
+              onSuccess={() => {
+                setEditingMemberForSetup(null);
+                loadAllData();
+              }}
+              member={editingMemberForSetup}
+              currentUserProfile={currentUserProfile}
+              departments={departments}
+              designations={designations}
+              eligibleManagers={eligibleManagers}
+            />
+          )}
         </>
       )}
 

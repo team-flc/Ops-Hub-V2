@@ -20,6 +20,18 @@ import {
   GoodStandingStatus,
   AssetClearanceStatus
 } from '../types';
+import {
+  getPKTTodayDateString,
+  getPKTCurrentMonthString,
+  formatPKTTime,
+  formatPKTDate,
+  calculatePKTDaysUntil15th,
+  calculatePKTSalaryCountdown,
+  calculateDaysWithCompany,
+  calculateShiftWindow,
+  isOvernightShift,
+  getDaysInMonth as getPKTDaysInMonth
+} from './pktDateUtils';
 
 export interface CheckInPayload {
   employeeId: string;
@@ -42,29 +54,19 @@ export interface CheckOutPayload {
 export const employeeOperationsService = {
   // Timezone & Date Utilities (Asia/Karachi PKT)
   getTodayDatePKT(d: Date = new Date()): string {
-    return new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'Asia/Karachi',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit'
-    }).format(d);
+    return getPKTTodayDateString(d);
+  },
+
+  getPKTCurrentMonth(d: Date = new Date()): string {
+    return getPKTCurrentMonthString(d);
   },
 
   formatPKTDateTime(dateInput: string | Date): string {
-    const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
-    return new Intl.DateTimeFormat('en-US', {
-      timeZone: 'Asia/Karachi',
-      year: 'numeric',
-      month: 'short',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    }).format(d) + ' PKT';
+    return formatPKTDate(dateInput, 'medium') + ' ' + formatPKTTime(dateInput);
   },
 
   getDaysInMonth(year: number, month: number): number {
-    return new Date(Date.UTC(year, month, 0)).getUTCDate();
+    return getPKTDaysInMonth(year, month);
   },
 
   // ===========================================================================
@@ -1281,47 +1283,15 @@ export const employeeOperationsService = {
   // ===========================================================================
 
   calculateDaysUntil15th(currentDate: Date = new Date()): { nextSalaryDate: string; daysRemaining: number } {
-    const pktDateStr = this.getTodayDatePKT(currentDate); // 'YYYY-MM-DD'
-    const [yearStr, monthStr, dayStr] = pktDateStr.split('-');
-    const year = parseInt(yearStr, 10);
-    const month = parseInt(monthStr, 10); // 1..12
-    const day = parseInt(dayStr, 10); // 1..31
-
-    let targetYear = year;
-    let targetMonth = month;
-    let daysRemaining = 0;
-
-    if (day <= 15) {
-      daysRemaining = 15 - day;
-    } else {
-      const daysInCurrentMonth = this.getDaysInMonth(year, month);
-      const daysLeftInCurrentMonth = daysInCurrentMonth - day;
-      daysRemaining = daysLeftInCurrentMonth + 15;
-      if (month === 12) {
-        targetYear = year + 1;
-        targetMonth = 1;
-      } else {
-        targetMonth = month + 1;
-      }
-    }
-
-    const targetMonthStr = targetMonth.toString().padStart(2, '0');
-    const nextSalaryDate = `${targetYear}-${targetMonthStr}-15`;
-
-    return { nextSalaryDate, daysRemaining };
+    return calculatePKTDaysUntil15th(currentDate);
   },
 
   calculateSalaryCountdown(currentDate: Date = new Date()): { nextSalaryDate: string; daysRemaining: number; formattedMessage: string } {
-    const { nextSalaryDate, daysRemaining } = this.calculateDaysUntil15th(currentDate);
-    let formattedMessage = '';
-    if (daysRemaining === 0) {
-      formattedMessage = 'Salary Payout Day Today (15th)';
-    } else if (daysRemaining === 1) {
-      formattedMessage = '1 day until 15th salary payout';
-    } else {
-      formattedMessage = `${daysRemaining} days until 15th salary payout`;
-    }
-    return { nextSalaryDate, daysRemaining, formattedMessage };
+    return calculatePKTSalaryCountdown(currentDate);
+  },
+
+  calculateDaysWithCompany(startDateStr: string | null | undefined, currentDate: Date = new Date()): number {
+    return calculateDaysWithCompany(startDateStr || '', currentDate);
   },
 
   async fetchEmployeePayrollRecords(employeeId: string): Promise<EmployeePayrollRecord[]> {
@@ -1546,6 +1516,7 @@ export const employeeOperationsService = {
       netPayable?: number;
       status?: any;
       paidAt?: string;
+      paidBy?: string;
       paymentProofUrl?: string;
       notes?: string;
     },
@@ -1572,7 +1543,10 @@ export const employeeOperationsService = {
       }
       if (updates.paidAt !== undefined) {
         dbUpdate.payment_date = updates.paidAt;
-        dbUpdate.paid_by = callerId;
+        dbUpdate.paid_by = updates.paidBy || callerId;
+      }
+      if (updates.paidBy !== undefined) {
+        dbUpdate.paid_by = updates.paidBy;
       }
       if (updates.paymentProofUrl !== undefined) {
         dbUpdate.payment_proof_path = updates.paymentProofUrl;
@@ -1905,19 +1879,12 @@ export const employeeOperationsService = {
     const unreturnedAssets = assets.filter((a) => a.status === 'assigned' || a.status === 'damaged' || a.status === 'lost');
     const assetRecoveryDeduction = unreturnedAssets.reduce((sum, a) => sum + (a.replacementValue ?? a.price ?? 0), 0);
 
-    // Naturally pending held amount based on Notice Period or Good Standing
-    let heldPendingAmount = 0;
-    if (noticePeriodStatus === 'not_served') {
-      heldPendingAmount = Math.min(baseSalary, currentAccruedAmount);
-    } else if (noticePeriodStatus === 'short_served' || noticePeriodStatus === 'short') {
-      heldPendingAmount = Math.round(currentAccruedAmount * 0.5);
-    } else if (goodStandingStatus === 'disputed' || goodStandingStatus === 'terminated_for_cause') {
-      heldPendingAmount = currentAccruedAmount;
-    }
-
+    // Naturally pending held amount (earned previous/held salary that is owed to employee)
+    // It is an EARNED addition (+)
+    const heldPendingAmount = 0;
     const otherAdjustments = 0;
     const approvedDeductions = lateDeductions + absenceDeductions + assetRecoveryDeduction + otherAdjustments;
-    const finalPayable = Math.max(0, pendingEarnedSalary + currentAccruedAmount - heldPendingAmount - approvedDeductions);
+    const finalPayable = Math.max(0, pendingEarnedSalary + currentAccruedAmount + heldPendingAmount - approvedDeductions);
 
     return {
       baseSalary,
@@ -1957,23 +1924,39 @@ export const employeeOperationsService = {
     lastWorkingDateOrCallerId?: string
   ): Promise<any> {
     if (typeof payloadOrEmpId === 'string') {
-      return this.calculateFinalSettlementEstimate(payloadOrEmpId, lastWorkingDateOrCallerId || new Date().toISOString().split('T')[0]);
+      return this.calculateFinalSettlementEstimate(payloadOrEmpId, lastWorkingDateOrCallerId || getPKTTodayDateString());
     }
+
+    const pendingEarnedSalary = payloadOrEmpId.pendingPreviousSalary || 0;
+    const currentAccruedAmount = payloadOrEmpId.currentMonthAccruedSalary || 0;
+    const heldPendingAmount = payloadOrEmpId.heldPendingAmount || 0;
+    const severanceBonus = payloadOrEmpId.severanceBonus || 0;
+    const lateDeductions = payloadOrEmpId.lateDeductions || 0;
+    const absenceDeductions = payloadOrEmpId.unapprovedAbsenceDeductions || 0;
+    const assetRecoveryDeduction = payloadOrEmpId.assetRecoveryDeductions || 0;
+    const otherDeductions = payloadOrEmpId.otherDeductions || 0;
+
+    const totalAdditions = pendingEarnedSalary + currentAccruedAmount + heldPendingAmount + severanceBonus;
+    const approvedDeductions = lateDeductions + absenceDeductions + assetRecoveryDeduction + otherDeductions;
+    const computedFinalPayable = payloadOrEmpId.netFinalPayable !== undefined 
+      ? payloadOrEmpId.netFinalPayable 
+      : Math.max(0, totalAdditions - approvedDeductions);
+
     return this.saveFinalSettlement({
       employeeId: payloadOrEmpId.employeeId,
       lastWorkingDate: payloadOrEmpId.lastWorkingDate,
       noticePeriodStatus: payloadOrEmpId.noticePeriodStatus || 'served',
       goodStandingStatus: payloadOrEmpId.goodStandingStatus || 'good_standing',
-      pendingEarnedSalary: payloadOrEmpId.pendingPreviousSalary || 0,
-      currentAccruedAmount: payloadOrEmpId.currentMonthAccruedSalary || 0,
-      heldPendingAmount: payloadOrEmpId.heldPendingAmount || 0,
-      lateDeductions: payloadOrEmpId.lateDeductions || 0,
-      absenceDeductions: payloadOrEmpId.unapprovedAbsenceDeductions || 0,
-      assetRecoveryDeduction: payloadOrEmpId.assetRecoveryDeductions || 0,
-      otherAdjustments: (payloadOrEmpId.otherDeductions || 0) - (payloadOrEmpId.severanceBonus || 0),
-      approvedDeductions: (payloadOrEmpId.lateDeductions || 0) + (payloadOrEmpId.unapprovedAbsenceDeductions || 0) + (payloadOrEmpId.assetRecoveryDeductions || 0) + (payloadOrEmpId.otherDeductions || 0),
+      pendingEarnedSalary,
+      currentAccruedAmount,
+      heldPendingAmount,
+      lateDeductions,
+      absenceDeductions,
+      assetRecoveryDeduction,
+      otherAdjustments: otherDeductions - severanceBonus,
+      approvedDeductions,
       assetClearanceStatus: 'cleared',
-      finalPayableAmount: payloadOrEmpId.netFinalPayable || 0,
+      finalPayableAmount: computedFinalPayable,
       separationReason: payloadOrEmpId.separationReason || 'resignation',
       deductionReasonNotes: payloadOrEmpId.deductionReasonNotes,
       notes: payloadOrEmpId.notes
@@ -2377,6 +2360,7 @@ export const employeeOperationsService = {
       serialNumber?: string;
       assignedTo?: string | null;
       condition?: string;
+      issueDate?: string;
       replacementValue?: number;
       notes?: string;
       status?: AssetStatus | string;
@@ -2388,24 +2372,29 @@ export const employeeOperationsService = {
 
     try {
       if (payload.id) {
+        const updateData: any = {
+          item_name: payload.assetName,
+          asset_name: payload.assetName,
+          asset_tag: payload.assetTag,
+          category: payload.category || 'laptop',
+          serial_number: payload.serialNumber || null,
+          employee_id: payload.assignedTo || null,
+          assigned_to: payload.assignedTo || null,
+          condition: payload.condition || 'good',
+          price: payload.replacementValue || 0,
+          replacement_value: payload.replacementValue || 0,
+          status: payload.status || (payload.assignedTo ? 'assigned' : 'available'),
+          notes: payload.notes || null,
+          updated_at: new Date().toISOString(),
+          updated_by: actorId
+        };
+        if (payload.issueDate) {
+          updateData.issue_date = payload.issueDate;
+        }
+
         const { error } = await supabase
           .from('company_assets')
-          .update({
-            item_name: payload.assetName,
-            asset_name: payload.assetName,
-            asset_tag: payload.assetTag,
-            category: payload.category || 'laptop',
-            serial_number: payload.serialNumber || null,
-            employee_id: payload.assignedTo || null,
-            assigned_to: payload.assignedTo || null,
-            condition: payload.condition || 'good',
-            price: payload.replacementValue || 0,
-            replacement_value: payload.replacementValue || 0,
-            status: payload.status || (payload.assignedTo ? 'assigned' : 'available'),
-            notes: payload.notes || null,
-            updated_at: new Date().toISOString(),
-            updated_by: actorId
-          })
+          .update(updateData)
           .eq('id', payload.id);
 
         if (error) return { error: error.message };
@@ -2421,7 +2410,7 @@ export const employeeOperationsService = {
             employee_id: payload.assignedTo || null,
             assigned_to: payload.assignedTo || null,
             condition: payload.condition || 'good',
-            issue_date: new Date().toISOString().split('T')[0],
+            issue_date: payload.issueDate || getPKTTodayDateString(),
             price: payload.replacementValue || 0,
             replacement_value: payload.replacementValue || 0,
             status: payload.status || (payload.assignedTo ? 'assigned' : 'available'),

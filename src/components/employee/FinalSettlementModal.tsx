@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { CompanyAsset, EmployeeRecord, TeamMemberRecord, UserProfile, NoticePeriodStatus, GoodStandingStatus } from '../../types';
 import { employeeOperationsService } from '../../lib/employeeOperationsService';
+import { getPKTTodayDateString } from '../../lib/pktDateUtils';
 
 interface FinalSettlementModalProps {
   isOpen: boolean;
@@ -30,7 +31,7 @@ export const FinalSettlementModal: React.FC<FinalSettlementModalProps> = ({
   const [step, setStep] = useState<'input' | 'review'>('input');
 
   const [separationReason, setSeparationReason] = useState<'resignation' | 'termination' | 'end_of_contract' | 'mutual_agreement' | 'other'>('resignation');
-  const [lastWorkingDate, setLastWorkingDate] = useState(new Date().toISOString().split('T')[0]);
+  const [lastWorkingDate, setLastWorkingDate] = useState(getPKTTodayDateString());
   const [noticePeriodStatus, setNoticePeriodStatus] = useState<NoticePeriodStatus>('served');
   const [goodStandingStatus, setGoodStandingStatus] = useState<GoodStandingStatus>('good_standing');
 
@@ -71,16 +72,8 @@ export const FinalSettlementModal: React.FC<FinalSettlementModalProps> = ({
       const unreturnedVal = unreturnedAssets.reduce((sum, a) => sum + (a.replacementValue ?? a.price ?? 0), 0);
       setAssetRecoveryDeductions(unreturnedVal);
 
-      // Default held amount based on notice period / standing
-      if (noticePeriodStatus === 'not_served') {
-        setHeldPendingAmount(Math.min(salary, accrued));
-      } else if (noticePeriodStatus === 'short_served') {
-        setHeldPendingAmount(Math.round(accrued * 0.5));
-      } else if (goodStandingStatus === 'disputed' || goodStandingStatus === 'terminated_for_cause') {
-        setHeldPendingAmount(accrued);
-      } else {
-        setHeldPendingAmount(0);
-      }
+      // Held earned salary starts at 0 without unapproved percentage penalties
+      setHeldPendingAmount(0);
     }
     setStep('input');
     setErrorMessage(null);
@@ -88,9 +81,9 @@ export const FinalSettlementModal: React.FC<FinalSettlementModalProps> = ({
 
   if (!isOpen || !employee) return null;
 
-  // Total gross additions & deductions
-  const totalAdditions = pendingPreviousSalary + currentMonthAccruedSalary + severanceBonus;
-  const totalDeductions = lateDeductions + unapprovedAbsenceDeductions + assetRecoveryDeductions + otherDeductions + heldPendingAmount;
+  // 8-Component Formula: Held pending salary is EARNED compensation (+) added to total gross earnings
+  const totalAdditions = pendingPreviousSalary + currentMonthAccruedSalary + heldPendingAmount + severanceBonus;
+  const totalDeductions = lateDeductions + unapprovedAbsenceDeductions + assetRecoveryDeductions + otherDeductions;
   const netFinalPayable = Math.max(0, totalAdditions - totalDeductions);
 
   const handleProceedToReview = (e: React.FormEvent) => {
@@ -356,15 +349,15 @@ export const FinalSettlementModal: React.FC<FinalSettlementModalProps> = ({
                 </div>
 
                 <div className="space-y-1">
-                  <label className="block text-[11px] font-semibold text-amber-600 dark:text-amber-400">
-                    Held Pending Clearance Amount (-)
+                  <label className="block text-[11px] font-semibold text-emerald-600 dark:text-emerald-400">
+                    Held Pending Earned Salary (+)
                   </label>
                   <input
                     type="number"
                     min="0"
                     value={heldPendingAmount}
                     onChange={(e) => setHeldPendingAmount(Number(e.target.value))}
-                    className="w-full px-3 py-2 text-xs bg-white dark:bg-dark-card border border-amber-200 dark:border-amber-900/40 rounded-xl text-amber-700 dark:text-amber-300 font-mono"
+                    className="w-full px-3 py-2 text-xs bg-white dark:bg-dark-card border border-emerald-200 dark:border-emerald-900/40 rounded-xl text-emerald-700 dark:text-emerald-300 font-mono"
                   />
                 </div>
 
@@ -515,34 +508,34 @@ export const FinalSettlementModal: React.FC<FinalSettlementModalProps> = ({
                     <td className="py-2.5 px-3 font-mono font-semibold text-right text-emerald-600">PKR {currentMonthAccruedSalary.toLocaleString()}</td>
                   </tr>
                   <tr>
-                    <td className="py-2.5 px-3 font-semibold text-slate-800 dark:text-gray-200">3. Severance / Gratuity / Bonus Additions</td>
+                    <td className="py-2.5 px-3 font-semibold text-slate-800 dark:text-gray-200">3. Held Pending Earned Salary</td>
+                    <td className="py-2.5 px-3 text-emerald-600 font-bold">+ Addition</td>
+                    <td className="py-2.5 px-3 font-mono font-semibold text-right text-emerald-600">PKR {heldPendingAmount.toLocaleString()}</td>
+                  </tr>
+                  <tr>
+                    <td className="py-2.5 px-3 font-semibold text-slate-800 dark:text-gray-200">4. Severance / Gratuity / Bonus Additions</td>
                     <td className="py-2.5 px-3 text-emerald-600 font-bold">+ Addition</td>
                     <td className="py-2.5 px-3 font-mono font-semibold text-right text-emerald-600">PKR {severanceBonus.toLocaleString()}</td>
                   </tr>
                   <tr>
-                    <td className="py-2.5 px-3 font-semibold text-slate-800 dark:text-gray-200">4. Late Arrivals Penalty (PKR 500/day)</td>
+                    <td className="py-2.5 px-3 font-semibold text-slate-800 dark:text-gray-200">5. Late Arrivals Penalty (PKR 500/day)</td>
                     <td className="py-2.5 px-3 text-rose-600 font-bold">- Deduction</td>
                     <td className="py-2.5 px-3 font-mono font-semibold text-right text-rose-600">-PKR {lateDeductions.toLocaleString()}</td>
                   </tr>
                   <tr>
-                    <td className="py-2.5 px-3 font-semibold text-slate-800 dark:text-gray-200">5. Unapproved Absence Salary Cuts</td>
+                    <td className="py-2.5 px-3 font-semibold text-slate-800 dark:text-gray-200">6. Unapproved Absence Salary Cuts</td>
                     <td className="py-2.5 px-3 text-rose-600 font-bold">- Deduction</td>
                     <td className="py-2.5 px-3 font-mono font-semibold text-right text-rose-600">-PKR {unapprovedAbsenceDeductions.toLocaleString()}</td>
                   </tr>
                   <tr>
-                    <td className="py-2.5 px-3 font-semibold text-slate-800 dark:text-gray-200">6. Asset Recovery / Damaged Property</td>
+                    <td className="py-2.5 px-3 font-semibold text-slate-800 dark:text-gray-200">7. Asset Recovery / Damaged Property</td>
                     <td className="py-2.5 px-3 text-rose-600 font-bold">- Deduction</td>
                     <td className="py-2.5 px-3 font-mono font-semibold text-right text-rose-600">-PKR {assetRecoveryDeductions.toLocaleString()}</td>
                   </tr>
                   <tr>
-                    <td className="py-2.5 px-3 font-semibold text-slate-800 dark:text-gray-200">7. Held Pending Clearance Amount</td>
-                    <td className="py-2.5 px-3 text-amber-600 font-bold">- Withheld</td>
-                    <td className="py-2.5 px-3 font-mono font-semibold text-right text-amber-600">-PKR {heldPendingAmount.toLocaleString()}</td>
-                  </tr>
-                  <tr>
                     <td className="py-2.5 px-3 font-semibold text-slate-800 dark:text-gray-200">8. Other Adjustments / Deductions</td>
-                    <td className="py-2.5 px-3 text-slate-500 font-bold">Adjustment</td>
-                    <td className="py-2.5 px-3 font-mono font-semibold text-right text-slate-700 dark:text-gray-300">-PKR {otherDeductions.toLocaleString()}</td>
+                    <td className="py-2.5 px-3 text-rose-600 font-bold">- Deduction</td>
+                    <td className="py-2.5 px-3 font-mono font-semibold text-right text-rose-600">-PKR {otherDeductions.toLocaleString()}</td>
                   </tr>
                   <tr className="bg-brand-50/50 dark:bg-brand-950/20 font-black">
                     <td className="py-3.5 px-3 text-slate-900 dark:text-gray-100 text-sm">TOTAL NET FINAL PAYABLE</td>

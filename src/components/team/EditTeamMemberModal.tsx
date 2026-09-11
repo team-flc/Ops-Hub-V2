@@ -5,11 +5,12 @@ import {
   AlertCircle, Loader2, Edit3, Clock, DollarSign,
   UserCog, ShieldCheck, Lock, Camera, Trash2, Shield
 } from 'lucide-react';
-import { Department, Designation, TeamMemberRecord, UserProfile, WorkShift, EmployeeRecord, EmploymentType, EmploymentStatus } from '../../types';
+import { Department, Designation, TeamMemberRecord, UserProfile, WorkShift, EmployeeRecord, EmploymentType, EmploymentStatus, ROLE_DISPLAY_NAMES } from '../../types';
 import { useOpsStore } from '../../store/opsStore';
 import { teamManagementService } from '../../lib/teamManagementService';
 import { archiveService } from '../../lib/archiveService';
 import { employeeOperationsService } from '../../lib/employeeOperationsService';
+import { getPKTTodayDateString } from '../../lib/pktDateUtils';
 import { storageService, useSignedUrl } from '../../lib/storageService';
 import { supabase } from '../../lib/supabase';
 
@@ -75,7 +76,7 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
       if (!member) return;
       setFullName(member.fullName);
       setPhone(member.phone || '');
-      setStartDate(member.startDate || new Date().toISOString().split('T')[0]);
+      setStartDate(member.startDate || getPKTTodayDateString());
       setSelectedDeptIds(member.departments.map((d) => d.id));
       setSelectedDesignationId(member.designationId || '');
       setSelectedManagerId(member.reportingManagerId || '');
@@ -404,6 +405,19 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
                 <div className="w-full px-3.5 py-2.5 text-xs bg-slate-100 dark:bg-dark-card border border-slate-200 dark:border-dark-border rounded-xl text-slate-500 dark:text-gray-400 font-mono flex items-center justify-between cursor-not-allowed">
                   <span>{member.workEmail}</span>
                   <span className="text-[10px] text-slate-400 font-normal">Immutable</span>
+                </div>
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300 flex items-center gap-1">
+                  <span>Governed System Role</span>
+                  <Shield className="w-3 h-3 text-slate-400" />
+                </label>
+                <div className="w-full px-3.5 py-2.5 text-xs bg-slate-100 dark:bg-dark-card border border-slate-200 dark:border-dark-border rounded-xl text-slate-700 dark:text-gray-300 font-medium flex items-center justify-between cursor-not-allowed">
+                  <span>{ROLE_DISPLAY_NAMES[member.role] || member.role}</span>
+                  <span className="text-[10px] text-slate-400 font-normal flex items-center gap-1">
+                    <Lock className="w-2.5 h-2.5" /> Read-Only
+                  </span>
                 </div>
               </div>
 

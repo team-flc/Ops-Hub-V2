@@ -11,6 +11,7 @@ import { useOpsStore } from '../../store/opsStore';
 import { teamManagementService } from '../../lib/teamManagementService';
 import { employeeOperationsService } from '../../lib/employeeOperationsService';
 import { storageService, useSignedUrl } from '../../lib/storageService';
+import { getPKTTodayDateString } from '../../lib/pktDateUtils';
 
 interface CreateTeamMemberModalProps {
   isOpen: boolean;
@@ -46,7 +47,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const displayAvatarUrl = useSignedUrl('profile-avatars', avatarUrl);
-  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
+  const [startDate, setStartDate] = useState(getPKTTodayDateString());
   const [selectedDeptIds, setSelectedDeptIds] = useState<string[]>([]);
   const [selectedDesignationId, setSelectedDesignationId] = useState('');
   const [selectedManagerId, setSelectedManagerId] = useState('');
@@ -67,6 +68,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
   const [customCheckOutTime, setCustomCheckOutTime] = useState('');
   const [jobDescription, setJobDescription] = useState('');
   const [employmentStatus, setEmploymentStatus] = useState<EmploymentStatus>('active');
+  const [setupCompleted, setSetupCompleted] = useState(false);
 
   // UI State
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -267,7 +269,8 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
             shiftId: selectedShiftId || undefined,
             customCheckInTime: customCheckInTime.trim() || undefined,
             customCheckOutTime: customCheckOutTime.trim() || undefined,
-            employmentStatus
+            employmentStatus,
+            setupCompletedAt: setupCompleted ? new Date().toISOString() : null
           }, currentUserProfile.id);
         }
 
@@ -304,12 +307,13 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
     setLinkedinUrl('');
     setBio('');
     setAvatarUrl(null);
-    setStartDate(new Date().toISOString().split('T')[0]);
+    setStartDate(getPKTTodayDateString());
     setSelectedDeptIds([]);
     setSelectedDesignationId('');
     setSelectedClientIds([]);
     setPassword('');
     setConfirmPassword('');
+    setSetupCompleted(false);
     setErrorMessage(null);
     setCreatedCredentials(null);
     onClose();
@@ -826,6 +830,29 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
                       <option value="resigned">Resigned</option>
                     </select>
                   </div>
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                      Custom Check-In Time (Override)
+                    </label>
+                    <input
+                      type="time"
+                      value={customCheckInTime}
+                      onChange={(e) => setCustomCheckInTime(e.target.value)}
+                      className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                      Custom Check-Out Time (Override)
+                    </label>
+                    <input
+                      type="time"
+                      value={customCheckOutTime}
+                      onChange={(e) => setCustomCheckOutTime(e.target.value)}
+                      className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    />
+                  </div>
                 </div>
 
                 <div className="space-y-1">
@@ -838,6 +865,24 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
                     onChange={(e) => setJobDescription(e.target.value)}
                     placeholder="Key deliverables, client responsibilities, and operational duties..."
                     className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
+                  />
+                </div>
+
+                {/* Setup Completed Toggle */}
+                <div className="p-3 rounded-2xl bg-brand-50/50 dark:bg-brand-950/20 border border-brand-200 dark:border-brand-900/40 flex items-center justify-between">
+                  <div>
+                    <span className="text-xs font-bold text-slate-800 dark:text-gray-200 block">
+                      Employee Operations Setup Completed
+                    </span>
+                    <span className="text-[10px] text-slate-500 dark:text-gray-400">
+                      Enables shift scheduling, live attendance presence tracking, and payroll cycle inclusion
+                    </span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={setupCompleted}
+                    onChange={(e) => setSetupCompleted(e.target.checked)}
+                    className="w-4 h-4 text-brand-600 rounded-md focus:ring-brand-500 cursor-pointer"
                   />
                 </div>
               </div>

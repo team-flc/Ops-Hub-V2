@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Clock, CheckCircle2, AlertCircle, X, ShieldAlert } from 'lucide-react';
 import { EmployeeAttendance } from '../../types';
 import { employeeOperationsService } from '../../lib/employeeOperationsService';
+import { getPKTTodayDateString } from '../../lib/pktDateUtils';
 
 interface AttendanceCorrectionModalProps {
   isOpen: boolean;
@@ -20,7 +21,7 @@ export const AttendanceCorrectionModal: React.FC<AttendanceCorrectionModalProps>
   callerId,
   onSuccess
 }) => {
-  const [workDate, setWorkDate] = useState(new Date().toISOString().split('T')[0]);
+  const [workDate, setWorkDate] = useState(getPKTTodayDateString());
   const [checkInTime, setCheckInTime] = useState('');
   const [checkOutTime, setCheckOutTime] = useState('');
   const [status, setStatus] = useState<EmployeeAttendance['status']>('present');
@@ -33,7 +34,7 @@ export const AttendanceCorrectionModal: React.FC<AttendanceCorrectionModalProps>
 
   useEffect(() => {
     if (attendance) {
-      setWorkDate(attendance.workDate);
+      setWorkDate(attendance.workDate || getPKTTodayDateString());
       setCheckInTime(attendance.checkInTime ? attendance.checkInTime.slice(11, 16) : '');
       setCheckOutTime(attendance.checkOutTime ? attendance.checkOutTime.slice(11, 16) : '');
       setStatus(attendance.status);
@@ -41,7 +42,7 @@ export const AttendanceCorrectionModal: React.FC<AttendanceCorrectionModalProps>
       setAbsenceDeduction(attendance.absenceDeduction || 0);
       setOverrideReason(attendance.correctionReason || '');
     } else {
-      setWorkDate(new Date().toISOString().split('T')[0]);
+      setWorkDate(getPKTTodayDateString());
       setCheckInTime('11:00');
       setCheckOutTime('20:00');
       setStatus('present');
@@ -186,7 +187,7 @@ export const AttendanceCorrectionModal: React.FC<AttendanceCorrectionModalProps>
                 onChange={(e) => {
                   const s = e.target.value as any;
                   setStatus(s);
-                  if (s === 'present') {
+                  if (s === 'present' || s === 'corrected') {
                     setLateDeduction(0);
                     setAbsenceDeduction(0);
                   } else if (s === 'late') {
@@ -198,8 +199,9 @@ export const AttendanceCorrectionModal: React.FC<AttendanceCorrectionModalProps>
                 <option value="present">Present (On-Time)</option>
                 <option value="late">Late Arrival</option>
                 <option value="absent">Unapproved Absent</option>
-                <option value="leave">Approved Leave</option>
-                <option value="half_day">Half Day</option>
+                <option value="early_checkout">Early Checkout</option>
+                <option value="incomplete">Incomplete / Missing Punch</option>
+                <option value="corrected">Excused / Corrected</option>
               </select>
             </div>
 

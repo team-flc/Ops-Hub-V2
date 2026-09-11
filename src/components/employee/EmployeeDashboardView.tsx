@@ -10,9 +10,13 @@ import {
   EmployeeRecord, WorkShift, EmployeeAttendance, 
   CompanyAsset, EmployeeBankDetails, EmployeePayrollRecord, 
   EmployeePerformanceRecord, EmployeeManagementTask,
-  EmployeeProfileChangeRequest
+  EmployeeProfileChangeRequest, ROLE_DISPLAY_NAMES
 } from '../../types';
 import { employeeOperationsService } from '../../lib/employeeOperationsService';
+import { 
+  getPKTTodayDateString, getDaysInPKTMonth, getPKTDateTimeParts, 
+  calculatePKTSalaryCountdown, calculateDaysWithCompany 
+} from '../../lib/pktDateUtils';
 import { EmployeeAttendanceControl } from './EmployeeAttendanceControl';
 import { SOPModal } from './SOPModal';
 import { BankDetailsModal } from './BankDetailsModal';
@@ -47,12 +51,7 @@ export const EmployeeDashboardView: React.FC = () => {
 
     try {
       // Work date in PKT
-      const todayDate = new Intl.DateTimeFormat('en-CA', {
-        timeZone: 'Asia/Karachi',
-        year: 'numeric',
-        month: '2-digit',
-        day: '2-digit'
-      }).format(new Date());
+      const todayDate = getPKTTodayDateString();
 
       const [
         rec,
@@ -121,12 +120,12 @@ export const EmployeeDashboardView: React.FC = () => {
   const totalAbsenceDeductions = attendanceHistory.reduce((sum, a) => sum + (a.absenceDeduction || 0), 0);
 
   // Next Salary Payout Countdown (15th payout date in PKT)
-  const { daysRemaining: daysUntilPayout } = employeeOperationsService.calculateSalaryCountdown();
+  const { daysRemaining: daysUntilPayout } = calculatePKTSalaryCountdown();
 
-  // Current Accrued Earnings Calculation
+  // Current Accrued Earnings Calculation in PKT
   const baseSalary = Number(employeeRecord?.salary || 0);
-  const currentDay = new Date().getDate();
-  const totalDaysInMonth = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).getDate();
+  const { day: currentDay } = getPKTDateTimeParts();
+  const totalDaysInMonth = getDaysInPKTMonth();
   const rawAccrued = totalDaysInMonth > 0 ? (baseSalary / totalDaysInMonth) * currentDay : 0;
   const netAccrued = Math.max(0, Math.round(rawAccrued - totalLateDeductions - totalAbsenceDeductions));
 
@@ -162,7 +161,7 @@ export const EmployeeDashboardView: React.FC = () => {
               </span>
             </div>
             <p className="text-xs text-indigo-100/90 font-medium">
-              {profile?.designationName || 'Team Member'} • {activeShift ? activeShift.name : 'Morning Shift'}
+              {profile?.designationName || (profile?.role ? ROLE_DISPLAY_NAMES[profile.role] : 'Team Member')} • {activeShift ? `${activeShift.name} (${activeShift.startTime.slice(0, 5)} - ${activeShift.endTime.slice(0, 5)} PKT)` : 'Shift Pending'}
             </p>
           </div>
         </div>

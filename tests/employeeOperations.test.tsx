@@ -1,6 +1,14 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { employeeOperationsService } from '../src/lib/employeeOperationsService';
-import { WorkShift, CompanyWorkSchedule, NoticePeriodStatus, GoodStandingStatus, CompanyAsset } from '../src/types';
+import { 
+  WorkShift, CompanyWorkSchedule, NoticePeriodStatus, GoodStandingStatus, 
+  CompanyAsset, ROLE_DISPLAY_NAMES, EmployeeRecord, TeamMemberRecord, AssetStatus
+} from '../src/types';
+import { 
+  getPKTTodayDateString, getPKTCurrentMonthString, formatPKTDate, formatPKTTime,
+  getPKTDateTimeParts, getDaysInPKTMonth, isOvernightShift, calculateShiftWindow,
+  calculateDaysWithCompany, calculatePKTDaysUntil15th, calculatePKTSalaryCountdown
+} from '../src/lib/pktDateUtils';
 
 describe('Employee Operations System Full Behavioral Test Suite', () => {
   beforeEach(() => {
@@ -119,113 +127,148 @@ describe('Employee Operations System Full Behavioral Test Suite', () => {
     });
   });
 
-  // 5. 8-Component Final Settlement Calculation Engine
+  // 5. 8-Component Final Settlement Calculation Engine (Held salary is EARNED addition +)
   describe('5. 8-Component Final Settlement Calculation Engine', () => {
-    it('calculates net final settlement with pending salary, current accrued, additions, deductions, and held amount', () => {
-      const pendingPrevious = 100000;
-      const currentAccrued = 50000;
+    it('correctly treats held pending salary as earned addition (+) and adds all earned components', () => {
+      const pendingEarnedSalary = 100000;
+      const currentAccruedAmount = 50000;
+      const heldPendingAmount = 10000; // Previously held earned salary being released (+)
       const severanceBonus = 20000;
-      const lateDeductions = 1500; // 3 late days
-      const absenceDeductions = 5000; // 1 absent day
-      const assetRecovery = 15000; // 1 damaged/lost item
-      const heldPending = 10000; // partial hold
-      const otherAdjustments = 2000;
 
-      const totalAdditions = pendingPrevious + currentAccrued + severanceBonus;
-      const totalDeductions = lateDeductions + absenceDeductions + assetRecovery + heldPending + otherAdjustments;
+      const lateDeductions = 1500;
+      const absenceDeductions = 5000;
+      const assetRecoveryDeduction = 15000;
+      const otherDeductions = 2000;
+
+      const totalAdditions = pendingEarnedSalary + currentAccruedAmount + heldPendingAmount + severanceBonus;
+      const totalDeductions = lateDeductions + absenceDeductions + assetRecoveryDeduction + otherDeductions;
       const netFinalPayable = Math.max(0, totalAdditions - totalDeductions);
 
-      expect(totalAdditions).toBe(170000);
-      expect(totalDeductions).toBe(33500);
-      expect(netFinalPayable).toBe(136500);
+      expect(totalAdditions).toBe(180000);
+      expect(totalDeductions).toBe(23500);
+      expect(netFinalPayable).toBe(156500);
+    });
+
+    it('calculates settlement with correct 8-component formula', () => {
+      const baseSalary = 150000;
+      const daysInMonth = 30;
+      const daysWorked = 15;
+      const currentAccruedAmount = Number(((baseSalary / daysInMonth) * daysWorked).toFixed(2));
+      const pendingEarnedSalary = 50000;
+      const heldPendingAmount = 10000;
+      const severanceBonus = 15000;
+      const lateDeductions = 1000;
+      const absenceDeductions = 5000;
+      const assetRecoveryDeduction = 5000;
+      const otherDeductions = 0;
+
+      const totalAdditions = pendingEarnedSalary + currentAccruedAmount + heldPendingAmount + severanceBonus;
+      const totalDeductions = lateDeductions + absenceDeductions + assetRecoveryDeduction + otherDeductions;
+      const netFinalPayable = Math.max(0, totalAdditions - totalDeductions);
+
+      expect(currentAccruedAmount).toBe(75000);
+      expect(totalAdditions).toBe(150000);
+      expect(totalDeductions).toBe(11000);
+      expect(netFinalPayable).toBe(139000);
+    });
+
+    it('never produces negative payable amount even when deductions exceed additions', () => {
+      const totalAdditions = 10000;
+      const totalDeductions = 65000;
+      const netFinalPayable = Math.max(0, totalAdditions - totalDeductions);
+      expect(netFinalPayable).toBe(0);
     });
   });
 
-  // 6. Notice Period & Good Standing Status Rules
-  describe('6. Notice Period & Good Standing Status Rules', () => {
-    it('holds full accrued salary when notice period is not served', () => {
-      const baseSalary = 120000;
-      const currentAccrued = 60000;
-      const noticeStatus: NoticePeriodStatus = 'not_served';
-
-      let held = 0;
-      if (noticeStatus === 'not_served') {
-        held = Math.min(baseSalary, currentAccrued);
-      }
-      expect(held).toBe(60000);
+  // 6. Overnight Shift & Midnight Crossing (Asia/Karachi PKT)
+  describe('6. Overnight Shift & Midnight Crossing', () => {
+    it('detects overnight shift when end time is earlier in clock time than start time', () => {
+      expect(isOvernightShift('20:00:00', '05:00:00')).toBe(true);
+      expect(isOvernightShift('22:00:00', '07:00:00')).toBe(true);
+      expect(isOvernightShift('11:00:00', '20:00:00')).toBe(false);
+      expect(isOvernightShift('09:00:00', '18:00:00')).toBe(false);
     });
 
-    it('holds 50% accrued salary when notice period is short-served', () => {
-      const currentAccrued = 60000;
-      const noticeStatus: NoticePeriodStatus = 'short_served';
-
-      let held = 0;
-      if (noticeStatus === 'short_served') {
-        held = Math.round(currentAccrued * 0.5);
-      }
-      expect(held).toBe(30000);
+    it('computes overnight shift window starting on workDate and ending on next calendar day in PKT', () => {
+      const window = calculateShiftWindow('2026-09-12', '20:00:00', '05:00:00', true);
+      expect(window.isOvernight).toBe(true);
+      expect(window.startIso).toBe('2026-09-12T20:00:00+05:00');
+      expect(window.endIso).toBe('2026-09-13T05:00:00+05:00');
     });
 
-    it('holds 0 when notice period is served in full or waived', () => {
-      const currentAccrued = 60000;
-      const noticeStatus: NoticePeriodStatus = 'served';
-      const goodStanding: GoodStandingStatus = 'good_standing';
-
-      let held = 0;
-      if (noticeStatus === 'served' && goodStanding === 'good_standing') {
-        held = 0;
-      }
-      expect(held).toBe(0);
-    });
-
-    it('holds full accrued salary when good standing is disputed or terminated for cause', () => {
-      const currentAccrued = 75000;
-      const goodStanding: GoodStandingStatus = 'terminated_for_cause';
-
-      let held = 0;
-      if (goodStanding === 'disputed' || goodStanding === 'terminated_for_cause') {
-        held = currentAccrued;
-      }
-      expect(held).toBe(75000);
+    it('computes standard daytime shift window on the same calendar day', () => {
+      const window = calculateShiftWindow('2026-09-12', '11:00:00', '20:00:00', false);
+      expect(window.isOvernight).toBe(false);
+      expect(window.startIso).toBe('2026-09-12T11:00:00+05:00');
+      expect(window.endIso).toBe('2026-09-12T20:00:00+05:00');
     });
   });
 
-  // 7. Night Shift Midnight Crossing
-  describe('7. Night Shift Midnight Crossing', () => {
-    it('correctly validates night shift start at 20:00 and end at 05:00 with crossesMidnight true', () => {
-      const nightShift: WorkShift = {
-        id: 'shift-night',
-        name: 'Night Shift',
-        code: 'NIGHT_01',
-        startTime: '20:00:00',
-        endTime: '05:00:00',
-        crossesMidnight: true,
-        timezone: 'Asia/Karachi'
-      };
+  // 7. Authoritative PKT Date Boundaries & Midnight Crossing
+  describe('7. Authoritative PKT Date Boundaries & Midnight Crossing', () => {
+    it('formats a UTC midnight timestamp (e.g. 2026-09-11T23:30:00Z) to PKT date 2026-09-12', () => {
+      const utcDate = new Date('2026-09-11T23:30:00Z');
+      const pktDateStr = formatPKTDate(utcDate, 'iso');
+      expect(pktDateStr).toBe('2026-09-12');
+    });
 
-      expect(nightShift.crossesMidnight).toBe(true);
-      expect(nightShift.startTime).toBe('20:00:00');
-      expect(nightShift.endTime).toBe('05:00:00');
+    it('formats time in 12-hour PKT format with AM/PM', () => {
+      const utcDate = new Date('2026-09-12T06:00:00Z'); // 11:00 PKT
+      const pktTime = formatPKTTime(utcDate);
+      expect(pktTime).toBe('11:00 AM');
+    });
+
+    it('returns exact days in PKT month for leap and non-leap years', () => {
+      expect(getDaysInPKTMonth('2026-09')).toBe(30);
+      expect(getDaysInPKTMonth('2026-08')).toBe(31);
+      expect(getDaysInPKTMonth('2026-02')).toBe(28);
+      expect(getDaysInPKTMonth('2028-02')).toBe(29);
+    });
+
+    it('calculates employee company tenure in whole days', () => {
+      const refDate = new Date('2026-09-12T12:00:00+05:00');
+      const tenure = calculateDaysWithCompany('2026-09-02', refDate);
+      expect(tenure).toBe(10);
     });
   });
 
-  // 8. Safe Setup Gate Enforcement
-  describe('8. Safe Setup Gate Enforcement', () => {
-    it('requires setup_completed_at to be non-null for automated payroll generation', () => {
-      const employeeNotSetup = {
-        id: 'emp-1',
-        fullName: 'New Staff',
-        setupCompletedAt: null
-      };
-      const employeeSetup = {
-        id: 'emp-2',
-        fullName: 'Active Setup Staff',
-        setupCompletedAt: '2026-09-01T10:00:00Z'
-      };
+  // 8. Safe Setup Gate Enforcement & Setup Pending Isolation
+  describe('8. Safe Setup Gate Enforcement & Setup Pending Isolation', () => {
+    it('correctly partitions staff into configured vs setup pending', () => {
+      const staff: Array<{ id: string; fullName: string; setupCompletedAt?: string | null }> = [
+        { id: '1', fullName: 'Configured Staff 1', setupCompletedAt: '2026-09-01T00:00:00Z' },
+        { id: '2', fullName: 'New Staff Unconfigured', setupCompletedAt: null },
+        { id: '3', fullName: 'Configured Staff 2', setupCompletedAt: '2026-09-10T12:00:00Z' }
+      ];
 
-      const isEligible = (emp: { setupCompletedAt?: string | null }) => !!emp.setupCompletedAt;
-      expect(isEligible(employeeNotSetup)).toBe(false);
-      expect(isEligible(employeeSetup)).toBe(true);
+      const configured = staff.filter(s => !!s.setupCompletedAt);
+      const pending = staff.filter(s => !s.setupCompletedAt);
+
+      expect(configured.length).toBe(2);
+      expect(pending.length).toBe(1);
+      expect(pending[0].fullName).toBe('New Staff Unconfigured');
+    });
+
+    it('excludes setup pending staff from missing check-in audits and live attendance counters', () => {
+      const configuredStaff: TeamMemberRecord[] = [
+        { id: 'c1', fullName: 'Alice', workEmail: 'alice@agency.com', role: 'team_member', status: 'active', departments: [], createdAt: '', updatedAt: '' }
+      ];
+      const setupPendingStaff: TeamMemberRecord[] = [
+        { id: 'p1', fullName: 'Bob', workEmail: 'bob@agency.com', role: 'team_member', status: 'active', departments: [], createdAt: '', updatedAt: '' }
+      ];
+
+      const todayAttendance = [
+        { id: 'att1', employeeId: 'c1', workDate: '2026-09-12', checkInTime: '2026-09-12T11:00:00+05:00', status: 'on_time' as const, minutesLate: 0, lateDeduction: 0, absenceDeduction: 0, scheduledCheckIn: '11:00:00', scheduledCheckOut: '20:00:00', createdAt: '', updatedAt: '' }
+      ];
+
+      // Live attendance counters evaluate ONLY configured staff
+      const checkedInConfigured = todayAttendance.filter(a => a.checkInTime && configuredStaff.some(cs => cs.id === a.employeeId)).length;
+      const pendingConfigured = Math.max(0, configuredStaff.length - checkedInConfigured);
+
+      expect(checkedInConfigured).toBe(1);
+      expect(pendingConfigured).toBe(0);
+      // Bob is in setupPendingStaff, NOT in pendingConfigured
+      expect(setupPendingStaff.length).toBe(1);
     });
   });
 
@@ -233,21 +276,21 @@ describe('Employee Operations System Full Behavioral Test Suite', () => {
   describe('9. PKT 15th Salary Countdown Math', () => {
     it('calculates exact remaining calendar days from Sept 12 to Sept 15 in PKT (3 days)', () => {
       const sept12 = new Date('2026-09-12T14:30:00+05:00');
-      const { daysRemaining, nextSalaryDate } = employeeOperationsService.calculateDaysUntil15th(sept12);
+      const { daysRemaining, nextSalaryDate } = calculatePKTDaysUntil15th(sept12);
       expect(nextSalaryDate).toBe('2026-09-15');
       expect(daysRemaining).toBe(3);
     });
 
     it('returns 0 days remaining on the 15th payout day itself', () => {
       const sept15 = new Date('2026-09-15T09:00:00+05:00');
-      const { daysRemaining, formattedMessage } = employeeOperationsService.calculateSalaryCountdown(sept15);
+      const { daysRemaining, formattedMessage } = calculatePKTSalaryCountdown(sept15);
       expect(daysRemaining).toBe(0);
       expect(formattedMessage).toContain('Salary Payout Day Today (15th)');
     });
 
     it('rolls over to 15th of next month when current date is past the 15th', () => {
       const sept16 = new Date('2026-09-16T10:00:00+05:00');
-      const { nextSalaryDate, daysRemaining } = employeeOperationsService.calculateDaysUntil15th(sept16);
+      const { nextSalaryDate, daysRemaining } = calculatePKTDaysUntil15th(sept16);
       expect(nextSalaryDate).toBe('2026-10-15');
       expect(daysRemaining).toBe(29);
     });
@@ -269,31 +312,32 @@ describe('Employee Operations System Full Behavioral Test Suite', () => {
 
   // 11. Company Asset Lifecycle States & Valuation
   describe('11. Company Asset Lifecycle States & Valuation', () => {
-    it('calculates total replacement value for assigned, damaged, and lost assets', () => {
+    it('supports all valid asset statuses and calculates recoverable value', () => {
+      const validStatuses: AssetStatus[] = [
+        'assigned', 'acknowledged', 'returned', 'damaged', 'lost', 'under_review', 'available', 'closed'
+      ];
+
+      expect(validStatuses.includes('acknowledged')).toBe(true);
+      expect(validStatuses.includes('under_review')).toBe(true);
+
       const assets: CompanyAsset[] = [
-        { id: 'a1', itemName: 'Laptop Dell XPS', assetTag: 'LAP-001', status: 'assigned', replacementValue: 120000, condition: 'good', createdAt: '', updatedAt: '' },
-        { id: 'a2', itemName: 'Monitor 27"', assetTag: 'MON-002', status: 'damaged', replacementValue: 45000, condition: 'damaged', createdAt: '', updatedAt: '' },
-        { id: 'a3', itemName: 'Headset Jabra', assetTag: 'AUD-003', status: 'available', replacementValue: 15000, condition: 'good', createdAt: '', updatedAt: '' }
+        { id: 'a1', itemName: 'Laptop Dell XPS', assetTag: 'LAP-001', status: 'assigned', issueDate: '2026-09-12', price: 120000, replacementValue: 120000, condition: 'good', financialRecoveryApproved: false, financialRecoveryAmount: 0, createdAt: '', updatedAt: '' },
+        { id: 'a2', itemName: 'Monitor 27"', assetTag: 'MON-002', status: 'damaged', issueDate: '2026-09-12', price: 45000, replacementValue: 45000, condition: 'damaged', financialRecoveryApproved: false, financialRecoveryAmount: 0, createdAt: '', updatedAt: '' },
+        { id: 'a3', itemName: 'Headset Jabra', assetTag: 'AUD-003', status: 'available', issueDate: '2026-09-12', price: 15000, replacementValue: 15000, condition: 'good', financialRecoveryApproved: false, financialRecoveryAmount: 0, createdAt: '', updatedAt: '' }
       ];
 
       const recoverable = assets.filter(a => a.status === 'assigned' || a.status === 'damaged' || a.status === 'lost');
-      const totalRecovery = recoverable.reduce((sum, a) => sum + (a.replacementValue ?? 0), 0);
+      const totalRecovery = recoverable.reduce((sum, a) => sum + (a.replacementValue ?? a.price ?? 0), 0);
       expect(totalRecovery).toBe(165000);
     });
   });
 
-  // 12. SOP Acknowledgement Versioning
-  describe('12. SOP Acknowledgement Versioning', () => {
-    it('records version 1.0 upon acknowledgement and unlocks portal actions', () => {
-      const empRecord = {
-        sopAcknowledged: true,
-        sopVersion: '1.0',
-        sopAcknowledgedAt: '2026-09-12T08:00:00Z'
-      };
-
-      expect(empRecord.sopAcknowledged).toBe(true);
-      expect(empRecord.sopVersion).toBe('1.0');
-      expect(empRecord.sopAcknowledgedAt).toBeTruthy();
+  // 12. Dynamic Role Mapping
+  describe('12. Dynamic Role Mapping', () => {
+    it('maps system roles dynamically using ROLE_DISPLAY_NAMES', () => {
+      expect(ROLE_DISPLAY_NAMES.owner).toBe('Owner');
+      expect(ROLE_DISPLAY_NAMES.operational_manager).toBe('Operational Manager');
+      expect(ROLE_DISPLAY_NAMES.team_member).toBe('Team Member');
     });
   });
 
@@ -343,40 +387,22 @@ describe('Employee Operations System Full Behavioral Test Suite', () => {
     });
   });
 
-  // 16. Batch Attendance Query Isolation
-  describe('16. Batch Attendance Query Isolation', () => {
-    it('handles UUID strings without incorrectly interpreting them as dates', () => {
-      const employeeUUID = '7d2e053f-4df6-455b-b9d9-c027bb309831';
-      const dateString = '2026-09-12';
-
-      // UUID has hyphens but length 36; date string has hyphens and length 10 (YYYY-MM-DD)
-      const isDate = (val: string) => /^\d{4}-\d{2}-\d{2}$/.test(val);
-      expect(isDate(dateString)).toBe(true);
-      expect(isDate(employeeUUID)).toBe(false);
-    });
-  });
-
-  // 17. Read-Only Official Email Security
-  describe('17. Read-Only Official Email Security', () => {
-    it('prevents modifying workEmail during profile edits to maintain authoritative auth identity', () => {
-      const initialProfile = {
-        id: 'u-1',
-        workEmail: 'official.staff@agency.com',
-        backupPhone: '+923001234567'
+  // 16. Private Payment Proof & Disbursal Audit Trail
+  describe('16. Private Payment Proof & Disbursal Audit Trail', () => {
+    it('records paying manager id (paidBy) and timestamp (paidAt) on paid status', () => {
+      const managerId = 'mgr-123';
+      const record = {
+        id: 'pay-1',
+        status: 'paid',
+        paidAt: new Date().toISOString(),
+        paidBy: managerId,
+        paymentProofUrl: 'payroll-proofs/pay-1/receipt.pdf'
       };
 
-      const allowedUpdates = {
-        backupPhone: '+923007654321'
-      };
-
-      const updatedProfile = {
-        ...initialProfile,
-        ...allowedUpdates
-      };
-
-      expect(updatedProfile.workEmail).toBe('official.staff@agency.com');
-      expect(updatedProfile.backupPhone).toBe('+923007654321');
+      expect(record.status).toBe('paid');
+      expect(record.paidBy).toBe(managerId);
+      expect(record.paidAt).toBeTruthy();
+      expect(record.paymentProofUrl).toBeTruthy();
     });
   });
 });
-

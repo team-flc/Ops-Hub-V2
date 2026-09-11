@@ -928,7 +928,7 @@ export interface EmployeeAttendance {
   updatedAt: string;
 }
 
-export type AssetStatus = 'assigned' | 'receipt_pending' | 'received' | 'returned' | 'damaged' | 'lost' | 'available' | 'closed';
+export type AssetStatus = 'assigned' | 'receipt_pending' | 'received' | 'acknowledged' | 'returned' | 'damaged' | 'lost' | 'under_review' | 'available' | 'closed';
 
 export interface CompanyAsset {
   id: string;
