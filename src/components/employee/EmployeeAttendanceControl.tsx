@@ -342,9 +342,14 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
 
           {/* Evidence Capture for Clock Out */}
           <div className="space-y-3 p-4 rounded-2xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border">
-            <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-gray-300">
-              Shift End Workstation Evidence
-            </label>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+              <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-gray-300">
+                Shift End Workstation Evidence (Mandatory)
+              </label>
+              <span className="text-[11px] text-slate-500 dark:text-gray-400">
+                Select <strong className="text-brand-600 dark:text-brand-400">"Entire Screen"</strong> to verify taskbar clock
+              </span>
+            </div>
 
             {previewUrl ? (
               <div className="relative rounded-2xl overflow-hidden border border-slate-300 dark:border-dark-border bg-black max-w-sm">
@@ -359,33 +364,38 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
                 </button>
               </div>
             ) : (
-              <div className="flex flex-wrap items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={handleCaptureScreen}
-                  disabled={isCapturingScreen}
-                  className="px-4 py-2.5 rounded-xl bg-slate-900 text-white dark:bg-brand-600 hover:bg-slate-800 text-xs font-bold transition-all shadow-xs flex items-center gap-2"
-                >
-                  <Camera className="w-4 h-4" />
-                  <span>{isCapturingScreen ? 'Capturing...' : 'Capture Desktop Screen'}</span>
-                </button>
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={handleCaptureScreen}
+                    disabled={isCapturingScreen}
+                    className="px-4 py-2.5 rounded-xl bg-slate-900 text-white dark:bg-brand-600 hover:bg-slate-800 text-xs font-bold transition-all shadow-xs flex items-center gap-2"
+                  >
+                    <Camera className="w-4 h-4" />
+                    <span>{isCapturingScreen ? 'Capturing...' : 'Capture Entire Screen'}</span>
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="px-4 py-2.5 rounded-xl bg-white dark:bg-dark-card border border-slate-300 dark:border-dark-border hover:bg-slate-100 text-xs font-semibold text-slate-700 dark:text-gray-200 transition-colors flex items-center gap-2"
-                >
-                  <Upload className="w-4 h-4" />
-                  <span>Upload Screenshot</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-4 py-2.5 rounded-xl bg-white dark:bg-dark-card border border-slate-300 dark:border-dark-border hover:bg-slate-100 text-xs font-semibold text-slate-700 dark:text-gray-200 transition-colors flex items-center gap-2"
+                  >
+                    <Upload className="w-4 h-4" />
+                    <span>Upload Screenshot</span>
+                  </button>
 
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleManualUpload}
-                  className="hidden"
-                />
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleManualUpload}
+                    className="hidden"
+                  />
+                </div>
+                <p className="text-[11px] text-amber-700 dark:text-amber-400 italic">
+                  Desktop screen capture (or manual upload) is required before clocking out.
+                </p>
               </div>
             )}
 
@@ -407,9 +417,9 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
           {/* Clock Out Action Button */}
           <button
             type="button"
-            disabled={isProcessing}
+            disabled={isProcessing || (!capturedBlob && !manualFile)}
             onClick={handleClockOut}
-            className="w-full py-3.5 px-4 rounded-2xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white font-bold text-sm transition-all shadow-lg shadow-rose-600/25 flex items-center justify-center gap-2"
+            className="w-full py-3.5 px-4 rounded-2xl bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-sm transition-all shadow-lg shadow-rose-600/25 flex items-center justify-center gap-2"
           >
             {isProcessing ? (
               <RefreshCw className="w-4 h-4 animate-spin" />
@@ -477,11 +487,13 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
 
           {/* Evidence Capture for Clock In */}
           <div className="space-y-3 p-4 rounded-2xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-gray-300">
                 Workstation Screen Evidence (Mandatory)
               </label>
-              <span className="text-[10px] text-slate-400 font-normal">Automated compression (JPEG 0.70)</span>
+              <span className="text-[11px] text-slate-500 dark:text-gray-400">
+                Select <strong className="text-brand-600 dark:text-brand-400">"Entire Screen"</strong> to verify taskbar clock
+              </span>
             </div>
 
             {previewUrl ? (
@@ -497,33 +509,38 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
                 </button>
               </div>
             ) : (
-              <div className="flex flex-wrap items-center gap-2.5">
-                <button
-                  type="button"
-                  onClick={handleCaptureScreen}
-                  disabled={isCapturingScreen}
-                  className="px-4 py-2.5 rounded-xl bg-slate-900 text-white dark:bg-brand-600 hover:bg-slate-800 text-xs font-bold transition-all shadow-xs flex items-center gap-2"
-                >
-                  <Camera className="w-4 h-4" />
-                  <span>{isCapturingScreen ? 'Capturing...' : 'Capture Desktop Screen'}</span>
-                </button>
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <button
+                    type="button"
+                    onClick={handleCaptureScreen}
+                    disabled={isCapturingScreen}
+                    className="px-4 py-2.5 rounded-xl bg-slate-900 text-white dark:bg-brand-600 hover:bg-slate-800 text-xs font-bold transition-all shadow-xs flex items-center gap-2"
+                  >
+                    <Camera className="w-4 h-4" />
+                    <span>{isCapturingScreen ? 'Capturing...' : 'Capture Entire Screen'}</span>
+                  </button>
 
-                <button
-                  type="button"
-                  onClick={() => fileInputRef.current?.click()}
-                  className="px-4 py-2.5 rounded-xl bg-white dark:bg-dark-card border border-slate-300 dark:border-dark-border hover:bg-slate-100 text-xs font-semibold text-slate-700 dark:text-gray-200 transition-colors flex items-center gap-2"
-                >
-                  <Upload className="w-4 h-4" />
-                  <span>Upload Screenshot</span>
-                </button>
+                  <button
+                    type="button"
+                    onClick={() => fileInputRef.current?.click()}
+                    className="px-4 py-2.5 rounded-xl bg-white dark:bg-dark-card border border-slate-300 dark:border-dark-border hover:bg-slate-100 text-xs font-semibold text-slate-700 dark:text-gray-200 transition-colors flex items-center gap-2"
+                  >
+                    <Upload className="w-4 h-4" />
+                    <span>Upload Screenshot</span>
+                  </button>
 
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept="image/*"
-                  onChange={handleManualUpload}
-                  className="hidden"
-                />
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept="image/*"
+                    onChange={handleManualUpload}
+                    className="hidden"
+                  />
+                </div>
+                <p className="text-[11px] text-amber-700 dark:text-amber-400 italic">
+                  Desktop screen capture (or manual upload) is required before clocking in.
+                </p>
               </div>
             )}
           </div>
@@ -531,16 +548,18 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
           {/* Clock In Action Button */}
           <button
             type="button"
-            disabled={isProcessing}
+            disabled={isProcessing || (!capturedBlob && !manualFile)}
             onClick={handleClockIn}
-            className="w-full py-4 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-sm transition-all shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-2"
+            className="w-full py-4 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-sm transition-all shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-2"
           >
             {isProcessing ? (
               <RefreshCw className="w-4 h-4 animate-spin" />
             ) : (
-              <CheckCircle2 className="w-5 h-5" />
+              <>
+                <CheckCircle2 className="w-5 h-5" />
+                <span>Clock In & Verify Workstation</span>
+              </>
             )}
-            <span>Clock In Now ({todayWorkDate})</span>
           </button>
         </div>
       )}

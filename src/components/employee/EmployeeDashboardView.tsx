@@ -120,15 +120,8 @@ export const EmployeeDashboardView: React.FC = () => {
   const unapprovedAbsences = attendanceHistory.filter(a => a.status === 'absent').length;
   const totalAbsenceDeductions = attendanceHistory.reduce((sum, a) => sum + (a.absenceDeduction || 0), 0);
 
-  // Next Salary Payout Countdown (15th of next month for current month cycle)
-  const calculateDaysUntil15th = () => {
-    const now = new Date();
-    // Next payout date is the 15th of next month
-    const payoutDate = new Date(now.getFullYear(), now.getMonth() + 1, 15);
-    const diffMs = payoutDate.getTime() - now.getTime();
-    return Math.max(1, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
-  };
-  const daysUntilPayout = calculateDaysUntil15th();
+  // Next Salary Payout Countdown (15th payout date in PKT)
+  const { daysRemaining: daysUntilPayout } = employeeOperationsService.calculateSalaryCountdown();
 
   // Current Accrued Earnings Calculation
   const baseSalary = Number(employeeRecord?.salary || 0);

@@ -15,7 +15,10 @@ import {
   UserProfile,
   UserRole,
   AttendanceStatus,
-  AssetStatus
+  AssetStatus,
+  NoticePeriodStatus,
+  GoodStandingStatus,
+  AssetClearanceStatus
 } from '../types';
 
 export interface CheckInPayload {
@@ -37,6 +40,33 @@ export interface CheckOutPayload {
 }
 
 export const employeeOperationsService = {
+  // Timezone & Date Utilities (Asia/Karachi PKT)
+  getTodayDatePKT(d: Date = new Date()): string {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Asia/Karachi',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    }).format(d);
+  },
+
+  formatPKTDateTime(dateInput: string | Date): string {
+    const d = typeof dateInput === 'string' ? new Date(dateInput) : dateInput;
+    return new Intl.DateTimeFormat('en-US', {
+      timeZone: 'Asia/Karachi',
+      year: 'numeric',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    }).format(d) + ' PKT';
+  },
+
+  getDaysInMonth(year: number, month: number): number {
+    return new Date(Date.UTC(year, month, 0)).getUTCDate();
+  },
+
   // ===========================================================================
   // 1. WORK SHIFTS & COMPANY SCHEDULES
   // ===========================================================================
@@ -90,7 +120,7 @@ export const employeeOperationsService = {
   },
 
   isWorkingDay(date: Date, schedules: CompanyWorkSchedule[]): boolean {
-    const dateStr = date.toISOString().split('T')[0];
+    const dateStr = this.getTodayDatePKT(date);
     const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
     const normalizedDay = dayOfWeek === 0 ? 7 : dayOfWeek; // 1..7 (Mon..Sun)
 
@@ -111,7 +141,7 @@ export const employeeOperationsService = {
   // ===========================================================================
 
   async fetchEmployeeRecord(employeeId: string): Promise<EmployeeRecord | null> {
-    if (!supabase) return null;
+    if (!supabase || !employeeId) return null;
     try {
       const { data, error } = await supabase
         .from('employee_records')
@@ -145,6 +175,7 @@ export const employeeOperationsService = {
         sopAcknowledged: data.sop_acknowledged,
         sopAcknowledgedAt: data.sop_acknowledged_at,
         sopVersion: data.sop_version,
+        setupCompletedAt: data.setup_completed_at,
         createdAt: data.created_at,
         updatedAt: data.updated_at,
         createdBy: data.created_by,
@@ -152,6 +183,50 @@ export const employeeOperationsService = {
       };
     } catch {
       return null;
+    }
+  },
+
+  async fetchAllEmployeeRecords(): Promise<EmployeeRecord[]> {
+    if (!supabase) return [];
+    try {
+      const { data, error } = await supabase
+        .from('employee_records')
+        .select('*, work_shifts(*)');
+
+      if (error || !data) return [];
+      return data.map((d: any) => ({
+        id: d.id,
+        employeeId: d.employee_id,
+        employmentType: d.employment_type,
+        dateOfBirth: d.date_of_birth,
+        salary: Number(d.salary || 0),
+        jobDescription: d.job_description,
+        shiftId: d.shift_id,
+        shift: d.work_shifts ? {
+          id: d.work_shifts.id,
+          name: d.work_shifts.name,
+          code: d.work_shifts.code,
+          startTime: d.work_shifts.start_time,
+          endTime: d.work_shifts.end_time,
+          crossesMidnight: d.work_shifts.crosses_midnight,
+          timezone: d.work_shifts.timezone,
+          createdAt: d.work_shifts.created_at,
+          updatedAt: d.work_shifts.updated_at
+        } : null,
+        customCheckInTime: d.custom_check_in_time,
+        customCheckOutTime: d.custom_check_out_time,
+        employmentStatus: d.employment_status,
+        sopAcknowledged: d.sop_acknowledged,
+        sopAcknowledgedAt: d.sop_acknowledged_at,
+        sopVersion: d.sop_version,
+        setupCompletedAt: d.setup_completed_at,
+        createdAt: d.created_at,
+        updatedAt: d.updated_at,
+        createdBy: d.created_by,
+        updatedBy: d.updated_by
+      }));
+    } catch {
+      return [];
     }
   },
 
@@ -172,6 +247,7 @@ export const employeeOperationsService = {
         custom_check_in_time: record.customCheckInTime || null,
         custom_check_out_time: record.customCheckOutTime || null,
         employment_status: record.employmentStatus || 'active',
+        setup_completed_at: record.setupCompletedAt !== undefined ? record.setupCompletedAt : undefined,
         updated_at: new Date().toISOString(),
         updated_by: callerId
       };
@@ -192,7 +268,8 @@ export const employeeOperationsService = {
           employeeId: record.employeeId,
           employmentType: record.employmentType,
           salary: record.salary,
-          employmentStatus: record.employmentStatus
+          employmentStatus: record.employmentStatus,
+          setupCompleted: Boolean(record.setupCompletedAt)
         },
         reason: 'Management employee record update'
       });
@@ -231,18 +308,30 @@ export const employeeOperationsService = {
     const diffMs = actualTime.getTime() - scheduledTime.getTime();
     if (diffMs > 0) {
       const minutesLate = Math.ceil(diffMs / 60000);
-      // Flat PKR 500 late deduction per late day (no monthly cap)
+      // Flat PKR 500 late deduction per late occurrence (1m, 15m, 180m = PKR 500, no monthly cap)
       return { isLate: true, minutesLate, deduction: 500 };
     }
     return { isLate: false, minutesLate: 0, deduction: 0 };
   },
 
-  calculateAbsenceDeduction(monthlySalary: number, date: Date): number {
-    const year = date.getFullYear();
-    const month = date.getMonth() + 1; // 1..12
-    const totalDaysInMonth = new Date(year, month, 0).getDate(); // 28, 29, 30, or 31
-    if (totalDaysInMonth <= 0 || monthlySalary <= 0) return 0;
-    return Number((monthlySalary / totalDaysInMonth).toFixed(2));
+  calculateLateDeduction(minutesLate: number): number {
+    return minutesLate > 0 ? 500 : 0;
+  },
+
+  calculateAbsenceDeduction(monthlySalary: number, dateOrDateStr: Date | string): number {
+    if (monthlySalary <= 0) return 0;
+    let year: number;
+    let month: number;
+    if (typeof dateOrDateStr === 'string') {
+      const [y, m] = dateOrDateStr.split('-').map(Number);
+      year = y;
+      month = m;
+    } else {
+      year = dateOrDateStr.getFullYear();
+      month = dateOrDateStr.getMonth() + 1;
+    }
+    const totalDaysInMonth = this.getDaysInMonth(year, month);
+    return Math.round((monthlySalary / totalDaysInMonth) * 100) / 100;
   },
 
   async captureScreenFrame(): Promise<{ blob?: Blob; error?: string }> {
@@ -257,6 +346,16 @@ export const employeeOperationsService = {
           displaySurface: 'monitor' as any
         }
       });
+
+      // Strict enforcement: Where browser exposes displaySurface, reject tab / window captures
+      const track = stream.getVideoTracks()[0];
+      const settings = track?.getSettings() as any;
+      if (settings?.displaySurface && settings.displaySurface !== 'monitor') {
+        stream.getTracks().forEach((t) => t.stop());
+        return { 
+          error: 'Please select "Entire Screen" rather than an individual tab or window so your workstation taskbar and system clock can be verified.' 
+        };
+      }
 
       const video = document.createElement('video');
       video.srcObject = stream;
@@ -287,6 +386,37 @@ export const employeeOperationsService = {
 
       // Stop stream immediately after capture
       stream.getTracks().forEach((t) => t.stop());
+
+      // Overlay official PKT date/time stamp badge in bottom-right corner
+      const nowPKT = new Intl.DateTimeFormat('en-GB', {
+        timeZone: 'Asia/Karachi',
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
+      }).format(new Date());
+
+      const stampText = `Ops Hub PKT: ${nowPKT} PKT`;
+      ctx.font = 'bold 20px monospace';
+      const textMetrics = ctx.measureText(stampText);
+      const textWidth = textMetrics.width;
+      const boxPadding = 12;
+      const boxX = canvas.width - textWidth - boxPadding * 2 - 20;
+      const boxY = canvas.height - 48;
+
+      // Dark translucent badge
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+      ctx.fillRect(boxX, boxY, textWidth + boxPadding * 2, 36);
+      ctx.strokeStyle = 'rgba(59, 130, 246, 0.8)';
+      ctx.lineWidth = 1.5;
+      ctx.strokeRect(boxX, boxY, textWidth + boxPadding * 2, 36);
+
+      // Text
+      ctx.fillStyle = '#10b981';
+      ctx.fillText(stampText, boxX + boxPadding, boxY + 24);
 
       // Compress JPEG at 0.70 quality keeping taskbar clock legible and storage small (~60-120KB)
       const blob = await new Promise<Blob | null>((resolve) => {
@@ -618,46 +748,70 @@ export const employeeOperationsService = {
   },
 
   async fetchTodayAttendance(
-    employeeIdOrDate?: string,
+    employeeId: string,
     dateStr?: string
-  ): Promise<any> {
-    if (!supabase) return null;
+  ): Promise<EmployeeAttendance | null> {
+    if (!supabase || !employeeId) return null;
     try {
-      const today = dateStr || (employeeIdOrDate && employeeIdOrDate.includes('-') ? employeeIdOrDate : new Date().toISOString().split('T')[0]);
-      let query = supabase.from('employee_attendance').select('*').eq('work_date', today);
-      if (employeeIdOrDate && !employeeIdOrDate.includes('-')) {
-        query = query.eq('employee_id', employeeIdOrDate);
-        const { data, error } = await query.maybeSingle();
-        if (error || !data) return null;
-        return {
-          id: data.id,
-          employeeId: data.employee_id,
-          workDate: data.work_date,
-          shiftId: data.shift_id,
-          scheduledCheckIn: data.scheduled_check_in || '11:00',
-          scheduledCheckOut: data.scheduled_check_out || '20:00',
-          checkInTime: data.check_in_time,
-          checkOutTime: data.check_out_time,
-          status: data.status,
-          minutesLate: data.minutes_late || 0,
-          lateDeduction: Number(data.late_deduction || 0),
-          absenceDeduction: Number(data.absence_deduction || 0),
-          checkInScreenshotPath: data.check_in_screenshot_path,
-          checkOutScreenshotPath: data.check_out_screenshot_path,
-          screenCaptureUrl: data.check_in_screenshot_path,
-          createdAt: data.created_at,
-          updatedAt: data.updated_at
-        };
-      }
-      const { data, error } = await query;
+      const today = dateStr || this.getTodayDatePKT();
+      const { data, error } = await supabase
+        .from('employee_attendance')
+        .select('*')
+        .eq('employee_id', employeeId)
+        .eq('work_date', today)
+        .maybeSingle();
+
+      if (error || !data) return null;
+      return {
+        id: data.id,
+        employeeId: data.employee_id,
+        workDate: data.work_date,
+        shiftId: data.shift_id,
+        scheduledCheckIn: data.scheduled_check_in || '11:00:00',
+        scheduledCheckOut: data.scheduled_check_out || '20:00:00',
+        checkInTime: data.check_in_time,
+        checkOutTime: data.check_out_time,
+        status: data.status,
+        minutesLate: data.minutes_late || 0,
+        lateDeduction: Number(data.late_deduction || 0),
+        absenceDeduction: Number(data.absence_deduction || 0),
+        checkInScreenshotPath: data.check_in_screenshot_path,
+        checkOutScreenshotPath: data.check_out_screenshot_path,
+        checkInEvidenceType: data.check_in_evidence_type,
+        checkOutEvidenceType: data.check_out_evidence_type,
+        earlyCheckoutReason: data.early_checkout_reason,
+        earlyCheckoutStatus: data.early_checkout_status,
+        correctionReason: data.correction_reason,
+        correctedBy: data.corrected_by,
+        correctedAt: data.corrected_at,
+        screenCaptureUrl: data.check_in_screenshot_path,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at
+      };
+    } catch {
+      return null;
+    }
+  },
+
+  async fetchAllTodayAttendance(dateStr?: string): Promise<EmployeeAttendance[]> {
+    if (!supabase) return [];
+    try {
+      const today = dateStr || this.getTodayDatePKT();
+      const { data, error } = await supabase
+        .from('employee_attendance')
+        .select('*')
+        .eq('work_date', today)
+        .not('check_in_time', 'is', null)
+        .order('check_in_time', { ascending: true });
+
       if (error || !data) return [];
       return data.map((a: any) => ({
         id: a.id,
         employeeId: a.employee_id,
         workDate: a.work_date,
         shiftId: a.shift_id,
-        scheduledCheckIn: a.scheduled_check_in || '11:00',
-        scheduledCheckOut: a.scheduled_check_out || '20:00',
+        scheduledCheckIn: a.scheduled_check_in || '11:00:00',
+        scheduledCheckOut: a.scheduled_check_out || '20:00:00',
         checkInTime: a.check_in_time,
         checkOutTime: a.check_out_time,
         status: a.status,
@@ -666,12 +820,19 @@ export const employeeOperationsService = {
         absenceDeduction: Number(a.absence_deduction || 0),
         checkInScreenshotPath: a.check_in_screenshot_path,
         checkOutScreenshotPath: a.check_out_screenshot_path,
+        checkInEvidenceType: a.check_in_evidence_type,
+        checkOutEvidenceType: a.check_out_evidence_type,
+        earlyCheckoutReason: a.early_checkout_reason,
+        earlyCheckoutStatus: a.early_checkout_status,
+        correctionReason: a.correction_reason,
+        correctedBy: a.corrected_by,
+        correctedAt: a.corrected_at,
         screenCaptureUrl: a.check_in_screenshot_path,
         createdAt: a.created_at,
         updatedAt: a.updated_at
       }));
     } catch {
-      return null;
+      return [];
     }
   },
 
@@ -1120,24 +1281,47 @@ export const employeeOperationsService = {
   // ===========================================================================
 
   calculateDaysUntil15th(currentDate: Date = new Date()): { nextSalaryDate: string; daysRemaining: number } {
-    const year = currentDate.getFullYear();
-    const month = currentDate.getMonth(); // 0..11
-    const day = currentDate.getDate();
+    const pktDateStr = this.getTodayDatePKT(currentDate); // 'YYYY-MM-DD'
+    const [yearStr, monthStr, dayStr] = pktDateStr.split('-');
+    const year = parseInt(yearStr, 10);
+    const month = parseInt(monthStr, 10); // 1..12
+    const day = parseInt(dayStr, 10); // 1..31
 
-    let targetDate: Date;
-    if (day < 15) {
-      // 15th of current month (for previous month's salary)
-      targetDate = new Date(year, month, 15);
+    let targetYear = year;
+    let targetMonth = month;
+    let daysRemaining = 0;
+
+    if (day <= 15) {
+      daysRemaining = 15 - day;
     } else {
-      // 15th of next month (for current month's salary)
-      targetDate = new Date(year, month + 1, 15);
+      const daysInCurrentMonth = this.getDaysInMonth(year, month);
+      const daysLeftInCurrentMonth = daysInCurrentMonth - day;
+      daysRemaining = daysLeftInCurrentMonth + 15;
+      if (month === 12) {
+        targetYear = year + 1;
+        targetMonth = 1;
+      } else {
+        targetMonth = month + 1;
+      }
     }
 
-    const diffTime = targetDate.getTime() - currentDate.getTime();
-    const daysRemaining = Math.max(0, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
-    const nextSalaryDate = targetDate.toISOString().split('T')[0];
+    const targetMonthStr = targetMonth.toString().padStart(2, '0');
+    const nextSalaryDate = `${targetYear}-${targetMonthStr}-15`;
 
     return { nextSalaryDate, daysRemaining };
+  },
+
+  calculateSalaryCountdown(currentDate: Date = new Date()): { nextSalaryDate: string; daysRemaining: number; formattedMessage: string } {
+    const { nextSalaryDate, daysRemaining } = this.calculateDaysUntil15th(currentDate);
+    let formattedMessage = '';
+    if (daysRemaining === 0) {
+      formattedMessage = 'Salary Payout Day Today (15th)';
+    } else if (daysRemaining === 1) {
+      formattedMessage = '1 day until 15th salary payout';
+    } else {
+      formattedMessage = `${daysRemaining} days until 15th salary payout`;
+    }
+    return { nextSalaryDate, daysRemaining, formattedMessage };
   },
 
   async fetchEmployeePayrollRecords(employeeId: string): Promise<EmployeePayrollRecord[]> {
@@ -1266,8 +1450,14 @@ export const employeeOperationsService = {
       return this.generateMonthlyPayrollRecord(periodOrEmployeeId, callerIdOrPeriod || '', callerId);
     }
     if (supabase) {
-      const { data: employees } = await supabase.from('employee_records').select('id');
-      if (employees) {
+      const { data: employees } = await supabase
+        .from('employee_records')
+        .select('id, setup_completed_at, employment_status')
+        .not('setup_completed_at', 'is', null)
+        .neq('employment_status', 'terminated')
+        .neq('employment_status', 'resigned');
+
+      if (employees && employees.length > 0) {
         for (const emp of employees) {
           await this.generateMonthlyPayrollRecord(emp.id, periodOrEmployeeId, callerIdOrPeriod || 'system');
         }
@@ -1670,43 +1860,77 @@ export const employeeOperationsService = {
 
   async calculateFinalSettlementEstimate(
     employeeId: string,
-    lastWorkingDate: string
+    lastWorkingDate: string,
+    noticePeriodStatus: NoticePeriodStatus = 'served',
+    goodStandingStatus: GoodStandingStatus = 'good_standing'
   ): Promise<{
+    baseSalary: number;
+    daysInMonth: number;
+    daysWorked: number;
     pendingEarnedSalary: number;
     currentAccruedAmount: number;
+    heldPendingAmount: number;
+    lateDeductions: number;
+    absenceDeductions: number;
+    assetRecoveryDeduction: number;
+    otherAdjustments: number;
     approvedDeductions: number;
-    unreturnedAssetPrice: number;
     finalPayable: number;
   }> {
     const emp = await this.fetchEmployeeRecord(employeeId);
-    const grossSalary = emp?.salary || 0;
+    const baseSalary = emp?.salary || 0;
     const lDate = new Date(lastWorkingDate);
 
     // Current month accrual
     const year = lDate.getFullYear();
     const month = lDate.getMonth() + 1;
-    const daysInMonth = new Date(year, month, 0).getDate();
+    const daysInMonth = this.getDaysInMonth(year, month);
     const daysWorked = Math.min(daysInMonth, lDate.getDate());
-    const currentAccruedAmount = Number(((grossSalary / daysInMonth) * daysWorked).toFixed(2));
+    const currentAccruedAmount = Number(((baseSalary / daysInMonth) * daysWorked).toFixed(2));
 
     // Check unpaid previous months
     const payrolls = await this.fetchEmployeePayrollRecords(employeeId);
-    const unpaidPayrolls = payrolls.filter((p) => p.status === 'Approved' || p.status === 'Draft');
-    const pendingEarnedSalary = unpaidPayrolls.reduce((sum, p) => sum + p.netPayable, 0);
+    const unpaidPayrolls = payrolls.filter((p) => p.status === 'Approved' || p.status === 'Draft' || p.status === 'under_review' || p.status === 'draft');
+    const pendingEarnedSalary = unpaidPayrolls.reduce((sum, p) => sum + (p.netPayable || 0), 0);
+
+    // Fetch attendance for the current month up to last working date
+    const periodMonthStr = month.toString().padStart(2, '0');
+    const startDate = `${year}-${periodMonthStr}-01`;
+    const attendance = await this.fetchEmployeeAttendance(employeeId, startDate, lastWorkingDate);
+    const lateDeductions = attendance.reduce((sum, a) => sum + (a.lateDeduction || 0), 0);
+    const absenceDeductions = attendance.reduce((sum, a) => sum + (a.absenceDeduction || 0), 0);
 
     // Check unreturned assets
     const assets = await this.fetchEmployeeAssets(employeeId);
-    const unreturnedAssets = assets.filter((a) => a.status === 'assigned' || a.status === 'receipt_pending');
-    const unreturnedAssetPrice = unreturnedAssets.reduce((sum, a) => sum + a.price, 0);
+    const unreturnedAssets = assets.filter((a) => a.status === 'assigned' || a.status === 'damaged' || a.status === 'lost');
+    const assetRecoveryDeduction = unreturnedAssets.reduce((sum, a) => sum + (a.replacementValue ?? a.price ?? 0), 0);
 
-    const approvedDeductions = 0;
-    const finalPayable = Math.max(0, pendingEarnedSalary + currentAccruedAmount - approvedDeductions);
+    // Naturally pending held amount based on Notice Period or Good Standing
+    let heldPendingAmount = 0;
+    if (noticePeriodStatus === 'not_served') {
+      heldPendingAmount = Math.min(baseSalary, currentAccruedAmount);
+    } else if (noticePeriodStatus === 'short_served' || noticePeriodStatus === 'short') {
+      heldPendingAmount = Math.round(currentAccruedAmount * 0.5);
+    } else if (goodStandingStatus === 'disputed' || goodStandingStatus === 'terminated_for_cause') {
+      heldPendingAmount = currentAccruedAmount;
+    }
+
+    const otherAdjustments = 0;
+    const approvedDeductions = lateDeductions + absenceDeductions + assetRecoveryDeduction + otherAdjustments;
+    const finalPayable = Math.max(0, pendingEarnedSalary + currentAccruedAmount - heldPendingAmount - approvedDeductions);
 
     return {
+      baseSalary,
+      daysInMonth,
+      daysWorked,
       pendingEarnedSalary,
       currentAccruedAmount,
+      heldPendingAmount,
+      lateDeductions,
+      absenceDeductions,
+      assetRecoveryDeduction,
+      otherAdjustments,
       approvedDeductions,
-      unreturnedAssetPrice,
       finalPayable
     };
   },
@@ -1716,14 +1940,18 @@ export const employeeOperationsService = {
       employeeId: string;
       separationReason?: string;
       lastWorkingDate: string;
+      noticePeriodStatus?: NoticePeriodStatus;
+      goodStandingStatus?: GoodStandingStatus;
       pendingPreviousSalary?: number;
       currentMonthAccruedSalary?: number;
+      heldPendingAmount?: number;
       lateDeductions?: number;
       unapprovedAbsenceDeductions?: number;
       assetRecoveryDeductions?: number;
       otherDeductions?: number;
       severanceBonus?: number;
       netFinalPayable?: number;
+      deductionReasonNotes?: string;
       notes?: string;
     },
     lastWorkingDateOrCallerId?: string
@@ -1734,12 +1962,20 @@ export const employeeOperationsService = {
     return this.saveFinalSettlement({
       employeeId: payloadOrEmpId.employeeId,
       lastWorkingDate: payloadOrEmpId.lastWorkingDate,
-      noticePeriodStatus: 'served',
+      noticePeriodStatus: payloadOrEmpId.noticePeriodStatus || 'served',
+      goodStandingStatus: payloadOrEmpId.goodStandingStatus || 'good_standing',
       pendingEarnedSalary: payloadOrEmpId.pendingPreviousSalary || 0,
       currentAccruedAmount: payloadOrEmpId.currentMonthAccruedSalary || 0,
+      heldPendingAmount: payloadOrEmpId.heldPendingAmount || 0,
+      lateDeductions: payloadOrEmpId.lateDeductions || 0,
+      absenceDeductions: payloadOrEmpId.unapprovedAbsenceDeductions || 0,
+      assetRecoveryDeduction: payloadOrEmpId.assetRecoveryDeductions || 0,
+      otherAdjustments: (payloadOrEmpId.otherDeductions || 0) - (payloadOrEmpId.severanceBonus || 0),
       approvedDeductions: (payloadOrEmpId.lateDeductions || 0) + (payloadOrEmpId.unapprovedAbsenceDeductions || 0) + (payloadOrEmpId.assetRecoveryDeductions || 0) + (payloadOrEmpId.otherDeductions || 0),
       assetClearanceStatus: 'cleared',
       finalPayableAmount: payloadOrEmpId.netFinalPayable || 0,
+      separationReason: payloadOrEmpId.separationReason || 'resignation',
+      deductionReasonNotes: payloadOrEmpId.deductionReasonNotes,
       notes: payloadOrEmpId.notes
     }, lastWorkingDateOrCallerId || 'system');
   },
@@ -1748,33 +1984,51 @@ export const employeeOperationsService = {
     payload: {
       employeeId: string;
       lastWorkingDate: string;
-      noticePeriodStatus: 'served' | 'waived' | 'short' | 'not_served';
+      noticePeriodStatus: NoticePeriodStatus;
+      goodStandingStatus?: GoodStandingStatus;
       pendingEarnedSalary: number;
       currentAccruedAmount: number;
+      heldPendingAmount?: number;
+      lateDeductions?: number;
+      absenceDeductions?: number;
+      assetRecoveryDeduction?: number;
+      otherAdjustments?: number;
       approvedDeductions: number;
-      assetClearanceStatus: 'pending' | 'cleared' | 'charges_applied';
+      assetClearanceStatus: AssetClearanceStatus;
       finalPayableAmount: number;
+      separationReason?: string;
+      deductionReasonNotes?: string;
       notes?: string;
     },
     callerId: string
   ): Promise<{ settlement?: EmployeeFinalSettlement; error?: string }> {
     if (!supabase) return { error: 'Database unconfigured.' };
     try {
+      const dbPayload: any = {
+        employee_id: payload.employeeId,
+        last_working_date: payload.lastWorkingDate,
+        notice_period_status: payload.noticePeriodStatus,
+        good_standing_status: payload.goodStandingStatus || 'good_standing',
+        pending_earned_salary: payload.pendingEarnedSalary,
+        current_accrued_amount: payload.currentAccruedAmount,
+        held_pending_amount: payload.heldPendingAmount || 0,
+        late_deductions: payload.lateDeductions || 0,
+        absence_deductions: payload.absenceDeductions || 0,
+        asset_recovery_deduction: payload.assetRecoveryDeduction || 0,
+        other_adjustments: payload.otherAdjustments || 0,
+        approved_deductions: payload.approvedDeductions,
+        asset_clearance_status: payload.assetClearanceStatus,
+        final_payable_amount: payload.finalPayableAmount,
+        separation_reason: payload.separationReason || 'resignation',
+        deduction_reason_notes: payload.deductionReasonNotes || null,
+        status: 'under_review',
+        notes: payload.notes || null,
+        updated_at: new Date().toISOString()
+      };
+
       const { data, error } = await supabase
         .from('employee_final_settlements')
-        .upsert({
-          employee_id: payload.employeeId,
-          last_working_date: payload.lastWorkingDate,
-          notice_period_status: payload.noticePeriodStatus,
-          pending_earned_salary: payload.pendingEarnedSalary,
-          current_accrued_amount: payload.currentAccruedAmount,
-          approved_deductions: payload.approvedDeductions,
-          asset_clearance_status: payload.assetClearanceStatus,
-          final_payable_amount: payload.finalPayableAmount,
-          status: 'under_review',
-          notes: payload.notes || null,
-          updated_at: new Date().toISOString()
-        }, { onConflict: 'employee_id' })
+        .upsert(dbPayload, { onConflict: 'employee_id' })
         .select()
         .single();
 
@@ -1783,7 +2037,10 @@ export const employeeOperationsService = {
       // Update employment status to 'resigned' or 'terminated'
       await supabase
         .from('employee_records')
-        .update({ employment_status: 'resigned', updated_at: new Date().toISOString() })
+        .update({ 
+          employment_status: payload.separationReason === 'termination' ? 'terminated' : 'resigned', 
+          updated_at: new Date().toISOString() 
+        })
         .eq('id', payload.employeeId);
 
       await supabase.from('system_audit_events').insert({
@@ -1800,11 +2057,20 @@ export const employeeOperationsService = {
           employeeId: data.employee_id,
           lastWorkingDate: data.last_working_date,
           noticePeriodStatus: data.notice_period_status,
-          pendingEarnedSalary: Number(data.pending_earned_salary),
-          currentAccruedAmount: Number(data.current_accrued_amount),
-          approvedDeductions: Number(data.approved_deductions),
+          goodStandingStatus: data.good_standing_status,
+          pendingEarnedSalary: Number(data.pending_earned_salary || 0),
+          currentAccruedAmount: Number(data.current_accrued_amount || 0),
+          heldPendingAmount: Number(data.held_pending_amount || 0),
+          lateDeductions: Number(data.late_deductions || 0),
+          absenceDeductions: Number(data.absence_deductions || 0),
+          assetRecoveryDeduction: Number(data.asset_recovery_deduction || 0),
+          otherAdjustments: Number(data.other_adjustments || 0),
+          approvedDeductions: Number(data.approved_deductions || 0),
           assetClearanceStatus: data.asset_clearance_status,
-          finalPayableAmount: Number(data.final_payable_amount),
+          finalPayableAmount: Number(data.final_payable_amount || 0),
+          netFinalPayable: Number(data.final_payable_amount || 0),
+          separationReason: data.separation_reason,
+          deductionReasonNotes: data.deduction_reason_notes,
           status: data.status,
           notes: data.notes,
           createdAt: data.created_at,

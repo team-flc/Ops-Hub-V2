@@ -94,10 +94,10 @@ export const SOPModal: React.FC<SOPModalProps> = ({
             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border space-y-2">
               <div className="flex items-center gap-2 font-bold text-slate-900 dark:text-gray-100">
                 <Camera className="w-4 h-4 text-brand-600" />
-                <span>2. Screen Capture & Attendance Evidence</span>
+                <span>2. Live Desktop Screen Capture & Attendance Evidence</span>
               </div>
               <p className="text-xs text-slate-600 dark:text-gray-400">
-                When checking in and checking out, employees must submit a live desktop screen capture (or fallback manual screenshot upload) to verify active workstation presence. Screen captures are securely stored and viewable solely by Operations Management.
+                When checking in and checking out, employees must select <strong>"Entire Screen"</strong> in the browser prompt to submit a live desktop capture of their active workstation. Fallback manual screenshot uploads require operational reason justification and audit. Screen captures are securely stored in Supabase storage and viewable solely by authorized Operations Management.
               </p>
             </div>
 
@@ -123,14 +123,14 @@ export const SOPModal: React.FC<SOPModalProps> = ({
               </p>
             </div>
 
-            {/* 5. Payroll Cycle & Bank Details */}
+            {/* 5. Payroll Cycle & Bank Details Security */}
             <div className="p-4 rounded-2xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border space-y-2">
               <div className="flex items-center gap-2 font-bold text-slate-900 dark:text-gray-100">
                 <DollarSign className="w-4 h-4 text-brand-600" />
-                <span>5. Payroll Cycle & Payout Protocol</span>
+                <span>5. Payroll Cycle & Bank Security Governance</span>
               </div>
               <p className="text-xs text-slate-600 dark:text-gray-400">
-                Payroll cycles run from the 1st to the final day of each calendar month. Salary disbursements are executed on the <strong>15th day of the subsequent month</strong>. Employees are responsible for maintaining verified bank details.
+                Payroll cycles run from the 1st to the final day of each calendar month. Salary disbursements are executed on the <strong>15th day of the subsequent month</strong>. To prevent fraudulent modifications, any updates to bank account or IBAN details require Operational Manager review and approval before becoming active for disbursements.
               </p>
             </div>
           </div>

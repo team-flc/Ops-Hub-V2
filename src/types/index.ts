@@ -886,6 +886,7 @@ export interface EmployeeRecord {
   sopAcknowledged: boolean;
   sopAcknowledgedAt?: string | null;
   sopVersion?: string;
+  setupCompletedAt?: string | null;
   createdAt: string;
   updatedAt: string;
   createdBy?: string | null;
@@ -927,7 +928,7 @@ export interface EmployeeAttendance {
   updatedAt: string;
 }
 
-export type AssetStatus = 'assigned' | 'receipt_pending' | 'received' | 'returned' | 'damaged' | 'lost' | 'available';
+export type AssetStatus = 'assigned' | 'receipt_pending' | 'received' | 'returned' | 'damaged' | 'lost' | 'available' | 'closed';
 
 export interface CompanyAsset {
   id: string;
@@ -1087,18 +1088,30 @@ export interface EmployeeManagementTask {
   updatedAt: string;
 }
 
+export type NoticePeriodStatus = 'served' | 'waived' | 'short_served' | 'not_served' | 'short';
+export type GoodStandingStatus = 'good_standing' | 'disputed' | 'terminated_for_cause';
+export type AssetClearanceStatus = 'all_returned' | 'deductions_applied' | 'pending_return' | 'pending' | 'cleared' | 'charges_applied';
+
 export interface EmployeeFinalSettlement {
   id: string;
   employeeId: string;
+  employeeName?: string;
   lastWorkingDate: string; // YYYY-MM-DD
-  noticePeriodStatus: 'served' | 'waived' | 'short' | 'not_served';
-  pendingEarnedSalary: number;
-  currentAccruedAmount: number;
-  approvedDeductions: number;
-  assetClearanceStatus: 'pending' | 'cleared' | 'charges_applied';
+  noticePeriodStatus: NoticePeriodStatus;
+  goodStandingStatus?: GoodStandingStatus;
+  pendingEarnedSalary: number; // Previous unpaid salary
+  currentAccruedAmount: number; // Current month earned salary
+  heldPendingAmount?: number; // Naturally pending held amount
+  approvedDeductions: number; // Sum of late + absence + asset + other deductions
+  lateDeductions?: number;
+  absenceDeductions?: number;
+  assetRecoveryDeduction?: number;
+  otherAdjustments?: number;
+  assetClearanceStatus: AssetClearanceStatus;
   finalPayableAmount: number;
   netFinalPayable?: number | null;
   separationReason?: string | null;
+  deductionReasonNotes?: string | null;
   paymentProofPath?: string | null;
   status: 'draft' | 'under_review' | 'approved' | 'settled';
   settledAt?: string | null;

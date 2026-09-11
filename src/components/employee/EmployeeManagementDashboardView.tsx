@@ -99,16 +99,16 @@ export const EmployeeManagementDashboardView: React.FC = () => {
       setConcerns(tasks);
       setSettlements(allSettlements);
 
-      // Fetch today's attendance for all active members
-      const attendanceResults: EmployeeAttendance[] = [];
+      // Fetch genuine today's attendance in a single batch query
+      const todayAttendance = await employeeOperationsService.fetchAllTodayAttendance(todayDate);
+      setTodayAttendanceList(todayAttendance);
+
+      // Check missing check-ins for active members
+      const checkedInMemberIds = new Set(todayAttendance.filter(a => a.checkInTime).map(a => a.employeeId));
       const missingList: Array<{ employee: UserProfile | TeamMemberRecord; shift: WorkShift; minutesLate: number }> = [];
 
       for (const m of members) {
-        const att = await employeeOperationsService.fetchTodayAttendance(m.id, todayDate);
-        if (att) {
-          attendanceResults.push(att);
-        } else if (m.status === 'active') {
-          // Check if missing past 60 mins from shift start
+        if (m.status === 'active' && !checkedInMemberIds.has(m.id)) {
           const defaultShift = allShifts[0];
           const [startH, startM] = (defaultShift?.startTime || '11:00:00').split(':').map(Number);
           const now = new Date();
@@ -126,7 +126,6 @@ export const EmployeeManagementDashboardView: React.FC = () => {
         }
       }
 
-      setTodayAttendanceList(attendanceResults);
       setMissingCheckIns(missingList);
     } catch (err) {
       console.error('Failed to load management dashboard data:', err);
@@ -170,8 +169,8 @@ export const EmployeeManagementDashboardView: React.FC = () => {
 
   // Active Staff & Stats
   const activeStaffCount = teamMembers.filter(m => m.status === 'active').length;
-  const checkedInTodayCount = todayAttendanceList.length;
-  const lateTodayCount = todayAttendanceList.filter(a => a.status === 'late').length;
+  const checkedInTodayCount = todayAttendanceList.filter(a => a.checkInTime).length;
+  const lateTodayCount = todayAttendanceList.filter(a => a.status === 'late' && a.checkInTime).length;
   const pendingPayrollCount = payrollRecords.filter(p => p.status === 'draft' || p.status === 'approved').length;
   const openConcernsCount = concerns.filter(c => c.status !== 'completed').length;
 
@@ -284,7 +283,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
       </div>
 
       {/* Navigation Tabs */}
-      <div className="flex items-center gap-1.5 p-1.5 rounded-2xl bg-slate-100 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border overflow-x-auto">
+      <div className="flex flex-wrap items-center gap-1.5 p-1.5 rounded-2xl bg-slate-100 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border">
         <button
           type="button"
           onClick={() => setActiveTab('attendance')}
@@ -379,118 +378,262 @@ export const EmployeeManagementDashboardView: React.FC = () => {
 
       {/* TAB 1: LIVE ATTENDANCE */}
       {activeTab === 'attendance' && (
-        <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border shadow-xs space-y-4">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-            <h2 className="text-sm font-bold text-slate-900 dark:text-gray-100 flex items-center gap-2">
-              <Clock className="w-4 h-4 text-brand-600" />
-              <span>Today's Live Attendance Dashboard</span>
-            </h2>
-            <button
-              type="button"
-              onClick={() => setSelectedAttendanceCorrection({
-                id: '',
-                employeeId: '',
-                workDate: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()),
-                scheduledCheckIn: '11:00:00',
-                scheduledCheckOut: '20:00:00',
-                minutesLate: 0,
-                status: 'on_time',
-                lateDeduction: 0,
-                absenceDeduction: 0,
-                createdAt: '',
-                updatedAt: ''
-              })}
-              className="px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-brand-600 text-white text-xs font-bold hover:bg-slate-800 transition-colors flex items-center gap-1.5"
-            >
-              <Plus className="w-3.5 h-3.5" /> Manual Attendance Log
-            </button>
+        <div className="space-y-6">
+          {/* Visual Distribution Summary Bar */}
+          <div className="p-4 sm:p-5 rounded-3xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border shadow-xs space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-gray-400">
+                Today's Attendance Composition (Active Staff: {activeStaffCount})
+              </span>
+              <div className="flex items-center gap-4 text-xs font-mono">
+                <span className="flex items-center gap-1.5 text-emerald-600 font-bold">
+                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
+                  On-Time: {checkedInTodayCount - lateTodayCount}
+                </span>
+                <span className="flex items-center gap-1.5 text-amber-600 font-bold">
+                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
+                  Late (+500 PKR): {lateTodayCount}
+                </span>
+                <span className="flex items-center gap-1.5 text-slate-500 font-bold">
+                  <span className="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
+                  Pending Check-In: {Math.max(0, activeStaffCount - checkedInTodayCount)}
+                </span>
+              </div>
+            </div>
+
+            {/* Distribution Bar */}
+            <div className="h-3 w-full rounded-full bg-slate-100 dark:bg-dark-100 overflow-hidden flex">
+              {activeStaffCount > 0 && (
+                <>
+                  <div
+                    style={{ width: `${((checkedInTodayCount - lateTodayCount) / activeStaffCount) * 100}%` }}
+                    className="h-full bg-emerald-500 transition-all"
+                    title={`On-Time: ${checkedInTodayCount - lateTodayCount}`}
+                  />
+                  <div
+                    style={{ width: `${(lateTodayCount / activeStaffCount) * 100}%` }}
+                    className="h-full bg-amber-500 transition-all"
+                    title={`Late: ${lateTodayCount}`}
+                  />
+                  <div
+                    style={{ width: `${(Math.max(0, activeStaffCount - checkedInTodayCount) / activeStaffCount) * 100}%` }}
+                    className="h-full bg-slate-300 dark:bg-dark-border transition-all"
+                    title={`Pending: ${Math.max(0, activeStaffCount - checkedInTodayCount)}`}
+                  />
+                </>
+              )}
+            </div>
           </div>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
-              <thead>
-                <tr className="border-b border-slate-100 dark:border-dark-border text-slate-400 uppercase text-[10px] font-bold tracking-wider">
-                  <th className="py-3 px-3">Employee</th>
-                  <th className="py-3 px-3">Check In</th>
-                  <th className="py-3 px-3">Check Out</th>
-                  <th className="py-3 px-3">Status</th>
-                  <th className="py-3 px-3">Evidence</th>
-                  <th className="py-3 px-3">Deduction</th>
-                  <th className="py-3 px-3 text-right">Action</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-100 dark:divide-dark-border">
-                {todayAttendanceList.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="py-8 text-center text-slate-400 italic">
-                      No check-ins recorded for today yet.
-                    </td>
+          {/* Section 1: Genuine Checked-In Staff */}
+          <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border shadow-xs space-y-4">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-gray-100 flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                  <span>Checked-In Staff Today ({todayAttendanceList.filter(a => a.checkInTime).length})</span>
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-gray-400">
+                  Verified desktop screen capture check-in records
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setSelectedAttendanceCorrection({
+                  id: '',
+                  employeeId: '',
+                  workDate: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()),
+                  scheduledCheckIn: '11:00:00',
+                  scheduledCheckOut: '20:00:00',
+                  minutesLate: 0,
+                  status: 'on_time',
+                  lateDeduction: 0,
+                  absenceDeduction: 0,
+                  createdAt: '',
+                  updatedAt: ''
+                })}
+                className="px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-brand-600 text-white text-xs font-bold hover:bg-slate-800 transition-colors flex items-center gap-1.5"
+              >
+                <Plus className="w-3.5 h-3.5" /> Manual Attendance Log
+              </button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-100 dark:border-dark-border text-slate-400 uppercase text-[10px] font-bold tracking-wider">
+                    <th className="py-3 px-3">Employee</th>
+                    <th className="py-3 px-3">Check In</th>
+                    <th className="py-3 px-3">Check Out</th>
+                    <th className="py-3 px-3">Status</th>
+                    <th className="py-3 px-3">Evidence</th>
+                    <th className="py-3 px-3">Deduction</th>
+                    <th className="py-3 px-3 text-right">Action</th>
                   </tr>
-                ) : (
-                  todayAttendanceList.map((att) => {
-                    const member = teamMembers.find(m => m.id === att.employeeId);
-                    const name = member?.fullName || 'Staff Member';
-                    return (
-                      <tr key={att.id} className="hover:bg-slate-50/50 dark:hover:bg-dark-sidebar transition-colors">
-                        <td className="py-3 px-3">
-                          <div className="font-bold text-slate-900 dark:text-gray-100">{name}</div>
-                          <div className="text-[10px] text-slate-400">{member?.workEmail}</div>
-                        </td>
-                        <td className="py-3 px-3 font-mono">
-                          {att.checkInTime ? new Date(att.checkInTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi', hour: '2-digit', minute: '2-digit' }) : '--'}
-                        </td>
-                        <td className="py-3 px-3 font-mono">
-                          {att.checkOutTime ? new Date(att.checkOutTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi', hour: '2-digit', minute: '2-digit' }) : '--'}
-                        </td>
-                        <td className="py-3 px-3">
-                          <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold capitalize ${
-                            att.status === 'on_time' || att.status === 'present'
-                              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
-                              : att.status === 'late'
-                              ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300'
-                              : 'bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-300'
-                          }`}>
-                            {att.status} {att.status === 'late' && att.minutesLate ? `(+${att.minutesLate}m)` : ''}
-                          </span>
-                        </td>
-                        <td className="py-3 px-3">
-                          {(att.screenCaptureUrl || att.checkInScreenshotPath) ? (
+                </thead>
+                <tbody className="divide-y divide-slate-100 dark:divide-dark-border">
+                  {todayAttendanceList.filter(a => a.checkInTime).length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="py-8 text-center text-slate-400 italic">
+                        No check-ins recorded for today yet. Staff will appear here once they clock in with entire-screen workstation proof.
+                      </td>
+                    </tr>
+                  ) : (
+                    todayAttendanceList.filter(a => a.checkInTime).map((att) => {
+                      const member = teamMembers.find(m => m.id === att.employeeId);
+                      const name = member?.fullName || 'Staff Member';
+                      return (
+                        <tr key={att.id} className="hover:bg-slate-50/50 dark:hover:bg-dark-sidebar transition-colors">
+                          <td className="py-3 px-3">
+                            <div className="font-bold text-slate-900 dark:text-gray-100">{name}</div>
+                            <div className="text-[10px] text-slate-400">{member?.workEmail}</div>
+                          </td>
+                          <td className="py-3 px-3 font-mono">
+                            {att.checkInTime ? new Date(att.checkInTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi', hour: '2-digit', minute: '2-digit' }) : '--'}
+                          </td>
+                          <td className="py-3 px-3 font-mono">
+                            {att.checkOutTime ? new Date(att.checkOutTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi', hour: '2-digit', minute: '2-digit' }) : '--'}
+                          </td>
+                          <td className="py-3 px-3">
+                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold capitalize ${
+                              att.status === 'on_time' || att.status === 'present'
+                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
+                                : att.status === 'late'
+                                ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300'
+                                : 'bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-300'
+                            }`}>
+                              {att.status} {att.status === 'late' && att.minutesLate ? `(+${att.minutesLate}m)` : ''}
+                            </span>
+                          </td>
+                          <td className="py-3 px-3">
+                            {(att.screenCaptureUrl || att.checkInScreenshotPath) ? (
+                              <button
+                                type="button"
+                                onClick={() => setPreviewEvidenceUrl(att.screenCaptureUrl || att.checkInScreenshotPath || null)}
+                                className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-dark-card hover:bg-slate-200 text-brand-600 text-[11px] font-semibold flex items-center gap-1"
+                              >
+                                <Eye className="w-3 h-3" /> View Frame
+                              </button>
+                            ) : (
+                              <span className="text-[11px] text-slate-400 italic">No Capture</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 font-mono">
+                            {att.lateDeduction || att.absenceDeduction ? (
+                              <span className="text-rose-600 font-bold">
+                                -PKR {((att.lateDeduction || 0) + (att.absenceDeduction || 0)).toLocaleString()}
+                              </span>
+                            ) : (
+                              <span className="text-emerald-600 font-semibold">PKR 0</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-3 text-right">
                             <button
                               type="button"
-                              onClick={() => setPreviewEvidenceUrl(att.screenCaptureUrl || att.checkInScreenshotPath || null)}
-                              className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-dark-card hover:bg-slate-200 text-brand-600 text-[11px] font-semibold flex items-center gap-1"
+                              onClick={() => setSelectedAttendanceCorrection(att)}
+                              className="p-1.5 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-slate-100 dark:hover:bg-dark-100 transition-colors"
+                              title="Adjust / Excuse Attendance"
                             >
-                              <Eye className="w-3 h-3" /> View Frame
+                              <Edit3 className="w-3.5 h-3.5" />
                             </button>
-                          ) : (
-                            <span className="text-[11px] text-slate-400 italic">No Capture</span>
-                          )}
-                        </td>
-                        <td className="py-3 px-3 font-mono">
-                          {att.lateDeduction || att.absenceDeduction ? (
-                            <span className="text-rose-600 font-bold">
-                              -PKR {((att.lateDeduction || 0) + (att.absenceDeduction || 0)).toLocaleString()}
-                            </span>
-                          ) : (
-                            <span className="text-emerald-600 font-semibold">PKR 0</span>
-                          )}
-                        </td>
-                        <td className="py-3 px-3 text-right">
-                          <button
-                            type="button"
-                            onClick={() => setSelectedAttendanceCorrection(att)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-slate-100 dark:hover:bg-dark-100 transition-colors"
-                            title="Adjust / Excuse Attendance"
-                          >
-                            <Edit3 className="w-3.5 h-3.5" />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
+                          </td>
+                        </tr>
+                      );
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          </div>
+
+          {/* Section 2: Pending Check-In Staff */}
+          <div className="p-5 sm:p-6 rounded-3xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-gray-100 flex items-center gap-2">
+                  <Clock className="w-4 h-4 text-slate-500" />
+                  <span>Pending Check-In Staff ({teamMembers.filter(m => m.status === 'active' && !todayAttendanceList.some(a => a.employeeId === m.id && a.checkInTime)).length})</span>
+                </h2>
+                <p className="text-xs text-slate-500 dark:text-gray-400">
+                  Active team members who have not yet logged attendance today
+                </p>
+              </div>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead>
+                  <tr className="border-b border-slate-200 dark:border-dark-border text-slate-400 uppercase text-[10px] font-bold tracking-wider">
+                    <th className="py-2.5 px-3">Employee</th>
+                    <th className="py-2.5 px-3">Role</th>
+                    <th className="py-2.5 px-3">Scheduled Shift</th>
+                    <th className="py-2.5 px-3">Status</th>
+                    <th className="py-2.5 px-3 text-right">Action</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200 dark:divide-dark-border">
+                  {teamMembers.filter(m => m.status === 'active' && !todayAttendanceList.some(a => a.employeeId === m.id && a.checkInTime)).length === 0 ? (
+                    <tr>
+                      <td colSpan={5} className="py-6 text-center text-slate-400 italic">
+                        All active staff members have checked in for today.
+                      </td>
+                    </tr>
+                  ) : (
+                    teamMembers
+                      .filter(m => m.status === 'active' && !todayAttendanceList.some(a => a.employeeId === m.id && a.checkInTime))
+                      .map((member) => {
+                        const isLateEscalated = missingCheckIns.some(mc => mc.employee.id === member.id);
+                        return (
+                          <tr key={member.id} className="hover:bg-white/60 dark:hover:bg-dark-card transition-colors">
+                            <td className="py-2.5 px-3">
+                              <div className="font-bold text-slate-900 dark:text-gray-100">{member.fullName}</div>
+                              <div className="text-[10px] text-slate-400">{member.workEmail}</div>
+                            </td>
+                            <td className="py-2.5 px-3 capitalize text-slate-600 dark:text-gray-400">
+                              {member.role.replace('_', ' ')}
+                            </td>
+                            <td className="py-2.5 px-3 text-slate-600 dark:text-gray-400 font-mono">
+                              11:00 AM – 08:00 PM PKT
+                            </td>
+                            <td className="py-2.5 px-3">
+                              {isLateEscalated ? (
+                                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300">
+                                  Missing (&gt;60m)
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-200 text-slate-700 dark:bg-dark-border dark:text-gray-300">
+                                  Pending Check-In
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2.5 px-3 text-right">
+                              <button
+                                type="button"
+                                onClick={() => setSelectedAttendanceCorrection({
+                                  id: '',
+                                  employeeId: member.id,
+                                  workDate: new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Karachi', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date()),
+                                  scheduledCheckIn: '11:00:00',
+                                  scheduledCheckOut: '20:00:00',
+                                  minutesLate: 0,
+                                  status: 'on_time',
+                                  lateDeduction: 0,
+                                  absenceDeduction: 0,
+                                  createdAt: '',
+                                  updatedAt: ''
+                                })}
+                                className="px-2.5 py-1 rounded-xl bg-slate-200 dark:bg-dark-card hover:bg-slate-300 dark:hover:bg-dark-100 text-slate-800 dark:text-gray-200 font-bold text-[11px] transition-colors"
+                              >
+                                Log Attendance
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
         </div>
       )}
