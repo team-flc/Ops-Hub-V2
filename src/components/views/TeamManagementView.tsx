@@ -32,6 +32,7 @@ export const TeamManagementView: React.FC = () => {
 
   // Filters
   const [searchQuery, setSearchQuery] = useState('');
+  const [selectedRoleFilter, setSelectedRoleFilter] = useState('');
   const [selectedDeptFilter, setSelectedDeptFilter] = useState('');
   const [selectedDesignationFilter, setSelectedDesignationFilter] = useState('');
   const [selectedManagerFilter, setSelectedManagerFilter] = useState('');
@@ -82,6 +83,10 @@ export const TeamManagementView: React.FC = () => {
         const matchesEmail = m.workEmail.toLowerCase().includes(q);
         if (!matchesName && !matchesEmail) return false;
       }
+      // Role
+      if (selectedRoleFilter && m.role !== selectedRoleFilter) {
+        return false;
+      }
       // Department
       if (selectedDeptFilter && !m.departments.some((d) => d.id === selectedDeptFilter)) {
         return false;
@@ -100,7 +105,7 @@ export const TeamManagementView: React.FC = () => {
       }
       return true;
     });
-  }, [teamMembers, searchQuery, selectedDeptFilter, selectedDesignationFilter, selectedManagerFilter, selectedStatusFilter]);
+  }, [teamMembers, searchQuery, selectedRoleFilter, selectedDeptFilter, selectedDesignationFilter, selectedManagerFilter, selectedStatusFilter]);
 
   // KPI Metrics
   const metrics = useMemo(() => {
@@ -189,7 +194,7 @@ export const TeamManagementView: React.FC = () => {
 
       {/* Filters Toolbar */}
       <div className="p-4 bg-white dark:bg-dark-200 border border-slate-200 dark:border-dark-border rounded-2xl shadow-sm space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-3">
           {/* Search */}
           <div className="relative">
             <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400" />
@@ -201,6 +206,18 @@ export const TeamManagementView: React.FC = () => {
               className="w-full pl-9 pr-3 py-2 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
           </div>
+
+          {/* Role Filter */}
+          <select
+            value={selectedRoleFilter}
+            onChange={(e) => setSelectedRoleFilter(e.target.value)}
+            className="px-3 py-2 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+          >
+            <option value="">All Roles</option>
+            <option value="owner">Owner</option>
+            <option value="operational_manager">Operational Manager</option>
+            <option value="team_member">Team Member</option>
+          </select>
 
           {/* Department Filter */}
           <select
@@ -301,7 +318,24 @@ export const TeamManagementView: React.FC = () => {
                             {initials}
                           </div>
                           <div>
-                            <div className="font-bold text-slate-900 dark:text-gray-100">{member.fullName}</div>
+                            <div className="flex items-center gap-2">
+                              <span className="font-bold text-slate-900 dark:text-gray-100">{member.fullName}</span>
+                              {member.role === 'owner' && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-rose-50 text-rose-700 dark:bg-rose-950/60 dark:text-rose-300 border border-rose-200 dark:border-rose-900">
+                                  Owner
+                                </span>
+                              )}
+                              {member.role === 'operational_manager' && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-blue-50 text-blue-700 dark:bg-blue-950/60 dark:text-blue-300 border border-blue-200 dark:border-blue-900">
+                                  Manager
+                                </span>
+                              )}
+                              {member.role === 'team_member' && (
+                                <span className="px-1.5 py-0.5 rounded text-[10px] font-medium text-slate-500 dark:text-slate-400 bg-slate-100 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border">
+                                  Staff
+                                </span>
+                              )}
+                            </div>
                             <div className="text-[11px] text-slate-400 font-mono">{member.workEmail}</div>
                           </div>
                         </div>
@@ -381,34 +415,38 @@ export const TeamManagementView: React.FC = () => {
                             <Key className="w-4 h-4" />
                           </button>
 
-                          {member.status === 'active' ? (
-                            <button
-                              type="button"
-                              onClick={() => setSuspendingMember(member)}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-dark-100 transition-colors"
-                              title="Suspend / Offboard"
-                            >
-                              <UserX className="w-4 h-4" />
-                            </button>
-                          ) : (
-                            <button
-                              type="button"
-                              onClick={() => handleReactivate(member.id)}
-                              className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 dark:hover:bg-dark-100 transition-colors"
-                              title="Reactivate Account"
-                            >
-                              <RotateCcw className="w-4 h-4" />
-                            </button>
-                          )}
+                          {member.role !== 'owner' && (
+                            <>
+                              {member.status === 'active' ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setSuspendingMember(member)}
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-dark-100 transition-colors"
+                                  title="Suspend / Offboard"
+                                >
+                                  <UserX className="w-4 h-4" />
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleReactivate(member.id)}
+                                  className="p-1.5 rounded-lg text-emerald-600 hover:bg-emerald-50 dark:hover:bg-dark-100 transition-colors"
+                                  title="Reactivate Account"
+                                >
+                                  <RotateCcw className="w-4 h-4" />
+                                </button>
+                              )}
 
-                          <button
-                            type="button"
-                            onClick={() => setArchivingMember(member)}
-                            className="p-1.5 rounded-lg text-slate-400 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-dark-100 transition-colors"
-                            title="Archive Team Member"
-                          >
-                            <Archive className="w-4 h-4" />
-                          </button>
+                              <button
+                                type="button"
+                                onClick={() => setArchivingMember(member)}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-dark-100 transition-colors"
+                                title="Archive Team Member"
+                              >
+                                <Archive className="w-4 h-4" />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </td>
                     </tr>

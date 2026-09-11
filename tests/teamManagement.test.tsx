@@ -41,6 +41,9 @@ vi.mock('../src/lib/supabase', () => {
             eq: () => ({
               order: () => Promise.resolve({ data: [], error: null })
             }),
+            or: () => ({
+              order: () => Promise.resolve({ data: [], error: null })
+            }),
             order: () => Promise.resolve({ data: [], error: null })
           }),
           order: () => Promise.resolve({ data: [], error: null })
@@ -458,5 +461,63 @@ describe('Phase 2A Team & User Management Tests', () => {
 
     expect(result.error).toBe('Edge Function returned a non-2xx status code');
   });
+
+  it('13. Owner fetchTeamMembers returns owner, managers and team members, with owner manager displayed as dash', async () => {
+    const mockProfiles = [
+      {
+        id: 'owner-1',
+        full_name: 'Atif Khan',
+        work_email: 'owner@faseehlall.com',
+        phone: '+1234567890',
+        role: 'owner',
+        status: 'active',
+        designation_id: null,
+        reporting_manager_id: null,
+        start_date: '2026-01-01',
+        suspended_at: null,
+        suspended_by: null,
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z'
+      },
+      {
+        id: 'mgr-1',
+        full_name: 'Operational Manager',
+        work_email: 'mgr@faseehlall.com',
+        phone: '+1234567891',
+        role: 'operational_manager',
+        status: 'active',
+        designation_id: null,
+        reporting_manager_id: 'owner-1',
+        start_date: '2026-01-01',
+        suspended_at: null,
+        suspended_by: null,
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z'
+      }
+    ];
+
+    const viSupabase = await import('../src/lib/supabase');
+    vi.spyOn(viSupabase.supabase, 'from').mockImplementation((table: string) => {
+      if (table === 'profiles') {
+        return {
+          select: () => ({
+            in: () => ({
+              order: () => Promise.resolve({ data: mockProfiles, error: null })
+            })
+          })
+        } as any;
+      }
+      return {
+        select: () => Promise.resolve({ data: [], error: null })
+      } as any;
+    });
+
+    const members = await teamManagementService.fetchTeamMembers('owner', 'owner-1');
+    expect(members.length).toBe(2);
+    expect(members[0].role).toBe('owner');
+    expect(members[0].reportingManagerName).toBe('—');
+    expect(members[1].role).toBe('operational_manager');
+  });
 });
+
 

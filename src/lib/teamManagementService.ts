@@ -72,12 +72,17 @@ export const teamManagementService = {
           id, full_name, work_email, phone, role, status,
           designation_id, reporting_manager_id, start_date,
           suspended_at, suspended_by, created_at, updated_at
-        `)
-        .eq('role', 'team_member');
+        `);
 
-      // Scoped permissions: Operational Manager can only view their direct reports
-      if (callerRole === 'operational_manager') {
-        query = query.eq('reporting_manager_id', callerId);
+      // Scoped permissions: Owner views all internal staff, Operational Manager views direct reports + self
+      if (callerRole === 'owner') {
+        query = query.in('role', ['owner', 'operational_manager', 'team_member']);
+      } else if (callerRole === 'operational_manager') {
+        query = query
+          .in('role', ['operational_manager', 'team_member'])
+          .or(`reporting_manager_id.eq.${callerId},id.eq.${callerId}`);
+      } else {
+        query = query.eq('id', callerId);
       }
 
       const { data: profiles, error: profError } = await query.order('created_at', { ascending: false });
@@ -149,7 +154,7 @@ export const teamManagementService = {
           designationId: p.designation_id,
           designationName: p.designation_id ? designationMap.get(p.designation_id) || 'Unassigned' : 'Unassigned',
           reportingManagerId: p.reporting_manager_id,
-          reportingManagerName: p.reporting_manager_id ? managerMap.get(p.reporting_manager_id) || 'Unassigned' : 'Unassigned',
+          reportingManagerName: p.role === 'owner' ? '—' : (p.reporting_manager_id ? managerMap.get(p.reporting_manager_id) || 'Unassigned' : 'Unassigned'),
           startDate: p.start_date || p.created_at.split('T')[0],
           suspendedAt: p.suspended_at,
           suspendedBy: p.suspended_by,
