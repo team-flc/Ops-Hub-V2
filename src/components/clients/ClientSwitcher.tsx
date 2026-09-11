@@ -157,7 +157,7 @@ export const ClientSwitcher: React.FC<ClientSwitcherProps> = ({
             aria-hidden="true"
           />
 
-          <div className="fixed inset-x-0 bottom-0 sm:inset-auto sm:absolute sm:left-0 sm:top-full sm:mt-2 w-full sm:w-80 max-h-[85dvh] sm:max-h-none bg-white dark:bg-dark-card rounded-t-3xl sm:rounded-2xl shadow-2xl border border-gray-200 dark:border-dark-border z-50 overflow-hidden flex flex-col animate-scale-up pb-safe sm:pb-0">
+          <div className="fixed inset-x-0 bottom-0 sm:inset-auto sm:absolute sm:left-0 sm:top-full sm:mt-2 w-full sm:w-[360px] max-h-[85dvh] sm:max-h-none bg-white dark:bg-dark-card rounded-t-3xl sm:rounded-2xl shadow-2xl border border-gray-200 dark:border-dark-border z-50 overflow-hidden flex flex-col animate-scale-up pb-safe sm:pb-0">
             {/* Sheet Handle for Mobile */}
             <div className="sm:hidden pt-2.5 pb-1 flex justify-center">
               <div className="w-10 h-1 rounded-full bg-gray-300 dark:bg-dark-border" />
@@ -204,7 +204,7 @@ export const ClientSwitcher: React.FC<ClientSwitcherProps> = ({
             )}
 
             {/* Body Content with 4 Distinct States */}
-            <div className="max-h-60 sm:max-h-60 overflow-y-auto p-2 sm:p-1.5 space-y-1">
+            <div className="max-h-60 sm:max-h-64 overflow-y-auto p-2 sm:p-1.5 space-y-1">
               {/* State 1: Loading */}
               {isLoading && (
                 <div className="p-6 text-center text-xs text-gray-400 flex flex-col items-center justify-center gap-2">
@@ -263,36 +263,40 @@ export const ClientSwitcher: React.FC<ClientSwitcherProps> = ({
                           onSelectClient(client);
                           setIsOpen(false);
                         }}
-                        className={`w-full flex items-center justify-between p-2.5 sm:p-2 rounded-xl text-left transition-all cursor-pointer group min-h-[44px] ${
+                        className={`w-full flex items-center justify-between p-2.5 sm:p-2 rounded-xl text-left transition-all cursor-pointer group min-h-[48px] ${
                           isSelected
                             ? 'bg-brand-500/10 border border-brand-500/30'
                             : 'hover:bg-gray-100 dark:hover:bg-dark-100 border border-transparent'
                         }`}
                       >
-                        {/* Left: Logo/Initials + Company Name + Status */}
-                        <div className="flex items-center gap-2.5 min-w-0 pr-2">
+                        {/* Left: Logo/Initials + Company Name + Client Name + Status */}
+                        <div className="flex items-start gap-2.5 min-w-0 pr-2 flex-1">
                           <ClientLogoAvatar
                             logoUrl={client.logoUrl}
                             companyName={client.companyName}
-                            sizeClass="w-8 h-8 sm:w-7 sm:h-7 rounded-lg"
+                            sizeClass="w-8 h-8 sm:w-7 sm:h-7 rounded-lg mt-0.5"
                             isSelected={isSelected}
                           />
-                          <div className="min-w-0">
+                          <div className="min-w-0 flex-1">
                             <span className={`text-xs font-bold truncate block ${
                               isSelected ? 'text-brand-600 dark:text-brand-400' : 'text-gray-900 dark:text-gray-100'
                             }`}>
                               {client.companyName}
                             </span>
-                            <div className="flex items-center gap-1.5 mt-0.5">
-                              <span className="text-[10px] text-gray-400 truncate">
+                            {client.clientName && (
+                              <span className="text-[10px] text-gray-500 dark:text-gray-400 truncate block mt-0.5">
                                 {client.clientName}
                               </span>
-                              <span className={`text-[9px] font-bold px-1.5 py-0.2 rounded-full border ${
+                            )}
+                            <div className="mt-1 flex items-center">
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border inline-flex items-center ${
                                 client.status === 'Active'
                                   ? 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20'
                                   : client.status === 'Onboarding'
+                                  ? 'bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20'
+                                  : client.status === 'Paused'
                                   ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
-                                  : 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20'
+                                  : 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
                               }`}>
                                 {client.status}
                               </span>
