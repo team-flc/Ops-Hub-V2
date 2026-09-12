@@ -79,7 +79,11 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
 
   // Links
   const [websiteUrl, setWebsiteUrl] = useState(client.links?.website || '');
+  const [flcLandingPageUrl, setFlcLandingPageUrl] = useState(client.links?.flc_landing_page || '');
   const [driveUrl, setDriveUrl] = useState(client.links?.google_drive || '');
+  const [staticCreativesUrl, setStaticCreativesUrl] = useState(client.links?.static_creatives || '');
+  const [videosUrl, setVideosUrl] = useState(client.links?.videos || '');
+  const [vslUrl, setVslUrl] = useState(client.links?.vsl || '');
   const [facebookUrl, setFacebookUrl] = useState(client.links?.facebook || '');
   const [instagramUrl, setInstagramUrl] = useState(client.links?.instagram || '');
   const [linkedinPageUrl, setLinkedinPageUrl] = useState(client.links?.linkedin_company_page || '');
@@ -115,7 +119,11 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     setPauseReason(client.pauseReason || 'Operational reason');
     setRequiredLinkedInCount(client.requiredLinkedinProfileCount || 3);
     setWebsiteUrl(client.links?.website || '');
+    setFlcLandingPageUrl(client.links?.flc_landing_page || '');
     setDriveUrl(client.links?.google_drive || '');
+    setStaticCreativesUrl(client.links?.static_creatives || '');
+    setVideosUrl(client.links?.videos || '');
+    setVslUrl(client.links?.vsl || '');
     setFacebookUrl(client.links?.facebook || '');
     setInstagramUrl(client.links?.instagram || '');
     setLinkedinPageUrl(client.links?.linkedin_company_page || '');
@@ -201,7 +209,11 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
 
     const rawLinks: Partial<Record<ClientLinkType, string>> = {
       website: websiteUrl,
+      flc_landing_page: flcLandingPageUrl,
       google_drive: driveUrl,
+      static_creatives: staticCreativesUrl,
+      videos: videosUrl,
+      vsl: vslUrl,
       facebook: facebookUrl,
       instagram: instagramUrl,
       linkedin_company_page: linkedinPageUrl,
@@ -658,7 +670,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label htmlFor="edit-website" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Website / Landing Page URL
+                Website URL
               </label>
               <input
                 id="edit-website"
@@ -671,15 +683,15 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
             </div>
 
             <div>
-              <label htmlFor="edit-linkedin-page" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                LinkedIn Company Page URL
+              <label htmlFor="edit-flc-landing-page" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                FLC Landing Page URL
               </label>
               <input
-                id="edit-linkedin-page"
+                id="edit-flc-landing-page"
                 type="url"
-                value={linkedinPageUrl}
-                onChange={(e) => setLinkedinPageUrl(e.target.value)}
-                placeholder="https://linkedin.com/company/..."
+                value={flcLandingPageUrl}
+                onChange={(e) => setFlcLandingPageUrl(e.target.value)}
+                placeholder="https://flc-landing-page.com/..."
                 className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
               />
             </div>
@@ -694,6 +706,62 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 value={driveUrl}
                 onChange={(e) => setDriveUrl(e.target.value)}
                 placeholder="https://drive.google.com/drive/folders/..."
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="edit-static-creatives" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Static Creatives URL
+              </label>
+              <input
+                id="edit-static-creatives"
+                type="url"
+                value={staticCreativesUrl}
+                onChange={(e) => setStaticCreativesUrl(e.target.value)}
+                placeholder="https://... (Static Creatives / Ads Link)"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="edit-videos" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Videos URL
+              </label>
+              <input
+                id="edit-videos"
+                type="url"
+                value={videosUrl}
+                onChange={(e) => setVideosUrl(e.target.value)}
+                placeholder="https://... (Video Ads / Creatives Link)"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="edit-vsl" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                VSL (Video Sales Letter) URL
+              </label>
+              <input
+                id="edit-vsl"
+                type="url"
+                value={vslUrl}
+                onChange={(e) => setVslUrl(e.target.value)}
+                placeholder="https://... (VSL Link)"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="edit-linkedin-page" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                LinkedIn Company Page URL
+              </label>
+              <input
+                id="edit-linkedin-page"
+                type="url"
+                value={linkedinPageUrl}
+                onChange={(e) => setLinkedinPageUrl(e.target.value)}
+                placeholder="https://linkedin.com/company/..."
                 className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
               />
             </div>

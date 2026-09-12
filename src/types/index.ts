@@ -345,7 +345,11 @@ export type ClientLinkType =
   | 'instagram'
   | 'linkedin_company_page'
   | 'slack_channel'
-  | 'whatsapp_group';
+  | 'whatsapp_group'
+  | 'static_creatives'
+  | 'videos'
+  | 'vsl'
+  | 'flc_landing_page';
 
 export interface ClientLink {
   id?: string;

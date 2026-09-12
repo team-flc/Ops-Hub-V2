@@ -9,11 +9,13 @@ import { CreateClientModal } from '../src/components/clients/CreateClientModal';
 import { DuplicateClientModal } from '../src/components/clients/DuplicateClientModal';
 import { SelectedClientHeader } from '../src/components/clients/SelectedClientHeader';
 import { ClientWorkspaceView } from '../src/components/clients/ClientWorkspaceView';
+import { ClientDetailsTab } from '../src/components/clients/ClientDetailsTab';
 import { ClientManagementView, ClientLogoAvatar } from '../src/components/views/ClientManagementView';
 import { SettingsLayout } from '../src/components/settings/SettingsLayout';
 import { Header } from '../src/components/layout/Header';
 import { useOpsStore } from '../src/store/opsStore';
 import { 
+  clientManagementService,
   sanitizeUrl, 
   isValidLinkedInUrl, 
   calculateLinkedInReadiness 
@@ -592,5 +594,156 @@ describe('Phase 2B: Client Management & Dynamic LinkedIn Access Tests', () => {
 
     expect(screen.getByText('Client Management Dashboard')).toBeInTheDocument();
   });
+
+  // 19. SIDEBAR WORKSPACE LINKS: STATIC, VIDEOS, VSL, FLC LANDING PAGE
+  it('19. Sidebar renders Static, Videos, VSL, and FLC Landing Page workspace links when configured', async () => {
+    const { Sidebar } = await import('../src/components/layout/Sidebar');
+    mockGetUser.mockResolvedValue({ data: { user: { id: 'u-1', email: 'owner@flc.com' } }, error: null });
+    mockFromSelect.mockImplementation((table: string) => {
+      if (table === 'profiles') {
+        return Promise.resolve({
+          data: { id: 'u-1', full_name: 'Faseeh Lall', role: 'owner', status: 'active', work_email: 'owner@flc.com' },
+          error: null
+        });
+      }
+      return Promise.resolve({ data: null, error: null });
+    });
+
+    const clientWithAllLinks: ClientRecord = {
+      ...mockClients[0],
+      links: {
+        website: 'https://acme.com',
+        flc_landing_page: 'https://flc-landing.com/acme',
+        google_drive: 'https://drive.google.com/drive/folders/acme',
+        static_creatives: 'https://drive.google.com/drive/folders/static-creatives',
+        videos: 'https://drive.google.com/drive/folders/videos',
+        vsl: 'https://vimeo.com/acme-vsl',
+        linkedin_company_page: 'https://linkedin.com/company/acme',
+        facebook: 'https://facebook.com/acme',
+        instagram: 'https://instagram.com/acme',
+        slack_channel: 'https://slack.com/acme',
+        whatsapp_group: 'https://chat.whatsapp.com/acme'
+      }
+    };
+
+    vi.spyOn(clientManagementService, 'fetchClients').mockResolvedValue({
+      data: [clientWithAllLinks],
+      error: null
+    });
+    vi.spyOn(clientManagementService, 'fetchEligibleManagers').mockResolvedValue(mockManagers);
+
+    useOpsStore.setState({
+      clients: [clientWithAllLinks],
+      selectedClientId: clientWithAllLinks.id
+    });
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <AuthProvider>
+            <Sidebar />
+          </AuthProvider>
+        </MemoryRouter>
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('FLC Landing Page')).toBeInTheDocument();
+      expect(screen.getByText('Static')).toBeInTheDocument();
+      expect(screen.getByText('Videos')).toBeInTheDocument();
+      expect(screen.getByText('VSL')).toBeInTheDocument();
+    });
+
+    // Check correct URLs
+    const flcLink = screen.getByRole('link', { name: /FLC Landing Page/i });
+    expect(flcLink).toHaveAttribute('href', 'https://flc-landing.com/acme');
+    expect(flcLink).toHaveAttribute('target', '_blank');
+
+    const staticLink = screen.getByRole('link', { name: /Static/i });
+    expect(staticLink).toHaveAttribute('href', 'https://drive.google.com/drive/folders/static-creatives');
+
+    const videosLink = screen.getByRole('link', { name: /Videos/i });
+    expect(videosLink).toHaveAttribute('href', 'https://drive.google.com/drive/folders/videos');
+
+    const vslLink = screen.getByRole('link', { name: /VSL/i });
+    expect(vslLink).toHaveAttribute('href', 'https://vimeo.com/acme-vsl');
+  });
+
+  // 20. CLIENT DETAILS TAB INPUTS FOR NEW LINKS
+  it('20. ClientDetailsTab renders input fields for Static Creatives, Videos, VSL, and FLC Landing Page', () => {
+    const clientWithLinks: ClientRecord = {
+      ...mockClients[0],
+      links: {
+        flc_landing_page: 'https://flc-landing.com/acme',
+        static_creatives: 'https://drive.google.com/static',
+        videos: 'https://drive.google.com/videos',
+        vsl: 'https://vimeo.com/vsl-1'
+      }
+    };
+
+    render(
+      <ClientDetailsTab
+        client={clientWithLinks}
+        currentUserProfile={mockManagers[1]}
+        eligibleManagers={mockManagers}
+        onClientUpdated={vi.fn()}
+      />
+    );
+
+    const flcInput = screen.getByLabelText(/FLC Landing Page URL/i) as HTMLInputElement;
+    expect(flcInput).toBeInTheDocument();
+    expect(flcInput.value).toBe('https://flc-landing.com/acme');
+
+    const staticInput = screen.getByLabelText(/Static Creatives URL/i) as HTMLInputElement;
+    expect(staticInput).toBeInTheDocument();
+    expect(staticInput.value).toBe('https://drive.google.com/static');
+
+    const videosInput = screen.getByLabelText(/Videos URL/i) as HTMLInputElement;
+    expect(videosInput).toBeInTheDocument();
+    expect(videosInput.value).toBe('https://drive.google.com/videos');
+
+    const vslInput = screen.getByLabelText(/VSL \(Video Sales Letter\) URL/i) as HTMLInputElement;
+    expect(vslInput).toBeInTheDocument();
+    expect(vslInput.value).toBe('https://vimeo.com/vsl-1');
+  });
+
+  // 21. CREATE & DUPLICATE MODALS INPUTS FOR NEW LINKS
+  it('21. CreateClientModal & DuplicateClientModal render input fields for all 4 new links', () => {
+    // Create Modal
+    const { unmount } = render(
+      <CreateClientModal
+        isOpen={true}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+        currentUserProfile={mockManagers[1]}
+        eligibleManagers={mockManagers}
+      />
+    );
+
+    expect(screen.getByLabelText(/FLC Landing Page URL/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Static Creatives URL/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Videos URL/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/VSL \(Video Sales Letter\) URL/i)).toBeInTheDocument();
+
+    unmount();
+
+    // Duplicate Modal
+    render(
+      <DuplicateClientModal
+        isOpen={true}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+        sourceClient={mockClients[0]}
+        currentUserProfile={mockManagers[1]}
+        eligibleManagers={mockManagers}
+      />
+    );
+
+    expect(screen.getByLabelText(/FLC Landing Page URL/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Static Creatives URL/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Videos URL/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/VSL \(Video Sales Letter\) URL/i)).toBeInTheDocument();
+  });
 });
+
 

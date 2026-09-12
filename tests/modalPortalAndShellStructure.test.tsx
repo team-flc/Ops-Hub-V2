@@ -257,7 +257,7 @@ describe('Modal Portal & Shell Structural Verification', () => {
       expect(companyInput.value).toBe('');
 
       // Website URL starts blank (not copied from source client)
-      const websiteInput = screen.getByLabelText(/Website \/ Landing Page URL/i) as HTMLInputElement;
+      const websiteInput = screen.getByLabelText(/^Website URL/i) as HTMLInputElement;
       expect(websiteInput.value).toBe('');
     });
   });

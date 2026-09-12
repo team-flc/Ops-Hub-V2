@@ -3,7 +3,8 @@ import { useSafeNavigate } from '../../lib/safeRouterHooks';
 import { useOpsStore } from '../../store/opsStore';
 import { 
   Building2, ChevronsLeft, ChevronsRight, Briefcase, X,
-  Globe, HardDrive, MessageCircle, ExternalLink, Clock, Users, UserCheck
+  Globe, HardDrive, MessageCircle, ExternalLink, Clock, Users, UserCheck,
+  Image, Video, PlaySquare, Sparkles
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { ClientRecord, UserProfile } from '../../types';
@@ -102,16 +103,40 @@ export const Sidebar: React.FC = () => {
       icon: <Globe className="w-3.5 h-3.5" />
     },
     {
-      key: 'linkedin_company_page',
-      label: 'LinkedIn',
-      url: clientLinks.linkedin_company_page,
-      icon: <LinkedInIcon className="w-3.5 h-3.5" />
+      key: 'flc_landing_page',
+      label: 'FLC Landing Page',
+      url: clientLinks.flc_landing_page,
+      icon: <Sparkles className="w-3.5 h-3.5" />
     },
     {
       key: 'google_drive',
       label: 'Google Drive',
       url: clientLinks.google_drive,
       icon: <HardDrive className="w-3.5 h-3.5" />
+    },
+    {
+      key: 'static_creatives',
+      label: 'Static',
+      url: clientLinks.static_creatives,
+      icon: <Image className="w-3.5 h-3.5" />
+    },
+    {
+      key: 'videos',
+      label: 'Videos',
+      url: clientLinks.videos,
+      icon: <Video className="w-3.5 h-3.5" />
+    },
+    {
+      key: 'vsl',
+      label: 'VSL',
+      url: clientLinks.vsl,
+      icon: <PlaySquare className="w-3.5 h-3.5" />
+    },
+    {
+      key: 'linkedin_company_page',
+      label: 'LinkedIn',
+      url: clientLinks.linkedin_company_page,
+      icon: <LinkedInIcon className="w-3.5 h-3.5" />
     },
     {
       key: 'facebook',
