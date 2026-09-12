@@ -595,8 +595,8 @@ describe('Phase 2B: Client Management & Dynamic LinkedIn Access Tests', () => {
     expect(screen.getByText('Client Management Dashboard')).toBeInTheDocument();
   });
 
-  // 19. SIDEBAR WORKSPACE LINKS: STATIC, VIDEOS, VSL, FLC LANDING PAGE
-  it('19. Sidebar renders Static, Videos, VSL, and FLC Landing Page workspace links when configured', async () => {
+  // 19. SIDEBAR WORKSPACE LINKS: STATIC, VIDEOS, VSL, FLC LANDING PAGE, GRID
+  it('19. Sidebar renders Static, Videos, VSL, FLC Landing Page, and Grid workspace links when configured', async () => {
     const { Sidebar } = await import('../src/components/layout/Sidebar');
     mockGetUser.mockResolvedValue({ data: { user: { id: 'u-1', email: 'owner@flc.com' } }, error: null });
     mockFromSelect.mockImplementation((table: string) => {
@@ -618,6 +618,7 @@ describe('Phase 2B: Client Management & Dynamic LinkedIn Access Tests', () => {
         static_creatives: 'https://drive.google.com/drive/folders/static-creatives',
         videos: 'https://drive.google.com/drive/folders/videos',
         vsl: 'https://vimeo.com/acme-vsl',
+        grid: 'https://grid.app/acme-grid',
         linkedin_company_page: 'https://linkedin.com/company/acme',
         facebook: 'https://facebook.com/acme',
         instagram: 'https://instagram.com/acme',
@@ -652,6 +653,7 @@ describe('Phase 2B: Client Management & Dynamic LinkedIn Access Tests', () => {
       expect(screen.getByText('Static')).toBeInTheDocument();
       expect(screen.getByText('Videos')).toBeInTheDocument();
       expect(screen.getByText('VSL')).toBeInTheDocument();
+      expect(screen.getByText('Grid')).toBeInTheDocument();
     });
 
     // Check correct URLs
@@ -667,17 +669,21 @@ describe('Phase 2B: Client Management & Dynamic LinkedIn Access Tests', () => {
 
     const vslLink = screen.getByRole('link', { name: /VSL/i });
     expect(vslLink).toHaveAttribute('href', 'https://vimeo.com/acme-vsl');
+
+    const gridLink = screen.getByRole('link', { name: /Grid/i });
+    expect(gridLink).toHaveAttribute('href', 'https://grid.app/acme-grid');
   });
 
   // 20. CLIENT DETAILS TAB INPUTS FOR NEW LINKS
-  it('20. ClientDetailsTab renders input fields for Static Creatives, Videos, VSL, and FLC Landing Page', () => {
+  it('20. ClientDetailsTab renders input fields for Static Creatives, Videos, VSL, Grid, and FLC Landing Page', () => {
     const clientWithLinks: ClientRecord = {
       ...mockClients[0],
       links: {
         flc_landing_page: 'https://flc-landing.com/acme',
         static_creatives: 'https://drive.google.com/static',
         videos: 'https://drive.google.com/videos',
-        vsl: 'https://vimeo.com/vsl-1'
+        vsl: 'https://vimeo.com/vsl-1',
+        grid: 'https://grid.app/board-1'
       }
     };
 
@@ -705,10 +711,14 @@ describe('Phase 2B: Client Management & Dynamic LinkedIn Access Tests', () => {
     const vslInput = screen.getByLabelText(/VSL \(Video Sales Letter\) URL/i) as HTMLInputElement;
     expect(vslInput).toBeInTheDocument();
     expect(vslInput.value).toBe('https://vimeo.com/vsl-1');
+
+    const gridInput = screen.getByLabelText(/Grid URL/i) as HTMLInputElement;
+    expect(gridInput).toBeInTheDocument();
+    expect(gridInput.value).toBe('https://grid.app/board-1');
   });
 
   // 21. CREATE & DUPLICATE MODALS INPUTS FOR NEW LINKS
-  it('21. CreateClientModal & DuplicateClientModal render input fields for all 4 new links', () => {
+  it('21. CreateClientModal & DuplicateClientModal render input fields for all 5 new links including Grid', () => {
     // Create Modal
     const { unmount } = render(
       <CreateClientModal
@@ -724,6 +734,7 @@ describe('Phase 2B: Client Management & Dynamic LinkedIn Access Tests', () => {
     expect(screen.getByLabelText(/Static Creatives URL/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Videos URL/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/VSL \(Video Sales Letter\) URL/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Grid URL/i)).toBeInTheDocument();
 
     unmount();
 
@@ -743,6 +754,7 @@ describe('Phase 2B: Client Management & Dynamic LinkedIn Access Tests', () => {
     expect(screen.getByLabelText(/Static Creatives URL/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/Videos URL/i)).toBeInTheDocument();
     expect(screen.getByLabelText(/VSL \(Video Sales Letter\) URL/i)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Grid URL/i)).toBeInTheDocument();
   });
 });
 

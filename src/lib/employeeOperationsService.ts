@@ -2236,6 +2236,8 @@ export const employeeOperationsService = {
         avatarUrl: prof.avatar_url,
         bio: prof.bio,
         linkedinUrl: prof.linkedin_url,
+        facebookUrl: prof.facebook_url,
+        instagramUrl: prof.instagram_url,
         contactEmail: prof.contact_email,
         backupPhone: prof.backup_phone
       };

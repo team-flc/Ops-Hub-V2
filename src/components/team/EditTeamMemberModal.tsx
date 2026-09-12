@@ -43,6 +43,8 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
   const [backupPhone, setBackupPhone] = useState('');
   const [contactEmail, setContactEmail] = useState('');
   const [linkedinUrl, setLinkedinUrl] = useState('');
+  const [facebookUrl, setFacebookUrl] = useState('');
+  const [instagramUrl, setInstagramUrl] = useState('');
   const [bio, setBio] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
@@ -96,6 +98,8 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
             setBackupPhone(prof.backup_phone || '');
             setContactEmail(prof.contact_email || '');
             setLinkedinUrl(prof.linkedin_url || '');
+            setFacebookUrl(prof.facebook_url || '');
+            setInstagramUrl(prof.instagram_url || '');
             setBio(prof.bio || '');
           }
         }
@@ -210,6 +214,16 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
       return;
     }
 
+    if (facebookUrl.trim() && !/^https?:\/\//i.test(facebookUrl.trim())) {
+      setErrorMessage('Invalid Facebook URL. Must start with http:// or https://');
+      return;
+    }
+
+    if (instagramUrl.trim() && !/^https?:\/\//i.test(instagramUrl.trim())) {
+      setErrorMessage('Invalid Instagram URL. Must start with http:// or https://');
+      return;
+    }
+
     if (contactEmail.trim() && !contactEmail.includes('@')) {
       setErrorMessage('A valid Connected Contact Email address is required.');
       return;
@@ -249,6 +263,8 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
           backupPhone: backupPhone.trim() || undefined,
           contactEmail: contactEmail.trim().toLowerCase() || undefined,
           linkedinUrl: linkedinUrl.trim() || undefined,
+          facebookUrl: facebookUrl.trim() || undefined,
+          instagramUrl: instagramUrl.trim() || undefined,
           bio: bio.trim() || undefined,
           avatarUrl: avatarUrl || null,
           startDate,
@@ -469,6 +485,32 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
                   value={linkedinUrl}
                   onChange={(e) => setLinkedinUrl(e.target.value)}
                   placeholder="https://linkedin.com/in/username"
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                  Facebook Profile URL (Optional)
+                </label>
+                <input
+                  type="url"
+                  value={facebookUrl}
+                  onChange={(e) => setFacebookUrl(e.target.value)}
+                  placeholder="https://facebook.com/username"
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                  Instagram Profile URL (Optional)
+                </label>
+                <input
+                  type="url"
+                  value={instagramUrl}
+                  onChange={(e) => setInstagramUrl(e.target.value)}
+                  placeholder="https://instagram.com/username"
                   className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
               </div>

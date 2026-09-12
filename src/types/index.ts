@@ -228,6 +228,8 @@ export interface UserProfile {
   bio?: string | null;
   avatarUrl?: string | null;
   linkedinUrl?: string | null;
+  facebookUrl?: string | null;
+  instagramUrl?: string | null;
   contactEmail?: string | null;
   role: UserRole;
   status: AccountStatus;
@@ -349,7 +351,8 @@ export type ClientLinkType =
   | 'static_creatives'
   | 'videos'
   | 'vsl'
-  | 'flc_landing_page';
+  | 'flc_landing_page'
+  | 'grid';
 
 export interface ClientLink {
   id?: string;

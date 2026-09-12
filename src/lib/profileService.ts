@@ -19,6 +19,8 @@ export const profileService = {
           bio,
           avatar_url,
           linkedin_url,
+          facebook_url,
+          instagram_url,
           contact_email,
           role,
           status,
@@ -52,6 +54,8 @@ export const profileService = {
         bio: data.bio,
         avatarUrl: data.avatar_url,
         linkedinUrl: data.linkedin_url,
+        facebookUrl: data.facebook_url,
+        instagramUrl: data.instagram_url,
         contactEmail: data.contact_email,
         role: data.role,
         status: data.status,
@@ -83,6 +87,8 @@ export const profileService = {
     fullName: string;
     bio?: string | null;
     linkedinUrl?: string | null;
+    facebookUrl?: string | null;
+    instagramUrl?: string | null;
     contactEmail?: string | null;
     phone?: string | null;
     backupPhone?: string | null;
@@ -128,6 +134,8 @@ export const profileService = {
         bio: raw.bio,
         avatarUrl: raw.avatar_url,
         linkedinUrl: raw.linkedin_url,
+        facebookUrl: raw.facebook_url,
+        instagramUrl: raw.instagram_url,
         contactEmail: raw.contact_email,
         role: raw.role,
         status: raw.status,

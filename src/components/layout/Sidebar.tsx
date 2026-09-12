@@ -4,7 +4,7 @@ import { useOpsStore } from '../../store/opsStore';
 import { 
   Building2, ChevronsLeft, ChevronsRight, Briefcase, X,
   Globe, HardDrive, MessageCircle, ExternalLink, Clock, Users, UserCheck,
-  Image, Video, PlaySquare, Sparkles
+  Image, Video, PlaySquare, Sparkles, LayoutGrid
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { ClientRecord, UserProfile } from '../../types';
@@ -131,6 +131,12 @@ export const Sidebar: React.FC = () => {
       label: 'VSL',
       url: clientLinks.vsl,
       icon: <PlaySquare className="w-3.5 h-3.5" />
+    },
+    {
+      key: 'grid',
+      label: 'Grid',
+      url: clientLinks.grid,
+      icon: <LayoutGrid className="w-3.5 h-3.5" />
     },
     {
       key: 'linkedin_company_page',

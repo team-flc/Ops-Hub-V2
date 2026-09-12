@@ -84,6 +84,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
   const [staticCreativesUrl, setStaticCreativesUrl] = useState(client.links?.static_creatives || '');
   const [videosUrl, setVideosUrl] = useState(client.links?.videos || '');
   const [vslUrl, setVslUrl] = useState(client.links?.vsl || '');
+  const [gridUrl, setGridUrl] = useState(client.links?.grid || '');
   const [facebookUrl, setFacebookUrl] = useState(client.links?.facebook || '');
   const [instagramUrl, setInstagramUrl] = useState(client.links?.instagram || '');
   const [linkedinPageUrl, setLinkedinPageUrl] = useState(client.links?.linkedin_company_page || '');
@@ -124,6 +125,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     setStaticCreativesUrl(client.links?.static_creatives || '');
     setVideosUrl(client.links?.videos || '');
     setVslUrl(client.links?.vsl || '');
+    setGridUrl(client.links?.grid || '');
     setFacebookUrl(client.links?.facebook || '');
     setInstagramUrl(client.links?.instagram || '');
     setLinkedinPageUrl(client.links?.linkedin_company_page || '');
@@ -214,6 +216,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
       static_creatives: staticCreativesUrl,
       videos: videosUrl,
       vsl: vslUrl,
+      grid: gridUrl,
       facebook: facebookUrl,
       instagram: instagramUrl,
       linkedin_company_page: linkedinPageUrl,
@@ -748,6 +751,20 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 value={vslUrl}
                 onChange={(e) => setVslUrl(e.target.value)}
                 placeholder="https://... (VSL Link)"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="edit-grid" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Grid URL
+              </label>
+              <input
+                id="edit-grid"
+                type="url"
+                value={gridUrl}
+                onChange={(e) => setGridUrl(e.target.value)}
+                placeholder="https://... (Grid Link)"
                 className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
               />
             </div>

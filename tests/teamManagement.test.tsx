@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from '../src/context/AuthContext';
 import { ProtectedRoute } from '../src/components/auth/ProtectedRoute';
 import { CreateTeamMemberModal } from '../src/components/team/CreateTeamMemberModal';
+import { EditTeamMemberModal } from '../src/components/team/EditTeamMemberModal';
 import { SuspendUserModal } from '../src/components/team/SuspendUserModal';
 import { Header } from '../src/components/layout/Header';
 import { teamManagementService } from '../src/lib/teamManagementService';
@@ -517,6 +518,80 @@ describe('Phase 2A Team & User Management Tests', () => {
     expect(members[0].role).toBe('owner');
     expect(members[0].reportingManagerName).toBe('—');
     expect(members[1].role).toBe('operational_manager');
+  });
+
+  // 14. SOCIAL PROFILE URLS (LINKEDIN, FACEBOOK, INSTAGRAM) IN TEAM MODALS
+  it('14. CreateTeamMemberModal & EditTeamMemberModal render Facebook and Instagram Profile URL inputs', () => {
+    const ownerProfile: UserProfile = {
+      id: 'usr-owner-1',
+      fullName: 'Atif Khan',
+      role: 'owner',
+      status: 'active',
+      createdAt: '',
+      updatedAt: ''
+    };
+
+    const mockDepts = [
+      { id: 'd1', name: 'Operations', slug: 'operations', status: 'active' as const, sortOrder: 1, createdAt: '', updatedAt: '' }
+    ];
+
+    const mockDesignations = [
+      { id: 'des-1', name: 'Operations Associate', status: 'active' as const, createdAt: '', updatedAt: '' }
+    ];
+
+    // Create Modal
+    const { unmount } = render(
+      <CreateTeamMemberModal
+        isOpen={true}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+        currentUserProfile={ownerProfile}
+        departments={mockDepts}
+        designations={mockDesignations}
+        eligibleManagers={[ownerProfile]}
+        onOpenDesignationManager={vi.fn()}
+      />
+    );
+
+    expect(screen.getByPlaceholderText('https://linkedin.com/in/username')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('https://facebook.com/username')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('https://instagram.com/username')).toBeInTheDocument();
+
+    unmount();
+
+    // Edit Modal
+    const fakeMember: TeamMemberRecord = {
+      id: 'usr-tm-edit',
+      fullName: 'Staff Member',
+      workEmail: 'staff@faseehlall.com',
+      role: 'team_member',
+      status: 'active',
+      startDate: '2026-01-01',
+      departments: mockDepts,
+      clientAccessCount: 0,
+      clientIds: [],
+      createdAt: '',
+      updatedAt: ''
+    };
+
+    render(
+      <EditTeamMemberModal
+        isOpen={true}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+        member={fakeMember}
+        currentUserProfile={ownerProfile}
+        departments={mockDepts}
+        designations={mockDesignations}
+        eligibleManagers={[ownerProfile]}
+        clients={[]}
+        onOpenDesignationManager={vi.fn()}
+      />
+    );
+
+    expect(screen.getByPlaceholderText('https://linkedin.com/in/username')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('https://facebook.com/username')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('https://instagram.com/username')).toBeInTheDocument();
   });
 });
 

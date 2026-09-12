@@ -75,6 +75,7 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
   const [staticCreativesUrl, setStaticCreativesUrl] = useState('');
   const [videosUrl, setVideosUrl] = useState('');
   const [vslUrl, setVslUrl] = useState('');
+  const [gridUrl, setGridUrl] = useState('');
   const [facebookUrl, setFacebookUrl] = useState('');
   const [instagramUrl, setInstagramUrl] = useState('');
   const [linkedinPageUrl, setLinkedinPageUrl] = useState('');
@@ -171,6 +172,7 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
       static_creatives: staticCreativesUrl,
       videos: videosUrl,
       vsl: vslUrl,
+      grid: gridUrl,
       facebook: facebookUrl,
       instagram: instagramUrl,
       linkedin_company_page: linkedinPageUrl,
@@ -510,6 +512,20 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
                   value={vslUrl}
                   onChange={(e) => setVslUrl(e.target.value)}
                   placeholder="https://... (VSL Link)"
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="link-grid" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Grid URL
+                </label>
+                <input
+                  id="link-grid"
+                  type="url"
+                  value={gridUrl}
+                  onChange={(e) => setGridUrl(e.target.value)}
+                  placeholder="https://... (Grid Link)"
                   className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
                 />
               </div>
