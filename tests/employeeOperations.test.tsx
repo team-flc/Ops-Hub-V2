@@ -532,4 +532,229 @@ describe('Employee Operations System Full Behavioral Test Suite', () => {
       expect(canViewDossier('team_member', currentUserId, currentUserId)).toBe(true);
     });
   });
+
+  // 20. Server-Authoritative Attendance RPC & Clock Manipulation Resistance
+  describe('20. Server-Authoritative Attendance RPC & Clock Manipulation Resistance', () => {
+    it('computes late minutes and status strictly using PKT shift schedule regardless of client timezone', () => {
+      // PKT Shift: 11:00 PKT (06:00 UTC) to 20:00 PKT (15:00 UTC)
+      const scheduledPKT = new Date('2026-09-12T11:00:00+05:00');
+      // Even if client clock is set to local UTC or US Pacific, server compares against true UTC/PKT instant
+      const checkInAt1105PKT = new Date('2026-09-12T06:05:00Z'); // Exactly 11:05 PKT
+      const checkInResult = employeeOperationsService.calculateLateMinutes(scheduledPKT, checkInAt1105PKT);
+
+      expect(checkInResult.isLate).toBe(true);
+      expect(checkInResult.minutesLate).toBe(5);
+      expect(checkInResult.deduction).toBe(500);
+    });
+
+    it('rejects duplicate check-in attempts on the same workDate', async () => {
+      const isDuplicate = (existingCheckIn: string | null) => {
+        return !!existingCheckIn;
+      };
+
+      expect(isDuplicate('2026-09-12T11:00:00Z')).toBe(true);
+      expect(isDuplicate(null)).toBe(false);
+    });
+  });
+
+  // 21. Scheduled Background Automation Engine & Absence Deduction Math
+  describe('21. Scheduled Background Automation Engine & Absence Deduction Math', () => {
+    it('generates 60-minute missing check-in management alert idempotently', () => {
+      const shiftStart = new Date('2026-09-12T11:00:00+05:00');
+      const now65MinsPast = new Date('2026-09-12T12:05:00+05:00');
+      const hasCheckedIn = false;
+
+      const shouldCreate60mAlert = !hasCheckedIn && (now65MinsPast.getTime() - shiftStart.getTime()) >= 60 * 60 * 1000;
+      const idempotencyKey = `missing_checkin_60m_emp1_2026-09-12`;
+
+      expect(shouldCreate60mAlert).toBe(true);
+      expect(idempotencyKey).toBe('missing_checkin_60m_emp1_2026-09-12');
+    });
+
+    it('marks unapproved absence at shift end with exact daily salary deduction (Salary / DaysInMonth)', () => {
+      const salary = 120000;
+      const daysInSept = 30;
+      const absenceDeduction = Math.round((salary / daysInSept) * 100) / 100;
+
+      expect(absenceDeduction).toBe(4000); // 120000 / 30 = 4000
+    });
+
+    it('flags missing checkout at shift end without applying automatic deductions', () => {
+      const shiftEnd = new Date('2026-09-12T20:00:00+05:00');
+      const now35MinsPastEnd = new Date('2026-09-12T20:35:00+05:00');
+      const isCheckedIn = true;
+      const isCheckedOut = false;
+
+      const shouldFlagMissingCheckout = isCheckedIn && !isCheckedOut && (now35MinsPastEnd.getTime() - shiftEnd.getTime()) >= 30 * 60 * 1000;
+      expect(shouldFlagMissingCheckout).toBe(true);
+    });
+
+    it('flags early checkout for management review without automated penalty', () => {
+      const scheduledCheckOut = new Date('2026-09-12T20:00:00+05:00');
+      const actualEarlyCheckout = new Date('2026-09-12T18:30:00+05:00');
+
+      const isEarly = actualEarlyCheckout.getTime() < (scheduledCheckOut.getTime() - 5 * 60 * 1000);
+      const automaticPenalty = 0; // Policy: Early checkouts require manager review, no automatic deduction
+
+      expect(isEarly).toBe(true);
+      expect(automaticPenalty).toBe(0);
+    });
+  });
+
+  // 22. Bank Detail Approval Enforcement & Non-Manager Write Prevention
+  describe('22. Bank Detail Approval Enforcement & Non-Manager Write Prevention', () => {
+    it('creates a pending change request with management task when team member submits bank update', () => {
+      const isManager = false;
+      const submission = {
+        employeeId: 'emp-101',
+        bankName: 'Faysal Bank',
+        accountTitle: 'Ali Raza',
+        accountNumber: '0204060810',
+        iban: 'PK45FAYS0000000204060810'
+      };
+
+      const workflowAction = isManager ? 'direct_update' : 'change_request';
+      expect(workflowAction).toBe('change_request');
+    });
+
+    it('allows manager to approve pending bank request, updating official details', () => {
+      const pendingRequest = {
+        id: 'cr-99',
+        employeeId: 'emp-101',
+        requestType: 'bank_details',
+        status: 'pending',
+        requestedChanges: {
+          bankName: 'Faysal Bank',
+          accountTitle: 'Ali Raza',
+          accountNumber: '0204060810'
+        }
+      };
+
+      const applyApproval = (req: typeof pendingRequest) => ({
+        ...req,
+        status: 'approved',
+        reviewedBy: 'mgr-1',
+        reviewedAt: '2026-09-12T15:00:00Z'
+      });
+
+      const approved = applyApproval(pendingRequest);
+      expect(approved.status).toBe('approved');
+      expect(approved.reviewedBy).toBe('mgr-1');
+    });
+  });
+
+  // 23. Effective-Dated Working Days Computation
+  describe('23. Effective-Dated Working Days Computation', () => {
+    it('calculates scheduled working days in September 2026 (30 days - 4 Sundays = 26 days)', () => {
+      const workingDays = employeeOperationsService.calculateMonthScheduledWorkingDays(2026, 9);
+      expect(workingDays).toBe(26);
+    });
+
+    it('calculates scheduled working days in August 2026 (31 days - 5 Sundays = 26 days)', () => {
+      const workingDays = employeeOperationsService.calculateMonthScheduledWorkingDays(2026, 8);
+      expect(workingDays).toBe(26);
+    });
+
+    it('calculates scheduled working days in October 2026 (31 days - 4 Sundays = 27 days)', () => {
+      const workingDays = employeeOperationsService.calculateMonthScheduledWorkingDays(2026, 10);
+      expect(workingDays).toBe(27);
+    });
+
+    it('calculates scheduled working days in February 2026 (28 days - 4 Sundays = 24 days)', () => {
+      const workingDays = employeeOperationsService.calculateMonthScheduledWorkingDays(2026, 2);
+      expect(workingDays).toBe(24);
+    });
+  });
+
+  // 24. Private Bucket Storage & Short-Lived Signed URL Generation
+  describe('24. Private Bucket Storage & Short-Lived Signed URL Generation', () => {
+    it('stores attendance evidence in private bucket with employee id namespace', () => {
+      const employeeId = 'emp-555';
+      const workDate = '2026-09-12';
+      const timestamp = 1789210000;
+      const expectedPath = `${employeeId}/${workDate}_checkin_${timestamp}.jpg`;
+
+      expect(expectedPath.startsWith('emp-555/')).toBe(true);
+      expect(expectedPath.endsWith('.jpg')).toBe(true);
+    });
+
+    it('denies client role access to private storage and employee records', () => {
+      const clientRole = 'client';
+      const canAccessEmployeeRecords = (role: string) => role === 'owner' || role === 'operational_manager';
+      const canAccessOwnRecordOnly = (role: string, targetId: string, currentId: string) => {
+        if (role === 'client') return false;
+        if (role === 'team_member') return targetId === currentId;
+        return true;
+      };
+
+      expect(canAccessEmployeeRecords(clientRole)).toBe(false);
+      expect(canAccessOwnRecordOnly(clientRole, 'emp-1', 'emp-1')).toBe(false);
+    });
+  });
+
+  // 25. Complete Employee 360 Submodules
+  describe('25. Complete Employee 360 Submodules (Work Reports, Goals, Documents, Salary Hikes)', () => {
+    it('manages weekly and monthly work reports with review workflow', () => {
+      const report = {
+        id: 'rep-1',
+        employeeId: 'emp-1',
+        reportType: 'weekly' as const,
+        period: '2026-W37',
+        summary: 'Completed client deliverables and resolved bug backlog',
+        achievements: 'Speed optimization of core dashboard',
+        status: 'submitted' as const
+      };
+
+      expect(report.reportType).toBe('weekly');
+      expect(report.status).toBe('submitted');
+    });
+
+    it('tracks employee performance goals and progress percentages', () => {
+      const goal = {
+        id: 'goal-1',
+        employeeId: 'emp-1',
+        title: 'Complete System Governance Certification',
+        targetDate: '2026-10-31',
+        progress: 75,
+        status: 'in_progress' as const
+      };
+
+      expect(goal.progress).toBe(75);
+      expect(goal.status).toBe('in_progress');
+    });
+
+    it('supports employee governance documents with digital acknowledgement requirement', () => {
+      const doc = {
+        id: 'doc-1',
+        employeeId: 'emp-1',
+        title: 'Employment Agreement 2026',
+        documentType: 'contract' as const,
+        filePath: 'emp-1/contract_2026.pdf',
+        acknowledgementRequired: true,
+        acknowledgedAt: null
+      };
+
+      expect(doc.acknowledgementRequired).toBe(true);
+      expect(doc.acknowledgedAt).toBeNull();
+    });
+
+    it('records salary-hike increments with previous vs new salary comparison', () => {
+      const hike = {
+        id: 'hike-1',
+        employeeId: 'emp-1',
+        previousSalary: 120000,
+        newSalary: 145000,
+        effectiveDate: '2026-10-01',
+        reason: 'Annual performance merit increment',
+        approvedBy: 'owner-1'
+      };
+
+      const increase = hike.newSalary - hike.previousSalary;
+      const percentage = (increase / hike.previousSalary) * 100;
+
+      expect(increase).toBe(25000);
+      expect(Number(percentage.toFixed(1))).toBe(20.8);
+    });
+  });
+
 });

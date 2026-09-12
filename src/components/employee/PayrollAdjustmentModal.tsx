@@ -167,7 +167,7 @@ export const PayrollAdjustmentModal: React.FC<PayrollAdjustmentModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div className="space-y-1">
               <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
-                Bonus / Commission (PKR)
+                Bonus (PKR)
               </label>
               <input
                 type="number"

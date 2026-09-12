@@ -18,7 +18,11 @@ import {
   AssetStatus,
   NoticePeriodStatus,
   GoodStandingStatus,
-  AssetClearanceStatus
+  AssetClearanceStatus,
+  EmployeeWorkReport,
+  EmployeeGoal,
+  EmployeeDocument,
+  EmployeeSalaryHike
 } from '../types';
 import {
   getPKTTodayDateString,
@@ -136,6 +140,20 @@ export const employeeOperationsService = {
     const workingDays = activeSchedule ? activeSchedule.workingDays : [1, 2, 3, 4, 5, 6];
     // Sunday (0 or 7) is not a working day unless explicitly in workingDays
     return workingDays.includes(dayOfWeek) || workingDays.includes(normalizedDay);
+  },
+
+  calculateMonthScheduledWorkingDays(year: number, month: number, schedules: CompanyWorkSchedule[] = []): number {
+    const daysInMonth = this.getDaysInMonth(year, month);
+    let workingDaysCount = 0;
+    for (let d = 1; d <= daysInMonth; d++) {
+      const monthStr = month < 10 ? `0${month}` : `${month}`;
+      const dayStr = d < 10 ? `0${d}` : `${d}`;
+      const dateObj = new Date(`${year}-${monthStr}-${dayStr}T12:00:00+05:00`);
+      if (this.isWorkingDay(dateObj, schedules)) {
+        workingDaysCount++;
+      }
+    }
+    return workingDaysCount;
   },
 
   // ===========================================================================
@@ -2218,6 +2236,486 @@ export const employeeOperationsService = {
     }
   },
 
+  // ===========================================================================
+  // 10. EMPLOYEE 360: WORK REPORTS, GOALS, DOCUMENTS, SALARY HIKES & BANK APPROVAL
+  // ===========================================================================
+
+  // 10.1 Bank Approval Workflow
+  async requestBankDetailsChange(payload: {
+    employeeId: string;
+    bankName: string;
+    accountTitle: string;
+    accountNumberOrIban?: string;
+    accountNumber?: string;
+    iban?: string;
+    branchCode?: string;
+    reason?: string;
+  }): Promise<{ request?: EmployeeProfileChangeRequest; error?: string }> {
+    const accNum = (payload.accountNumberOrIban || payload.accountNumber || payload.iban || '').trim();
+    return this.submitProfileChangeRequest({
+      employeeId: payload.employeeId,
+      requestType: 'bank_details',
+      requestedChanges: {
+        bankName: payload.bankName.trim(),
+        accountTitle: payload.accountTitle.trim(),
+        accountNumberOrIban: accNum,
+        accountNumber: payload.accountNumber?.trim(),
+        iban: payload.iban?.trim(),
+        branchCode: payload.branchCode?.trim()
+      },
+      reason: payload.reason || 'Employee submitted bank details update'
+    });
+  },
+
+  async fetchPendingBankChangeRequest(employeeId: string): Promise<EmployeeProfileChangeRequest | null> {
+    if (!supabase) return null;
+    try {
+      const { data, error } = await supabase
+        .from('employee_profile_change_requests')
+        .select('*')
+        .eq('employee_id', employeeId)
+        .eq('request_type', 'bank_details')
+        .eq('status', 'pending')
+        .order('created_at', { ascending: false })
+        .maybeSingle();
+
+      if (error || !data) return null;
+      return {
+        id: data.id,
+        employeeId: data.employee_id,
+        requestType: data.request_type,
+        requestedChanges: data.requested_changes || {},
+        currentValues: data.current_values,
+        reason: data.reason,
+        status: data.status,
+        reviewedBy: data.reviewed_by,
+        reviewedAt: data.reviewed_at,
+        reviewNotes: data.review_notes,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at
+      };
+    } catch {
+      return null;
+    }
+  },
+
+  async approveBankDetailsChange(requestId: string, reviewerId: string, reviewNotes?: string): Promise<{ error?: string }> {
+    return this.reviewProfileChangeRequest(requestId, 'approved', reviewerId, reviewNotes);
+  },
+
+  async rejectBankDetailsChange(requestId: string, reviewerId: string, reviewNotes?: string): Promise<{ error?: string }> {
+    return this.reviewProfileChangeRequest(requestId, 'rejected', reviewerId, reviewNotes);
+  },
+
+  // 10.2 Weekly & Monthly Work Reports
+  async fetchWorkReports(employeeId?: string, reportType?: 'weekly' | 'monthly'): Promise<EmployeeWorkReport[]> {
+    if (!supabase) return [];
+    try {
+      let query = supabase.from('employee_work_reports').select('*').order('period', { ascending: false });
+      if (employeeId) {
+        query = query.eq('employee_id', employeeId);
+      }
+      if (reportType) {
+        query = query.eq('report_type', reportType);
+      }
+      const { data, error } = await query;
+      if (error || !data) return [];
+      return data.map((r: any) => ({
+        id: r.id,
+        employeeId: r.employee_id,
+        reportType: r.report_type,
+        period: r.period,
+        summary: r.summary,
+        achievements: r.achievements,
+        blockersOrIncidents: r.blockers_or_incidents,
+        managementNotes: r.management_notes,
+        status: r.status,
+        reviewedBy: r.reviewed_by,
+        reviewedAt: r.reviewed_at,
+        createdAt: r.created_at,
+        updatedAt: r.updated_at
+      }));
+    } catch {
+      return [];
+    }
+  },
+
+  async submitWorkReport(report: {
+    employeeId: string;
+    reportType: 'weekly' | 'monthly';
+    period: string;
+    summary: string;
+    achievements?: string;
+    blockersOrIncidents?: string;
+  }): Promise<{ report?: EmployeeWorkReport; error?: string }> {
+    if (!supabase) return { error: 'Database unconfigured.' };
+    try {
+      const { data, error } = await supabase
+        .from('employee_work_reports')
+        .upsert({
+          employee_id: report.employeeId,
+          report_type: report.reportType,
+          period: report.period,
+          summary: report.summary,
+          achievements: report.achievements || null,
+          blockers_or_incidents: report.blockersOrIncidents || null,
+          status: 'submitted',
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'employee_id,report_type,period' })
+        .select()
+        .single();
+
+      if (error || !data) return { error: error?.message || 'Failed to submit report.' };
+
+      return {
+        report: {
+          id: data.id,
+          employeeId: data.employee_id,
+          reportType: data.report_type,
+          period: data.period,
+          summary: data.summary,
+          achievements: data.achievements,
+          blockersOrIncidents: data.blockers_or_incidents,
+          managementNotes: data.management_notes,
+          status: data.status,
+          reviewedBy: data.reviewed_by,
+          reviewedAt: data.reviewed_at,
+          createdAt: data.created_at,
+          updatedAt: data.updated_at
+        }
+      };
+    } catch (err: any) {
+      return { error: err.message };
+    }
+  },
+
+  async reviewWorkReport(reportId: string, decision: 'reviewed' | 'approved', reviewerId: string, notes?: string): Promise<{ error?: string }> {
+    if (!supabase) return { error: 'Database unconfigured.' };
+    try {
+      const { error } = await supabase
+        .from('employee_work_reports')
+        .update({
+          status: decision,
+          management_notes: notes || null,
+          reviewed_by: reviewerId,
+          reviewed_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', reportId);
+
+      if (error) return { error: error.message };
+      return {};
+    } catch (err: any) {
+      return { error: err.message };
+    }
+  },
+
+  // 10.3 Goals & OKRs
+  async fetchGoals(employeeId?: string): Promise<EmployeeGoal[]> {
+    if (!supabase) return [];
+    try {
+      let query = supabase.from('employee_goals').select('*').order('target_date', { ascending: true });
+      if (employeeId) {
+        query = query.eq('employee_id', employeeId);
+      }
+      const { data, error } = await query;
+      if (error || !data) return [];
+      return data.map((g: any) => ({
+        id: g.id,
+        employeeId: g.employee_id,
+        title: g.title,
+        description: g.description,
+        targetDate: g.target_date,
+        progress: Number(g.progress || 0),
+        status: g.status,
+        managementNotes: g.management_notes,
+        createdBy: g.created_by,
+        createdAt: g.created_at,
+        updatedAt: g.updated_at
+      }));
+    } catch {
+      return [];
+    }
+  },
+
+  async createGoal(goal: {
+    employeeId: string;
+    title: string;
+    description?: string;
+    targetDate: string;
+    progress?: number;
+    status?: 'in_progress' | 'achieved' | 'behind' | 'cancelled';
+  }, callerId: string): Promise<{ goal?: EmployeeGoal; error?: string }> {
+    if (!supabase) return { error: 'Database unconfigured.' };
+    try {
+      const { data, error } = await supabase
+        .from('employee_goals')
+        .insert({
+          employee_id: goal.employeeId,
+          title: goal.title,
+          description: goal.description || null,
+          target_date: goal.targetDate,
+          progress: goal.progress || 0,
+          status: goal.status || 'in_progress',
+          created_by: callerId,
+          updated_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (error || !data) return { error: error?.message || 'Failed to create goal.' };
+
+      return {
+        goal: {
+          id: data.id,
+          employeeId: data.employee_id,
+          title: data.title,
+          description: data.description,
+          targetDate: data.target_date,
+          progress: Number(data.progress || 0),
+          status: data.status,
+          managementNotes: data.management_notes,
+          createdBy: data.created_by,
+          createdAt: data.created_at,
+          updatedAt: data.updated_at
+        }
+      };
+    } catch (err: any) {
+      return { error: err.message };
+    }
+  },
+
+  async updateGoal(goalId: string, updates: Partial<EmployeeGoal>): Promise<{ error?: string }> {
+    if (!supabase) return { error: 'Database unconfigured.' };
+    try {
+      const dbPayload: any = {
+        updated_at: new Date().toISOString()
+      };
+      if (updates.title !== undefined) dbPayload.title = updates.title;
+      if (updates.description !== undefined) dbPayload.description = updates.description;
+      if (updates.targetDate !== undefined) dbPayload.target_date = updates.targetDate;
+      if (updates.progress !== undefined) dbPayload.progress = updates.progress;
+      if (updates.status !== undefined) dbPayload.status = updates.status;
+      if (updates.managementNotes !== undefined) dbPayload.management_notes = updates.managementNotes;
+
+      const { error } = await supabase.from('employee_goals').update(dbPayload).eq('id', goalId);
+      if (error) return { error: error.message };
+      return {};
+    } catch (err: any) {
+      return { error: err.message };
+    }
+  },
+
+  // 10.4 Employee Contracts & Documents
+  async fetchDocuments(employeeId?: string): Promise<EmployeeDocument[]> {
+    if (!supabase) return [];
+    try {
+      let query = supabase.from('employee_documents').select('*').order('created_at', { ascending: false });
+      if (employeeId) {
+        query = query.eq('employee_id', employeeId);
+      }
+      const { data, error } = await query;
+      if (error || !data) return [];
+      return data.map((d: any) => ({
+        id: d.id,
+        employeeId: d.employee_id,
+        title: d.title,
+        documentType: d.document_type,
+        filePath: d.file_path,
+        fileSize: d.file_size ? Number(d.file_size) : undefined,
+        acknowledgementRequired: !!d.acknowledgement_required,
+        acknowledgedAt: d.acknowledged_at,
+        acknowledgedBy: d.acknowledged_by,
+        uploadedBy: d.uploaded_by,
+        uploadedAt: d.uploaded_at,
+        createdAt: d.created_at,
+        updatedAt: d.updated_at
+      }));
+    } catch {
+      return [];
+    }
+  },
+
+  async uploadDocument(doc: {
+    employeeId: string;
+    title: string;
+    documentType: 'contract' | 'nda' | 'policy' | 'other';
+    file: File | Blob;
+    fileName: string;
+    acknowledgementRequired?: boolean;
+  }, uploaderId: string): Promise<{ document?: EmployeeDocument; error?: string }> {
+    if (!supabase) return { error: 'Database unconfigured.' };
+    try {
+      const path = `${doc.employeeId}/${Date.now()}_${doc.fileName}`;
+      const { error: uploadErr } = await supabase.storage
+        .from('employee-documents')
+        .upload(path, doc.file, { upsert: true });
+
+      if (uploadErr) return { error: uploadErr.message };
+
+      const { data, error: insertErr } = await supabase
+        .from('employee_documents')
+        .insert({
+          employee_id: doc.employeeId,
+          title: doc.title,
+          document_type: doc.documentType,
+          file_path: path,
+          file_size: (doc.file as any).size || null,
+          acknowledgement_required: !!doc.acknowledgementRequired,
+          uploaded_by: uploaderId,
+          uploaded_at: new Date().toISOString()
+        })
+        .select()
+        .single();
+
+      if (insertErr || !data) return { error: insertErr?.message || 'Failed to save document metadata.' };
+
+      return {
+        document: {
+          id: data.id,
+          employeeId: data.employee_id,
+          title: data.title,
+          documentType: data.document_type,
+          filePath: data.file_path,
+          fileSize: data.file_size,
+          acknowledgementRequired: data.acknowledgement_required,
+          acknowledgedAt: data.acknowledged_at,
+          acknowledgedBy: data.acknowledged_by,
+          uploadedBy: data.uploaded_by,
+          uploadedAt: data.uploaded_at,
+          createdAt: data.created_at,
+          updatedAt: data.updated_at
+        }
+      };
+    } catch (err: any) {
+      return { error: err.message };
+    }
+  },
+
+  async acknowledgeDocument(documentId: string, employeeId: string): Promise<{ error?: string }> {
+    if (!supabase) return { error: 'Database unconfigured.' };
+    try {
+      const { error } = await supabase
+        .from('employee_documents')
+        .update({
+          acknowledged_at: new Date().toISOString(),
+          acknowledged_by: employeeId,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', documentId)
+        .eq('employee_id', employeeId);
+
+      if (error) return { error: error.message };
+      return {};
+    } catch (err: any) {
+      return { error: err.message };
+    }
+  },
+
+  async getSignedDocumentUrl(filePath: string, expiresInSeconds = 3600): Promise<{ url?: string; error?: string }> {
+    if (!supabase) return { error: 'Database unconfigured.' };
+    try {
+      const { data, error } = await supabase.storage
+        .from('employee-documents')
+        .createSignedUrl(filePath, expiresInSeconds);
+
+      if (error || !data?.signedUrl) return { error: error?.message || 'Failed to create signed URL.' };
+      return { url: data.signedUrl };
+    } catch (err: any) {
+      return { error: err.message };
+    }
+  },
+
+  // 10.5 Salary Hikes
+  async fetchSalaryHikes(employeeId: string): Promise<EmployeeSalaryHike[]> {
+    if (!supabase) return [];
+    try {
+      const { data, error } = await supabase
+        .from('employee_salary_hikes')
+        .select('*')
+        .eq('employee_id', employeeId)
+        .order('effective_date', { ascending: false });
+
+      if (error || !data) return [];
+      return data.map((h: any) => ({
+        id: h.id,
+        employeeId: h.employee_id,
+        previousSalary: Number(h.previous_salary || 0),
+        newSalary: Number(h.new_salary || 0),
+        effectiveDate: h.effective_date,
+        reason: h.reason,
+        approvedBy: h.approved_by,
+        createdAt: h.created_at
+      }));
+    } catch {
+      return [];
+    }
+  },
+
+  async logSalaryHike(hike: {
+    employeeId: string;
+    previousSalary: number;
+    newSalary: number;
+    effectiveDate: string;
+    reason: string;
+  }, approverId: string): Promise<{ hike?: EmployeeSalaryHike; error?: string }> {
+    if (!supabase) return { error: 'Database unconfigured.' };
+    try {
+      const { data, error } = await supabase
+        .from('employee_salary_hikes')
+        .insert({
+          employee_id: hike.employeeId,
+          previous_salary: hike.previousSalary,
+          new_salary: hike.newSalary,
+          effective_date: hike.effectiveDate,
+          reason: hike.reason,
+          approved_by: approverId
+        })
+        .select()
+        .single();
+
+      if (error || !data) return { error: error?.message || 'Failed to log salary hike.' };
+
+      // Also update employee_records salary
+      await supabase
+        .from('employee_records')
+        .update({
+          salary: hike.newSalary,
+          updated_at: new Date().toISOString(),
+          updated_by: approverId
+        })
+        .eq('id', hike.employeeId);
+
+      return {
+        hike: {
+          id: data.id,
+          employeeId: data.employee_id,
+          previousSalary: Number(data.previous_salary || 0),
+          newSalary: Number(data.new_salary || 0),
+          effectiveDate: data.effective_date,
+          reason: data.reason,
+          approvedBy: data.approved_by,
+          createdAt: data.created_at
+        }
+      };
+    } catch (err: any) {
+      return { error: err.message };
+    }
+  },
+
+  // 10.6 Attendance Automation RPC Runner
+  async processAttendanceAutomation(): Promise<{ result?: any; error?: string }> {
+    if (!supabase) return { error: 'Database unconfigured.' };
+    try {
+      const { data, error } = await supabase.rpc('fn_cron_process_attendance_automation');
+      if (error) return { error: error.message };
+      return { result: data };
+    } catch (err: any) {
+      return { error: err.message };
+    }
+  },
+
+  // 10.7 Full Dossier Enhanced Fetcher
   async fetchFullEmployeeDossier(employeeId: string): Promise<EmployeeFullDossier | null> {
     if (!supabase) return null;
     try {
@@ -2257,7 +2755,14 @@ export const employeeOperationsService = {
         assets,
         payrollRecords,
         performanceRecords,
-        settlement
+        settlement,
+        changeRequests,
+        tasks,
+        workReports,
+        goals,
+        documents,
+        salaryHikes,
+        pendingBankChangeRequest
       ] = await Promise.all([
         this.fetchEmployeeRecord(employeeId),
         this.fetchBankDetails(employeeId),
@@ -2265,20 +2770,36 @@ export const employeeOperationsService = {
         this.fetchEmployeeAssets(employeeId),
         this.fetchEmployeePayrollRecords(employeeId),
         this.fetchPerformanceRecords(employeeId),
-        this.fetchFinalSettlement(employeeId)
+        this.fetchFinalSettlement(employeeId),
+        this.fetchProfileChangeRequests(employeeId),
+        this.fetchManagementTasks(undefined, employeeId),
+        this.fetchWorkReports(employeeId),
+        this.fetchGoals(employeeId),
+        this.fetchDocuments(employeeId),
+        this.fetchSalaryHikes(employeeId),
+        this.fetchPendingBankChangeRequest(employeeId)
       ]);
 
       return {
         profile,
         employeeRecord: empRecord,
+        record: empRecord,
         bankDetails,
         attendanceHistory,
+        attendance: attendanceHistory,
         assets,
         payrollRecords,
+        payroll: payrollRecords,
         performanceRecords,
-        changeRequests: [],
-        tasks: [],
-        settlement
+        performance: performanceRecords,
+        changeRequests,
+        tasks,
+        settlement,
+        workReports,
+        goals,
+        documents,
+        salaryHikes,
+        pendingBankChangeRequest
       };
     } catch {
       return null;

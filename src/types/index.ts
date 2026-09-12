@@ -1128,6 +1128,63 @@ export interface EmployeeFinalSettlement {
   updatedAt: string;
 }
 
+export interface EmployeeWorkReport {
+  id: string;
+  employeeId: string;
+  reportType: 'weekly' | 'monthly';
+  period: string; // e.g. "2026-W37" or "2026-09"
+  summary: string;
+  achievements?: string;
+  blockersOrIncidents?: string;
+  managementNotes?: string;
+  status: 'submitted' | 'reviewed' | 'approved';
+  reviewedBy?: string | null;
+  reviewedAt?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EmployeeGoal {
+  id: string;
+  employeeId: string;
+  title: string;
+  description?: string;
+  targetDate: string; // YYYY-MM-DD
+  progress: number; // 0 - 100
+  status: 'in_progress' | 'achieved' | 'behind' | 'cancelled';
+  managementNotes?: string;
+  createdBy?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EmployeeDocument {
+  id: string;
+  employeeId: string;
+  title: string;
+  documentType: 'contract' | 'nda' | 'policy' | 'other';
+  filePath: string;
+  fileSize?: number;
+  acknowledgementRequired: boolean;
+  acknowledgedAt?: string | null;
+  acknowledgedBy?: string | null;
+  uploadedBy?: string;
+  uploadedAt: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface EmployeeSalaryHike {
+  id: string;
+  employeeId: string;
+  previousSalary: number;
+  newSalary: number;
+  effectiveDate: string; // YYYY-MM-DD
+  reason: string;
+  approvedBy: string;
+  createdAt: string;
+}
+
 export interface EmployeeFullDossier {
   profile: UserProfile;
   employeeRecord: EmployeeRecord | null;
@@ -1143,6 +1200,11 @@ export interface EmployeeFullDossier {
   changeRequests: EmployeeProfileChangeRequest[];
   tasks: EmployeeManagementTask[];
   settlement: EmployeeFinalSettlement | null;
+  workReports?: EmployeeWorkReport[];
+  goals?: EmployeeGoal[];
+  documents?: EmployeeDocument[];
+  salaryHikes?: EmployeeSalaryHike[];
+  pendingBankChangeRequest?: EmployeeProfileChangeRequest | null;
 }
 
 

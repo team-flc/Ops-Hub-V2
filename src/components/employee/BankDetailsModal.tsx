@@ -59,20 +59,39 @@ export const BankDetailsModal: React.FC<BankDetailsModalProps> = ({
     setErrorMessage(null);
 
     try {
-      const res = await employeeOperationsService.upsertBankDetails({
-        employeeId,
-        bankName: bankName.trim(),
-        accountTitle: accountTitle.trim(),
-        accountNumber: accountNumber.trim(),
-        iban: iban.trim() || undefined,
-        branchCode: branchCode.trim() || undefined
-      });
+      if (isManager) {
+        const res = await employeeOperationsService.upsertBankDetails({
+          employeeId,
+          bankName: bankName.trim(),
+          accountTitle: accountTitle.trim(),
+          accountNumber: accountNumber.trim(),
+          iban: iban.trim() || undefined,
+          branchCode: branchCode.trim() || undefined
+        });
 
-      if (res.error) {
-        setErrorMessage(res.error);
+        if (res.error) {
+          setErrorMessage(res.error);
+        } else {
+          onSuccess();
+          onClose();
+        }
       } else {
-        onSuccess();
-        onClose();
+        const res = await employeeOperationsService.requestBankDetailsChange({
+          employeeId,
+          bankName: bankName.trim(),
+          accountTitle: accountTitle.trim(),
+          accountNumber: accountNumber.trim(),
+          iban: iban.trim() || undefined,
+          branchCode: branchCode.trim() || undefined,
+          reason: 'Employee submitted bank details update'
+        });
+
+        if (res.error) {
+          setErrorMessage(res.error);
+        } else {
+          onSuccess();
+          onClose();
+        }
       }
     } catch (err: any) {
       setErrorMessage(err.message || 'Failed to update bank details.');
@@ -119,7 +138,11 @@ export const BankDetailsModal: React.FC<BankDetailsModalProps> = ({
 
           <div className="p-3.5 rounded-2xl bg-brand-50/60 dark:bg-brand-950/20 border border-brand-200 dark:border-brand-800/40 flex items-center gap-2.5 text-xs text-brand-800 dark:text-brand-300">
             <Lock className="w-4 h-4 text-brand-600 shrink-0" />
-            <span>Bank account details are masked and strictly protected under financial compliance policies.</span>
+            <span>
+              {isManager
+                ? 'Management Direct Entry: Bank details are masked and strictly protected under financial compliance policies.'
+                : 'Approval Required: Bank detail updates require Owner/Manager review before taking effect on payroll disbursements.'}
+            </span>
           </div>
 
           <div className="space-y-1">
@@ -207,11 +230,11 @@ export const BankDetailsModal: React.FC<BankDetailsModalProps> = ({
               className="px-5 py-2.5 rounded-xl bg-brand-600 hover:bg-brand-700 disabled:opacity-50 text-white text-xs font-bold transition-all shadow-md shadow-brand-500/20 flex items-center gap-2"
             >
               {isSubmitting ? (
-                <span>Saving...</span>
+                <span>Submitting...</span>
               ) : (
                 <>
                   <CheckCircle2 className="w-4 h-4" />
-                  <span>Save Bank Details</span>
+                  <span>{isManager ? 'Save Bank Details' : 'Submit for Approval'}</span>
                 </>
               )}
             </button>

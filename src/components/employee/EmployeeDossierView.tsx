@@ -10,7 +10,8 @@ import { useAuth } from '../../context/AuthContext';
 import { useSafeNavigate } from '../../lib/safeRouterHooks';
 import {
   EmployeeFullDossier, TeamMemberRecord, UserProfile,
-  CompanyAsset, EmployeeAttendance, EmployeePayrollRecord
+  CompanyAsset, EmployeeAttendance, EmployeePayrollRecord,
+  EmployeeWorkReport, EmployeeGoal, EmployeeDocument, EmployeeSalaryHike
 } from '../../types';
 import { employeeOperationsService } from '../../lib/employeeOperationsService';
 import { teamManagementService } from '../../lib/teamManagementService';
@@ -20,6 +21,10 @@ import { BankDetailsModal } from './BankDetailsModal';
 import { AttendanceCorrectionModal } from './AttendanceCorrectionModal';
 import { PayrollAdjustmentModal } from './PayrollAdjustmentModal';
 import { FinalSettlementModal } from './FinalSettlementModal';
+import { SubmitWorkReportModal } from './SubmitWorkReportModal';
+import { GoalModal } from './GoalModal';
+import { UploadDocumentModal } from './UploadDocumentModal';
+import { LogSalaryHikeModal } from './LogSalaryHikeModal';
 
 const LinkedInIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" }) => (
   <svg className={className} viewBox="0 0 24 24" fill="currentColor">
@@ -45,7 +50,7 @@ export const EmployeeDossierView: React.FC = () => {
   const navigate = useSafeNavigate();
 
   const [dossier, setDossier] = useState<EmployeeFullDossier | null>(null);
-  const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'performance' | 'payroll' | 'assets' | 'documents'>('overview');
+  const [activeTab, setActiveTab] = useState<'overview' | 'attendance' | 'performance' | 'payroll' | 'assets' | 'documents' | 'hikes'>('overview');
   const [isLoading, setIsLoading] = useState(true);
 
   // Modals
@@ -57,6 +62,11 @@ export const EmployeeDossierView: React.FC = () => {
   const [selectedPayrollRecord, setSelectedPayrollRecord] = useState<EmployeePayrollRecord | null>(null);
   const [isSettlementModalOpen, setIsSettlementModalOpen] = useState(false);
   const [previewEvidenceUrl, setPreviewEvidenceUrl] = useState<string | null>(null);
+  const [isGoalModalOpen, setIsGoalModalOpen] = useState(false);
+  const [editingGoal, setEditingGoal] = useState<EmployeeGoal | null>(null);
+  const [isUploadDocModalOpen, setIsUploadDocModalOpen] = useState(false);
+  const [isLogHikeModalOpen, setIsLogHikeModalOpen] = useState(false);
+  const [isWorkReportModalOpen, setIsWorkReportModalOpen] = useState(false);
 
   const targetId = employeeId || currentUserProfile?.id;
 
@@ -103,7 +113,7 @@ export const EmployeeDossierView: React.FC = () => {
     );
   }
 
-  const { profile, bankDetails, assets = [], changeRequests = [] } = dossier;
+  const { profile, bankDetails, assets = [], changeRequests = [], workReports = [], goals = [], documents = [], salaryHikes = [], pendingBankChangeRequest } = dossier;
   const record = dossier.employeeRecord || dossier.record;
   const attendance = dossier.attendanceHistory || dossier.attendance || [];
   const payroll = dossier.payrollRecords || dossier.payroll || [];
@@ -456,38 +466,201 @@ export const EmployeeDossierView: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 3: PERFORMANCE */}
+      {/* TAB 3: PERFORMANCE & 360 */}
       {activeTab === 'performance' && (
-        <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border shadow-xs space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-slate-900 dark:text-gray-100">Performance Notes & Warnings</h2>
-            {isManager && (
+        <div className="space-y-6">
+          {/* Work Reports Section */}
+          <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-gray-100">Weekly & Monthly Work Reports</h2>
+                <p className="text-xs text-slate-500 dark:text-gray-400">Employee deliverables, highlights and blocker logs</p>
+              </div>
               <button
                 type="button"
-                onClick={() => setIsLogIncidentModalOpen(true)}
+                onClick={() => setIsWorkReportModalOpen(true)}
                 className="px-3.5 py-1.5 rounded-xl bg-brand-600 text-white text-xs font-bold hover:bg-brand-700 transition-colors flex items-center gap-1.5"
               >
-                <Plus className="w-3.5 h-3.5" /> Log Incident / Coaching
+                <Plus className="w-3.5 h-3.5" /> Submit Report
               </button>
+            </div>
+
+            {workReports.length === 0 ? (
+              <p className="text-xs text-slate-400 italic text-center py-6">No work reports submitted on record.</p>
+            ) : (
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {workReports.map((r) => (
+                  <div key={r.id} className="p-4 rounded-2xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border space-y-2.5 text-xs">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-slate-900 dark:text-gray-100 uppercase">{r.period}</span>
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase bg-brand-100 text-brand-800">
+                          {r.reportType}
+                        </span>
+                      </div>
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold capitalize ${
+                        r.status === 'approved' ? 'bg-emerald-100 text-emerald-800' :
+                        r.status === 'reviewed' ? 'bg-blue-100 text-blue-800' : 'bg-amber-100 text-amber-800'
+                      }`}>
+                        {r.status}
+                      </span>
+                    </div>
+
+                    <div>
+                      <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider block">Summary:</span>
+                      <p className="text-slate-700 dark:text-gray-300 leading-relaxed">{r.summary}</p>
+                    </div>
+
+                    {r.achievements && (
+                      <div>
+                        <span className="text-[10px] font-semibold text-emerald-600 uppercase tracking-wider block">Achievements:</span>
+                        <p className="text-slate-600 dark:text-gray-400">{r.achievements}</p>
+                      </div>
+                    )}
+
+                    {r.blockersOrIncidents && (
+                      <div>
+                        <span className="text-[10px] font-semibold text-rose-600 uppercase tracking-wider block">Blockers:</span>
+                        <p className="text-slate-600 dark:text-gray-400">{r.blockersOrIncidents}</p>
+                      </div>
+                    )}
+
+                    {r.managementNotes && (
+                      <div className="p-2.5 rounded-xl bg-indigo-50/60 dark:bg-indigo-950/30 text-[11px] text-indigo-900 dark:text-indigo-200">
+                        <span className="font-bold block">Supervisor Feedback:</span>
+                        <span>{r.managementNotes}</span>
+                      </div>
+                    )}
+
+                    {isManager && r.status === 'submitted' && (
+                      <div className="pt-2 border-t border-slate-200 dark:border-dark-border flex items-center justify-end gap-2">
+                        <button
+                          type="button"
+                          onClick={async () => {
+                            if (currentUserProfile) {
+                              await employeeOperationsService.reviewWorkReport(r.id, 'approved', currentUserProfile.id, 'Approved by management');
+                              loadDossier();
+                            }
+                          }}
+                          className="px-2.5 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[10px]"
+                        >
+                          Approve Report
+                        </button>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
             )}
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            {performance.length === 0 ? (
-              <p className="text-xs text-slate-400 italic col-span-2 text-center py-6">No performance notes recorded.</p>
+          {/* Goals and OKRs Section */}
+          <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-gray-100">Performance Goals & OKRs</h2>
+                <p className="text-xs text-slate-500 dark:text-gray-400">Quarterly milestones, learning targets and KPI tracking</p>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  setEditingGoal(null);
+                  setIsGoalModalOpen(true);
+                }}
+                className="px-3.5 py-1.5 rounded-xl bg-brand-600 text-white text-xs font-bold hover:bg-brand-700 transition-colors flex items-center gap-1.5"
+              >
+                <Plus className="w-3.5 h-3.5" /> Add Goal
+              </button>
+            </div>
+
+            {goals.length === 0 ? (
+              <p className="text-xs text-slate-400 italic text-center py-6">No performance goals set for this member.</p>
             ) : (
-              performance.map((p) => (
-                <div key={p.id} className="p-4 rounded-2xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border space-y-2 text-xs">
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-slate-900 dark:text-gray-100">{p.title}</span>
-                    <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-700 capitalize">
-                      {p.recordType}
-                    </span>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {goals.map((g) => (
+                  <div key={g.id} className="p-4 rounded-2xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border space-y-3 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-900 dark:text-gray-100 text-sm">{g.title}</span>
+                      <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold capitalize ${
+                        g.status === 'achieved' ? 'bg-emerald-100 text-emerald-800' :
+                        g.status === 'in_progress' ? 'bg-indigo-100 text-indigo-800' :
+                        g.status === 'behind' ? 'bg-amber-100 text-amber-800' : 'bg-slate-100 text-slate-800'
+                      }`}>
+                        {g.status.replace('_', ' ')}
+                      </span>
+                    </div>
+
+                    {g.description && (
+                      <p className="text-slate-600 dark:text-gray-400 leading-relaxed">{g.description}</p>
+                    )}
+
+                    <div className="space-y-1.5">
+                      <div className="flex justify-between text-[11px]">
+                        <span className="text-slate-500">Progress:</span>
+                        <span className="font-bold font-mono text-brand-600">{g.progress}%</span>
+                      </div>
+                      <div className="w-full bg-slate-200 dark:bg-dark-border h-2 rounded-full overflow-hidden">
+                        <div
+                          className="bg-brand-600 h-full rounded-full transition-all duration-300"
+                          style={{ width: `${g.progress}%` }}
+                        />
+                      </div>
+                    </div>
+
+                    <div className="pt-2 border-t border-slate-200 dark:border-dark-border flex items-center justify-between text-[10px] text-slate-400">
+                      <span>Target: <strong className="text-slate-700 dark:text-gray-300">{g.targetDate}</strong></span>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingGoal(g);
+                          setIsGoalModalOpen(true);
+                        }}
+                        className="text-brand-600 hover:text-brand-700 font-bold"
+                      >
+                        Edit Goal / Progress
+                      </button>
+                    </div>
                   </div>
-                  <p className="text-slate-600 dark:text-gray-400">{p.description}</p>
-                </div>
-              ))
+                ))}
+              </div>
             )}
+          </div>
+
+          {/* Incidents and Coaching Section */}
+          <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-gray-100">Performance Notes & Coaching Warnings</h2>
+                <p className="text-xs text-slate-500 dark:text-gray-400">Formal supervisor coaching logs and commendations</p>
+              </div>
+              {isManager && (
+                <button
+                  type="button"
+                  onClick={() => setIsLogIncidentModalOpen(true)}
+                  className="px-3.5 py-1.5 rounded-xl bg-brand-600 text-white text-xs font-bold hover:bg-brand-700 transition-colors flex items-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Log Incident / Coaching
+                </button>
+              )}
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {performance.length === 0 ? (
+                <p className="text-xs text-slate-400 italic col-span-2 text-center py-6">No performance notes recorded.</p>
+              ) : (
+                performance.map((p) => (
+                  <div key={p.id} className="p-4 rounded-2xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border space-y-2 text-xs">
+                    <div className="flex items-center justify-between">
+                      <span className="font-bold text-slate-900 dark:text-gray-100">{p.title}</span>
+                      <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-indigo-50 text-indigo-700 capitalize">
+                        {p.recordType}
+                      </span>
+                    </div>
+                    <p className="text-slate-600 dark:text-gray-400">{p.description}</p>
+                  </div>
+                ))
+              )}
+            </div>
           </div>
         </div>
       )}
@@ -602,28 +775,150 @@ export const EmployeeDossierView: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 6: DOCUMENTS & EMPLOYMENT */}
+      {/* TAB 6: CONTRACTS & GOVERNANCE DOCUMENTS */}
       {activeTab === 'documents' && (
-        <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border shadow-xs space-y-4">
-          <h2 className="text-sm font-bold text-slate-900 dark:text-gray-100">Profile Change Requests & Audit History</h2>
-          <div className="space-y-2 text-xs">
-            {changeRequests.length === 0 ? (
-              <p className="text-slate-400 italic py-4">No change requests on record.</p>
+        <div className="space-y-6">
+          <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h2 className="text-sm font-bold text-slate-900 dark:text-gray-100">Contracts, NDAs & Employee Documents</h2>
+                <p className="text-xs text-slate-500 dark:text-gray-400">Private, short-lived signed access for employee compliance</p>
+              </div>
+              {isManager && (
+                <button
+                  type="button"
+                  onClick={() => setIsUploadDocModalOpen(true)}
+                  className="px-3.5 py-1.5 rounded-xl bg-brand-600 text-white text-xs font-bold hover:bg-brand-700 transition-colors flex items-center gap-1.5"
+                >
+                  <Plus className="w-3.5 h-3.5" /> Upload Document
+                </button>
+              )}
+            </div>
+
+            {documents.length === 0 ? (
+              <p className="text-xs text-slate-400 italic py-6 text-center">No contracts or documents on file for this employee.</p>
             ) : (
-              changeRequests.map((req) => (
-                <div key={req.id} className="p-3 rounded-2xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border flex justify-between">
-                  <div>
-                    <span className="font-semibold text-slate-800 capitalize">{req.requestType.replace('_', ' ')}</span>
-                    <span className="text-slate-500 block text-[11px]">{req.reason || 'No reason specified'}</span>
+              <div className="divide-y divide-slate-100 dark:divide-dark-border">
+                {documents.map((doc) => (
+                  <div key={doc.id} className="py-3 flex items-center justify-between gap-4 text-xs">
+                    <div>
+                      <span className="font-bold text-slate-800 dark:text-gray-200 block">{doc.title}</span>
+                      <span className="text-[11px] text-slate-400 capitalize">
+                        {doc.documentType} • Uploaded {new Date(doc.uploadedAt).toLocaleDateString()}
+                      </span>
+                    </div>
+
+                    <div className="flex items-center gap-3">
+                      {doc.acknowledgementRequired && (
+                        doc.acknowledgedAt ? (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-100 text-emerald-800 border border-emerald-300">
+                            ✓ Acknowledged {new Date(doc.acknowledgedAt).toLocaleDateString()}
+                          </span>
+                        ) : (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-100 text-amber-800 border border-amber-300">
+                            Pending Acknowledgement
+                          </span>
+                        )
+                      )}
+
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const res = await employeeOperationsService.getSignedDocumentUrl(doc.filePath);
+                          if (res.url) {
+                            window.open(res.url, '_blank');
+                          }
+                        }}
+                        className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 text-xs font-semibold"
+                      >
+                        View Document
+                      </button>
+                    </div>
                   </div>
-                  <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold capitalize ${
-                    req.status === 'approved' ? 'bg-emerald-100 text-emerald-800' : req.status === 'rejected' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
-                  }`}>
-                    {req.status}
-                  </span>
-                </div>
-              ))
+                ))}
+              </div>
             )}
+          </div>
+
+          <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border shadow-xs space-y-4">
+            <h2 className="text-sm font-bold text-slate-900 dark:text-gray-100">Profile Change Requests & Audit History</h2>
+            <div className="space-y-2 text-xs">
+              {changeRequests.length === 0 ? (
+                <p className="text-slate-400 italic py-4">No change requests on record.</p>
+              ) : (
+                changeRequests.map((req) => (
+                  <div key={req.id} className="p-3 rounded-2xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border flex justify-between items-center">
+                    <div>
+                      <span className="font-semibold text-slate-800 capitalize">{req.requestType.replace('_', ' ')}</span>
+                      <span className="text-slate-500 block text-[11px]">{req.reason || 'No reason specified'}</span>
+                    </div>
+                    <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold capitalize ${
+                      req.status === 'approved' ? 'bg-emerald-100 text-emerald-800' : req.status === 'rejected' ? 'bg-rose-100 text-rose-800' : 'bg-amber-100 text-amber-800'
+                    }`}>
+                      {req.status}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* TAB 7: SALARY HIKES */}
+      {activeTab === 'hikes' && (
+        <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border shadow-xs space-y-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-sm font-bold text-slate-900 dark:text-gray-100">Salary Increment & Revision History</h2>
+              <p className="text-xs text-slate-500 dark:text-gray-400">Formal compensation modifications with manager approval audit</p>
+            </div>
+            {isManager && (
+              <button
+                type="button"
+                onClick={() => setIsLogHikeModalOpen(true)}
+                className="px-3.5 py-1.5 rounded-xl bg-emerald-600 text-white text-xs font-bold hover:bg-emerald-700 transition-colors flex items-center gap-1.5"
+              >
+                <Plus className="w-3.5 h-3.5" /> Log Salary Hike
+              </button>
+            )}
+          </div>
+
+          <div className="overflow-x-auto">
+            <table className="w-full text-left text-xs">
+              <thead>
+                <tr className="border-b border-slate-100 dark:border-dark-border text-slate-400 uppercase text-[10px] font-bold tracking-wider">
+                  <th className="py-2.5 px-3">Effective Date</th>
+                  <th className="py-2.5 px-3">Previous Base</th>
+                  <th className="py-2.5 px-3">New Base Salary</th>
+                  <th className="py-2.5 px-3">Increment</th>
+                  <th className="py-2.5 px-3">Reason / Justification</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100 dark:divide-dark-border">
+                {salaryHikes.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="py-6 text-center text-slate-400 italic">No salary increments on record.</td>
+                  </tr>
+                ) : (
+                  salaryHikes.map((hike) => {
+                    const diff = hike.newSalary - hike.previousSalary;
+                    const pct = hike.previousSalary > 0 ? ((diff / hike.previousSalary) * 100).toFixed(1) : '100';
+                    return (
+                      <tr key={hike.id} className="hover:bg-slate-50/50 dark:hover:bg-dark-sidebar transition-colors">
+                        <td className="py-2.5 px-3 font-semibold font-mono">{hike.effectiveDate}</td>
+                        <td className="py-2.5 px-3 font-mono text-slate-500">PKR {hike.previousSalary.toLocaleString()}</td>
+                        <td className="py-2.5 px-3 font-mono font-bold text-slate-900 dark:text-gray-100">PKR {hike.newSalary.toLocaleString()}</td>
+                        <td className="py-2.5 px-3 font-mono text-emerald-600 font-semibold">
+                          +PKR {diff.toLocaleString()} ({pct}%)
+                        </td>
+                        <td className="py-2.5 px-3 text-slate-600 dark:text-gray-300">{hike.reason}</td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
@@ -684,6 +979,43 @@ export const EmployeeDossierView: React.FC = () => {
             employeeRecord={record || null}
             assignedAssets={assets}
             callerId={currentUserProfile.id}
+            onSuccess={loadDossier}
+          />
+
+          <GoalModal
+            isOpen={isGoalModalOpen}
+            onClose={() => {
+              setIsGoalModalOpen(false);
+              setEditingGoal(null);
+            }}
+            employeeId={targetId || ''}
+            callerId={currentUserProfile.id}
+            existingGoal={editingGoal}
+            isManager={isManager}
+            onSuccess={loadDossier}
+          />
+
+          <UploadDocumentModal
+            isOpen={isUploadDocModalOpen}
+            onClose={() => setIsUploadDocModalOpen(false)}
+            employeeId={targetId || ''}
+            callerId={currentUserProfile.id}
+            onSuccess={loadDossier}
+          />
+
+          <LogSalaryHikeModal
+            isOpen={isLogHikeModalOpen}
+            onClose={() => setIsLogHikeModalOpen(false)}
+            employeeId={targetId || ''}
+            currentSalary={record?.salary || 0}
+            callerId={currentUserProfile.id}
+            onSuccess={loadDossier}
+          />
+
+          <SubmitWorkReportModal
+            isOpen={isWorkReportModalOpen}
+            onClose={() => setIsWorkReportModalOpen(false)}
+            employeeId={targetId || ''}
             onSuccess={loadDossier}
           />
         </>
