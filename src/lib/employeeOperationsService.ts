@@ -1521,36 +1521,20 @@ export const employeeOperationsService = {
 
   async raisePayrollConcern(
     recordId: string,
-    employeeId: string,
-    notes: string
+    notesOrEmployeeId: string,
+    maybeNotes?: string
   ): Promise<{ error?: string }> {
     if (!supabase) return { error: 'Database unconfigured.' };
+    const notes = (maybeNotes !== undefined ? maybeNotes : notesOrEmployeeId) || '';
     if (!notes.trim()) return { error: 'Please enter details regarding your salary concern.' };
 
     try {
-      const { error } = await supabase
-        .from('employee_payroll_records')
-        .update({
-          status: 'Concern Raised',
-          concern_notes: notes.trim(),
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', recordId)
-        .eq('employee_id', employeeId);
-
-      if (error) return { error: error.message };
-
-      // Create Management Task
-      await supabase.from('employee_management_tasks').insert({
-        task_type: 'employee_concern',
-        employee_id: employeeId,
-        title: 'Payroll Calculation Concern Raised',
-        description: `Employee raised a payroll concern: "${notes.trim()}".`,
-        status: 'open',
-        priority: 'high',
-        reference_id: recordId
+      const { error } = await supabase.rpc('fn_employee_raise_payroll_concern', {
+        p_payroll_id: recordId,
+        p_concern_notes: notes.trim()
       });
 
+      if (error) return { error: error.message };
       return {};
     } catch (err: any) {
       return { error: err.message };
