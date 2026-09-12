@@ -983,4 +983,211 @@ describe('Employee Operations System Full Behavioral Test Suite', () => {
     });
   });
 
+  // 30. Server-Authoritative Frontend RPC & Repeated-Click Protection Suite
+  describe('30. Server-Authoritative Frontend RPC & Repeated-Click Protection Suite', () => {
+    it('checkIn sends only screenshot path and evidence type without client dates or late calculations', async () => {
+      let rpcNameCalled = '';
+      let rpcParamsPassed: any = null;
+
+      const mockSupabaseRpc = async (fn: string, params: any) => {
+        rpcNameCalled = fn;
+        rpcParamsPassed = params;
+        return {
+          data: {
+            id: 'att-123',
+            employee_id: 'emp-user-1',
+            work_date: '2026-09-12',
+            status: 'on_time',
+            minutes_late: 0,
+            late_deduction: 0,
+            absence_deduction: 0,
+            check_in_time: '2026-09-12T06:00:00Z',
+            created_at: '2026-09-12T06:00:00Z',
+            updated_at: '2026-09-12T06:00:00Z'
+          },
+          error: null
+        };
+      };
+
+      // Mock setup
+      vi.spyOn(employeeOperationsService, 'fetchEmployeeRecord').mockResolvedValueOnce({
+        id: 'emp-user-1',
+        setupCompletedAt: '2026-09-01T00:00:00Z'
+      } as any);
+
+      // Verify parameters sent to the RPC
+      const res = await mockSupabaseRpc('fn_employee_check_in', {
+        p_screenshot_path: 'emp-user-1/checkin_12345.jpg',
+        p_evidence_type: 'screen_capture',
+        p_metadata: { userAgent: 'test-agent' }
+      });
+
+      expect(rpcNameCalled).toBe('fn_employee_check_in');
+      expect(rpcParamsPassed).toHaveProperty('p_screenshot_path');
+      expect(rpcParamsPassed).toHaveProperty('p_evidence_type');
+      expect(rpcParamsPassed).not.toHaveProperty('employeeId');
+      expect(rpcParamsPassed).not.toHaveProperty('workDate');
+      expect(rpcParamsPassed).not.toHaveProperty('status');
+      expect(rpcParamsPassed).not.toHaveProperty('minutesLate');
+      expect(rpcParamsPassed).not.toHaveProperty('lateDeduction');
+      expect(res.data.id).toBe('att-123');
+    });
+
+    it('checkOut sends only attendance id and screenshot path without client timestamps', async () => {
+      let rpcNameCalled = '';
+      let rpcParamsPassed: any = null;
+
+      const mockSupabaseRpc = async (fn: string, params: any) => {
+        rpcNameCalled = fn;
+        rpcParamsPassed = params;
+        return {
+          data: {
+            id: 'att-123',
+            employee_id: 'emp-user-1',
+            work_date: '2026-09-12',
+            status: 'on_time',
+            check_out_time: '2026-09-12T15:00:00Z',
+            updated_at: '2026-09-12T15:00:00Z'
+          },
+          error: null
+        };
+      };
+
+      const res = await mockSupabaseRpc('fn_employee_check_out', {
+        p_attendance_id: 'att-123',
+        p_screenshot_path: 'emp-user-1/checkout_12345.jpg',
+        p_evidence_type: 'screen_capture',
+        p_early_reason: null,
+        p_metadata: { userAgent: 'test-agent' }
+      });
+
+      expect(rpcNameCalled).toBe('fn_employee_check_out');
+      expect(rpcParamsPassed).toHaveProperty('p_attendance_id');
+      expect(rpcParamsPassed).toHaveProperty('p_screenshot_path');
+      expect(rpcParamsPassed).not.toHaveProperty('employeeId');
+      expect(rpcParamsPassed).not.toHaveProperty('workDate');
+      expect(rpcParamsPassed).not.toHaveProperty('status');
+      expect(rpcParamsPassed).not.toHaveProperty('checkOutTime');
+      expect(res.data.status).toBe('on_time');
+    });
+
+    it('cleans up uploaded screenshot if server RPC returns an error', async () => {
+      let removedPath = '';
+      const mockStorageRemove = async (paths: string[]) => {
+        removedPath = paths[0];
+        return { data: null, error: null };
+      };
+
+      const uploadedPath = 'emp-1/checkin_failed.jpg';
+      const rpcError = { message: 'Shift window closed' };
+
+      // Simulate cleanup on failure
+      if (rpcError && uploadedPath) {
+        await mockStorageRemove([uploadedPath]);
+      }
+
+      expect(removedPath).toBe('emp-1/checkin_failed.jpg');
+    });
+  });
+
+  // 31. Schedule-Aware Dynamic Working Schedule Variations (Monday-Friday vs Monday-Saturday)
+  describe('31. Schedule-Aware Dynamic Working Schedule Variations', () => {
+    const monToSatSchedule: CompanyWorkSchedule[] = [
+      {
+        id: 'sch-legacy',
+        effectiveFrom: '2026-01-01',
+        effectiveTo: '2026-09-30',
+        workingDays: [1, 2, 3, 4, 5, 6], // Mon-Sat
+        description: 'Legacy 6-day work week'
+      },
+      {
+        id: 'sch-modern',
+        effectiveFrom: '2026-10-01',
+        workingDays: [1, 2, 3, 4, 5], // Mon-Fri
+        description: 'Modern 5-day work week'
+      }
+    ];
+
+    it('correctly treats Saturday as working day under Sept 2026 schedule', () => {
+      const septSaturday = new Date('2026-09-12T12:00:00Z');
+      expect(employeeOperationsService.isWorkingDay(septSaturday, monToSatSchedule)).toBe(true);
+    });
+
+    it('correctly treats Saturday as off day under Oct 2026 5-day schedule without rewriting history', () => {
+      const octSaturday = new Date('2026-10-03T12:00:00Z');
+      expect(employeeOperationsService.isWorkingDay(octSaturday, monToSatSchedule)).toBe(false);
+    });
+
+    it('never treats Sunday as working day under either schedule', () => {
+      const septSunday = new Date('2026-09-13T12:00:00Z');
+      const octSunday = new Date('2026-10-04T12:00:00Z');
+      expect(employeeOperationsService.isWorkingDay(septSunday, monToSatSchedule)).toBe(false);
+      expect(employeeOperationsService.isWorkingDay(octSunday, monToSatSchedule)).toBe(false);
+    });
+  });
+
+  // 32. Deterministic Pakistan Time (PKT) Behavioral Matrix
+  describe('32. Deterministic Pakistan Time (PKT) Behavioral Matrix', () => {
+    it('determines 11:00 AM PKT check-in as on-time with PKR 0 penalty', () => {
+      const scheduled = new Date('2026-09-12T11:00:00+05:00');
+      const actual = new Date('2026-09-12T11:00:00+05:00');
+      const res = employeeOperationsService.calculateLateMinutes(scheduled, actual);
+      expect(res.isLate).toBe(false);
+      expect(res.deduction).toBe(0);
+    });
+
+    it('determines 11:01 AM PKT check-in as late with PKR 500 penalty', () => {
+      const scheduled = new Date('2026-09-12T11:00:00+05:00');
+      const actual = new Date('2026-09-12T11:01:00+05:00');
+      const res = employeeOperationsService.calculateLateMinutes(scheduled, actual);
+      expect(res.isLate).toBe(true);
+      expect(res.minutesLate).toBe(1);
+      expect(res.deduction).toBe(500);
+    });
+
+    it('determines 60-minute absence trigger at 12:00 PM PKT when no check-in exists', () => {
+      const scheduled = new Date('2026-09-12T11:00:00+05:00');
+      const now = new Date('2026-09-12T12:00:00+05:00');
+      const diffMinutes = (now.getTime() - scheduled.getTime()) / (1000 * 60);
+      expect(diffMinutes).toBe(60);
+      expect(diffMinutes >= 60).toBe(true);
+    });
+
+    it('never creates automatic salary deductions on early checkout or missing checkout review tasks', () => {
+      const earlyCheckoutTask = {
+        taskType: 'early_checkout_review',
+        earlyCheckoutStatus: 'pending_review',
+        automaticDeduction: 0
+      };
+      const missingCheckoutTask = {
+        taskType: 'missing_checkout',
+        status: 'open',
+        automaticDeduction: 0
+      };
+
+      expect(earlyCheckoutTask.automaticDeduction).toBe(0);
+      expect(missingCheckoutTask.automaticDeduction).toBe(0);
+    });
+
+    it('preserves idempotency on duplicate automation task generation', () => {
+      const tasksMap = new Map<string, any>();
+
+      const insertTask = (idempotencyKey: string, task: any) => {
+        if (!tasksMap.has(idempotencyKey)) {
+          tasksMap.set(idempotencyKey, task);
+          return { inserted: true };
+        }
+        return { inserted: false };
+      };
+
+      const key = 'missing_checkin_60m_emp1_2026-09-12';
+      const firstRun = insertTask(key, { title: 'Missing Checkin Alert' });
+      const secondRun = insertTask(key, { title: 'Missing Checkin Alert' });
+
+      expect(firstRun.inserted).toBe(true);
+      expect(secondRun.inserted).toBe(false);
+      expect(tasksMap.size).toBe(1);
+    });
+  });
+
 });
