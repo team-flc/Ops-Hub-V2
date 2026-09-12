@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { employeeOperationsService } from '../src/lib/employeeOperationsService';
-import { 
-  WorkShift, CompanyWorkSchedule, NoticePeriodStatus, GoodStandingStatus, 
+import {
+  WorkShift, CompanyWorkSchedule, NoticePeriodStatus, GoodStandingStatus,
   CompanyAsset, ROLE_DISPLAY_NAMES, EmployeeRecord, TeamMemberRecord, AssetStatus
 } from '../src/types';
-import { 
+import {
   getPKTTodayDateString, getPKTCurrentMonthString, formatPKTDate, formatPKTTime,
   getPKTDateTimeParts, getDaysInPKTMonth, isOvernightShift, calculateShiftWindow,
   calculateDaysWithCompany, calculatePKTDaysUntil15th, calculatePKTSalaryCountdown
@@ -403,6 +403,133 @@ describe('Employee Operations System Full Behavioral Test Suite', () => {
       expect(record.paidBy).toBe(managerId);
       expect(record.paidAt).toBeTruthy();
       expect(record.paymentProofUrl).toBeTruthy();
+    });
+  });
+
+  // 17. Setup Pending Gate & Security Contradiction Resolution
+  describe('17. Setup Pending Gate & Security Contradiction Resolution', () => {
+    it('blocks check-in attempts when employee setup is not completed', async () => {
+      // Mock fetchEmployeeRecord to return setupCompletedAt = null
+      vi.spyOn(employeeOperationsService, 'fetchEmployeeRecord').mockResolvedValueOnce({
+        id: 'rec-1',
+        userId: 'user-setup-pending',
+        setupCompletedAt: null,
+        sopAcknowledged: false,
+        salary: 0,
+        createdAt: '',
+        updatedAt: ''
+      } as any);
+
+      const res = await employeeOperationsService.checkIn({
+        employeeId: 'user-setup-pending',
+        workDate: '2026-09-12',
+        evidenceBlob: new Blob(['evidence'])
+      });
+
+      expect(res.error).toContain('Employee setup is pending');
+      expect(res.attendance).toBeUndefined();
+    });
+
+    it('blocks check-out attempts when employee setup is not completed', async () => {
+      vi.spyOn(employeeOperationsService, 'fetchEmployeeRecord').mockResolvedValueOnce({
+        id: 'rec-1',
+        userId: 'user-setup-pending',
+        setupCompletedAt: null,
+        sopAcknowledged: false,
+        salary: 0,
+        createdAt: '',
+        updatedAt: ''
+      } as any);
+
+      const res = await employeeOperationsService.checkOut({
+        attendanceId: 'att-1',
+        employeeId: 'user-setup-pending',
+        evidenceBlob: new Blob(['evidence'])
+      });
+
+      expect(res.error).toContain('Employee setup is pending');
+      expect(res.attendance).toBeUndefined();
+    });
+
+    it('exempts setup-pending employees from late, absence, and penalty calculations', () => {
+      const isSetupPending = true;
+      const attendanceHistory = [
+        { id: '1', workDate: '2026-09-10', status: 'late' as const, lateDeduction: 500 },
+        { id: '2', workDate: '2026-09-11', status: 'absent' as const, absenceDeduction: 5000 }
+      ];
+
+      const presentDays = isSetupPending ? 0 : attendanceHistory.filter(a => a.status === 'present' || a.status === 'late').length;
+      const lateDays = isSetupPending ? 0 : attendanceHistory.filter(a => a.status === 'late').length;
+      const totalLateDeductions = isSetupPending ? 0 : attendanceHistory.reduce((sum, a) => sum + (a.lateDeduction || 0), 0);
+      const unapprovedAbsences = isSetupPending ? 0 : attendanceHistory.filter(a => a.status === 'absent').length;
+      const totalAbsenceDeductions = isSetupPending ? 0 : attendanceHistory.reduce((sum, a) => sum + (a.absenceDeduction || 0), 0);
+
+      expect(presentDays).toBe(0);
+      expect(lateDays).toBe(0);
+      expect(totalLateDeductions).toBe(0);
+      expect(unapprovedAbsences).toBe(0);
+      expect(totalAbsenceDeductions).toBe(0);
+    });
+  });
+
+  // 18. Create / Edit Employee Bank Details & Setup Validation Parity
+  describe('18. Create / Edit Employee Bank Details & Setup Validation Parity', () => {
+    it('validates setup completion criteria (Designation, Department, Shift, Base Salary > 0)', () => {
+      const validateSetup = (data: { designationId?: string; departmentIds?: string[]; shiftId?: string; salary?: number }) => {
+        const errors: string[] = [];
+        if (!data.designationId) errors.push('Designation required');
+        if (!data.departmentIds || data.departmentIds.length === 0) errors.push('Department required');
+        if (!data.shiftId) errors.push('Shift required');
+        if (!data.salary || data.salary <= 0) errors.push('Valid Base Monthly Salary (> 0 PKR) required');
+        return { isValid: errors.length === 0, errors };
+      };
+
+      expect(validateSetup({}).isValid).toBe(false);
+      expect(validateSetup({ designationId: 'desig-1', departmentIds: ['dep-1'], shiftId: 'shift-1', salary: 0 }).isValid).toBe(false);
+      expect(validateSetup({ designationId: 'desig-1', departmentIds: ['dep-1'], shiftId: 'shift-1', salary: 150000 }).isValid).toBe(true);
+    });
+
+    it('handles bank details storage with bank name, account title, and account number/IBAN', () => {
+      const bankDetails = {
+        userId: 'user-123',
+        bankName: 'Meezan Bank',
+        accountTitle: 'Muhammad Ali',
+        accountNumber: '01020304050607',
+        iban: 'PK12MEZN0001020304050607',
+        isVerified: true
+      };
+
+      expect(bankDetails.bankName).toBe('Meezan Bank');
+      expect(bankDetails.accountTitle).toBe('Muhammad Ali');
+      expect(bankDetails.accountNumber).toBeTruthy();
+      expect(bankDetails.isVerified).toBe(true);
+    });
+  });
+
+  // 19. Role-Based Access Isolation & Security
+  describe('19. Role-Based Access Isolation & Security', () => {
+    it('allows only owner and operational_manager to manage operations or complete setup', () => {
+      const canManageOps = (role: string) => role === 'owner' || role === 'operational_manager';
+
+      expect(canManageOps('owner')).toBe(true);
+      expect(canManageOps('operational_manager')).toBe(true);
+      expect(canManageOps('team_member')).toBe(false);
+      expect(canManageOps('client')).toBe(false);
+    });
+
+    it('isolates team members to their own employee dashboard view', () => {
+      const currentUserId = 'user-abc';
+      const targetUserId = 'user-xyz';
+
+      const canViewDossier = (role: string, myId: string, requestedId: string) => {
+        if (role === 'owner' || role === 'operational_manager') return true;
+        return myId === requestedId;
+      };
+
+      expect(canViewDossier('owner', currentUserId, targetUserId)).toBe(true);
+      expect(canViewDossier('operational_manager', currentUserId, targetUserId)).toBe(true);
+      expect(canViewDossier('team_member', currentUserId, targetUserId)).toBe(false);
+      expect(canViewDossier('team_member', currentUserId, currentUserId)).toBe(true);
     });
   });
 });

@@ -1,16 +1,16 @@
 import { supabase } from './supabase';
-import { 
-  WorkShift, 
-  CompanyWorkSchedule, 
-  EmployeeRecord, 
-  EmployeeAttendance, 
-  CompanyAsset, 
-  EmployeeBankDetails, 
-  EmployeeProfileChangeRequest, 
-  EmployeePayrollRecord, 
-  EmployeePerformanceRecord, 
-  EmployeeManagementTask, 
-  EmployeeFinalSettlement, 
+import {
+  WorkShift,
+  CompanyWorkSchedule,
+  EmployeeRecord,
+  EmployeeAttendance,
+  CompanyAsset,
+  EmployeeBankDetails,
+  EmployeeProfileChangeRequest,
+  EmployeePayrollRecord,
+  EmployeePerformanceRecord,
+  EmployeeManagementTask,
+  EmployeeFinalSettlement,
   EmployeeFullDossier,
   UserProfile,
   UserRole,
@@ -354,8 +354,8 @@ export const employeeOperationsService = {
       const settings = track?.getSettings() as any;
       if (settings?.displaySurface && settings.displaySurface !== 'monitor') {
         stream.getTracks().forEach((t) => t.stop());
-        return { 
-          error: 'Please select "Entire Screen" rather than an individual tab or window so your workstation taskbar and system clock can be verified.' 
+        return {
+          error: 'Please select "Entire Screen" rather than an individual tab or window so your workstation taskbar and system clock can be verified.'
         };
       }
 
@@ -439,15 +439,18 @@ export const employeeOperationsService = {
     if (!supabase) return { error: 'Database unconfigured.' };
 
     try {
-      // 1. Fetch employee record to get shift & schedule
+      // 1. Fetch employee record and enforce setup completion
       const empRecord = await this.fetchEmployeeRecord(payload.employeeId);
+      if (!empRecord || !empRecord.setupCompletedAt) {
+        return { error: 'Employee setup is pending. Management must complete employment, shift, and payroll configuration before attendance can be recorded.' };
+      }
+
       const shifts = await this.fetchWorkShifts();
-      const defaultShift = shifts.find((s) => s.code === 'morning') || shifts[0];
-      const activeShift = (empRecord?.shiftId ? shifts.find((s) => s.id === empRecord.shiftId) : null) || defaultShift;
+      const activeShift = (empRecord.shiftId ? shifts.find((s) => s.id === empRecord.shiftId) : null) || shifts[0];
 
       // 2. Compute scheduled check-in time in Asia/Karachi (PKT)
-      const checkInTimeStr = empRecord?.customCheckInTime || activeShift?.startTime || '11:00:00';
-      const checkOutTimeStr = empRecord?.customCheckOutTime || activeShift?.endTime || '20:00:00';
+      const checkInTimeStr = empRecord.customCheckInTime || activeShift?.startTime || '11:00:00';
+      const checkOutTimeStr = empRecord.customCheckOutTime || activeShift?.endTime || '20:00:00';
 
       const scheduledCheckIn = new Date(`${payload.workDate}T${checkInTimeStr}`);
       let scheduledCheckOut = new Date(`${payload.workDate}T${checkOutTimeStr}`);
@@ -579,6 +582,11 @@ export const employeeOperationsService = {
     if (!supabase) return { error: 'Database unconfigured.' };
 
     try {
+      const empRecord = await this.fetchEmployeeRecord(payload.employeeId);
+      if (!empRecord || !empRecord.setupCompletedAt) {
+        return { error: 'Employee setup is pending. Management must complete employment, shift, and payroll configuration before attendance can be recorded.' };
+      }
+
       const { data: attendance, error: fetchErr } = await supabase
         .from('employee_attendance')
         .select('*')
@@ -1938,8 +1946,8 @@ export const employeeOperationsService = {
 
     const totalAdditions = pendingEarnedSalary + currentAccruedAmount + heldPendingAmount + severanceBonus;
     const approvedDeductions = lateDeductions + absenceDeductions + assetRecoveryDeduction + otherDeductions;
-    const computedFinalPayable = payloadOrEmpId.netFinalPayable !== undefined 
-      ? payloadOrEmpId.netFinalPayable 
+    const computedFinalPayable = payloadOrEmpId.netFinalPayable !== undefined
+      ? payloadOrEmpId.netFinalPayable
       : Math.max(0, totalAdditions - approvedDeductions);
 
     return this.saveFinalSettlement({
@@ -2020,9 +2028,9 @@ export const employeeOperationsService = {
       // Update employment status to 'resigned' or 'terminated'
       await supabase
         .from('employee_records')
-        .update({ 
-          employment_status: payload.separationReason === 'termination' ? 'terminated' : 'resigned', 
-          updated_at: new Date().toISOString() 
+        .update({
+          employment_status: payload.separationReason === 'termination' ? 'terminated' : 'resigned',
+          updated_at: new Date().toISOString()
         })
         .eq('id', payload.employeeId);
 

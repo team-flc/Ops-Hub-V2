@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { useParams } from 'react-router-dom';
-import { 
-  User, Mail, Phone, Calendar, Clock, DollarSign, 
-  Laptop, Award, FileText, ArrowLeft, ShieldCheck, 
-  AlertTriangle, CheckCircle2, Edit3, Plus, RefreshCw, 
+import {
+  User, Mail, Phone, Calendar, Clock, DollarSign,
+  Laptop, Award, FileText, ArrowLeft, ShieldCheck,
+  AlertTriangle, CheckCircle2, Edit3, Plus, RefreshCw,
   Lock, Eye, AlertCircle, Building2, Briefcase
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useSafeNavigate } from '../../lib/safeRouterHooks';
-import { 
-  EmployeeFullDossier, TeamMemberRecord, UserProfile, 
-  CompanyAsset, EmployeeAttendance, EmployeePayrollRecord 
+import {
+  EmployeeFullDossier, TeamMemberRecord, UserProfile,
+  CompanyAsset, EmployeeAttendance, EmployeePayrollRecord
 } from '../../types';
 import { employeeOperationsService } from '../../lib/employeeOperationsService';
 import { teamManagementService } from '../../lib/teamManagementService';
@@ -166,7 +166,7 @@ export const EmployeeDossierView: React.FC = () => {
               </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-gray-400">
-              {profile.designationName || 'Team Member'} • {record?.shift?.name || 'Morning Shift'} • {profile.workEmail}
+              {profile.designationName || 'Team Member'} • {!record?.setupCompletedAt ? 'Setup Pending — Shift Unconfigured' : (record?.shift?.name || 'Shift Unconfigured')} • {profile.workEmail}
             </p>
           </div>
         </div>

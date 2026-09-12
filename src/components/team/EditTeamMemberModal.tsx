@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { 
-  X, UserCheck, Building2, Briefcase, Check, 
+import {
+  X, UserCheck, Building2, Briefcase, Check,
   AlertCircle, Loader2, Edit3, Clock, DollarSign,
   UserCog, ShieldCheck, Lock, Camera, Trash2, Shield
 } from 'lucide-react';
@@ -70,6 +70,11 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
   const [setupCompleted, setSetupCompleted] = useState(false);
   const [existingSetupCompletedAt, setExistingSetupCompletedAt] = useState<string | null>(null);
 
+  // Bank Details State
+  const [bankName, setBankName] = useState('');
+  const [accountTitle, setAccountTitle] = useState('');
+  const [accountNumberOrIban, setAccountNumberOrIban] = useState('');
+
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -104,9 +109,10 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
           }
         }
 
-        const [fetchedShifts, employeeRec] = await Promise.all([
+        const [fetchedShifts, employeeRec, fetchedBank] = await Promise.all([
           employeeOperationsService.fetchWorkShifts(),
-          employeeOperationsService.fetchEmployeeRecord(member.id)
+          employeeOperationsService.fetchEmployeeRecord(member.id),
+          employeeOperationsService.fetchBankDetails(member.id)
         ]);
 
         setShifts(fetchedShifts);
@@ -125,6 +131,16 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
         } else if (fetchedShifts.length > 0) {
           setSelectedShiftId(fetchedShifts[0].id);
           setSetupCompleted(false);
+        }
+
+        if (fetchedBank) {
+          setBankName(fetchedBank.bankName || '');
+          setAccountTitle(fetchedBank.accountTitle || '');
+          setAccountNumberOrIban(fetchedBank.accountNumberOrIban || '');
+        } else {
+          setBankName('');
+          setAccountTitle('');
+          setAccountNumberOrIban('');
         }
       } catch (err) {
         console.error('Failed to load companion employee data:', err);
@@ -239,6 +255,14 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
       return;
     }
 
+    // Strict validation for Setup Complete status
+    if (setupCompleted) {
+      if (!selectedDesignationId || selectedDeptIds.length === 0 || !selectedShiftId || !salary || Number(salary) <= 0) {
+        setErrorMessage('To mark Employee Operations Setup as Completed, you must configure a Designation, at least one Department, an Assigned Shift, and a valid Base Monthly Salary (> 0 PKR).');
+        return;
+      }
+    }
+
     // Safety check for any removed client IDs
     const removedClientIds = (member.clientIds || []).filter((id) => !selectedClientIds.includes(id));
     for (const removedId of removedClientIds) {
@@ -302,6 +326,16 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
         setupCompletedAt: resolvedSetupCompletedAt
       }, currentUserProfile.id);
 
+      // If bank details provided/edited, save them
+      if (bankName.trim() && accountTitle.trim() && accountNumberOrIban.trim()) {
+        await employeeOperationsService.upsertBankDetails({
+          employeeId: member.id,
+          bankName: bankName.trim(),
+          accountTitle: accountTitle.trim(),
+          accountNumberOrIban: accountNumberOrIban.trim()
+        }, currentUserProfile.id);
+      }
+
       setIsSubmitting(false);
       onSuccess();
       onClose();
@@ -314,7 +348,7 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
   const modalContent = (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
       <div className="bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border rounded-3xl shadow-2xl w-full max-w-2xl max-h-[90vh] flex flex-col overflow-hidden">
-        
+
         {/* Header */}
         <div className="px-6 py-5 border-b border-slate-100 dark:border-dark-border flex items-center justify-between bg-slate-50/60 dark:bg-dark-sidebar">
           <div className="flex items-center gap-3">
@@ -718,13 +752,76 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
                 className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
               />
             </div>
+
+            {/* Working Days Policy Notice */}
+            <div className="p-3 rounded-2xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border flex items-center justify-between text-xs">
+              <div className="flex items-center gap-2 text-slate-700 dark:text-gray-300">
+                <Clock className="w-4 h-4 text-brand-600 shrink-0" />
+                <span><strong>Working Schedule:</strong> Monday – Saturday (6 Days/Week • Sunday Off)</span>
+              </div>
+              <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300 border border-brand-200 dark:border-brand-800">
+                PKT UTC+5
+              </span>
+            </div>
           </div>
 
-          {/* 3. Departments */}
+          {/* 3. Bank Account Details */}
+          <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-dark-border">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-gray-400 flex items-center gap-1.5">
+              <DollarSign className="w-3.5 h-3.5 text-emerald-600" />
+              <span>3. Bank Account Details (For Salary Disbursement)</span>
+            </h3>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+              <div className="space-y-1">
+                <label htmlFor="edit-bank-name" className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                  Bank Name
+                </label>
+                <input
+                  id="edit-bank-name"
+                  type="text"
+                  value={bankName}
+                  onChange={(e) => setBankName(e.target.value)}
+                  placeholder="e.g. Meezan Bank, HBL, Standard Chartered"
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label htmlFor="edit-account-title" className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                  Account Title (Beneficiary Name)
+                </label>
+                <input
+                  id="edit-account-title"
+                  type="text"
+                  value={accountTitle}
+                  onChange={(e) => setAccountTitle(e.target.value)}
+                  placeholder="e.g. Muhammad Atif"
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+
+              <div className="col-span-1 sm:col-span-2 space-y-1">
+                <label htmlFor="edit-account-number" className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                  Account Number or IBAN (24 Characters)
+                </label>
+                <input
+                  id="edit-account-number"
+                  type="text"
+                  value={accountNumberOrIban}
+                  onChange={(e) => setAccountNumberOrIban(e.target.value)}
+                  placeholder="e.g. PK36MEZN0000000102030405 or 010203040506"
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 font-mono focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* 4. Departments */}
           <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-dark-border">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-gray-400 flex items-center gap-1.5">
               <Building2 className="w-3.5 h-3.5 text-brand-600" />
-              <span>3. Assigned Departments <span className="text-rose-500">*</span></span>
+              <span>4. Assigned Departments <span className="text-rose-500">*</span></span>
             </h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
               {departments.map((dept) => {
@@ -748,11 +845,11 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
             </div>
           </div>
 
-          {/* 4. Reporting Manager */}
+          {/* 5. Reporting Manager */}
           <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-dark-border">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-gray-400 flex items-center gap-1.5">
               <UserCheck className="w-3.5 h-3.5 text-brand-600" />
-              <span>4. Reporting Manager</span>
+              <span>5. Reporting Manager</span>
             </h3>
             {currentUserProfile?.role === 'operational_manager' ? (
               <div className="p-3 bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-xs">
@@ -777,11 +874,11 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
             )}
           </div>
 
-          {/* 5. Client Access */}
+          {/* 6. Client Access */}
           <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-dark-border">
             <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-gray-400 flex items-center gap-1.5">
               <Briefcase className="w-3.5 h-3.5 text-brand-600" />
-              <span>5. Client Access</span>
+              <span>6. Client Access</span>
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-36 overflow-y-auto p-1">
               {clients
