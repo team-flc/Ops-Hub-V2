@@ -165,6 +165,22 @@ export const EmployeeDashboardView: React.FC = () => {
   const rawAccrued = (!isSetupPending && totalDaysInMonth > 0) ? (baseSalary / totalDaysInMonth) * currentDay : 0;
   const netAccrued = isSetupPending ? 0 : Math.max(0, Math.round(rawAccrued - totalLateDeductions - totalAbsenceDeductions));
 
+  // Configured Shift Duration in Hours
+  const shiftDurationHours = useMemo(() => {
+    if (!activeShift) return 9;
+    try {
+      const [sh, sm] = (employeeRecord?.customCheckInTime || activeShift.startTime || '11:00:00').split(':').map(Number);
+      const [eh, em] = (employeeRecord?.customCheckOutTime || activeShift.endTime || '20:00:00').split(':').map(Number);
+      let diffMinutes = (eh * 60 + em) - (sh * 60 + sm);
+      if (diffMinutes <= 0 || activeShift.crossesMidnight) {
+        diffMinutes += 24 * 60;
+      }
+      return Math.round(diffMinutes / 60) || 9;
+    } catch {
+      return 9;
+    }
+  }, [activeShift, employeeRecord]);
+
   // Graph 1: Weekly Attendance Trend Data (Mon to Sat for current week)
   const weeklyAttendanceData = useMemo(() => {
     const todayPKT = getPKTTodayDateString();
@@ -433,7 +449,7 @@ export const EmployeeDashboardView: React.FC = () => {
 
           <div className="h-32 flex items-end justify-between gap-1.5 pt-4">
             {weeklyAttendanceData.map((d) => {
-              const heightPct = d.hours > 0 ? Math.min(100, Math.round((d.hours / 9) * 100)) : (d.status === 'present' || d.status === 'late' ? 85 : 15);
+              const heightPct = d.hours > 0 ? Math.min(100, Math.round((d.hours / shiftDurationHours) * 100)) : (d.status === 'present' || d.status === 'late' ? 85 : 15);
               let barColor = 'bg-slate-100 dark:bg-dark-sidebar';
               if (d.status === 'present') barColor = 'bg-emerald-500';
               else if (d.status === 'late') barColor = 'bg-amber-500';
@@ -471,23 +487,23 @@ export const EmployeeDashboardView: React.FC = () => {
               <PieChart className="w-4 h-4 text-emerald-600" />
               <span>Monthly Composition</span>
             </div>
-            <span className="text-[10px] text-slate-400 font-mono">26 Work Days</span>
+            <span className="text-[10px] text-slate-400 font-mono">{monthlyComposition.totalWorkingDays} Work Days</span>
           </div>
 
           <div className="space-y-2 pt-1">
             <div className="h-4 rounded-full bg-slate-100 dark:bg-dark-sidebar flex overflow-hidden">
               <div
-                style={{ width: `${(monthlyComposition.onTimeDays / 26) * 100}%` }}
+                style={{ width: `${(monthlyComposition.onTimeDays / (monthlyComposition.totalWorkingDays || 26)) * 100}%` }}
                 className="bg-emerald-500 h-full"
                 title={`On-time: ${monthlyComposition.onTimeDays}d`}
               />
               <div
-                style={{ width: `${(monthlyComposition.lateDays / 26) * 100}%` }}
+                style={{ width: `${(monthlyComposition.lateDays / (monthlyComposition.totalWorkingDays || 26)) * 100}%` }}
                 className="bg-amber-500 h-full"
                 title={`Late: ${monthlyComposition.lateDays}d`}
               />
               <div
-                style={{ width: `${(monthlyComposition.absent / 26) * 100}%` }}
+                style={{ width: `${(monthlyComposition.absent / (monthlyComposition.totalWorkingDays || 26)) * 100}%` }}
                 className="bg-rose-500 h-full"
                 title={`Absent: ${monthlyComposition.absent}d`}
               />

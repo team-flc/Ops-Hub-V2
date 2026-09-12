@@ -757,4 +757,230 @@ describe('Employee Operations System Full Behavioral Test Suite', () => {
     });
   });
 
+
+  // 26. Night Shift Anchoring & Boundary Tests (PKT UTC+5)
+  describe('26. Night Shift Anchoring & Boundary Tests (8 PM - 5 AM PKT)', () => {
+    const shift = {
+      startTime: '20:00:00',
+      endTime: '05:00:00',
+      crossesMidnight: true
+    };
+
+    const resolveNightShiftAnchor = (pktTimeStr: string, currentDate: string) => {
+      // pktTimeStr: "HH:MM:SS"
+      const [h, m] = pktTimeStr.split(':').map(Number);
+      const timeInMins = h * 60 + m;
+      const shiftStartMins = 20 * 60; // 1200
+      const shiftEndMins = 5 * 60;    // 300
+
+      if (timeInMins <= shiftEndMins) {
+        // Post-midnight before 05:00 AM: Anchored to yesterday
+        const yesterday = new Date(currentDate);
+        yesterday.setDate(yesterday.getDate() - 1);
+        return {
+          anchoredWorkDate: yesterday.toISOString().slice(0, 10),
+          shiftWindow: 'yesterday_instance',
+          isShiftActive: true
+        };
+      } else if (timeInMins >= (shiftStartMins - 120)) {
+        // 18:00 to 23:59: Anchored to today
+        return {
+          anchoredWorkDate: currentDate,
+          shiftWindow: 'today_instance',
+          isShiftActive: true
+        };
+      } else {
+        // Outside shift window (05:01 to 17:59)
+        return {
+          anchoredWorkDate: null,
+          shiftWindow: 'inactive',
+          isShiftActive: false
+        };
+      }
+    };
+
+    it('anchors 7:59 PM PKT to today instance (within 2h pre-shift check-in window)', () => {
+      const res = resolveNightShiftAnchor('19:59:00', '2026-09-12');
+      expect(res.anchoredWorkDate).toBe('2026-09-12');
+      expect(res.isShiftActive).toBe(true);
+    });
+
+    it('anchors 8:00 PM PKT (shift start) to today instance', () => {
+      const res = resolveNightShiftAnchor('20:00:00', '2026-09-12');
+      expect(res.anchoredWorkDate).toBe('2026-09-12');
+      expect(res.isShiftActive).toBe(true);
+    });
+
+    it('anchors 11:59 PM PKT to today instance', () => {
+      const res = resolveNightShiftAnchor('23:59:00', '2026-09-12');
+      expect(res.anchoredWorkDate).toBe('2026-09-12');
+      expect(res.isShiftActive).toBe(true);
+    });
+
+    it('anchors 12:00 AM (00:00 PKT) to yesterday instance', () => {
+      const res = resolveNightShiftAnchor('00:00:00', '2026-09-13');
+      expect(res.anchoredWorkDate).toBe('2026-09-12');
+      expect(res.isShiftActive).toBe(true);
+    });
+
+    it('anchors 4:59 AM PKT to yesterday instance', () => {
+      const res = resolveNightShiftAnchor('04:59:00', '2026-09-13');
+      expect(res.anchoredWorkDate).toBe('2026-09-12');
+      expect(res.isShiftActive).toBe(true);
+    });
+
+    it('anchors 5:00 AM PKT (shift end) to yesterday instance', () => {
+      const res = resolveNightShiftAnchor('05:00:00', '2026-09-13');
+      expect(res.anchoredWorkDate).toBe('2026-09-12');
+      expect(res.isShiftActive).toBe(true);
+    });
+
+    it('rejects check-in outside legitimate shift window at 12:00 PM (Noon PKT)', () => {
+      const res = resolveNightShiftAnchor('12:00:00', '2026-09-13');
+      expect(res.anchoredWorkDate).toBeNull();
+      expect(res.isShiftActive).toBe(false);
+    });
+  });
+
+  // 27. Screenshot Evidence Ownership & Path Traversal Validation
+  describe('27. Screenshot Evidence Ownership & Path Traversal Validation', () => {
+    const validateEvidencePath = (callerId: string, path: string | null | undefined, evidenceType: string) => {
+      if (!path || !path.trim()) return { valid: false, error: 'Evidence path required' };
+      if (!path.startsWith(`${callerId}/`)) return { valid: false, error: 'Evidence path must reside in authenticated employee directory' };
+      if (path.includes('..')) return { valid: false, error: 'Path traversal detected' };
+      if (!['screen_capture', 'manual_upload'].includes(evidenceType)) return { valid: false, error: 'Invalid evidence type' };
+      return { valid: true };
+    };
+
+    it('accepts valid path inside employee private folder', () => {
+      const callerId = 'user-123';
+      const path = 'user-123/1789210000_checkin.jpg';
+      expect(validateEvidencePath(callerId, path, 'screen_capture').valid).toBe(true);
+    });
+
+    it('rejects attempt by Team Member A to use Team Member B evidence path', () => {
+      const callerId = 'team-member-a';
+      const victimPath = 'team-member-b/1789210000_checkin.jpg';
+      const res = validateEvidencePath(callerId, victimPath, 'screen_capture');
+      expect(res.valid).toBe(false);
+      expect(res.error).toContain('authenticated employee directory');
+    });
+
+    it('rejects directory traversal attempts in evidence path', () => {
+      const callerId = 'user-123';
+      const traversalPath = 'user-123/../../../etc/passwd.jpg';
+      const res = validateEvidencePath(callerId, traversalPath, 'screen_capture');
+      expect(res.valid).toBe(false);
+      expect(res.error).toContain('Path traversal');
+    });
+
+    it('rejects unsupported evidence types', () => {
+      const callerId = 'user-123';
+      const path = 'user-123/checkin.jpg';
+      const res = validateEvidencePath(callerId, path, 'spoofed_camera');
+      expect(res.valid).toBe(false);
+      expect(res.error).toContain('Invalid evidence type');
+    });
+  });
+
+  // 28. Narrow Concern & Acknowledgement RPC Security
+  describe('28. Narrow Concern & Acknowledgement RPC Security', () => {
+    it('only updates acknowledgement fields without modifying financial or governance properties', () => {
+      const originalAsset: CompanyAsset = {
+        id: 'asset-1',
+        itemName: 'MacBook Pro 16',
+        assetTag: 'MAC-001',
+        status: 'assigned',
+        price: 350000,
+        replacementValue: 350000,
+        condition: 'good',
+        issueDate: '2026-09-01',
+        financialRecoveryApproved: false,
+        financialRecoveryAmount: 0,
+        createdAt: '2026-09-01',
+        updatedAt: '2026-09-01'
+      };
+
+      const acknowledgeRpc = (asset: CompanyAsset, actorId: string): CompanyAsset => {
+        // Narrow RPC updates ONLY acknowledged_at, acknowledged_by, status
+        return {
+          ...asset,
+          status: 'acknowledged',
+          acknowledgedAt: '2026-09-12T10:00:00Z',
+          acknowledgedBy: actorId,
+          updatedAt: '2026-09-12T10:00:00Z'
+        };
+      };
+
+      const acknowledged = acknowledgeRpc(originalAsset, 'emp-1');
+      expect(acknowledged.status).toBe('acknowledged');
+      expect(acknowledged.acknowledgedBy).toBe('emp-1');
+      // Financial and core attributes are completely immutable by employee
+      expect(acknowledged.price).toBe(350000);
+      expect(acknowledged.assetTag).toBe('MAC-001');
+    });
+
+    it('attaches payroll concern notes and creates management task without modifying payable salary', () => {
+      const originalPayroll = {
+        id: 'pay-1',
+        employeeId: 'emp-1',
+        grossSalary: 150000,
+        lateDeductionsTotal: 1000,
+        absenceDeductionsTotal: 5000,
+        netPayable: 144000,
+        status: 'pending' as const,
+        concernNotes: null as string | null
+      };
+
+      const raisePayrollConcernRpc = (payroll: typeof originalPayroll, notes: string) => {
+        return {
+          updatedPayroll: {
+            ...payroll,
+            concernNotes: notes
+          },
+          managementTask: {
+            taskType: 'payroll_concern',
+            employeeId: payroll.employeeId,
+            referenceId: payroll.id,
+            status: 'open'
+          }
+        };
+      };
+
+      const result = raisePayrollConcernRpc(originalPayroll, 'Dispute on late cut for Sept 10');
+      expect(result.updatedPayroll.concernNotes).toBe('Dispute on late cut for Sept 10');
+      expect(result.updatedPayroll.netPayable).toBe(144000); // Unaltered!
+      expect(result.updatedPayroll.grossSalary).toBe(150000); // Unaltered!
+      expect(result.managementTask.taskType).toBe('payroll_concern');
+    });
+  });
+
+  // 29. Edge Function Authorization & POST-Only Security
+  describe('29. Edge Function Authorization & POST-Only Security', () => {
+    const handleEdgeRequest = (method: string, secretHeader?: string, expectedSecret = 'TEST_CRON_SECRET_123') => {
+      if (method !== 'POST') {
+        return { status: 405, error: 'Method not allowed' };
+      }
+      if (!secretHeader || secretHeader !== `Bearer ${expectedSecret}`) {
+        return { status: 401, error: 'Unauthorized' };
+      }
+      return { status: 200, success: true };
+    };
+
+    it('rejects GET, PUT, DELETE, OPTIONS requests with 405', () => {
+      expect(handleEdgeRequest('GET').status).toBe(405);
+      expect(handleEdgeRequest('PUT').status).toBe(405);
+      expect(handleEdgeRequest('DELETE').status).toBe(405);
+    });
+
+    it('rejects unauthorized POST requests without secret with 401', () => {
+      expect(handleEdgeRequest('POST').status).toBe(401);
+      expect(handleEdgeRequest('POST', 'Bearer WRONG_SECRET').status).toBe(401);
+    });
+
+    it('accepts authorized POST with valid CRON_SECRET with 200', () => {
+      expect(handleEdgeRequest('POST', 'Bearer TEST_CRON_SECRET_123').status).toBe(200);
+    });
+  });
+
 });

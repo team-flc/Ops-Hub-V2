@@ -3,23 +3,46 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
 
 /**
  * Edge Function: Attendance Background Automation
- * Idempotently executes:
- * 1. 60m Missing Check-in Alerts -> Management Tasks
- * 2. Shift End Unapproved Absences -> Attendance Records + Salary Cut (Base / Month Days)
- * 3. Shift End Missing Checkouts -> Management Review Tasks
  *
- * Trigger Schedule: Cron every 5-15 minutes
- * Security: Authorization Bearer (service_role or CRON_SECRET)
+ * Scheduled invocation only (e.g. pg_net or external secure cron every 5-15m).
+ *
+ * Security:
+ * - Only POST method accepted (405 for any other method).
+ * - Mandatory CRON_SECRET validation via Authorization header or x-cron-secret header.
+ * - Missing or invalid secret immediately rejected with 401 Unauthorized before client initialization.
+ * - Zero secrets or keys logged, exposed, or returned in response.
+ * - No browser CORS headers enabled.
  */
 
 serve(async (req: Request) => {
-  if (req.method === 'OPTIONS') {
-    return new Response('ok', {
-      headers: {
-        'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
-      },
-    });
+  // 1. Strictly accept only POST requests
+  if (req.method !== 'POST') {
+    return new Response(
+      JSON.stringify({ error: 'Method not allowed' }),
+      { status: 405, headers: { 'Content-Type': 'application/json', 'Allow': 'POST' } }
+    );
+  }
+
+  // 2. Validate CRON_SECRET before doing any work
+  const expectedSecret = Deno.env.get('CRON_SECRET');
+  if (!expectedSecret) {
+    // Missing server configuration
+    return new Response(
+      JSON.stringify({ error: 'Unauthorized: server configuration missing' }),
+      { status: 401, headers: { 'Content-Type': 'application/json' } }
+    );
+  }
+
+  const authHeader = req.headers.get('Authorization') || '';
+  const customHeader = req.headers.get('x-cron-secret') || '';
+  const bearerToken = authHeader.startsWith('Bearer ') ? authHeader.substring(7).trim() : '';
+
+  const providedSecret = bearerToken || customHeader;
+  if (!providedSecret || providedSecret !== expectedSecret) {
+    return new Response(
+      JSON.stringify({ error: 'Unauthorized' }),
+      { status: 401, headers: { 'Content-Type': 'application/json' } }
+    );
   }
 
   try {
@@ -28,20 +51,20 @@ serve(async (req: Request) => {
 
     if (!supabaseUrl || !supabaseServiceKey) {
       return new Response(
-        JSON.stringify({ error: 'Missing environment configuration' }),
+        JSON.stringify({ error: 'Service configuration unavailable' }),
         { status: 500, headers: { 'Content-Type': 'application/json' } }
       );
     }
 
+    // 3. Initialize isolated service-role client
     const supabase = createClient(supabaseUrl, supabaseServiceKey);
 
-    // Call authoritative database stored procedure
+    // 4. Call authoritative database stored procedure
     const { data, error } = await supabase.rpc('fn_cron_process_attendance_automation');
 
     if (error) {
-      console.error('Attendance automation RPC failed:', error);
       return new Response(
-        JSON.stringify({ error: error.message }),
+        JSON.stringify({ error: 'Database automation cycle failed' }),
         { status: 500, headers: { 'Content-Type': 'application/json' } }
       );
     }
@@ -49,16 +72,14 @@ serve(async (req: Request) => {
     return new Response(
       JSON.stringify({
         success: true,
-        message: 'Attendance automation cycle completed successfully.',
-        results: data,
+        summary: data,
         executedAt: new Date().toISOString()
       }),
       { status: 200, headers: { 'Content-Type': 'application/json' } }
     );
-  } catch (err: any) {
-    console.error('Unexpected automation error:', err);
+  } catch {
     return new Response(
-      JSON.stringify({ error: err.message || 'Internal server error' }),
+      JSON.stringify({ error: 'Internal server error' }),
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
