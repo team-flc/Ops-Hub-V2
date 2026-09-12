@@ -9,7 +9,10 @@ import { CreateClientModal } from '../src/components/clients/CreateClientModal';
 import { DuplicateClientModal } from '../src/components/clients/DuplicateClientModal';
 import { SelectedClientHeader } from '../src/components/clients/SelectedClientHeader';
 import { ClientWorkspaceView } from '../src/components/clients/ClientWorkspaceView';
+import { ClientManagementView, ClientLogoAvatar } from '../src/components/views/ClientManagementView';
+import { SettingsLayout } from '../src/components/settings/SettingsLayout';
 import { Header } from '../src/components/layout/Header';
+import { useOpsStore } from '../src/store/opsStore';
 import { 
   sanitizeUrl, 
   isValidLinkedInUrl, 
@@ -518,6 +521,76 @@ describe('Phase 2B: Client Management & Dynamic LinkedIn Access Tests', () => {
 
     // Exactly one + Add Task button exists
     expect(screen.getAllByRole('button', { name: /\+ add task/i }).length).toBe(1);
+  });
+
+  // 16. CLIENT MANAGEMENT DASHBOARD KPI CARDS & HEADER
+  it('16. ClientManagementView renders KPI summary cards with total client count, active, onboarding, paused, and packages', async () => {
+    useOpsStore.setState({ clients: mockClients });
+
+    await act(async () => {
+      render(
+        <AuthProvider>
+          <ClientManagementView />
+        </AuthProvider>
+      );
+    });
+
+    expect(screen.getByText('Client Management Dashboard')).toBeInTheDocument();
+    expect(screen.getByText('Total Clients')).toBeInTheDocument();
+    expect(screen.getByText('Registered Organizations')).toBeInTheDocument();
+    expect(screen.getByText('In Active Service')).toBeInTheDocument();
+    expect(screen.getByText('Setup & Provisioning')).toBeInTheDocument();
+    expect(screen.getByText('Operational Hold')).toBeInTheDocument();
+    expect(screen.getByText('Packages')).toBeInTheDocument();
+    expect(screen.getByText('Acme Logistics')).toBeInTheDocument();
+    expect(screen.getByText('Beta Retailers')).toBeInTheDocument();
+  });
+
+  // 17. CLIENT LOGO AVATAR
+  it('17. ClientLogoAvatar displays initials fallback or image with object-contain', () => {
+    render(
+      <ClientLogoAvatar
+        companyName="PPC Shark Force"
+        logoUrl={null}
+        sizeClass="w-9 h-9"
+      />
+    );
+    expect(screen.getByText('PS')).toBeInTheDocument();
+  });
+
+  // 18. SETTINGS LAYOUT INTEGRATION
+  it('18. SettingsLayout renders ClientManagementView when initialTab is clients', async () => {
+    mockGetUser.mockResolvedValue({
+      data: {
+        user: {
+          id: 'owner-1',
+          email: 'owner@faseehlall.com'
+        }
+      },
+      error: null
+    });
+    mockFromSelect.mockResolvedValue({
+      data: {
+        id: 'owner-1',
+        fullName: 'Atif Khan',
+        role: 'owner',
+        status: 'active'
+      },
+      error: null
+    });
+    useOpsStore.setState({ clients: mockClients });
+
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={['/settings/clients']}>
+          <AuthProvider>
+            <SettingsLayout initialTab="clients" />
+          </AuthProvider>
+        </MemoryRouter>
+      );
+    });
+
+    expect(screen.getByText('Client Management Dashboard')).toBeInTheDocument();
   });
 });
 
