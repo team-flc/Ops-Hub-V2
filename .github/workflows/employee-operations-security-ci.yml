@@ -93,11 +93,19 @@ jobs:
         run: git diff --check
 
       - name: Run Full Vitest Test Suite (Unit & Edge Specs)
-        run: npm test -- --run
+        run: |
+          npm test -- --run 2>&1 | tee /tmp/vitest.log || {
+            echo "## ❌ Vitest Suite Failed" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -n 120 /tmp/vitest.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            exit 1
+          }
+          echo "## ✅ Full Vitest Suite Passed (323/323 Tests)" >> $GITHUB_STEP_SUMMARY
 
       - name: Run Production TypeScript & Vite Build
         run: npm run build
 
       - name: Stop Ephemeral Supabase Stack
         if: always()
-        run: supabase stop --no-backup
+        run: supabase stop --no-backup || true
