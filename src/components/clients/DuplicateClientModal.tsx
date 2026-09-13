@@ -61,6 +61,7 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
   // Links start blank (per requirement: do not copy client-specific links or profiles)
   const [websiteUrl, setWebsiteUrl] = useState('');
   const [flcLandingPageUrl, setFlcLandingPageUrl] = useState('');
+  const [brandIdentityUrl, setBrandIdentityUrl] = useState('');
   const [driveUrl, setDriveUrl] = useState('');
   const [staticCreativesUrl, setStaticCreativesUrl] = useState('');
   const [videosUrl, setVideosUrl] = useState('');
@@ -112,6 +113,7 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
     const rawLinks: Partial<Record<ClientLinkType, string>> = {
       website: websiteUrl,
       flc_landing_page: flcLandingPageUrl,
+      brand_identity: brandIdentityUrl,
       google_drive: driveUrl,
       static_creatives: staticCreativesUrl,
       videos: videosUrl,
@@ -380,6 +382,20 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
                   value={flcLandingPageUrl}
                   onChange={(e) => setFlcLandingPageUrl(e.target.value)}
                   placeholder="https://flc-landing-page.com/..."
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="dup-brand-identity" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Brand Identity URL
+                </label>
+                <input
+                  id="dup-brand-identity"
+                  type="url"
+                  value={brandIdentityUrl}
+                  onChange={(e) => setBrandIdentityUrl(e.target.value)}
+                  placeholder="https://... (Brand Identity Guidelines / Assets)"
                   className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
                 />
               </div>

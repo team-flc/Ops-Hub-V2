@@ -342,17 +342,18 @@ export type ClientStatus = 'Onboarding' | 'Active' | 'Paused' | 'Archived';
 export type ClientPauseReason = 'Payment overdue' | 'Client request' | 'Operational reason' | 'Other';
 export type ClientLinkType =
   | 'website'
+  | 'flc_landing_page'
+  | 'brand_identity'
   | 'google_drive'
-  | 'facebook'
-  | 'instagram'
-  | 'linkedin_company_page'
-  | 'slack_channel'
-  | 'whatsapp_group'
   | 'static_creatives'
   | 'videos'
+  | 'grid'
   | 'vsl'
-  | 'flc_landing_page'
-  | 'grid';
+  | 'linkedin_company_page'
+  | 'facebook'
+  | 'instagram'
+  | 'slack_channel'
+  | 'whatsapp_group';
 
 export interface ClientLink {
   id?: string;

@@ -1,10 +1,11 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Building2, 
   Link2, Check, AlertCircle, Save, Loader2, Plus, 
   Trash2, ExternalLink,
   Camera, Archive, X
 } from 'lucide-react';
+import { useOpsStore } from '../../store/opsStore';
 
 const LinkedInIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" }) => (
   <svg className={className} viewBox="0 0 24 24" fill="currentColor">
@@ -77,9 +78,13 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
   const [isArchiving, setIsArchiving] = useState(false);
   const [archiveError, setArchiveError] = useState<string | null>(null);
 
+  // Discard Confirmation Modal State
+  const [showDiscardModal, setShowDiscardModal] = useState(false);
+
   // Links
   const [websiteUrl, setWebsiteUrl] = useState(client.links?.website || '');
   const [flcLandingPageUrl, setFlcLandingPageUrl] = useState(client.links?.flc_landing_page || '');
+  const [brandIdentityUrl, setBrandIdentityUrl] = useState(client.links?.brand_identity || '');
   const [driveUrl, setDriveUrl] = useState(client.links?.google_drive || '');
   const [staticCreativesUrl, setStaticCreativesUrl] = useState(client.links?.static_creatives || '');
   const [videosUrl, setVideosUrl] = useState(client.links?.videos || '');
@@ -107,7 +112,78 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // Check if form is modified from saved client prop
+  const isDirty = useMemo(() => {
+    if (companyName !== client.companyName) return true;
+    if (clientName !== client.clientName) return true;
+    if (businessBio !== (client.businessBio || '')) return true;
+    if (industry !== (client.industry || '')) return true;
+    if (logoUrl !== (client.logoUrl || null)) return true;
+    if (pkg !== client.package) return true;
+    if (managerId !== client.operationalManagerId) return true;
+    if (activationDate !== client.activationDate) return true;
+    if (status !== client.status) return true;
+    if (status === 'Paused' && pauseReason !== (client.pauseReason || 'Operational reason')) return true;
+    if (requiredLinkedInCount !== (client.requiredLinkedinProfileCount || 3)) return true;
+    if (websiteUrl !== (client.links?.website || '')) return true;
+    if (flcLandingPageUrl !== (client.links?.flc_landing_page || '')) return true;
+    if (brandIdentityUrl !== (client.links?.brand_identity || '')) return true;
+    if (driveUrl !== (client.links?.google_drive || '')) return true;
+    if (staticCreativesUrl !== (client.links?.static_creatives || '')) return true;
+    if (videosUrl !== (client.links?.videos || '')) return true;
+    if (vslUrl !== (client.links?.vsl || '')) return true;
+    if (gridUrl !== (client.links?.grid || '')) return true;
+    if (facebookUrl !== (client.links?.facebook || '')) return true;
+    if (instagramUrl !== (client.links?.instagram || '')) return true;
+    if (linkedinPageUrl !== (client.links?.linkedin_company_page || '')) return true;
+    if (slackUrl !== (client.links?.slack_channel || '')) return true;
+    if (whatsappUrl !== (client.links?.whatsapp_group || '')) return true;
+    return false;
+  }, [
+    companyName, clientName, businessBio, industry, logoUrl, pkg, managerId,
+    activationDate, status, pauseReason, requiredLinkedInCount,
+    websiteUrl, flcLandingPageUrl, brandIdentityUrl, driveUrl, staticCreativesUrl,
+    videosUrl, vslUrl, gridUrl, facebookUrl, instagramUrl, linkedinPageUrl,
+    slackUrl, whatsappUrl, client
+  ]);
+
+  // Load draft if present in sessionStorage, else initialize from client prop
   useEffect(() => {
+    try {
+      const savedDraft = sessionStorage.getItem(`ops_hub_client_links_draft_${client.id}`);
+      if (savedDraft) {
+        const parsed = JSON.parse(savedDraft);
+        setCompanyName(parsed.companyName ?? client.companyName);
+        setClientName(parsed.clientName ?? client.clientName);
+        setBusinessBio(parsed.businessBio ?? (client.businessBio || ''));
+        setIndustry(parsed.industry ?? (client.industry || ''));
+        setLogoUrl(parsed.logoUrl !== undefined ? parsed.logoUrl : (client.logoUrl || null));
+        setPkg(parsed.pkg ?? client.package);
+        setManagerId(parsed.managerId ?? client.operationalManagerId);
+        setActivationDate(parsed.activationDate ?? client.activationDate);
+        setStatus(parsed.status ?? client.status);
+        setPauseReason(parsed.pauseReason ?? (client.pauseReason || 'Operational reason'));
+        setRequiredLinkedInCount(parsed.requiredLinkedInCount ?? (client.requiredLinkedinProfileCount || 3));
+        setWebsiteUrl(parsed.websiteUrl ?? (client.links?.website || ''));
+        setFlcLandingPageUrl(parsed.flcLandingPageUrl ?? (client.links?.flc_landing_page || ''));
+        setBrandIdentityUrl(parsed.brandIdentityUrl ?? (client.links?.brand_identity || ''));
+        setDriveUrl(parsed.driveUrl ?? (client.links?.google_drive || ''));
+        setStaticCreativesUrl(parsed.staticCreativesUrl ?? (client.links?.static_creatives || ''));
+        setVideosUrl(parsed.videosUrl ?? (client.links?.videos || ''));
+        setVslUrl(parsed.vslUrl ?? (client.links?.vsl || ''));
+        setGridUrl(parsed.gridUrl ?? (client.links?.grid || ''));
+        setFacebookUrl(parsed.facebookUrl ?? (client.links?.facebook || ''));
+        setInstagramUrl(parsed.instagramUrl ?? (client.links?.instagram || ''));
+        setLinkedinPageUrl(parsed.linkedinPageUrl ?? (client.links?.linkedin_company_page || ''));
+        setSlackUrl(parsed.slackUrl ?? (client.links?.slack_channel || ''));
+        setWhatsappUrl(parsed.whatsappUrl ?? (client.links?.whatsapp_group || ''));
+        setProfiles(client.linkedinProfiles || []);
+        return;
+      }
+    } catch {
+      // Ignore parse errors and fallback to client prop
+    }
+
     setCompanyName(client.companyName);
     setClientName(client.clientName);
     setBusinessBio(client.businessBio || '');
@@ -121,6 +197,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     setRequiredLinkedInCount(client.requiredLinkedinProfileCount || 3);
     setWebsiteUrl(client.links?.website || '');
     setFlcLandingPageUrl(client.links?.flc_landing_page || '');
+    setBrandIdentityUrl(client.links?.brand_identity || '');
     setDriveUrl(client.links?.google_drive || '');
     setStaticCreativesUrl(client.links?.static_creatives || '');
     setVideosUrl(client.links?.videos || '');
@@ -133,6 +210,89 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     setWhatsappUrl(client.links?.whatsapp_group || '');
     setProfiles(client.linkedinProfiles || []);
   }, [client]);
+
+  // Persist or clean up draft in sessionStorage
+  useEffect(() => {
+    const draftKey = `ops_hub_client_links_draft_${client.id}`;
+    if (isDirty) {
+      try {
+        sessionStorage.setItem(
+          draftKey,
+          JSON.stringify({
+            companyName,
+            clientName,
+            businessBio,
+            industry,
+            logoUrl,
+            pkg,
+            managerId,
+            activationDate,
+            status,
+            pauseReason,
+            requiredLinkedInCount,
+            websiteUrl,
+            flcLandingPageUrl,
+            brandIdentityUrl,
+            driveUrl,
+            staticCreativesUrl,
+            videosUrl,
+            vslUrl,
+            gridUrl,
+            facebookUrl,
+            instagramUrl,
+            linkedinPageUrl,
+            slackUrl,
+            whatsappUrl
+          })
+        );
+      } catch {
+        // Storage might be disabled or full
+      }
+    } else {
+      try {
+        sessionStorage.removeItem(draftKey);
+      } catch {}
+    }
+  }, [
+    isDirty, client.id, companyName, clientName, businessBio, industry, logoUrl,
+    pkg, managerId, activationDate, status, pauseReason, requiredLinkedInCount,
+    websiteUrl, flcLandingPageUrl, brandIdentityUrl, driveUrl, staticCreativesUrl,
+    videosUrl, vslUrl, gridUrl, facebookUrl, instagramUrl, linkedinPageUrl,
+    slackUrl, whatsappUrl
+  ]);
+
+  const handleConfirmDiscard = () => {
+    try {
+      sessionStorage.removeItem(`ops_hub_client_links_draft_${client.id}`);
+    } catch {}
+
+    setCompanyName(client.companyName);
+    setClientName(client.clientName);
+    setBusinessBio(client.businessBio || '');
+    setIndustry(client.industry || '');
+    setLogoUrl(client.logoUrl || null);
+    setPkg(client.package);
+    setManagerId(client.operationalManagerId);
+    setActivationDate(client.activationDate);
+    setStatus(client.status);
+    setPauseReason(client.pauseReason || 'Operational reason');
+    setRequiredLinkedInCount(client.requiredLinkedinProfileCount || 3);
+    setWebsiteUrl(client.links?.website || '');
+    setFlcLandingPageUrl(client.links?.flc_landing_page || '');
+    setBrandIdentityUrl(client.links?.brand_identity || '');
+    setDriveUrl(client.links?.google_drive || '');
+    setStaticCreativesUrl(client.links?.static_creatives || '');
+    setVideosUrl(client.links?.videos || '');
+    setVslUrl(client.links?.vsl || '');
+    setGridUrl(client.links?.grid || '');
+    setFacebookUrl(client.links?.facebook || '');
+    setInstagramUrl(client.links?.instagram || '');
+    setLinkedinPageUrl(client.links?.linkedin_company_page || '');
+    setSlackUrl(client.links?.slack_channel || '');
+    setWhatsappUrl(client.links?.whatsapp_group || '');
+    setErrorMsg(null);
+    setShowDiscardModal(false);
+  };
 
   const isTeamMember = currentUserProfile?.role === 'team_member';
   const isManagerOrOwner = currentUserProfile?.role === 'owner' || currentUserProfile?.role === 'operational_manager';
@@ -212,6 +372,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     const rawLinks: Partial<Record<ClientLinkType, string>> = {
       website: websiteUrl,
       flc_landing_page: flcLandingPageUrl,
+      brand_identity: brandIdentityUrl,
       google_drive: driveUrl,
       static_creatives: staticCreativesUrl,
       videos: videosUrl,
@@ -262,7 +423,12 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
         return;
       }
 
+      try {
+        sessionStorage.removeItem(`ops_hub_client_links_draft_${client.id}`);
+      } catch {}
+
       setSuccessMsg('Client configuration updated successfully.');
+      useOpsStore.getState().updateClientRecord(result.data);
       onClientUpdated(result.data);
       setIsSaving(false);
 
@@ -397,40 +563,64 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
 
       {/* 1. Core Information & Communication Channels Form */}
       <form onSubmit={handleSaveDetails} className="bg-white dark:bg-dark-card rounded-2xl border border-gray-200 dark:border-dark-border p-6 shadow-sm space-y-6">
-        <div className="flex items-center justify-between pb-4 border-b border-gray-100 dark:border-dark-border">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-100 dark:border-dark-border">
           <div>
-            <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">
-              Client Details & Configuration
-            </h3>
-            <p className="text-xs text-gray-500">
+            <div className="flex items-center gap-2.5 flex-wrap">
+              <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">
+                Client Details & Configuration
+              </h3>
+              {isDirty && (
+                <span
+                  data-testid="unsaved-changes-indicator"
+                  className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 animate-fade-in"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" />
+                  Unsaved changes
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-gray-500 mt-0.5">
               Manage client workspace information, assigned managers, and communication channels.
             </p>
           </div>
 
-          <button
-            type="submit"
-            disabled={isSaving}
-            className="flex items-center gap-2 px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-xs font-bold shadow-md shadow-brand-500/20 transition-all disabled:opacity-50"
-          >
-            {isSaving ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Saving Changes...</span>
-              </>
-            ) : (
-              <>
-                <Save className="w-4 h-4" />
-                <span>Save Changes</span>
-              </>
+          <div className="flex items-center gap-2.5 shrink-0">
+            {isDirty && (
+              <button
+                type="button"
+                onClick={() => setShowDiscardModal(true)}
+                disabled={isSaving}
+                className="px-4 py-2 rounded-xl border border-gray-200 dark:border-dark-border text-xs font-semibold text-gray-600 dark:text-gray-400 hover:text-rose-600 hover:border-rose-300 dark:hover:border-rose-900/50 hover:bg-rose-50/50 dark:hover:bg-rose-950/20 transition-all cursor-pointer disabled:opacity-50"
+              >
+                Discard Changes
+              </button>
             )}
-          </button>
+
+            <button
+              type="submit"
+              disabled={isSaving}
+              className="flex items-center gap-2 px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-xs font-bold shadow-md shadow-brand-500/20 transition-all cursor-pointer disabled:opacity-50"
+            >
+              {isSaving ? (
+                <>
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  <span>Saving Changes...</span>
+                </>
+              ) : (
+                <>
+                  <Save className="w-4 h-4" />
+                  <span>Save Changes</span>
+                </>
+              )}
+            </button>
+          </div>
         </div>
 
         {/* Client Brand Identity & Logo */}
         <div className="p-4 rounded-xl bg-gray-50 dark:bg-dark-100 border border-gray-200 dark:border-dark-border space-y-3">
           <div className="text-[11px] font-bold uppercase tracking-wider text-brand-600 dark:text-brand-400 flex items-center gap-1.5">
             <Building2 className="w-3.5 h-3.5" />
-            <span>Brand Identity & Organization Logo</span>
+            <span>Brand Logo & Organization Assets</span>
           </div>
           <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4">
             <div className="relative group flex-shrink-0">
@@ -695,6 +885,20 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 value={flcLandingPageUrl}
                 onChange={(e) => setFlcLandingPageUrl(e.target.value)}
                 placeholder="https://flc-landing-page.com/..."
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="edit-brand-identity" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Brand Identity URL
+              </label>
+              <input
+                id="edit-brand-identity"
+                type="url"
+                value={brandIdentityUrl}
+                onChange={(e) => setBrandIdentityUrl(e.target.value)}
+                placeholder="https://... (Brand Identity Guidelines / Assets)"
                 className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
               />
             </div>
@@ -1131,6 +1335,56 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
               >
                 {isArchiving ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Archive className="w-3.5 h-3.5" />}
                 <span>Confirm Archive</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Discard Changes Confirmation Modal */}
+      {showDiscardModal && (
+        <div
+          className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center p-4 z-50 animate-fade-in"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="discard-modal-title"
+        >
+          <div className="bg-white dark:bg-dark-card w-full max-w-md rounded-2xl shadow-2xl border border-gray-200 dark:border-dark-border p-6 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-dark-border">
+              <div className="flex items-center gap-2 text-rose-600 dark:text-rose-400">
+                <AlertCircle className="w-5 h-5 flex-shrink-0" />
+                <h3 id="discard-modal-title" className="text-base font-bold text-gray-900 dark:text-gray-100">
+                  Discard Unsaved Changes?
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setShowDiscardModal(false)}
+                className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-200 p-1.5 rounded-lg hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors cursor-pointer"
+                aria-label="Close"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-600 dark:text-gray-400 leading-relaxed">
+              Are you sure you want to discard your unsaved modifications? All changes made to this client workspace draft will be permanently reverted to the last saved state.
+            </p>
+
+            <div className="flex items-center justify-end gap-3 pt-2">
+              <button
+                type="button"
+                onClick={() => setShowDiscardModal(false)}
+                className="px-4 py-2 rounded-xl border border-gray-200 dark:border-dark-border text-xs font-semibold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors cursor-pointer"
+              >
+                Keep Editing
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmDiscard}
+                className="px-4 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white text-xs font-bold shadow-md shadow-rose-600/20 transition-all cursor-pointer"
+              >
+                Discard Changes
               </button>
             </div>
           </div>

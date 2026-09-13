@@ -4,7 +4,7 @@ import { useOpsStore } from '../../store/opsStore';
 import { 
   Building2, ChevronsLeft, ChevronsRight, Briefcase, X,
   Globe, HardDrive, MessageCircle, ExternalLink, Clock, Users, UserCheck,
-  Image, Video, PlaySquare, Sparkles, LayoutGrid
+  Image, Video, PlaySquare, Sparkles, LayoutGrid, Palette
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { ClientRecord, UserProfile } from '../../types';
@@ -58,24 +58,25 @@ export const Sidebar: React.FC = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
   const [sourceClientForDuplicate, setSourceClientForDuplicate] = useState<ClientRecord | null>(null);
-  const [eligibleManagers, setEligibleManagers] = useState<UserProfile[]>([]);
-  const [isClientsLoading, setIsClientsLoading] = useState(true);
+  const [isClientsLoading, setIsClientsLoading] = useState(false);
   const [clientsError, setClientsError] = useState<string | null>(null);
+  const [eligibleManagers, setEligibleManagers] = useState<UserProfile[]>([]);
 
   const loadClientData = useCallback(async () => {
     setIsClientsLoading(true);
     setClientsError(null);
     try {
-      const [clientRes, fetchedManagers] = await Promise.all([
+      const [clientsRes, fetchedManagers] = await Promise.all([
         clientManagementService.fetchClients(),
         clientManagementService.fetchEligibleManagers()
       ]);
-      if (clientRes.error) {
-        setClientsError(clientRes.error);
+
+      if (clientsRes.error) {
+        setClientsError(clientsRes.error);
       } else {
-        setClients(clientRes.data);
-        if (!selectedClientId && clientRes.data.length > 0) {
-          setSelectedClientId(clientRes.data[0].id);
+        setClients(clientsRes.data);
+        if (clientsRes.data.length > 0 && !selectedClientId) {
+          setSelectedClientId(clientsRes.data[0].id);
         }
       }
       setEligibleManagers(fetchedManagers);
@@ -104,9 +105,15 @@ export const Sidebar: React.FC = () => {
     },
     {
       key: 'flc_landing_page',
-      label: 'FLC Landing Page',
+      label: 'Landing Page',
       url: clientLinks.flc_landing_page,
       icon: <Sparkles className="w-3.5 h-3.5" />
+    },
+    {
+      key: 'brand_identity',
+      label: 'Brand Identity',
+      url: clientLinks.brand_identity,
+      icon: <Palette className="w-3.5 h-3.5" />
     },
     {
       key: 'google_drive',
@@ -116,7 +123,7 @@ export const Sidebar: React.FC = () => {
     },
     {
       key: 'static_creatives',
-      label: 'Static',
+      label: 'Statics',
       url: clientLinks.static_creatives,
       icon: <Image className="w-3.5 h-3.5" />
     },
@@ -127,16 +134,16 @@ export const Sidebar: React.FC = () => {
       icon: <Video className="w-3.5 h-3.5" />
     },
     {
-      key: 'vsl',
-      label: 'VSL',
-      url: clientLinks.vsl,
-      icon: <PlaySquare className="w-3.5 h-3.5" />
-    },
-    {
       key: 'grid',
       label: 'Grid',
       url: clientLinks.grid,
       icon: <LayoutGrid className="w-3.5 h-3.5" />
+    },
+    {
+      key: 'vsl',
+      label: 'VSL',
+      url: clientLinks.vsl,
+      icon: <PlaySquare className="w-3.5 h-3.5" />
     },
     {
       key: 'linkedin_company_page',

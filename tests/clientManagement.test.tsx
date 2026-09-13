@@ -649,19 +649,19 @@ describe('Phase 2B: Client Management & Dynamic LinkedIn Access Tests', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('FLC Landing Page')).toBeInTheDocument();
-      expect(screen.getByText('Static')).toBeInTheDocument();
+      expect(screen.getByText('Landing Page')).toBeInTheDocument();
+      expect(screen.getByText('Statics')).toBeInTheDocument();
       expect(screen.getByText('Videos')).toBeInTheDocument();
       expect(screen.getByText('VSL')).toBeInTheDocument();
       expect(screen.getByText('Grid')).toBeInTheDocument();
     });
 
     // Check correct URLs
-    const flcLink = screen.getByRole('link', { name: /FLC Landing Page/i });
+    const flcLink = screen.getByRole('link', { name: /Landing Page/i });
     expect(flcLink).toHaveAttribute('href', 'https://flc-landing.com/acme');
     expect(flcLink).toHaveAttribute('target', '_blank');
 
-    const staticLink = screen.getByRole('link', { name: /Static/i });
+    const staticLink = screen.getByRole('link', { name: /Statics/i });
     expect(staticLink).toHaveAttribute('href', 'https://drive.google.com/drive/folders/static-creatives');
 
     const videosLink = screen.getByRole('link', { name: /Videos/i });
