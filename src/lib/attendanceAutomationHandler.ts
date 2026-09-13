@@ -9,8 +9,8 @@
 export interface AttendanceAutomationDependencies {
   getEnv: (key: string) => string | undefined;
   createClient: (url: string, key: string) => {
-    rpc: (fnName: string) => Promise<{ data: any; error: any }>;
-  };
+    rpc: (fnName: string, ...args: any[]) => any;
+  } | any;
 }
 
 export async function handleAttendanceAutomationRequest(

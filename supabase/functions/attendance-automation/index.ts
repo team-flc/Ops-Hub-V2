@@ -10,7 +10,7 @@ export type { AttendanceAutomationDependencies };
 
 export const defaultDeps: AttendanceAutomationDependencies = {
   getEnv: (key: string) => Deno.env.get(key),
-  createClient: (url: string, key: string) => createClient(url, key)
+  createClient: (url: string, key: string) => createClient(url, key) as any
 };
 
 export async function handleRequest(
