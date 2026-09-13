@@ -538,6 +538,23 @@ $$;
 -- 4. NARROW SECURITY DEFINER RPCS REPLACING UNSAFE WHOLE-ROW UPDATES
 -- ------------------------------------------------------------------------------
 
+ALTER TABLE public.employee_management_tasks
+    DROP CONSTRAINT IF EXISTS employee_management_tasks_task_type_check;
+
+ALTER TABLE public.employee_management_tasks
+    ADD CONSTRAINT employee_management_tasks_task_type_check
+    CHECK (task_type IN (
+        'missing_checkin_60m',
+        'early_checkout_review',
+        'missing_checkout',
+        'employee_concern',
+        'payroll_concern',
+        'performance_concern',
+        'profile_change_request',
+        'payroll_approval',
+        'asset_review'
+    ));
+
 -- 4.1 Asset Acknowledgement RPC
 CREATE OR REPLACE FUNCTION public.fn_employee_acknowledge_asset(
     p_asset_id UUID
@@ -562,7 +579,7 @@ BEGIN
         status = 'acknowledged',
         updated_at = timezone('utc'::text, now())
     WHERE id = p_asset_id 
-      AND (employee_id = v_user_id OR assigned_to = v_user_id)
+      AND employee_id = v_user_id
     RETURNING * INTO v_updated;
 
     IF v_updated.id IS NULL THEN
@@ -709,6 +726,35 @@ BEGIN
 END;
 $$;
 
+-- 4.5 Reusable Working Day Verification Helper
+CREATE OR REPLACE FUNCTION public.fn_is_company_working_day(p_date DATE)
+RETURNS BOOLEAN
+LANGUAGE plpgsql
+STABLE
+AS $$
+DECLARE
+    v_day_of_week INT;
+    v_sched_record RECORD;
+BEGIN
+    v_day_of_week := EXTRACT(DOW FROM p_date); -- 0 = Sunday, 1 = Monday ... 6 = Saturday
+    SELECT * INTO v_sched_record
+    FROM public.company_work_schedules
+    WHERE effective_from <= p_date
+      AND (effective_to IS NULL OR effective_to >= p_date)
+    ORDER BY effective_from DESC LIMIT 1;
+
+    IF v_sched_record.id IS NOT NULL THEN
+        IF v_sched_record.working_days @> ARRAY[v_day_of_week] OR (v_day_of_week = 0 AND v_sched_record.working_days @> ARRAY[7]) THEN
+            RETURN true;
+        END IF;
+        RETURN false;
+    ELSE
+        -- Default Monday to Saturday policy (Sunday = 0 is non-working)
+        RETURN v_day_of_week <> 0;
+    END IF;
+END;
+$$;
+
 -- ------------------------------------------------------------------------------
 -- 5. FUNCTION EXECUTION GRANTS & REVOCATIONS
 -- ------------------------------------------------------------------------------
@@ -729,6 +775,7 @@ GRANT EXECUTE ON FUNCTION public.fn_employee_acknowledge_asset TO authenticated;
 GRANT EXECUTE ON FUNCTION public.fn_employee_acknowledge_document TO authenticated;
 GRANT EXECUTE ON FUNCTION public.fn_employee_raise_payroll_concern TO authenticated;
 GRANT EXECUTE ON FUNCTION public.fn_employee_raise_performance_concern TO authenticated;
+GRANT EXECUTE ON FUNCTION public.fn_is_company_working_day TO PUBLIC, authenticated, anon, service_role;
 
 -- Grant cron automation RPC strictly to service_role
 GRANT EXECUTE ON FUNCTION public.fn_cron_process_attendance_automation TO service_role;
