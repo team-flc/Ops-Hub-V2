@@ -76,6 +76,9 @@ jobs:
             echo '```' >> $GITHUB_STEP_SUMMARY
             cat /tmp/pgtap.log >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
+            head -n 50 /tmp/pgtap.log | while IFS= read -r line; do
+              echo "::error file=supabase/tests/database_security.sql::$line"
+            done
             exit 1
           }
           # Validate pgtap log contains file name, expected 41 test count, and Result: PASS
