@@ -668,7 +668,7 @@ export const WorkPlanBuilderModal: React.FC<WorkPlanBuilderModalProps> = ({
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-brand-50 text-brand-700 border border-brand-200 hover:bg-brand-100 text-xs font-bold cursor-pointer"
                       >
                         <Layers className="w-3.5 h-3.5 text-brand-600" />
-                        <span>+ Add Service Pack</span>
+                        <span>Add Service Pack</span>
                       </button>
                       <button
                         type="button"
@@ -676,7 +676,7 @@ export const WorkPlanBuilderModal: React.FC<WorkPlanBuilderModalProps> = ({
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-dark-100 text-slate-700 dark:text-gray-200 text-xs font-bold cursor-pointer"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        <span>+ Add Custom Task</span>
+                        <span>Add Custom Task</span>
                       </button>
                     </div>
                   </div>
@@ -723,7 +723,7 @@ export const WorkPlanBuilderModal: React.FC<WorkPlanBuilderModalProps> = ({
                         No service packs or tasks planned for Week {currentWeek.weekNumber}.
                       </p>
                       <p className="text-[11px] text-slate-400">
-                        Click "+ Add Service Pack" to apply a standard delivery pack or "+ Add Custom Task" for individual work.
+                        Click "Add Service Pack" to apply a standard delivery pack or "Add Custom Task" for individual work.
                       </p>
                     </div>
                   )}

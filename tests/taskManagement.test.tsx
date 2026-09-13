@@ -379,7 +379,7 @@ describe('Phase 3A: Operational Task Management Core Unit & Security Tests', () 
     expect(screen.getByText('Week 4')).toBeInTheDocument();
 
     // Owner has exactly ONE + Add Task button
-    const addBtns = screen.getAllByRole('button', { name: /\+ add task/i });
+    const addBtns = screen.getAllByRole('button', { name: /(?:\+\s*)?add task/i });
     expect(addBtns.length).toBe(1);
   });
 
@@ -444,7 +444,7 @@ describe('Phase 3A: Operational Task Management Core Unit & Security Tests', () 
     fireEvent.click(screen.getByRole('button', { name: /week 2/i }));
 
     // Exactly ONE + Add Task button must exist
-    const week2Btns = screen.getAllByRole('button', { name: /\+ add task/i });
+    const week2Btns = screen.getAllByRole('button', { name: /(?:\+\s*)?add task/i });
     expect(week2Btns.length).toBe(1);
 
     // Click + Add Task in Week 2
@@ -457,7 +457,7 @@ describe('Phase 3A: Operational Task Management Core Unit & Security Tests', () 
 
     // Switch to Week 3 and open
     fireEvent.click(screen.getByRole('button', { name: /week 3/i }));
-    const week3Btns = screen.getAllByRole('button', { name: /\+ add task/i });
+    const week3Btns = screen.getAllByRole('button', { name: /(?:\+\s*)?add task/i });
     expect(week3Btns.length).toBe(1);
     fireEvent.click(week3Btns[0]);
     expect(screen.getByText('Week 3 Setup')).toBeInTheDocument();
@@ -468,7 +468,7 @@ describe('Phase 3A: Operational Task Management Core Unit & Security Tests', () 
 
     // Switch to Week 4 and open
     fireEvent.click(screen.getByRole('button', { name: /week 4/i }));
-    const week4Btns = screen.getAllByRole('button', { name: /\+ add task/i });
+    const week4Btns = screen.getAllByRole('button', { name: /(?:\+\s*)?add task/i });
     expect(week4Btns.length).toBe(1);
     fireEvent.click(week4Btns[0]);
     expect(screen.getByText('Week 4 Setup')).toBeInTheDocument();
@@ -598,7 +598,7 @@ describe('Phase 3A: Operational Task Management Core Unit & Security Tests', () 
       />
     );
 
-    const addBtns = screen.getAllByRole('button', { name: /\+ add task/i });
+    const addBtns = screen.getAllByRole('button', { name: /(?:\+\s*)?add task/i });
     expect(addBtns.length).toBe(1);
   });
 

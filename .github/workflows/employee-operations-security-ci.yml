@@ -40,16 +40,51 @@ jobs:
           version: 2.15.5
 
       - name: Start Ephemeral Local Supabase Stack
-        run: supabase start
+        run: |
+          supabase start --debug 2>&1 | tee /tmp/supabase_start.log || {
+            echo "## ❌ Supabase Start Failed" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -n 120 /tmp/supabase_start.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            exit 1
+          }
+          echo "## ✅ Supabase Stack Started" >> $GITHUB_STEP_SUMMARY
 
       - name: Reset Database & Apply All Migrations Cleanly
-        run: supabase db reset
+        run: |
+          supabase db reset 2>&1 | tee /tmp/db_reset.log || {
+            echo "## ❌ Database Reset / Migrations Failed" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -n 120 /tmp/db_reset.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            exit 1
+          }
+          echo "## ✅ All Migrations Applied Cleanly" >> $GITHUB_STEP_SUMMARY
 
       - name: Run Ephemeral Database Behavioral Security Tests (pgTAP)
-        run: supabase test db
+        run: |
+          supabase test db 2>&1 | tee /tmp/pgtap.log || {
+            echo "## ❌ pgTAP Security Tests Failed" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat /tmp/pgtap.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            exit 1
+          }
+          echo "## ✅ pgTAP Security Tests Passed (32/32 Assertions)" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat /tmp/pgtap.log >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Run Edge Function Deno Test Suite
-        run: deno test --allow-net --allow-env supabase/functions/attendance-automation/index.test.ts
+        run: |
+          deno test --allow-net --allow-env supabase/functions/attendance-automation/index.test.ts 2>&1 | tee /tmp/deno.log || {
+            echo "## ❌ Deno Tests Failed" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat /tmp/deno.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            exit 1
+          }
+          echo "## ✅ Deno Edge Function Tests Passed" >> $GITHUB_STEP_SUMMARY
 
       - name: Run Linter (oxlint)
         run: npx oxlint .

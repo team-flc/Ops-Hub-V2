@@ -409,6 +409,7 @@ export interface ClientRecord {
   sourceClientId?: string | null;
   sourceCompanyName?: string | null;
   links: Partial<Record<ClientLinkType, string>>;
+  customWeekTitles?: Record<number | string, string> | null;
   assignedTeamMemberIds?: string[];
   createdBy?: string;
   createdAt: string;

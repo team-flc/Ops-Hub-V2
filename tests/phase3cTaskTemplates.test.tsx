@@ -317,7 +317,7 @@ describe('Phase 3C: Task Templates System Comprehensive Suite', () => {
         />
       );
 
-      const addTaskBtn = screen.getByRole('button', { name: /\+ add task/i });
+      const addTaskBtn = screen.getByRole('button', { name: /(?:\+\s*)?add task/i });
       fireEvent.click(addTaskBtn);
 
       await waitFor(() => {
@@ -602,14 +602,14 @@ describe('Phase 3C: Task Templates System Comprehensive Suite', () => {
       render(<TaskTemplatesView currentUserProfile={mockClientUser} />);
 
       expect(screen.getByText('Access Restricted')).toBeInTheDocument();
-      expect(screen.queryByText('+ Create Template')).not.toBeInTheDocument();
+      expect(screen.queryByText('Create Template')).not.toBeInTheDocument();
     });
 
     it('5.2 Strict RBAC: Team Member role sees Access Restricted', () => {
       render(<TaskTemplatesView currentUserProfile={mockTeamMember} />);
 
       expect(screen.getByText('Access Restricted')).toBeInTheDocument();
-      expect(screen.queryByText('+ Create Template')).not.toBeInTheDocument();
+      expect(screen.queryByText('Create Template')).not.toBeInTheDocument();
     });
 
     it('5.3 Owner role sees + Create Template button and action controls', async () => {
@@ -621,7 +621,7 @@ describe('Phase 3C: Task Templates System Comprehensive Suite', () => {
       render(<TaskTemplatesView currentUserProfile={mockOwner} />);
 
       await waitFor(() => {
-        expect(screen.getByText('+ Create Template')).toBeInTheDocument();
+        expect(screen.getByText('Create Template')).toBeInTheDocument();
         expect(screen.getByText('Media Buying Campaign Setup & Launch')).toBeInTheDocument();
       });
 
@@ -643,7 +643,7 @@ describe('Phase 3C: Task Templates System Comprehensive Suite', () => {
         expect(screen.getByText('Media Buying Campaign Setup & Launch')).toBeInTheDocument();
       });
 
-      expect(screen.queryByText('+ Create Template')).not.toBeInTheDocument();
+      expect(screen.queryByText('Create Template')).not.toBeInTheDocument();
       expect(screen.queryByTitle(/duplicate template/i)).not.toBeInTheDocument();
       expect(screen.queryByTitle(/edit template/i)).not.toBeInTheDocument();
       expect(screen.queryByTitle(/archive template/i)).not.toBeInTheDocument();
@@ -737,7 +737,7 @@ describe('Phase 3C: Task Templates System Comprehensive Suite', () => {
 
       expect(screen.getAllByText(/Template management becomes available after backend rollout/i).length).toBeGreaterThanOrEqual(1);
 
-      const createBtn = screen.getByRole('button', { name: /\+ create template/i });
+      const createBtn = screen.getByRole('button', { name: /(?:\+\s*)?create template/i });
       expect(createBtn).toBeDisabled();
 
       const createFirstBtn = screen.getByRole('button', { name: /create first template/i });

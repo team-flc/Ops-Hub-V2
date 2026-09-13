@@ -719,7 +719,7 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 rounded-xl transition-colors"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>+ Add LinkedIn Profile</span>
+              <span>Add LinkedIn Profile</span>
             </button>
           </div>
 
