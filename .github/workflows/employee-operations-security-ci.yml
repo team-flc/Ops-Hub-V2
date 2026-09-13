@@ -94,7 +94,7 @@ jobs:
 
       - name: Run Edge Function Deno Test Suite
         run: |
-          deno test --allow-all supabase/functions/tests/
+          deno test --allow-all supabase/functions/
           echo "## ✅ Edge Function Tests Passed (5/5 Assertions)" >> $GITHUB_STEP_SUMMARY
 
       - name: Run Linter (oxlint)
