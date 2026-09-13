@@ -72,12 +72,18 @@ jobs:
       - name: Run Ephemeral Database Behavioral Security Tests (pgTAP)
         run: |
           supabase test db --debug 2>&1 | tee /tmp/pgtap.log || {
+            LOG_CONTENT=$(cat /tmp/pgtap.log | tr '
+' ' ' | head -c 2000)
+            echo "::error title=pgTAP Failed Log::$LOG_CONTENT"
             echo "## ❌ pgTAP Security Tests Failed" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
             cat /tmp/pgtap.log >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
             exit 1
           }
+          LOG_CONTENT=$(cat /tmp/pgtap.log | tr '
+' ' ' | head -c 2000)
+          echo "::notice title=pgTAP Passed Log::$LOG_CONTENT"
           # Validate pgtap log contains file name, expected 41 test count, and Result: PASS
           if ! grep -q "database_security.sql" /tmp/pgtap.log; then
             echo "❌ pgTAP log missing database_security.sql execution proof"
