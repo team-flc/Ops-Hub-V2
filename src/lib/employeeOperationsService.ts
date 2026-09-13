@@ -38,9 +38,6 @@ import {
 } from './pktDateUtils';
 
 export interface CheckInPayload {
-  employeeId?: string; // Optional legacy compatibility
-  workDate?: string;   // Optional legacy compatibility
-  shiftId?: string;
   evidenceBlob?: Blob;
   manualFile?: File;
   metadata?: Record<string, any>;
@@ -48,7 +45,6 @@ export interface CheckInPayload {
 
 export interface CheckOutPayload {
   attendanceId?: string;
-  employeeId?: string;
   evidenceBlob?: Blob;
   manualFile?: File;
   earlyCheckoutReason?: string;
@@ -492,27 +488,26 @@ export const employeeOperationsService = {
     if (!supabase) return { error: 'Database unconfigured.' };
 
     try {
-      // 1. Resolve Authenticated User Session
+      // 1. Resolve Authenticated User Session strictly from Supabase Auth
       const { data: authData, error: authErr } = await supabase.auth.getUser();
-      const authenticatedUser = authData?.user;
-      const targetUserId = authenticatedUser?.id || payload.employeeId;
+      const authenticatedUserId = authData?.user?.id;
 
-      if (!targetUserId) {
-        return { error: authErr?.message || 'Unauthorized: Authenticated session required to check in.' };
+      if (authErr || !authenticatedUserId) {
+        return { error: 'Unauthorized: Authenticated session required to record attendance.' };
       }
 
       // 2. Client pre-flight check on setup completion (also authoritatively verified in server RPC)
-      const empRecord = await this.fetchEmployeeRecord(targetUserId);
+      const empRecord = await this.fetchEmployeeRecord(authenticatedUserId);
       if (!empRecord || !empRecord.setupCompletedAt) {
         return { error: 'Employee setup is pending. Management must complete employment, shift, and payroll configuration before attendance can be recorded.' };
       }
 
-      // 3. Upload Screenshot Evidence to Private Bucket
+      // 3. Upload Screenshot Evidence strictly to authenticated employee folder
       let screenshotPath: string | null = null;
       let evidenceType: 'screen_capture' | 'manual_upload' = 'screen_capture';
 
       if (payload.evidenceBlob) {
-        const fileName = `${targetUserId}/checkin_${Date.now()}.jpg`;
+        const fileName = `${authenticatedUserId}/checkin_${Date.now()}.jpg`;
         const { data: uploadData, error: uploadErr } = await supabase.storage
           .from('employee-attendance-evidence')
           .upload(fileName, payload.evidenceBlob, { contentType: 'image/jpeg', upsert: true });
@@ -524,7 +519,7 @@ export const employeeOperationsService = {
       } else if (payload.manualFile) {
         evidenceType = 'manual_upload';
         const fileExt = payload.manualFile.name.split('.').pop() || 'jpg';
-        const fileName = `${targetUserId}/checkin_manual_${Date.now()}.${fileExt}`;
+        const fileName = `${authenticatedUserId}/checkin_manual_${Date.now()}.${fileExt}`;
         const { data: uploadData, error: uploadErr } = await supabase.storage
           .from('employee-attendance-evidence')
           .upload(fileName, payload.manualFile, { upsert: true });
@@ -592,27 +587,26 @@ export const employeeOperationsService = {
     if (!supabase) return { error: 'Database unconfigured.' };
 
     try {
-      // 1. Resolve Authenticated User Session
+      // 1. Resolve Authenticated User Session strictly from Supabase Auth
       const { data: authData, error: authErr } = await supabase.auth.getUser();
-      const authenticatedUser = authData?.user;
-      const targetUserId = authenticatedUser?.id || payload.employeeId;
+      const authenticatedUserId = authData?.user?.id;
 
-      if (!targetUserId) {
-        return { error: authErr?.message || 'Unauthorized: Authenticated session required to check out.' };
+      if (authErr || !authenticatedUserId) {
+        return { error: 'Unauthorized: Authenticated session required to record attendance.' };
       }
 
       // 2. Client pre-flight check on setup completion (also authoritatively enforced in server RPC)
-      const empRecord = await this.fetchEmployeeRecord(targetUserId);
+      const empRecord = await this.fetchEmployeeRecord(authenticatedUserId);
       if (!empRecord || !empRecord.setupCompletedAt) {
         return { error: 'Employee setup is pending. Management must complete employment, shift, and payroll configuration before attendance can be recorded.' };
       }
 
-      // 3. Upload Screenshot Evidence to Private Bucket
+      // 3. Upload Screenshot Evidence strictly to authenticated employee folder
       let screenshotPath: string | null = null;
       let evidenceType: 'screen_capture' | 'manual_upload' = 'screen_capture';
 
       if (payload.evidenceBlob) {
-        const fileName = `${targetUserId}/checkout_${Date.now()}.jpg`;
+        const fileName = `${authenticatedUserId}/checkout_${Date.now()}.jpg`;
         const { data: uploadData, error: uploadErr } = await supabase.storage
           .from('employee-attendance-evidence')
           .upload(fileName, payload.evidenceBlob, { contentType: 'image/jpeg', upsert: true });
@@ -624,7 +618,7 @@ export const employeeOperationsService = {
       } else if (payload.manualFile) {
         evidenceType = 'manual_upload';
         const fileExt = payload.manualFile.name.split('.').pop() || 'jpg';
-        const fileName = `${targetUserId}/checkout_manual_${Date.now()}.${fileExt}`;
+        const fileName = `${authenticatedUserId}/checkout_manual_${Date.now()}.${fileExt}`;
         const { data: uploadData, error: uploadErr } = await supabase.storage
           .from('employee-attendance-evidence')
           .upload(fileName, payload.manualFile, { upsert: true });

@@ -312,3 +312,37 @@ export function calculateShiftWindow(
 
   return { scheduledStart, scheduledEnd, crossesMidnight, startIso, endIso, isOvernight: crossesMidnight };
 }
+
+/**
+ * Formats dynamic working schedule description (e.g. "Monday – Saturday" or "Monday – Friday")
+ * based on effective-dated company working schedule for a target date.
+ */
+export function formatWorkingScheduleDescription(
+  schedules: Array<{ effectiveFrom: string; effectiveTo?: string | null; workingDays: number[]; description?: string }>,
+  targetDateInput: Date | string = new Date()
+): string {
+  const targetDateStr = targetDateInput instanceof Date
+    ? getPKTTodayDateString(targetDateInput)
+    : targetDateInput.slice(0, 10);
+
+  const activeSched = (schedules || []).find((s) =>
+    s.effectiveFrom <= targetDateStr && (!s.effectiveTo || s.effectiveTo >= targetDateStr)
+  ) || schedules?.[0];
+
+  if (!activeSched || !activeSched.workingDays || activeSched.workingDays.length === 0) {
+    return 'Monday – Saturday';
+  }
+
+  const days = activeSched.workingDays.filter(d => d !== 0 && d !== 7);
+  if (days.length === 6) {
+    return 'Monday – Saturday';
+  } else if (days.length === 5 && !days.includes(6)) {
+    return 'Monday – Friday';
+  }
+
+  if (activeSched.description) {
+    return activeSched.description;
+  }
+
+  return 'Monday – Saturday';
+}

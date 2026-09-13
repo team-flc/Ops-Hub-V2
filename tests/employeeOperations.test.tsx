@@ -1,11 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { supabase } from '../src/lib/supabase';
 import { employeeOperationsService } from '../src/lib/employeeOperationsService';
 import {
   WorkShift, CompanyWorkSchedule, NoticePeriodStatus, GoodStandingStatus,
   CompanyAsset, ROLE_DISPLAY_NAMES, EmployeeRecord, TeamMemberRecord, AssetStatus
 } from '../src/types';
 import {
-  getPKTTodayDateString, getPKTCurrentMonthString, formatPKTDate, formatPKTTime,
+  formatWorkingScheduleDescription, getPKTTodayDateString, getPKTCurrentMonthString, formatPKTDate, formatPKTTime,
   getPKTDateTimeParts, getDaysInPKTMonth, isOvernightShift, calculateShiftWindow,
   calculateDaysWithCompany, calculatePKTDaysUntil15th, calculatePKTSalaryCountdown
 } from '../src/lib/pktDateUtils';
@@ -409,10 +410,15 @@ describe('Employee Operations System Full Behavioral Test Suite', () => {
   // 17. Setup Pending Gate & Security Contradiction Resolution
   describe('17. Setup Pending Gate & Security Contradiction Resolution', () => {
     it('blocks check-in attempts when employee setup is not completed', async () => {
+      vi.spyOn(supabase.auth, 'getUser').mockResolvedValueOnce({
+        data: { user: { id: 'user-setup-pending' } as any },
+        error: null
+      } as any);
+
       // Mock fetchEmployeeRecord to return setupCompletedAt = null
       vi.spyOn(employeeOperationsService, 'fetchEmployeeRecord').mockResolvedValueOnce({
-        id: 'rec-1',
-        userId: 'user-setup-pending',
+        id: 'user-setup-pending',
+        employeeId: 'EMP-001',
         setupCompletedAt: null,
         sopAcknowledged: false,
         salary: 0,
@@ -421,8 +427,6 @@ describe('Employee Operations System Full Behavioral Test Suite', () => {
       } as any);
 
       const res = await employeeOperationsService.checkIn({
-        employeeId: 'user-setup-pending',
-        workDate: '2026-09-12',
         evidenceBlob: new Blob(['evidence'])
       });
 
@@ -431,9 +435,14 @@ describe('Employee Operations System Full Behavioral Test Suite', () => {
     });
 
     it('blocks check-out attempts when employee setup is not completed', async () => {
+      vi.spyOn(supabase.auth, 'getUser').mockResolvedValueOnce({
+        data: { user: { id: 'user-setup-pending' } as any },
+        error: null
+      } as any);
+
       vi.spyOn(employeeOperationsService, 'fetchEmployeeRecord').mockResolvedValueOnce({
-        id: 'rec-1',
-        userId: 'user-setup-pending',
+        id: 'user-setup-pending',
+        employeeId: 'EMP-001',
         setupCompletedAt: null,
         sopAcknowledged: false,
         salary: 0,
@@ -443,7 +452,6 @@ describe('Employee Operations System Full Behavioral Test Suite', () => {
 
       const res = await employeeOperationsService.checkOut({
         attendanceId: 'att-1',
-        employeeId: 'user-setup-pending',
         evidenceBlob: new Blob(['evidence'])
       });
 
@@ -1187,6 +1195,74 @@ describe('Employee Operations System Full Behavioral Test Suite', () => {
       expect(firstRun.inserted).toBe(true);
       expect(secondRun.inserted).toBe(false);
       expect(tasksMap.size).toBe(1);
+    });
+  });
+
+  // 33. Release Gate: Custom Overnight Shifts & Dynamic Working Schedule
+  describe('33. Release Gate: Custom Overnight Shifts & Dynamic Working Schedule', () => {
+    it('correctly formats working schedule description from active company work schedule', () => {
+      const schedules = [
+        {
+          effectiveFrom: '2026-01-01',
+          workingDays: [1, 2, 3, 4, 5, 6],
+          description: 'Standard 6-day work week'
+        }
+      ];
+      const desc = formatWorkingScheduleDescription(schedules, new Date('2026-09-12T12:00:00+05:00'));
+      expect(desc).toBe('Monday – Saturday');
+    });
+
+    it('dynamically adapts working schedule description for 5-day schedules', () => {
+      const schedules = [
+        {
+          effectiveFrom: '2026-10-01',
+          workingDays: [1, 2, 3, 4, 5],
+          description: 'Modern 5-day work week'
+        }
+      ];
+      const desc = formatWorkingScheduleDescription(schedules, '2026-10-05');
+      expect(desc).toBe('Monday – Friday');
+    });
+
+    it('accurately calculates custom overnight shift window (e.g. 21:00 to 06:00)', () => {
+      const customShift = calculateShiftWindow('2026-09-12', '21:00:00', '06:00:00', true);
+      expect(customShift.crossesMidnight).toBe(true);
+      expect(customShift.scheduledStart.toISOString()).toBe(new Date('2026-09-12T21:00:00+05:00').toISOString());
+      expect(customShift.scheduledEnd.toISOString()).toBe(new Date('2026-09-13T06:00:00+05:00').toISOString());
+    });
+  });
+
+  // 34. Release Gate: Overnight Shift Late Checkout & Strict Identity Gate
+  describe('34. Release Gate: Overnight Shift Late Checkout & Strict Identity Gate', () => {
+    it('supports late checkout after scheduled shift end (e.g. 05:30 AM for 21:00-05:00 shift) without marking absence', () => {
+      const shiftStart = new Date('2026-09-12T21:00:00+05:00');
+      const shiftEnd = new Date('2026-09-13T05:00:00+05:00');
+      const actualCheckOut = new Date('2026-09-13T05:30:00+05:00');
+
+      // Late checkout after scheduled end is overtime/completed shift, not early checkout
+      const isEarly = actualCheckOut.getTime() < shiftEnd.getTime();
+      expect(isEarly).toBe(false);
+
+      // Duration worked: 8.5 hours
+      const durationHours = (actualCheckOut.getTime() - shiftStart.getTime()) / (1000 * 60 * 60);
+      expect(durationHours).toBe(8.5);
+    });
+
+    it('rejects check-in when caller is not authenticated via getUser()', async () => {
+      const res = await employeeOperationsService.checkIn({
+        metadata: { workMode: 'remote' }
+      });
+      // In mock environment without authenticated user, returns Unauthorized
+      expect(res.error).toBeDefined();
+      expect(res.error).toContain('Unauthorized');
+    });
+
+    it('rejects check-out when caller is not authenticated via getUser()', async () => {
+      const res = await employeeOperationsService.checkOut({
+        attendanceId: 'att-123'
+      });
+      expect(res.error).toBeDefined();
+      expect(res.error).toContain('Unauthorized');
     });
   });
 

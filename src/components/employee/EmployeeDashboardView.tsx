@@ -4,8 +4,8 @@ import {
   MessageSquare, ShieldCheck, AlertTriangle, CheckCircle2,
   ChevronRight, Lock, Plus, FileText, ExternalLink, RefreshCw,
   TrendingUp, AlertCircle, Eye, X, Building2, Briefcase,
-  BarChart3, PieChart, Activity, Download, Check, HelpCircle,
-  Sparkles, FileCheck, Landmark, ArrowUpRight
+  BarChart3, PieChart, Activity,
+  Sparkles, FileCheck, Landmark
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -20,7 +20,7 @@ import { employeeOperationsService } from '../../lib/employeeOperationsService';
 import {
   getPKTTodayDateString, getDaysInPKTMonth, getPKTDateTimeParts,
   calculatePKTSalaryCountdown, calculateDaysWithCompany, formatPKTTime,
-  formatPKTDate, getPKTCurrentMonthString
+  formatPKTDate, getPKTCurrentMonthString, formatWorkingScheduleDescription
 } from '../../lib/pktDateUtils';
 import { EmployeeAttendanceControl } from './EmployeeAttendanceControl';
 import { SOPModal } from './SOPModal';
@@ -158,7 +158,7 @@ export const EmployeeDashboardView: React.FC = () => {
   const totalAbsenceDeductions = isSetupPending ? 0 : attendanceHistory.reduce((sum, a) => sum + (a.absenceDeduction || 0), 0);
 
   // Next Salary Payout Countdown (15th payout date in PKT)
-  const { daysRemaining: daysUntilPayout, nextSalaryDate } = calculatePKTSalaryCountdown();
+  const { daysRemaining: daysUntilPayout } = calculatePKTSalaryCountdown();
 
   // Current Accrued Earnings Calculation in PKT
   const baseSalary = isSetupPending ? 0 : Number(employeeRecord?.salary || 0);
@@ -309,7 +309,7 @@ export const EmployeeDashboardView: React.FC = () => {
               <span className={isSetupPending ? 'text-amber-200 font-semibold' : ''}>
                 {isSetupPending
                   ? 'Setup Pending — Shift Unconfigured'
-                  : (activeShift ? `${activeShift.name} (${activeShift.startTime.slice(0, 5)} - ${activeShift.endTime.slice(0, 5)} PKT) • Monday – Saturday` : 'Shift Unconfigured')}
+                  : (activeShift ? `${activeShift.name} (${activeShift.startTime.slice(0, 5)} - ${activeShift.endTime.slice(0, 5)} PKT) • ${formatWorkingScheduleDescription(companySchedules)}` : 'Shift Unconfigured')}
               </span>
             </p>
             <div className="text-[11px] text-indigo-200/80 flex items-center gap-3 flex-wrap pt-0.5">
@@ -379,7 +379,7 @@ export const EmployeeDashboardView: React.FC = () => {
           <div className="text-xl sm:text-2xl font-black text-slate-900 dark:text-gray-100 font-mono">
             {presentDays} <span className="text-xs font-semibold text-slate-400">days</span>
           </div>
-          <p className="text-[10px] text-slate-500 dark:text-gray-400">Monday – Saturday cycle</p>
+          <p className="text-[10px] text-slate-500 dark:text-gray-400">{formatWorkingScheduleDescription(companySchedules)} cycle</p>
         </div>
 
         {/* Late Check-Ins */}
@@ -863,7 +863,7 @@ export const EmployeeDashboardView: React.FC = () => {
                     </div>
                     <div className="flex justify-between">
                       <span className="text-slate-500">Working Days:</span>
-                      <span className="font-semibold text-slate-800 dark:text-gray-200">Monday – Saturday</span>
+                      <span className="font-semibold text-slate-800 dark:text-gray-200">{formatWorkingScheduleDescription(companySchedules)}</span>
                     </div>
                   </div>
 

@@ -4,7 +4,7 @@ import {
   X, UserPlus, Shield, Building2, Briefcase, UserCheck,
   Key, Eye, EyeOff, Sparkles, Check, Copy, AlertCircle,
   Loader2, CheckCircle2, Camera, Trash2, Clock, DollarSign,
-  UserCog, Award
+  UserCog
 } from 'lucide-react';
 import { Department, Designation, UserProfile, WorkShift, EmploymentType, EmploymentStatus } from '../../types';
 import { useOpsStore } from '../../store/opsStore';
@@ -935,7 +935,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
                 <div className="p-3 rounded-2xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2 text-slate-700 dark:text-gray-300">
                     <Clock className="w-4 h-4 text-brand-600 shrink-0" />
-                    <span><strong>Working Schedule:</strong> Monday – Saturday (6 Days/Week • Sunday Off)</span>
+                    <span><strong>Working Schedule:</strong> Monday – Saturday (Company Standard Schedule • Off Days Excluded)</span>
                   </div>
                   <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300 border border-brand-200 dark:border-brand-800">
                     PKT UTC+5

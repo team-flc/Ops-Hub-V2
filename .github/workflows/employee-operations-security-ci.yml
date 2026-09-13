@@ -1,0 +1,60 @@
+name: Employee Operations Security & Ephemeral Database CI
+
+on:
+  push:
+    branches:
+      - 'feature/employee-operations-system'
+      - 'main'
+  pull_request:
+    branches:
+      - 'feature/employee-operations-system'
+      - 'main'
+
+jobs:
+  ephemeral-db-and-security-gate:
+    name: Ephemeral Database & Security Release Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Install Dependencies
+        run: npm ci
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start Ephemeral Supabase Database Stack
+        run: supabase start
+
+      - name: Reset Database & Apply All Migrations
+        run: supabase db reset
+
+      - name: Run Ephemeral Database Security Tests (pgTAP)
+        run: supabase test db
+
+      - name: Run Linter (oxlint)
+        run: npx oxlint .
+
+      - name: Verify Clean Git Working Tree (diff-check)
+        run: git diff --check
+
+      - name: Run Full Vitest Test Suite
+        run: npm test -- --run
+
+      - name: Run Production TypeScript & Vite Build
+        run: npm run build
+
+      - name: Stop Ephemeral Supabase Stack
+        if: always()
+        run: supabase stop --no-backup
