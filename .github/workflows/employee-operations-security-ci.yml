@@ -33,10 +33,10 @@ jobs:
       - name: Install Node Dependencies
         run: npm ci
 
-      - name: Setup Pinned Supabase CLI
+      - name: Setup Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: 2.15.5
+          version: latest
 
       - name: Start Ephemeral Local Supabase Stack
         run: |
@@ -71,6 +71,7 @@ jobs:
 
       - name: Run Ephemeral Database Behavioral Security Tests (pgTAP)
         run: |
+          sleep 3
           set +e
           supabase test db --debug > /tmp/pgtap.log 2>&1
           TEST_EXIT=$?
@@ -127,4 +128,4 @@ jobs:
       - name: Stop Ephemeral Supabase Stack
         if: always()
         run: |
-          supabase stop || true
+          supabase stop --no-backup || true
