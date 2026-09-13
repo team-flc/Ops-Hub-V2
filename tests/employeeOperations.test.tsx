@@ -1,6 +1,32 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { supabase } from '../src/lib/supabase';
 import { employeeOperationsService } from '../src/lib/employeeOperationsService';
+
+vi.mock('../src/lib/supabase', () => {
+  return {
+    isSupabaseConfigured: true,
+    supabase: {
+      auth: {
+        getUser: vi.fn().mockResolvedValue({ data: { user: null }, error: null })
+      },
+      from: vi.fn(() => ({
+        select: vi.fn().mockReturnThis(),
+        eq: vi.fn().mockReturnThis(),
+        order: vi.fn().mockResolvedValue({ data: [], error: null }),
+        single: vi.fn().mockResolvedValue({ data: null, error: null }),
+        maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null })
+      })),
+      rpc: vi.fn().mockResolvedValue({ data: null, error: null }),
+      storage: {
+        from: vi.fn(() => ({
+          upload: vi.fn().mockResolvedValue({ data: { path: 'test.jpg' }, error: null }),
+          remove: vi.fn().mockResolvedValue({ data: [], error: null }),
+          createSignedUrl: vi.fn().mockResolvedValue({ data: { signedUrl: 'http://example.com/test.jpg' }, error: null })
+        }))
+      }
+    }
+  };
+});
 import {
   WorkShift, CompanyWorkSchedule, NoticePeriodStatus, GoodStandingStatus,
   CompanyAsset, ROLE_DISPLAY_NAMES, EmployeeRecord, TeamMemberRecord, AssetStatus
