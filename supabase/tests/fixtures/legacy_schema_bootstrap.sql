@@ -9,24 +9,6 @@ REVOKE ALL ON SCHEMA app_private FROM PUBLIC;
 REVOKE ALL ON SCHEMA app_private FROM anon, authenticated;
 GRANT USAGE ON SCHEMA app_private TO authenticated;
 
-CREATE TABLE IF NOT EXISTS public.users (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  email TEXT,
-  role TEXT,
-  status TEXT DEFAULT 'active',
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-CREATE TABLE IF NOT EXISTS public.profiles (
-  id UUID PRIMARY KEY,
-  full_name TEXT,
-  role TEXT DEFAULT 'client',
-  status TEXT DEFAULT 'active',
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
 CREATE OR REPLACE FUNCTION app_private.get_caller_role()
 RETURNS TEXT
 LANGUAGE plpgsql
@@ -41,6 +23,15 @@ $$;
 
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA app_private FROM PUBLIC, anon;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA app_private TO authenticated;
+
+CREATE TABLE IF NOT EXISTS public.users (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  email TEXT,
+  role TEXT,
+  status TEXT DEFAULT 'active',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
 
 CREATE TABLE IF NOT EXISTS public.tasks (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
