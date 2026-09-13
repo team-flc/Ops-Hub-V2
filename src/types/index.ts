@@ -486,8 +486,8 @@ export interface ClientTask {
   assigneeRole?: string | null;
   isAssigneeEligible?: boolean;
   priority: ClientTaskPriority;
-  plannedStart: string;
-  dueDate: string;
+  plannedStart?: string | null;
+  dueDate?: string | null;
   status: ClientTaskStatus;
   approvalMode?: TaskApprovalMode;
   completedAt?: string | null;

@@ -149,10 +149,11 @@ export function validateMessageLinks(links: any[]): { valid: boolean; error?: st
   return { valid: true, validatedLinks };
 }
 
-export function isTaskOverdue(task: { dueDate: string; status: ClientTaskStatus; archivedAt?: string | null }): boolean {
+export function isTaskOverdue(task: { dueDate?: string | null; status: ClientTaskStatus; archivedAt?: string | null }): boolean {
   if (task.archivedAt) return false;
   if (task.status === 'Team Review' || task.status === 'Client Review' || task.status === 'Completed') return false;
   if (!['Draft', 'Assigned', 'In Progress', 'Blocked'].includes(task.status)) return false;
+  if (!task.dueDate) return false;
 
   const due = new Date(task.dueDate).getTime();
   if (isNaN(due)) return false;

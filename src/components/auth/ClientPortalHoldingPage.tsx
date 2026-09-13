@@ -143,7 +143,7 @@ export const ClientPortalHoldingPage: React.FC = () => {
                     <div className="flex items-center gap-3 mt-1 text-[11px] text-slate-500">
                       <span>Week {t.weekNumber}</span>
                       <span>•</span>
-                      <span>Due: {new Date(t.dueDate).toLocaleDateString()}</span>
+                      <span>Due: {t.dueDate ? new Date(t.dueDate).toLocaleDateString() : 'Unscheduled'}</span>
                     </div>
                   </div>
 

@@ -26,10 +26,11 @@ export const ClientTaskCard: React.FC<ClientTaskCardProps> = ({
   const isOwnerOrManager = currentUserProfile?.role === 'owner' || currentUserProfile?.role === 'operational_manager';
   const isAssignedMember = task.assigneeId === currentUserProfile?.id;
 
-  const formatDate = (iso: string) => {
+  const formatDate = (iso?: string | null) => {
     if (!iso) return '';
     try {
       const d = new Date(iso);
+      if (isNaN(d.getTime())) return '';
       return d.toLocaleDateString('en-US', {
         month: 'short',
         day: 'numeric',
@@ -132,7 +133,7 @@ export const ClientTaskCard: React.FC<ClientTaskCardProps> = ({
 
           <div className="flex items-center gap-1 flex-shrink-0 text-[10px]">
             <Calendar className="w-3 h-3 text-gray-400" />
-            <span>{formatDate(task.dueDate)}</span>
+            <span>{formatDate(task.dueDate) || 'Unscheduled'}</span>
           </div>
         </div>
 
