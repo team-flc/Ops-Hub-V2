@@ -17,6 +17,8 @@ export interface CreateTeamMemberPayload {
   backupPhone?: string;
   contactEmail?: string;
   linkedinUrl?: string;
+  facebookUrl?: string;
+  instagramUrl?: string;
   bio?: string;
   avatarUrl?: string | null;
   startDate: string;
@@ -34,6 +36,8 @@ export interface UpdateTeamMemberPayload {
   backupPhone?: string;
   contactEmail?: string;
   linkedinUrl?: string;
+  facebookUrl?: string;
+  instagramUrl?: string;
   bio?: string;
   avatarUrl?: string | null;
   startDate: string;

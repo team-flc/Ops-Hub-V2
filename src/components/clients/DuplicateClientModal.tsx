@@ -60,7 +60,12 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
 
   // Links start blank (per requirement: do not copy client-specific links or profiles)
   const [websiteUrl, setWebsiteUrl] = useState('');
+  const [flcLandingPageUrl, setFlcLandingPageUrl] = useState('');
   const [driveUrl, setDriveUrl] = useState('');
+  const [staticCreativesUrl, setStaticCreativesUrl] = useState('');
+  const [videosUrl, setVideosUrl] = useState('');
+  const [vslUrl, setVslUrl] = useState('');
+  const [gridUrl, setGridUrl] = useState('');
   const [facebookUrl, setFacebookUrl] = useState('');
   const [instagramUrl, setInstagramUrl] = useState('');
   const [linkedinPageUrl, setLinkedinPageUrl] = useState('');
@@ -95,7 +100,7 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
       return;
     }
     if (!clientName.trim()) {
-      setErrorMsg('New Client/Owner Name is required.');
+      setErrorMsg('Client/Owner Name is required.');
       return;
     }
     if (!managerId) {
@@ -106,7 +111,12 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
     // Validate provided URLs
     const rawLinks: Partial<Record<ClientLinkType, string>> = {
       website: websiteUrl,
+      flc_landing_page: flcLandingPageUrl,
       google_drive: driveUrl,
+      static_creatives: staticCreativesUrl,
+      videos: videosUrl,
+      vsl: vslUrl,
+      grid: gridUrl,
       facebook: facebookUrl,
       instagram: instagramUrl,
       linkedin_company_page: linkedinPageUrl,
@@ -348,7 +358,7 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
                 <label htmlFor="dup-website" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Website / Landing Page URL
+                  Website URL
                 </label>
                 <input
                   id="dup-website"
@@ -361,15 +371,15 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
               </div>
 
               <div>
-                <label htmlFor="dup-linkedin-page" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  LinkedIn Company Page URL
+                <label htmlFor="dup-flc-landing-page" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  FLC Landing Page URL
                 </label>
                 <input
-                  id="dup-linkedin-page"
+                  id="dup-flc-landing-page"
                   type="url"
-                  value={linkedinPageUrl}
-                  onChange={(e) => setLinkedinPageUrl(e.target.value)}
-                  placeholder="https://linkedin.com/company/..."
+                  value={flcLandingPageUrl}
+                  onChange={(e) => setFlcLandingPageUrl(e.target.value)}
+                  placeholder="https://flc-landing-page.com/..."
                   className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
                 />
               </div>
@@ -384,6 +394,76 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
                   value={driveUrl}
                   onChange={(e) => setDriveUrl(e.target.value)}
                   placeholder="https://drive.google.com/drive/folders/..."
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="dup-static-creatives" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Static Creatives URL
+                </label>
+                <input
+                  id="dup-static-creatives"
+                  type="url"
+                  value={staticCreativesUrl}
+                  onChange={(e) => setStaticCreativesUrl(e.target.value)}
+                  placeholder="https://... (Static Creatives / Ads Link)"
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="dup-videos" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Videos URL
+                </label>
+                <input
+                  id="dup-videos"
+                  type="url"
+                  value={videosUrl}
+                  onChange={(e) => setVideosUrl(e.target.value)}
+                  placeholder="https://... (Video Ads / Creatives Link)"
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="dup-vsl" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  VSL (Video Sales Letter) URL
+                </label>
+                <input
+                  id="dup-vsl"
+                  type="url"
+                  value={vslUrl}
+                  onChange={(e) => setVslUrl(e.target.value)}
+                  placeholder="https://... (VSL Link)"
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="dup-grid" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Grid URL
+                </label>
+                <input
+                  id="dup-grid"
+                  type="url"
+                  value={gridUrl}
+                  onChange={(e) => setGridUrl(e.target.value)}
+                  placeholder="https://... (Grid Link)"
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="dup-linkedin-page" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  LinkedIn Company Page URL
+                </label>
+                <input
+                  id="dup-linkedin-page"
+                  type="url"
+                  value={linkedinPageUrl}
+                  onChange={(e) => setLinkedinPageUrl(e.target.value)}
+                  placeholder="https://linkedin.com/company/..."
                   className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
                 />
               </div>

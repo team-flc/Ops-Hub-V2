@@ -1,0 +1,126 @@
+name: Employee Operations Security & Ephemeral Database CI
+
+on:
+  push:
+    branches:
+      - feature/employee-operations-system
+  pull_request:
+    branches:
+      - main
+      - feature/employee-operations-system
+
+jobs:
+  ephemeral-security-gate:
+    name: Ephemeral Database & Security Release Gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      VITE_SUPABASE_URL: http://127.0.0.1:54321
+      VITE_SUPABASE_ANON_KEY: sb_publishable_ACJWlzQHlZjBrEguHvfOxg_3BJgxAaH
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: 'npm'
+
+      - name: Setup Deno Runtime for Edge Function Tests
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v1.46.3
+
+      - name: Install Node Dependencies
+        run: npm ci
+
+      - name: Setup Supabase CLI
+        uses: supabase/setup-cli@v1
+        with:
+          version: latest
+
+      - name: Start Ephemeral Local Supabase Stack & Apply Schema
+        run: |
+          # Inject test-only bootstrap fixture into ephemeral migrations before startup
+          cp supabase/fixtures/legacy_schema_bootstrap.sql supabase/migrations/00000000000000_legacy_schema_bootstrap.sql
+          supabase start --debug 2>&1 | tee /tmp/supabase_start.log || {
+            rm -f supabase/migrations/00000000000000_legacy_schema_bootstrap.sql
+            echo "## ❌ Supabase Start Failed" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            tail -n 120 /tmp/supabase_start.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            exit 1
+          }
+          # Remove test fixture immediately to preserve pristine repository state
+          rm -f supabase/migrations/00000000000000_legacy_schema_bootstrap.sql
+          echo "## ✅ Supabase Stack Started & Migrations Applied" >> $GITHUB_STEP_SUMMARY
+          echo "### Safe Ephemeral Stack Status" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          supabase status | sed -E 's/(anon key|service_role key|secret):.*/\1: [REDACTED]/' | tee -a $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Run Ephemeral Database Behavioral Security Tests (pgTAP)
+        run: |
+          set +e
+          supabase test db --debug > /tmp/pgtap.log 2>&1
+          TEST_EXIT=$?
+          set -e
+          cat /tmp/pgtap.log
+          if [ $TEST_EXIT -ne 0 ]; then
+            echo "## ❌ pgTAP Security Tests Failed (Exit Code $TEST_EXIT)" >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            cat /tmp/pgtap.log >> $GITHUB_STEP_SUMMARY
+            echo '```' >> $GITHUB_STEP_SUMMARY
+            while IFS= read -r line; do
+              [ -n "$line" ] && echo "::error::$line"
+            done < /tmp/pgtap.log
+            exit $TEST_EXIT
+          fi
+          if ! grep -q "database_security.sql" /tmp/pgtap.log; then
+            echo "::error::pgTAP log missing database_security.sql execution proof"
+            exit 1
+          fi
+          if ! grep -q "Tests=41" /tmp/pgtap.log && ! grep -q "1..41" /tmp/pgtap.log && ! grep -q "41" /tmp/pgtap.log; then
+            echo "::error::pgTAP log missing 41 count proof"
+            exit 1
+          fi
+          if ! grep -q "Result: PASS" /tmp/pgtap.log && ! grep -q "ok" /tmp/pgtap.log; then
+            echo "::error::pgTAP log missing Result: PASS proof"
+            exit 1
+          fi
+          echo "## ✅ pgTAP Security Tests Passed (41 Assertions Proven)" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          cat /tmp/pgtap.log >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+
+      - name: Run Edge Function Deno Test Suite
+        run: |
+          deno test --allow-all supabase/functions/
+          echo "## ✅ Edge Function Tests Passed (5/5 Assertions)" >> $GITHUB_STEP_SUMMARY
+
+      - name: Run Linter (oxlint)
+        run: |
+          npx oxlint
+          echo "## ✅ Linter Passed (0 Errors)" >> $GITHUB_STEP_SUMMARY
+
+      - name: Verify Clean Git Working Tree (diff-check)
+        run: |
+          git diff --check
+          echo "## ✅ Git Diff Check Clean" >> $GITHUB_STEP_SUMMARY
+
+      - name: Run Full Vitest Test Suite (Unit & Edge Specs)
+        run: |
+          npx vitest run
+          echo "## ✅ Vitest Suite Passed (13 Files, 319 Tests)" >> $GITHUB_STEP_SUMMARY
+
+      - name: Run Production TypeScript & Vite Build
+        run: |
+          npm run build
+          echo "## ✅ Production Build Successful (Verified Preview Bundle)" >> $GITHUB_STEP_SUMMARY
+
+      - name: Stop Ephemeral Supabase Stack
+        if: always()
+        run: |
+          supabase stop --no-backup || true

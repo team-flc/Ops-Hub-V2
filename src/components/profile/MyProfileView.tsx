@@ -19,6 +19,8 @@ export const MyProfileView: React.FC = () => {
   const [fullName, setFullName] = useState('');
   const [bio, setBio] = useState('');
   const [linkedinUrl, setLinkedinUrl] = useState('');
+  const [facebookUrl, setFacebookUrl] = useState('');
+  const [instagramUrl, setInstagramUrl] = useState('');
   const [contactEmail, setContactEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [backupPhone, setBackupPhone] = useState('');
@@ -35,6 +37,8 @@ export const MyProfileView: React.FC = () => {
       setFullName(profile.fullName || '');
       setBio(profile.bio || '');
       setLinkedinUrl(profile.linkedinUrl || '');
+      setFacebookUrl(profile.facebookUrl || '');
+      setInstagramUrl(profile.instagramUrl || '');
       setContactEmail(profile.contactEmail || '');
       setPhone(profile.phone || '');
       setBackupPhone(profile.backupPhone || '');
@@ -87,6 +91,8 @@ export const MyProfileView: React.FC = () => {
       fullName,
       bio,
       linkedinUrl,
+      facebookUrl,
+      instagramUrl,
       contactEmail,
       phone,
       backupPhone,
@@ -262,7 +268,7 @@ export const MyProfileView: React.FC = () => {
               />
             </div>
 
-            <div className="md:col-span-2">
+            <div>
               <label className="block text-gray-700 dark:text-gray-300 font-bold mb-1.5">
                 LinkedIn Profile URL
               </label>
@@ -271,6 +277,32 @@ export const MyProfileView: React.FC = () => {
                 value={linkedinUrl}
                 onChange={(e) => setLinkedinUrl(e.target.value)}
                 placeholder="https://linkedin.com/in/yourprofile"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-gray-50 dark:bg-dark-100 border border-gray-200 dark:border-dark-border text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none font-medium"
+              />
+            </div>
+
+            <div>
+              <label className="block text-gray-700 dark:text-gray-300 font-bold mb-1.5">
+                Facebook Profile URL
+              </label>
+              <input
+                type="url"
+                value={facebookUrl}
+                onChange={(e) => setFacebookUrl(e.target.value)}
+                placeholder="https://facebook.com/yourprofile"
+                className="w-full px-3.5 py-2.5 rounded-xl bg-gray-50 dark:bg-dark-100 border border-gray-200 dark:border-dark-border text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none font-medium"
+              />
+            </div>
+
+            <div className="md:col-span-2">
+              <label className="block text-gray-700 dark:text-gray-300 font-bold mb-1.5">
+                Instagram Profile URL
+              </label>
+              <input
+                type="url"
+                value={instagramUrl}
+                onChange={(e) => setInstagramUrl(e.target.value)}
+                placeholder="https://instagram.com/yourprofile"
                 className="w-full px-3.5 py-2.5 rounded-xl bg-gray-50 dark:bg-dark-100 border border-gray-200 dark:border-dark-border text-gray-900 dark:text-gray-100 focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none font-medium"
               />
             </div>

@@ -25,6 +25,9 @@ import { TeamManagementView } from './components/views/TeamManagementView';
 import { ClientWorkspaceView } from './components/clients/ClientWorkspaceView';
 import { SettingsLayout } from './components/settings/SettingsLayout';
 import { MyProfileView } from './components/profile/MyProfileView';
+import { EmployeeDashboardView } from './components/employee/EmployeeDashboardView';
+import { EmployeeManagementDashboardView } from './components/employee/EmployeeManagementDashboardView';
+import { EmployeeDossierView } from './components/employee/EmployeeDossierView';
 import { TaskModal } from './components/tasks/TaskModal';
 import { CreateTaskModal } from './components/tasks/CreateTaskModal';
 import { CommandPalette } from './components/layout/CommandPalette';
@@ -38,7 +41,7 @@ import { UserProfile, SettingsTab } from './types';
  * Existing Internal FLC Ops Hub Workspace
  * Strictly accessible only by authenticated staff (owner, operational_manager, team_member).
  */
-export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard' | 'list' | 'client_workspace' | 'settings' | 'profile'; initialSettingsTab?: SettingsTab }> = ({ initialView, initialSettingsTab }) => {
+export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard' | 'list' | 'client_workspace' | 'settings' | 'profile' | 'employee_dashboard' | 'employee_operations' | 'employee_dossier'; initialSettingsTab?: SettingsTab }> = ({ initialView, initialSettingsTab }) => {
   const viewMode = useOpsStore((state) => state.viewMode);
   const setViewMode = useOpsStore((state) => state.setViewMode);
   const clients = useOpsStore((state) => state.clients);
@@ -48,7 +51,7 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
   const updateClientRecord = useOpsStore((state) => state.updateClientRecord);
 
   const { user, profile } = useAuth();
-  const params = useParams<{ clientId?: string; tab?: string }>();
+  const params = useParams<{ clientId?: string; tab?: string; employeeId?: string }>();
   const location = useLocation();
 
   const [eligibleManagers, setEligibleManagers] = useState<UserProfile[]>([]);
@@ -69,6 +72,12 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
       setViewMode('profile');
     } else if (location.pathname.startsWith('/team')) {
       setViewMode('directory');
+    } else if (location.pathname.startsWith('/employee/dashboard')) {
+      setViewMode('employee_dashboard');
+    } else if (location.pathname.startsWith('/operations/employees/') && location.pathname !== '/operations/employees') {
+      setViewMode('employee_dossier');
+    } else if (location.pathname.startsWith('/operations/employees')) {
+      setViewMode('employee_operations');
     } else if (location.pathname.startsWith('/clients')) {
       setViewMode('client_workspace');
     }
@@ -115,6 +124,15 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
     }
     if (location.pathname.startsWith('/team') || viewMode === 'directory') {
       return isManagerOrOwner ? <TeamManagementView /> : <OperationsDirectory />;
+    }
+    if (location.pathname.startsWith('/employee/dashboard') || viewMode === 'employee_dashboard') {
+      return <EmployeeDashboardView />;
+    }
+    if ((location.pathname.startsWith('/operations/employees/') && location.pathname !== '/operations/employees') || viewMode === 'employee_dossier') {
+      return <EmployeeDossierView />;
+    }
+    if (location.pathname.startsWith('/operations/employees') || viewMode === 'employee_operations') {
+      return isManagerOrOwner ? <EmployeeManagementDashboardView /> : <EmployeeDashboardView />;
     }
 
     switch (viewMode) {
@@ -231,6 +249,34 @@ export const App: React.FC = () => {
         element={
           <ProtectedRoute allowedRoles={['client']}>
             <ClientRedirect />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Dedicated Employee Self-Service Dashboard / Clock Portal */}
+      <Route
+        path="/employee/dashboard"
+        element={
+          <ProtectedRoute allowedRoles={['owner', 'operational_manager', 'team_member']}>
+            <OpsHubWorkspace initialView="employee_dashboard" />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Dedicated Employee Operations & Dossier Routes for Management */}
+      <Route
+        path="/operations/employees/:employeeId"
+        element={
+          <ProtectedRoute allowedRoles={['owner', 'operational_manager']}>
+            <OpsHubWorkspace initialView="employee_dossier" />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/operations/employees"
+        element={
+          <ProtectedRoute allowedRoles={['owner', 'operational_manager']}>
+            <OpsHubWorkspace initialView="employee_operations" />
           </ProtectedRoute>
         }
       />
