@@ -51,6 +51,24 @@ export function isValidLinkedInUrl(rawUrl?: string | null): boolean {
 }
 
 /**
+ * Format a phone number or WhatsApp link into a valid WhatsApp click-to-chat URL (https://wa.me/...).
+ * If input is already an http(s) URL, returns it sanitized.
+ * Otherwise extracts clean digits and builds https://wa.me/<digits>.
+ */
+export function formatWhatsAppUrl(input?: string | null): string {
+  if (!input || typeof input !== 'string') return '';
+  const trimmed = input.trim();
+  if (!trimmed) return '';
+
+  if (trimmed.startsWith('http://') || trimmed.startsWith('https://')) {
+    return sanitizeUrl(trimmed) || '';
+  }
+
+  const cleanDigits = trimmed.replace(/\D/g, '');
+  return cleanDigits ? `https://wa.me/${cleanDigits}` : '';
+}
+
+/**
  * Pure, reusable LinkedIn access completeness & readiness calculator.
  */
 export function calculateLinkedInReadiness(
@@ -495,7 +513,12 @@ export const clientManagementService = {
       if (input.links) {
         const linkEntries: { client_id: string; link_type: string; url: string; created_by?: string }[] = [];
         for (const [key, rawUrl] of Object.entries(input.links)) {
-          const cleanUrl = sanitizeUrl(rawUrl);
+          let cleanUrl: string | null = null;
+          if (key === 'poc_number' || key === 'poc_whatsapp') {
+            cleanUrl = (rawUrl && typeof rawUrl === 'string' && rawUrl.trim()) ? rawUrl.trim() : null;
+          } else {
+            cleanUrl = sanitizeUrl(rawUrl);
+          }
           if (cleanUrl) {
             linkEntries.push({
               client_id: newClient.id,
@@ -747,7 +770,12 @@ export const clientManagementService = {
       // Update links if provided
       if (input.links !== undefined) {
         for (const [key, rawUrl] of Object.entries(input.links)) {
-          const cleanUrl = sanitizeUrl(rawUrl);
+          let cleanUrl: string | null = null;
+          if (key === 'poc_number' || key === 'poc_whatsapp') {
+            cleanUrl = (rawUrl && typeof rawUrl === 'string' && rawUrl.trim()) ? rawUrl.trim() : null;
+          } else {
+            cleanUrl = sanitizeUrl(rawUrl);
+          }
           if (cleanUrl) {
             await supabase.from('client_links').upsert(
               {

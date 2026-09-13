@@ -7,7 +7,7 @@ import { Sidebar } from '../src/components/layout/Sidebar';
 import { ClientDetailsTab } from '../src/components/clients/ClientDetailsTab';
 import { CreateClientModal } from '../src/components/clients/CreateClientModal';
 import { DuplicateClientModal } from '../src/components/clients/DuplicateClientModal';
-import { clientManagementService } from '../src/lib/clientManagementService';
+import { clientManagementService, formatWhatsAppUrl } from '../src/lib/clientManagementService';
 import { useOpsStore } from '../src/store/opsStore';
 import { ClientRecord, UserProfile } from '../src/types';
 
@@ -43,7 +43,8 @@ const mockClientA: ClientRecord = {
     facebook: 'https://facebook.com/apexgrowth',
     instagram: 'https://instagram.com/apexgrowth',
     slack_channel: 'https://app.slack.com/client/T1/C1',
-    whatsapp_group: 'https://chat.whatsapp.com/ApexVip'
+    whatsapp_group: 'https://chat.whatsapp.com/ApexVip',
+    poc_number: '+92 300 1234567'
   },
   createdAt: '2026-09-01T00:00:00Z',
   updatedAt: '2026-09-01T00:00:00Z'
@@ -129,8 +130,8 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
     sessionStorage.clear();
   });
 
-  // 1. EXACT 13-ITEM ORDER, LABELS, AND ICONS IN SIDEBAR
-  it('1. Sidebar renders all 13 workspace links in exact required order with correct labels and icons', async () => {
+  // 1. EXACT 14-ITEM ORDER, LABELS, AND ICONS IN SIDEBAR
+  it('1. Sidebar renders all 14 workspace links in exact required order with correct labels and icons', async () => {
     await act(async () => {
       render(
         <MemoryRouter>
@@ -142,7 +143,7 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('13 active')).toBeInTheDocument();
+      expect(screen.getByText('14 active')).toBeInTheDocument();
     });
 
     // Query all rendered links inside sidebar
@@ -162,7 +163,8 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
       'Facebook',
       'Instagram',
       'Slack',
-      'WhatsApp'
+      'WhatsApp',
+      'POC WhatsApp'
     ];
 
     expect(linkTexts).toEqual(expectedOrder);
@@ -172,6 +174,12 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
     expect(brandIdentityLink).toHaveAttribute('href', 'https://brand.apex.com/guidelines');
     expect(brandIdentityLink).toHaveAttribute('target', '_blank');
     expect(brandIdentityLink).toHaveAttribute('rel', 'noopener noreferrer');
+
+    // Verify POC WhatsApp link attributes
+    const pocWhatsAppLink = screen.getByRole('link', { name: /POC WhatsApp/i });
+    expect(pocWhatsAppLink).toHaveAttribute('href', 'https://wa.me/923001234567');
+    expect(pocWhatsAppLink).toHaveAttribute('target', '_blank');
+    expect(pocWhatsAppLink).toHaveAttribute('rel', 'noopener noreferrer');
 
     // Verify Landing Page and Statics labels (not FLC Landing Page or Static)
     expect(screen.getByRole('link', { name: /Landing Page/i })).toHaveAttribute('href', 'https://flc-landing.com/apex');
@@ -191,7 +199,7 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('13 active')).toBeInTheDocument();
+      expect(screen.getByText('14 active')).toBeInTheDocument();
     });
 
     // Update client A in store to have only 3 links
@@ -288,6 +296,8 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
     expect((screen.getByLabelText(/Instagram Page URL/i) as HTMLInputElement).value).toBe('https://instagram.com/apexgrowth');
     expect((screen.getByLabelText(/Slack Channel URL/i) as HTMLInputElement).value).toBe('https://app.slack.com/client/T1/C1');
     expect((screen.getByLabelText(/WhatsApp Group URL/i) as HTMLInputElement).value).toBe('https://chat.whatsapp.com/ApexVip');
+    expect((screen.getByLabelText(/POC Number \/ WhatsApp/i) as HTMLInputElement).value).toBe('+92 300 1234567');
+    expect(screen.getByTestId('poc-direct-whatsapp-link')).toHaveAttribute('href', 'https://wa.me/923001234567');
 
     // Clean initial state should NOT show unsaved changes indicator
     expect(screen.queryByTestId('unsaved-changes-indicator')).not.toBeInTheDocument();
@@ -470,8 +480,8 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
     expect(sessionStorage.getItem(`ops_hub_client_links_draft_${mockClientA.id}`)).toBeNull();
   });
 
-  // 10. CREATE AND DUPLICATE CLIENT MODALS INCLUDE BRAND IDENTITY URL
-  it('10. CreateClientModal and DuplicateClientModal render Brand Identity URL input and submit it', async () => {
+  // 10. CREATE AND DUPLICATE CLIENT MODALS INCLUDE BRAND IDENTITY AND POC NUMBER
+  it('10. CreateClientModal and DuplicateClientModal render Brand Identity URL & POC Number inputs and submit them', async () => {
     const createSpy = vi.spyOn(clientManagementService, 'createClient').mockResolvedValue({
       data: mockClientA,
       error: undefined
@@ -488,13 +498,16 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
     );
 
     const brandInput = screen.getByLabelText(/Brand Identity URL/i);
+    const pocInput = screen.getByLabelText(/POC Number \/ WhatsApp/i);
     expect(brandInput).toBeInTheDocument();
+    expect(pocInput).toBeInTheDocument();
 
     // Fill required fields
     fireEvent.change(screen.getByLabelText(/Company Name/i), { target: { value: 'New Test Co' } });
     fireEvent.change(screen.getByLabelText(/Client \/ Owner Full Name/i), { target: { value: 'John Owner' } });
     fireEvent.change(screen.getByLabelText(/Activation Date/i), { target: { value: '2026-09-20' } });
     fireEvent.change(brandInput, { target: { value: 'https://brand.newtest.com' } });
+    fireEvent.change(pocInput, { target: { value: '+92 300 9998877' } });
 
     const submitBtn = screen.getByRole('button', { name: /Create Client Workspace/i });
     await act(async () => {
@@ -506,7 +519,8 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
         expect.objectContaining({
           companyName: 'New Test Co',
           links: expect.objectContaining({
-            brand_identity: 'https://brand.newtest.com'
+            brand_identity: 'https://brand.newtest.com',
+            poc_number: '+92 300 9998877'
           })
         }),
         'usr-owner-1'
@@ -533,13 +547,17 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
     );
 
     const dupBrandInput = screen.getByLabelText(/Brand Identity URL/i) as HTMLInputElement;
+    const dupPocInput = screen.getByLabelText(/POC Number \/ WhatsApp/i) as HTMLInputElement;
     expect(dupBrandInput).toBeInTheDocument();
+    expect(dupPocInput).toBeInTheDocument();
     expect(dupBrandInput.value).toBe(''); // Clean/blank links on duplicate
+    expect(dupPocInput.value).toBe('');
 
     fireEvent.change(screen.getByLabelText(/New Company Name/i), { target: { value: 'Apex Europe' } });
     fireEvent.change(screen.getByLabelText(/Client \/ Owner Full Name/i), { target: { value: 'Jane European' } });
     fireEvent.change(screen.getByLabelText(/Activation Date/i), { target: { value: '2026-09-25' } });
     fireEvent.change(dupBrandInput, { target: { value: 'https://brand.apexeurope.com' } });
+    fireEvent.change(dupPocInput, { target: { value: '+44 7700 900077' } });
 
     const dupSubmitBtn = screen.getByRole('button', { name: /Duplicate Client/i });
     await act(async () => {
@@ -552,11 +570,24 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
         expect.objectContaining({
           companyName: 'Apex Europe',
           links: expect.objectContaining({
-            brand_identity: 'https://brand.apexeurope.com'
+            brand_identity: 'https://brand.apexeurope.com',
+            poc_number: '+44 7700 900077'
           })
         }),
         'usr-owner-1'
       );
     });
+  });
+
+  // 11. DIRECT WHATSAPP CLICK-TO-CHAT FORMATTING
+  it('11. formatWhatsAppUrl correctly formats raw phone numbers, international formats, and preserve existing URLs', () => {
+    expect(formatWhatsAppUrl('+92 300 1234567')).toBe('https://wa.me/923001234567');
+    expect(formatWhatsAppUrl('03001234567')).toBe('https://wa.me/03001234567');
+    expect(formatWhatsAppUrl('+1 (555) 234-5678')).toBe('https://wa.me/15552345678');
+    expect(formatWhatsAppUrl('https://wa.me/923001234567')).toBe('https://wa.me/923001234567');
+    expect(formatWhatsAppUrl('https://chat.whatsapp.com/ApexGroup')).toBe('https://chat.whatsapp.com/ApexGroup');
+    expect(formatWhatsAppUrl('')).toBe('');
+    expect(formatWhatsAppUrl(null)).toBe('');
+    expect(formatWhatsAppUrl(undefined)).toBe('');
   });
 });

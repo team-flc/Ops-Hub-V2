@@ -3,7 +3,7 @@ import {
   Building2, 
   Link2, Check, AlertCircle, Save, Loader2, Plus, 
   Trash2, ExternalLink,
-  Camera, Archive, X
+  Camera, Archive, X, MessageCircle
 } from 'lucide-react';
 import { useOpsStore } from '../../store/opsStore';
 
@@ -24,6 +24,7 @@ import {
 import { 
   clientManagementService, 
   sanitizeUrl, 
+  formatWhatsAppUrl,
   isValidLinkedInUrl, 
   calculateLinkedInReadiness,
   LinkedInProfileInput 
@@ -95,6 +96,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
   const [linkedinPageUrl, setLinkedinPageUrl] = useState(client.links?.linkedin_company_page || '');
   const [slackUrl, setSlackUrl] = useState(client.links?.slack_channel || '');
   const [whatsappUrl, setWhatsappUrl] = useState(client.links?.whatsapp_group || '');
+  const [pocNumber, setPocNumber] = useState(client.links?.poc_number || '');
 
   // Dynamic LinkedIn Profiles State
   const [profiles, setProfiles] = useState<ClientLinkedInProfile[]>(
@@ -138,13 +140,14 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     if (linkedinPageUrl !== (client.links?.linkedin_company_page || '')) return true;
     if (slackUrl !== (client.links?.slack_channel || '')) return true;
     if (whatsappUrl !== (client.links?.whatsapp_group || '')) return true;
+    if (pocNumber !== (client.links?.poc_number || '')) return true;
     return false;
   }, [
     companyName, clientName, businessBio, industry, logoUrl, pkg, managerId,
     activationDate, status, pauseReason, requiredLinkedInCount,
     websiteUrl, flcLandingPageUrl, brandIdentityUrl, driveUrl, staticCreativesUrl,
     videosUrl, vslUrl, gridUrl, facebookUrl, instagramUrl, linkedinPageUrl,
-    slackUrl, whatsappUrl, client
+    slackUrl, whatsappUrl, pocNumber, client
   ]);
 
   // Load draft if present in sessionStorage, else initialize from client prop
@@ -177,6 +180,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
         setLinkedinPageUrl(parsed.linkedinPageUrl ?? (client.links?.linkedin_company_page || ''));
         setSlackUrl(parsed.slackUrl ?? (client.links?.slack_channel || ''));
         setWhatsappUrl(parsed.whatsappUrl ?? (client.links?.whatsapp_group || ''));
+        setPocNumber(parsed.pocNumber ?? (client.links?.poc_number || ''));
         setProfiles(client.linkedinProfiles || []);
         return;
       }
@@ -208,6 +212,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     setLinkedinPageUrl(client.links?.linkedin_company_page || '');
     setSlackUrl(client.links?.slack_channel || '');
     setWhatsappUrl(client.links?.whatsapp_group || '');
+    setPocNumber(client.links?.poc_number || '');
     setProfiles(client.linkedinProfiles || []);
   }, [client]);
 
@@ -242,7 +247,8 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
             instagramUrl,
             linkedinPageUrl,
             slackUrl,
-            whatsappUrl
+            whatsappUrl,
+            pocNumber
           })
         );
       } catch {
@@ -258,7 +264,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     pkg, managerId, activationDate, status, pauseReason, requiredLinkedInCount,
     websiteUrl, flcLandingPageUrl, brandIdentityUrl, driveUrl, staticCreativesUrl,
     videosUrl, vslUrl, gridUrl, facebookUrl, instagramUrl, linkedinPageUrl,
-    slackUrl, whatsappUrl
+    slackUrl, whatsappUrl, pocNumber
   ]);
 
   const handleConfirmDiscard = () => {
@@ -290,6 +296,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     setLinkedinPageUrl(client.links?.linkedin_company_page || '');
     setSlackUrl(client.links?.slack_channel || '');
     setWhatsappUrl(client.links?.whatsapp_group || '');
+    setPocNumber(client.links?.poc_number || '');
     setErrorMsg(null);
     setShowDiscardModal(false);
   };
@@ -382,11 +389,15 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
       instagram: instagramUrl,
       linkedin_company_page: linkedinPageUrl,
       slack_channel: slackUrl,
-      whatsapp_group: whatsappUrl
+      whatsapp_group: whatsappUrl,
+      poc_number: pocNumber
     };
 
     for (const [key, raw] of Object.entries(rawLinks)) {
       if (raw && raw.trim()) {
+        if (key === 'poc_number' || key === 'poc_whatsapp') {
+          continue;
+        }
         const sanitized = sanitizeUrl(raw);
         if (!sanitized) {
           setErrorMsg(`Invalid URL for ${key.replace(/_/g, ' ')}. Only http:// and https:// URLs are allowed.`);
@@ -1029,7 +1040,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
               />
             </div>
 
-            <div className="sm:col-span-2">
+            <div>
               <label htmlFor="edit-whatsapp" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                 WhatsApp Group URL
               </label>
@@ -1039,6 +1050,36 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 value={whatsappUrl}
                 onChange={(e) => setWhatsappUrl(e.target.value)}
                 placeholder="https://chat.whatsapp.com/..."
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="edit-poc-number" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  POC Number / WhatsApp
+                </label>
+                {pocNumber.trim() && formatWhatsAppUrl(pocNumber) ? (
+                  <a
+                    href={formatWhatsAppUrl(pocNumber)}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    data-testid="poc-direct-whatsapp-link"
+                    className="inline-flex items-center gap-1 text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 hover:underline hover:text-emerald-700 dark:hover:text-emerald-300 transition-colors"
+                    title="Direct WhatsApp Chat"
+                  >
+                    <MessageCircle className="w-3 h-3" />
+                    <span>Chat on WhatsApp</span>
+                  </a>
+                ) : null}
+              </div>
+              <input
+                id="edit-poc-number"
+                data-testid="edit-poc-number"
+                type="text"
+                value={pocNumber}
+                onChange={(e) => setPocNumber(e.target.value)}
+                placeholder="+92 300 1234567 or https://wa.me/..."
                 className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
               />
             </div>

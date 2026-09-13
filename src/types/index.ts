@@ -353,7 +353,9 @@ export type ClientLinkType =
   | 'facebook'
   | 'instagram'
   | 'slack_channel'
-  | 'whatsapp_group';
+  | 'whatsapp_group'
+  | 'poc_number'
+  | 'poc_whatsapp';
 
 export interface ClientLink {
   id?: string;

@@ -69,7 +69,8 @@ vi.mock('../src/lib/clientManagementService', () => ({
     createClient: vi.fn().mockResolvedValue({ data: mockClient, error: null })
   },
   sanitizeUrl: (url?: string) => url?.trim() || undefined,
-  isValidLinkedInUrl: (url: string) => url.includes('linkedin.com')
+  isValidLinkedInUrl: (url: string) => url.includes('linkedin.com'),
+  formatWhatsAppUrl: (input?: string) => input?.trim() ? `https://wa.me/${input.replace(/\D/g, '')}` : ''
 }));
 
 describe('Modal Portal & Shell Structural Verification', () => {

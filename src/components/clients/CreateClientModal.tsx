@@ -82,6 +82,7 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
   const [linkedinPageUrl, setLinkedinPageUrl] = useState('');
   const [slackUrl, setSlackUrl] = useState('');
   const [whatsappUrl, setWhatsappUrl] = useState('');
+  const [pocNumber, setPocNumber] = useState('');
 
   // LinkedIn Lead Generation Profiles
   const [requiredCount, setRequiredCount] = useState(3);
@@ -179,11 +180,15 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
       instagram: instagramUrl,
       linkedin_company_page: linkedinPageUrl,
       slack_channel: slackUrl,
-      whatsapp_group: whatsappUrl
+      whatsapp_group: whatsappUrl,
+      poc_number: pocNumber
     };
 
     for (const [key, raw] of Object.entries(rawLinks)) {
       if (raw && raw.trim()) {
+        if (key === 'poc_number' || key === 'poc_whatsapp') {
+          continue;
+        }
         const sanitized = sanitizeUrl(raw);
         if (!sanitized) {
           setErrorMsg(`Invalid URL for ${key.replace(/_/g, ' ')}. Only http:// and https:// URLs are allowed.`);
@@ -602,7 +607,7 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
                 />
               </div>
 
-              <div className="sm:col-span-2">
+              <div>
                 <label htmlFor="link-whatsapp" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                   WhatsApp Group URL
                 </label>
@@ -612,6 +617,21 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
                   value={whatsappUrl}
                   onChange={(e) => setWhatsappUrl(e.target.value)}
                   placeholder="https://chat.whatsapp.com/..."
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="link-poc-number" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  POC Number / WhatsApp
+                </label>
+                <input
+                  id="link-poc-number"
+                  data-testid="link-poc-number"
+                  type="text"
+                  value={pocNumber}
+                  onChange={(e) => setPocNumber(e.target.value)}
+                  placeholder="+92 300 1234567 or https://wa.me/..."
                   className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
                 />
               </div>

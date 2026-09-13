@@ -4,14 +4,14 @@ import { useOpsStore } from '../../store/opsStore';
 import { 
   Building2, ChevronsLeft, ChevronsRight, Briefcase, X,
   Globe, HardDrive, MessageCircle, ExternalLink, Clock, Users, UserCheck,
-  Image, Video, PlaySquare, Sparkles, LayoutGrid, Palette
+  Image, Video, PlaySquare, Sparkles, LayoutGrid, Palette, PhoneCall
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { ClientRecord, UserProfile } from '../../types';
 import { ClientSwitcher } from '../clients/ClientSwitcher';
 import { CreateClientModal } from '../clients/CreateClientModal';
 import { DuplicateClientModal } from '../clients/DuplicateClientModal';
-import { clientManagementService } from '../../lib/clientManagementService';
+import { clientManagementService, formatWhatsAppUrl } from '../../lib/clientManagementService';
 
 // Custom SVG Brand Icons for Client Workspace Links
 const LinkedInIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" }) => (
@@ -174,6 +174,12 @@ export const Sidebar: React.FC = () => {
       label: 'WhatsApp',
       url: clientLinks.whatsapp_group,
       icon: <MessageCircle className="w-3.5 h-3.5" />
+    },
+    {
+      key: 'poc_number',
+      label: 'POC WhatsApp',
+      url: formatWhatsAppUrl(clientLinks.poc_number),
+      icon: <PhoneCall className="w-3.5 h-3.5" />
     }
   ];
 
