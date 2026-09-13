@@ -399,13 +399,13 @@ BEGIN
     -- First cycle
     PERFORM public.fn_cron_process_attendance_automation();
 
-    SELECT count(*)::int INTO v_tasks_before FROM public.tasks WHERE task_type = 'attendance_anomaly' OR title LIKE '%Attendance%';
+    SELECT count(*)::int INTO v_tasks_before FROM public.employee_management_tasks;
     SELECT count(*)::int INTO v_att_before FROM public.employee_attendance;
 
     -- Second cycle
     PERFORM public.fn_cron_process_attendance_automation();
 
-    SELECT count(*)::int INTO v_tasks_after FROM public.tasks WHERE task_type = 'attendance_anomaly' OR title LIKE '%Attendance%';
+    SELECT count(*)::int INTO v_tasks_after FROM public.employee_management_tasks;
     SELECT count(*)::int INTO v_att_after FROM public.employee_attendance;
 
     IF v_tasks_after <> v_tasks_before THEN
