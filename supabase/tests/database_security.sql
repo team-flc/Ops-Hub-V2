@@ -164,7 +164,7 @@ SELECT is_empty('SELECT * FROM public.employee_records', '2. Anon cannot read em
 SELECT throws_ok(
     $$ SELECT public.fn_employee_check_in('22222222-2222-2222-2222-222222222222/test.jpg') $$,
     '42501',
-    'permission denied',
+    '.*permission denied.*',
     '3. Anon check-in RPC is rejected with Unauthorized'
 );
 
@@ -175,7 +175,7 @@ SELECT is_empty('SELECT * FROM public.employee_records', '5. Client role cannot 
 SELECT throws_ok(
     $$ SELECT public.fn_employee_check_in('11111111-1111-1111-1111-111111111111/test.jpg') $$,
     'P0001',
-    'active internal employee profile required',
+    '.*active internal employee profile required.*',
     '6. Client role check-in RPC is rejected with Forbidden'
 );
 
@@ -184,7 +184,7 @@ SELECT tests.authenticate_as('44444444-4444-4444-4444-444444444444');
 SELECT throws_ok(
     $$ SELECT public.fn_employee_check_in('44444444-4444-4444-4444-444444444444/test.jpg') $$,
     'P0001',
-    'active internal employee profile required',
+    '.*active internal employee profile required.*',
     '7. Inactive employee check-in RPC is rejected'
 );
 
@@ -193,7 +193,7 @@ SELECT tests.authenticate_as('55555555-5555-5555-5555-555555555555');
 SELECT throws_ok(
     $$ SELECT public.fn_employee_check_in('55555555-5555-5555-5555-555555555555/test.jpg') $$,
     'P0001',
-    'Employee setup is pending',
+    '.*Employee setup is pending.*',
     '8. Setup-pending employee check-in RPC is rejected'
 );
 
@@ -235,7 +235,7 @@ SELECT throws_ok(
     $$ INSERT INTO public.employee_attendance (employee_id, work_date, scheduled_check_in, scheduled_check_out, status)
        VALUES ('22222222-2222-2222-2222-222222222222', '2026-09-12', now(), now() + interval '8 hours', 'on_time') $$,
     '42501',
-    'violates row-level security policy',
+    '.*violates row-level security policy.*',
     '15. Direct employee INSERT on attendance table is denied by RLS'
 );
 
@@ -282,13 +282,13 @@ SELECT tests.authenticate_as('22222222-2222-2222-2222-222222222222');
 SELECT throws_ok(
     $$ SELECT public.fn_employee_check_in('33333333-3333-3333-3333-333333333333/checkin.jpg') $$,
     'P0001',
-    'must reside in authenticated employee directory',
+    '.*must reside in authenticated employee directory.*',
     '22. Using another employee screenshot path is strictly rejected'
 );
 SELECT throws_ok(
     $$ SELECT public.fn_employee_check_in('22222222-2222-2222-2222-222222222222/../../../etc/passwd.jpg') $$,
     'P0001',
-    'must reside in authenticated employee directory',
+    '.*must reside in authenticated employee directory.*',
     '23. Directory traversal in screenshot path is strictly rejected'
 );
 
@@ -296,7 +296,7 @@ SELECT throws_ok(
 SELECT throws_ok(
     $$ SELECT public.fn_cron_process_attendance_automation() $$,
     '42501',
-    'permission denied',
+    '.*permission denied.*',
     '24. Employee role cannot execute attendance automation cron RPC'
 );
 
@@ -304,7 +304,7 @@ SELECT tests.authenticate_as('77777777-7777-7777-7777-777777777777'); -- Owner
 SELECT throws_ok(
     $$ SELECT public.fn_cron_process_attendance_automation() $$,
     '42501',
-    'permission denied',
+    '.*permission denied.*',
     '25. Owner role cannot execute cron RPC (service_role only)'
 );
 
@@ -312,7 +312,7 @@ SELECT tests.authenticate_as('66666666-6666-6666-6666-666666666666'); -- Manager
 SELECT throws_ok(
     $$ SELECT public.fn_cron_process_attendance_automation() $$,
     '42501',
-    'permission denied',
+    '.*permission denied.*',
     '26. Operational Manager role cannot execute cron RPC (service_role only)'
 );
 
