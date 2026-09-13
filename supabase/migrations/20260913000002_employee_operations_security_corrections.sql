@@ -555,6 +555,13 @@ ALTER TABLE public.employee_management_tasks
         'asset_review'
     ));
 
+ALTER TABLE public.company_assets
+    DROP CONSTRAINT IF EXISTS company_assets_status_check;
+
+ALTER TABLE public.company_assets
+    ADD CONSTRAINT company_assets_status_check
+    CHECK (status IN ('assigned', 'acknowledged', 'receipt_pending', 'received', 'returned', 'damaged', 'lost'));
+
 -- 4.1 Asset Acknowledgement RPC
 CREATE OR REPLACE FUNCTION public.fn_employee_acknowledge_asset(
     p_asset_id UUID
