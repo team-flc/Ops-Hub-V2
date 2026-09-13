@@ -593,6 +593,62 @@ describe('Phase 2A Team & User Management Tests', () => {
     expect(screen.getByPlaceholderText('https://facebook.com/username')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('https://instagram.com/username')).toBeInTheDocument();
   });
+
+  // 15. EMPLOYEE OPERATIONS PERSISTENCE & CONFIGURE SETUP MODAL
+  it('15. EditTeamMemberModal renders Date of Birth, Bank Name, Account Number, and IBAN inputs for direct management entry', async () => {
+    const ownerProfile: UserProfile = {
+      id: 'usr-owner-1',
+      fullName: 'Atif Khan',
+      role: 'owner',
+      status: 'active',
+      createdAt: '',
+      updatedAt: ''
+    };
+
+    const mockDepts = [
+      { id: 'd1', name: 'Operations', slug: 'operations', status: 'active' as const, sortOrder: 1, createdAt: '', updatedAt: '' }
+    ];
+
+    const mockDesignations = [
+      { id: 'des-1', name: 'Operations Associate', status: 'active' as const, createdAt: '', updatedAt: '' }
+    ];
+
+    const fakeMember: TeamMemberRecord = {
+      id: 'usr-tm-edit',
+      fullName: 'Staff Member',
+      workEmail: 'staff@faseehlall.com',
+      role: 'team_member',
+      status: 'active',
+      startDate: '2026-01-01',
+      departments: mockDepts,
+      clientAccessCount: 0,
+      clientIds: [],
+      createdAt: '',
+      updatedAt: ''
+    };
+
+    render(
+      <EditTeamMemberModal
+        isOpen={true}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+        member={fakeMember}
+        currentUserProfile={ownerProfile}
+        departments={mockDepts}
+        designations={mockDesignations}
+        eligibleManagers={[ownerProfile]}
+      />
+    );
+
+    // Verify Date of Birth label
+    expect(screen.getByText('Date of Birth')).toBeInTheDocument();
+
+    // Verify Bank Details section inputs
+    expect(screen.getByPlaceholderText('e.g. Meezan Bank, HBL, EasyPaisa')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('e.g. Muhammad Atif (or leave blank if unverified)')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('e.g. 010203040506 or 03001234567')).toBeInTheDocument();
+    expect(screen.getByPlaceholderText('e.g. PK36MEZN0000000102030405')).toBeInTheDocument();
+  });
 });
 
 

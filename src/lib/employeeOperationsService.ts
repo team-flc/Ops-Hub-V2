@@ -1062,8 +1062,11 @@ export const employeeOperationsService = {
         id: data.id,
         employeeId: data.employee_id,
         bankName: data.bank_name,
-        accountTitle: data.account_title,
-        accountNumberOrIban: data.account_number_or_iban,
+        accountTitle: data.account_title || '',
+        accountNumberOrIban: data.account_number_or_iban || data.account_number || data.iban || '',
+        accountNumber: data.account_number || (!data.account_number_or_iban?.startsWith('PK') ? data.account_number_or_iban : ''),
+        iban: data.iban || (data.account_number_or_iban?.startsWith('PK') ? data.account_number_or_iban : ''),
+        branchCode: data.branch_code || '',
         status: data.status,
         createdAt: data.created_at,
         updatedAt: data.updated_at,
@@ -1079,7 +1082,7 @@ export const employeeOperationsService = {
     payload: {
       employeeId: string;
       bankName: string;
-      accountTitle: string;
+      accountTitle?: string;
       accountNumberOrIban?: string;
       accountNumber?: string;
       iban?: string;
@@ -1089,23 +1092,33 @@ export const employeeOperationsService = {
   ): Promise<{ error?: string }> {
     if (!supabase) return { error: 'Database unconfigured.' };
     const accNum = (payload.accountNumberOrIban || payload.accountNumber || payload.iban || '').trim();
-    if (!payload.bankName.trim() || !payload.accountTitle.trim() || !accNum) {
-      return { error: 'Bank Name, Account Title, and Account Number/IBAN are all required.' };
+    if (!payload.bankName?.trim()) {
+      return { error: 'Bank Name is required.' };
+    }
+    if (!accNum) {
+      return { error: 'Account Number or IBAN is required.' };
     }
     const actorId = callerId || payload.employeeId;
+    const title = (payload.accountTitle || '').trim();
 
     try {
+      const dbPayload: any = {
+        employee_id: payload.employeeId,
+        bank_name: payload.bankName.trim(),
+        account_title: title, // Stored as blank/unverified if not provided
+        account_number_or_iban: accNum,
+        status: 'active',
+        updated_at: new Date().toISOString(),
+        updated_by: actorId
+      };
+
+      if (payload.accountNumber !== undefined) dbPayload.account_number = payload.accountNumber.trim() || null;
+      if (payload.iban !== undefined) dbPayload.iban = payload.iban.trim() || null;
+      if (payload.branchCode !== undefined) dbPayload.branch_code = payload.branchCode.trim() || null;
+
       const { error } = await supabase
         .from('employee_bank_details')
-        .upsert({
-          employee_id: payload.employeeId,
-          bank_name: payload.bankName.trim(),
-          account_title: payload.accountTitle.trim(),
-          account_number_or_iban: accNum,
-          status: 'active',
-          updated_at: new Date().toISOString(),
-          updated_by: actorId
-        }, { onConflict: 'employee_id' });
+        .upsert(dbPayload, { onConflict: 'employee_id' });
 
       if (error) return { error: error.message };
 
@@ -1117,14 +1130,14 @@ export const employeeOperationsService = {
         entity_id: payload.employeeId,
         new_state: {
           bankName: payload.bankName.trim(),
-          accountTitle: payload.accountTitle.trim(),
+          accountTitle: title || 'Account title pending verification',
           maskedAccount: this.maskAccountNumber(accNum)
         }
       });
 
       return {};
     } catch (err: any) {
-      return { error: err.message };
+      return { error: err.message || 'Failed to save bank details.' };
     }
   },
 
@@ -2167,7 +2180,7 @@ export const employeeOperationsService = {
   async requestBankDetailsChange(payload: {
     employeeId: string;
     bankName: string;
-    accountTitle: string;
+    accountTitle?: string;
     accountNumberOrIban?: string;
     accountNumber?: string;
     iban?: string;
@@ -2175,12 +2188,13 @@ export const employeeOperationsService = {
     reason?: string;
   }): Promise<{ request?: EmployeeProfileChangeRequest; error?: string }> {
     const accNum = (payload.accountNumberOrIban || payload.accountNumber || payload.iban || '').trim();
+    const title = (payload.accountTitle || '').trim();
     return this.submitProfileChangeRequest({
       employeeId: payload.employeeId,
       requestType: 'bank_details',
       requestedChanges: {
         bankName: payload.bankName.trim(),
-        accountTitle: payload.accountTitle.trim(),
+        accountTitle: title,
         accountNumberOrIban: accNum,
         accountNumber: payload.accountNumber?.trim(),
         iban: payload.iban?.trim(),

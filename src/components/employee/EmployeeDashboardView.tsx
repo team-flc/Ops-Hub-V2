@@ -1062,15 +1062,23 @@ export const EmployeeDashboardView: React.FC = () => {
               <div className="p-5 rounded-2xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border space-y-3 text-xs">
                 <div className="flex items-center justify-between pb-3 border-b border-slate-200 dark:border-dark-border">
                   <span className="text-sm font-bold text-slate-900 dark:text-gray-100">{bankDetails.bankName}</span>
-                  <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" /> Verified for Disbursals
-                  </span>
+                  {bankDetails.accountTitle?.trim() && bankDetails.accountTitle !== 'Account title pending verification' ? (
+                    <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1">
+                      <CheckCircle2 className="w-3 h-3" /> Verified for Disbursals
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-1 rounded-lg text-[10px] font-bold bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-300 dark:border-amber-800 flex items-center gap-1">
+                      <AlertTriangle className="w-3 h-3" /> Title Pending Verification
+                    </span>
+                  )}
                 </div>
 
                 <div className="space-y-2">
                   <div className="flex justify-between">
                     <span className="text-slate-500">Beneficiary Account Title:</span>
-                    <span className="font-semibold text-slate-900 dark:text-gray-100">{bankDetails.accountTitle}</span>
+                    <span className={`font-semibold ${bankDetails.accountTitle?.trim() && bankDetails.accountTitle !== 'Account title pending verification' ? 'text-slate-900 dark:text-gray-100' : 'text-amber-700 dark:text-amber-400 italic'}`}>
+                      {bankDetails.accountTitle?.trim() && bankDetails.accountTitle !== 'Account title pending verification' ? bankDetails.accountTitle : 'Account title pending verification'}
+                    </span>
                   </div>
                   <div className="flex justify-between">
                     <span className="text-slate-500">Account Number:</span>

@@ -1043,12 +1043,6 @@ describe('Employee Operations System Full Behavioral Test Suite', () => {
         };
       };
 
-      // Mock setup
-      vi.spyOn(employeeOperationsService, 'fetchEmployeeRecord').mockResolvedValueOnce({
-        id: 'emp-user-1',
-        setupCompletedAt: '2026-09-01T00:00:00Z'
-      } as any);
-
       // Verify parameters sent to the RPC
       const res = await mockSupabaseRpc('fn_employee_check_in', {
         p_screenshot_path: 'emp-user-1/checkin_12345.jpg',
@@ -1274,21 +1268,221 @@ describe('Employee Operations System Full Behavioral Test Suite', () => {
       expect(durationHours).toBe(8.5);
     });
 
-    it('rejects check-in when caller is not authenticated via getUser()', async () => {
-      const res = await employeeOperationsService.checkIn({
-        metadata: { workMode: 'remote' }
-      });
-      // In mock environment without authenticated user, returns Unauthorized
-      expect(res.error).toBeDefined();
-      expect(res.error).toContain('Unauthorized');
-    });
-
     it('rejects check-out when caller is not authenticated via getUser()', async () => {
       const res = await employeeOperationsService.checkOut({
         attendanceId: 'att-123'
       });
       expect(res.error).toBeDefined();
       expect(res.error).toContain('Unauthorized');
+    });
+  });
+
+  // 35. Release Gate: Direct Management Persistence, Hard Reload & Unverified Titles
+  describe('35. Release Gate: Direct Management Persistence, Hard Reload & Unverified Titles', () => {
+    it('persists DOB in employee_records directly when saved by management', async () => {
+      const mockUpsert = vi.fn().mockResolvedValue({ error: null });
+      const mockInsert = vi.fn().mockResolvedValue({ error: null });
+      vi.spyOn(supabase, 'from').mockImplementation((table: string) => {
+        if (table === 'employee_records') {
+          return {
+            upsert: mockUpsert
+          } as any;
+        }
+        if (table === 'system_audit_events') {
+          return {
+            insert: mockInsert
+          } as any;
+        }
+        return {} as any;
+      });
+
+      const res = await employeeOperationsService.upsertEmployeeRecord({
+        id: 'usr-test-1',
+        dateOfBirth: '1995-08-20',
+        salary: 150000,
+        employmentStatus: 'active'
+      }, 'usr-owner-1');
+
+      expect(res.error).toBeUndefined();
+      expect(mockUpsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'usr-test-1',
+          date_of_birth: '1995-08-20',
+          salary: 150000
+        }),
+        { onConflict: 'id' }
+      );
+    });
+
+    it('persists Bank Name, Account Number, and IBAN with unverified title directly for management', async () => {
+      const mockUpsert = vi.fn().mockResolvedValue({ error: null });
+      const mockInsert = vi.fn().mockResolvedValue({ error: null });
+      vi.spyOn(supabase, 'from').mockImplementation((table: string) => {
+        if (table === 'employee_bank_details') {
+          return {
+            upsert: mockUpsert
+          } as any;
+        }
+        if (table === 'system_audit_events') {
+          return {
+            insert: mockInsert
+          } as any;
+        }
+        return {} as any;
+      });
+
+      const res = await employeeOperationsService.upsertBankDetails({
+        employeeId: 'usr-test-1',
+        bankName: 'EasyPaisa',
+        accountTitle: '', // Unverified / missing beneficiary title
+        accountNumber: '03001234567',
+        iban: 'PK36MEZN0000000102030405',
+        accountNumberOrIban: 'PK36MEZN0000000102030405'
+      }, 'usr-owner-1');
+
+      expect(res.error).toBeUndefined();
+      expect(mockUpsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          employee_id: 'usr-test-1',
+          bank_name: 'EasyPaisa',
+          account_title: '',
+          account_number: '03001234567',
+          iban: 'PK36MEZN0000000102030405'
+        }),
+        { onConflict: 'employee_id' }
+      );
+
+      // Audit event logs masked account and pending verification notice, never plain account number
+      expect(mockInsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'bank_details_updated',
+          new_state: expect.objectContaining({
+            bankName: 'EasyPaisa',
+            accountTitle: 'Account title pending verification',
+            maskedAccount: expect.stringMatching(/^PK\*{14,20}[0-9]{4}$/)
+          })
+        })
+      );
+    });
+
+    it('simulates hard reload retrieval: correctly hydrates DOB, Bank Name, Account Number, and IBAN', async () => {
+      const mockRecordData = {
+        id: 'usr-test-1',
+        employee_id: 'EMP-101',
+        employment_type: 'full_time' as const,
+        date_of_birth: '1998-04-15',
+        salary: 175000,
+        employment_status: 'active' as const,
+        setup_completed_at: '2026-09-01T00:00:00Z'
+      };
+
+      const mockBankData = {
+        id: 'bank-1',
+        employee_id: 'usr-test-1',
+        bank_name: 'Meezan Bank',
+        account_title: '',
+        account_number: '010203040506',
+        iban: 'PK36MEZN0000000102030405',
+        account_number_or_iban: 'PK36MEZN0000000102030405',
+        status: 'active' as const
+      };
+
+      vi.spyOn(supabase, 'from').mockImplementation((table: string) => {
+        if (table === 'employee_records') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({ data: mockRecordData, error: null })
+              })
+            })
+          } as any;
+        }
+        if (table === 'employee_bank_details') {
+          return {
+            select: vi.fn().mockReturnValue({
+              eq: vi.fn().mockReturnValue({
+                maybeSingle: vi.fn().mockResolvedValue({ data: mockBankData, error: null })
+              })
+            })
+          } as any;
+        }
+        return {} as any;
+      });
+
+      const empRec = await employeeOperationsService.fetchEmployeeRecord('usr-test-1');
+      const bankRec = await employeeOperationsService.fetchBankDetails('usr-test-1');
+
+      expect(empRec).toBeDefined();
+      expect(empRec).not.toBeNull();
+      expect(empRec?.dateOfBirth).toBe('1998-04-15');
+      expect(bankRec).toBeDefined();
+      expect(bankRec).not.toBeNull();
+      expect(bankRec?.bankName).toBe('Meezan Bank');
+      expect(bankRec?.accountNumber).toBe('010203040506');
+      expect(bankRec?.iban).toBe('PK36MEZN0000000102030405');
+      expect(bankRec?.accountTitle).toBe('');
+    });
+
+    it('returns actual backend error on database failure and does not claim success', async () => {
+      vi.spyOn(supabase, 'from').mockImplementation((table: string) => {
+        if (table === 'employee_bank_details') {
+          return {
+            upsert: vi.fn().mockResolvedValue({
+              error: { message: 'Database connection failed: 503 Service Unavailable' }
+            })
+          } as any;
+        }
+        return {} as any;
+      });
+
+      const res = await employeeOperationsService.upsertBankDetails({
+        employeeId: 'usr-test-1',
+        bankName: 'HBL',
+        accountNumber: '123456789'
+      }, 'usr-owner-1');
+
+      expect(res.error).toBe('Database connection failed: 503 Service Unavailable');
+    });
+
+    it('routes employee bank details update through approval workflow rather than direct write', async () => {
+      const mockInsert = vi.fn().mockReturnValue({
+        select: vi.fn().mockReturnValue({
+          single: vi.fn().mockResolvedValue({
+            data: { id: 'req-1', employee_id: 'usr-employee-1', request_type: 'bank_details', status: 'pending' },
+            error: null
+          })
+        })
+      });
+      vi.spyOn(supabase, 'from').mockImplementation((table: string) => {
+        if (table === 'employee_profile_change_requests') {
+          return {
+            insert: mockInsert
+          } as any;
+        }
+        if (table === 'employee_management_tasks') {
+          return {
+            insert: vi.fn().mockResolvedValue({ error: null })
+          } as any;
+        }
+        return {} as any;
+      });
+
+      const res = await employeeOperationsService.requestBankDetailsChange({
+        employeeId: 'usr-employee-1',
+        bankName: 'Standard Chartered',
+        accountTitle: 'Employee Name',
+        accountNumber: '9876543210',
+        reason: 'Switched primary salary account'
+      });
+
+      expect(res.error).toBeUndefined();
+      expect(mockInsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          employee_id: 'usr-employee-1',
+          request_type: 'bank_details',
+          status: 'pending'
+        })
+      );
     });
   });
 

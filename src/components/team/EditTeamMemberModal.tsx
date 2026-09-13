@@ -74,7 +74,8 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
   // Bank Details State
   const [bankName, setBankName] = useState('');
   const [accountTitle, setAccountTitle] = useState('');
-  const [accountNumberOrIban, setAccountNumberOrIban] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [iban, setIban] = useState('');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -133,17 +134,21 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
           setExistingSetupCompletedAt(employeeRec.setupCompletedAt || null);
         } else if (fetchedShifts.length > 0) {
           setSelectedShiftId(fetchedShifts[0].id);
+          setDob('');
+          setSalary('');
           setSetupCompleted(false);
         }
 
         if (fetchedBank) {
           setBankName(fetchedBank.bankName || '');
           setAccountTitle(fetchedBank.accountTitle || '');
-          setAccountNumberOrIban(fetchedBank.accountNumberOrIban || '');
+          setAccountNumber(fetchedBank.accountNumber || (!fetchedBank.accountNumberOrIban?.startsWith('PK') ? fetchedBank.accountNumberOrIban : ''));
+          setIban(fetchedBank.iban || (fetchedBank.accountNumberOrIban?.startsWith('PK') ? fetchedBank.accountNumberOrIban : ''));
         } else {
           setBankName('');
           setAccountTitle('');
-          setAccountNumberOrIban('');
+          setAccountNumber('');
+          setIban('');
         }
       } catch (err) {
         console.error('Failed to load companion employee data:', err);
@@ -314,12 +319,12 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
         resolvedSetupCompletedAt = existingSetupCompletedAt || new Date().toISOString();
       }
 
-      // Sync companion employee record
-      await employeeOperationsService.upsertEmployeeRecord({
+      // Sync companion employee record (including Date of Birth)
+      const empRecRes = await employeeOperationsService.upsertEmployeeRecord({
         id: member.id,
         employeeId: empId.trim() || undefined,
         employmentType,
-        dateOfBirth: dob || undefined,
+        dateOfBirth: dob || null,
         salary: salary ? Number(salary) : 0,
         jobDescription: jobDescription.trim() || undefined,
         shiftId: selectedShiftId || undefined,
@@ -329,14 +334,29 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
         setupCompletedAt: resolvedSetupCompletedAt
       }, currentUserProfile.id);
 
-      // If bank details provided/edited, save them
-      if (bankName.trim() && accountTitle.trim() && accountNumberOrIban.trim()) {
-        await employeeOperationsService.upsertBankDetails({
+      if (empRecRes?.error) {
+        setErrorMessage(empRecRes.error);
+        setIsSubmitting(false);
+        return;
+      }
+
+      // If bank details provided/edited, save them directly (management direct entry)
+      if (bankName.trim() || accountNumber.trim() || iban.trim() || accountTitle.trim()) {
+        const accOrIban = (iban.trim() || accountNumber.trim());
+        const bankRes = await employeeOperationsService.upsertBankDetails({
           employeeId: member.id,
           bankName: bankName.trim(),
-          accountTitle: accountTitle.trim(),
-          accountNumberOrIban: accountNumberOrIban.trim()
+          accountTitle: accountTitle.trim() || '',
+          accountNumber: accountNumber.trim() || undefined,
+          iban: iban.trim() || undefined,
+          accountNumberOrIban: accOrIban
         }, currentUserProfile.id);
+
+        if (bankRes?.error) {
+          setErrorMessage(bankRes.error);
+          setIsSubmitting(false);
+          return;
+        }
       }
 
       setIsSubmitting(false);
@@ -785,7 +805,7 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
                   type="text"
                   value={bankName}
                   onChange={(e) => setBankName(e.target.value)}
-                  placeholder="e.g. Meezan Bank, HBL, Standard Chartered"
+                  placeholder="e.g. Meezan Bank, HBL, EasyPaisa"
                   className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
               </div>
@@ -799,22 +819,36 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
                   type="text"
                   value={accountTitle}
                   onChange={(e) => setAccountTitle(e.target.value)}
-                  placeholder="e.g. Muhammad Atif"
+                  placeholder="e.g. Muhammad Atif (or leave blank if unverified)"
                   className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
                 />
               </div>
 
-              <div className="col-span-1 sm:col-span-2 space-y-1">
+              <div className="space-y-1">
                 <label htmlFor="edit-account-number" className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
-                  Account Number or IBAN (24 Characters)
+                  Account Number
                 </label>
                 <input
                   id="edit-account-number"
                   type="text"
-                  value={accountNumberOrIban}
-                  onChange={(e) => setAccountNumberOrIban(e.target.value)}
-                  placeholder="e.g. PK36MEZN0000000102030405 or 010203040506"
+                  value={accountNumber}
+                  onChange={(e) => setAccountNumber(e.target.value)}
+                  placeholder="e.g. 010203040506 or 03001234567"
                   className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 font-mono focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label htmlFor="edit-iban" className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                  IBAN (24 Characters)
+                </label>
+                <input
+                  id="edit-iban"
+                  type="text"
+                  value={iban}
+                  onChange={(e) => setIban(e.target.value.toUpperCase())}
+                  placeholder="e.g. PK36MEZN0000000102030405"
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 font-mono focus:outline-none focus:ring-2 focus:ring-brand-500 uppercase"
                 />
               </div>
             </div>

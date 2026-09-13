@@ -50,8 +50,8 @@ export const BankDetailsModal: React.FC<BankDetailsModalProps> = ({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!bankName.trim() || !accountTitle.trim() || !accountNumber.trim()) {
-      setErrorMessage('Bank Name, Account Title, and Account Number are required.');
+    if (!bankName.trim() || (!accountNumber.trim() && !iban.trim())) {
+      setErrorMessage('Bank Name and Account Number or IBAN are required.');
       return;
     }
 
@@ -63,8 +63,8 @@ export const BankDetailsModal: React.FC<BankDetailsModalProps> = ({
         const res = await employeeOperationsService.upsertBankDetails({
           employeeId,
           bankName: bankName.trim(),
-          accountTitle: accountTitle.trim(),
-          accountNumber: accountNumber.trim(),
+          accountTitle: accountTitle.trim() || '',
+          accountNumber: accountNumber.trim() || undefined,
           iban: iban.trim() || undefined,
           branchCode: branchCode.trim() || undefined
         });
@@ -79,8 +79,8 @@ export const BankDetailsModal: React.FC<BankDetailsModalProps> = ({
         const res = await employeeOperationsService.requestBankDetailsChange({
           employeeId,
           bankName: bankName.trim(),
-          accountTitle: accountTitle.trim(),
-          accountNumber: accountNumber.trim(),
+          accountTitle: accountTitle.trim() || '',
+          accountNumber: accountNumber.trim() || undefined,
           iban: iban.trim() || undefined,
           branchCode: branchCode.trim() || undefined,
           reason: 'Employee submitted bank details update'
@@ -161,14 +161,13 @@ export const BankDetailsModal: React.FC<BankDetailsModalProps> = ({
 
           <div className="space-y-1">
             <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
-              Account Title (Beneficiary Name) <span className="text-rose-500">*</span>
+              Account Title (Beneficiary Name)
             </label>
             <input
               type="text"
-              required
               value={accountTitle}
               onChange={(e) => setAccountTitle(e.target.value)}
-              placeholder="Must match official CNIC / Bank title"
+              placeholder="e.g. Muhammad Atif (or leave blank if unverified)"
               className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
             />
           </div>
@@ -176,14 +175,13 @@ export const BankDetailsModal: React.FC<BankDetailsModalProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
             <div className="space-y-1">
               <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
-                Account Number <span className="text-rose-500">*</span>
+                Account Number
               </label>
               <input
                 type="text"
-                required
                 value={accountNumber}
                 onChange={(e) => setAccountNumber(e.target.value)}
-                placeholder="e.g. 01020304050607"
+                placeholder="e.g. 01020304050607 or 03001234567"
                 className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 font-mono"
               />
             </div>

@@ -260,7 +260,7 @@ export const EmployeeDossierView: React.FC = () => {
           <div className="md:col-span-2 space-y-6">
             <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border shadow-xs space-y-4">
               <h2 className="text-sm font-bold text-slate-900 dark:text-gray-100">Employment Details</h2>
-              <div className="grid grid-cols-2 gap-4 text-xs">
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 text-xs">
                 <div>
                   <span className="text-slate-400 block">Work Email</span>
                   <span className="font-semibold text-slate-800 dark:text-gray-200">{profile.workEmail}</span>
@@ -272,6 +272,10 @@ export const EmployeeDossierView: React.FC = () => {
                 <div>
                   <span className="text-slate-400 block">Start Date</span>
                   <span className="font-semibold text-slate-800 dark:text-gray-200">{profile.startDate || 'N/A'}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block">Date of Birth</span>
+                  <span className="font-semibold text-slate-800 dark:text-gray-200">{record?.dateOfBirth || 'N/A'}</span>
                 </div>
                 <div>
                   <span className="text-slate-400 block">Base Monthly Salary</span>
@@ -667,17 +671,57 @@ export const EmployeeDossierView: React.FC = () => {
 
       {/* TAB 4: PAYROLL */}
       {activeTab === 'payroll' && (
-        <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border shadow-xs space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-slate-900 dark:text-gray-100">Salary History & Payslips</h2>
-            <button
-              type="button"
-              onClick={() => setIsBankModalOpen(true)}
-              className="text-xs font-semibold text-brand-600 hover:underline"
-            >
-              {bankDetails ? 'Edit Bank Account' : '+ Add Bank Account'}
-            </button>
+        <div className="space-y-6">
+          {/* Active Bank Account Details Card */}
+          <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-emerald-50 dark:bg-emerald-950/30 text-emerald-600 flex items-center justify-center font-bold">
+                  <DollarSign className="w-5 h-5" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-gray-100">Direct Bank Transfer Details</h2>
+                  <p className="text-[11px] text-slate-500 dark:text-gray-400">Used for automated 15th of the month payroll disbursal</p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsBankModalOpen(true)}
+                className="px-3.5 py-1.5 rounded-xl bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/30 text-brand-700 dark:text-brand-300 text-xs font-bold transition-colors"
+              >
+                {bankDetails ? (isManager ? 'Edit Bank Details' : 'Request Update') : '+ Add Bank Account'}
+              </button>
+            </div>
+
+            {bankDetails ? (
+              <div className="p-4 rounded-2xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Bank Name</span>
+                  <span className="font-bold text-slate-900 dark:text-gray-100">{bankDetails.bankName}</span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Beneficiary Account Title</span>
+                  <span className={`font-semibold ${bankDetails.accountTitle?.trim() && bankDetails.accountTitle !== 'Account title pending verification' ? 'text-slate-800 dark:text-gray-200' : 'text-amber-700 dark:text-amber-400 italic'}`}>
+                    {bankDetails.accountTitle?.trim() && bankDetails.accountTitle !== 'Account title pending verification' ? bankDetails.accountTitle : 'Account title pending verification'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-slate-400 block text-[11px]">Account / IBAN</span>
+                  <span className="font-mono font-bold text-slate-900 dark:text-gray-100">
+                    {bankDetails.accountNumber ? `•••• •••• ${bankDetails.accountNumber.slice(-4)}` : (bankDetails.accountNumberOrIban ? `•••• •••• ${bankDetails.accountNumberOrIban.slice(-4)}` : '••••••••')}
+                  </span>
+                  {bankDetails.iban && <span className="block font-mono text-[10px] text-slate-500 mt-0.5">{bankDetails.iban}</span>}
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-slate-400 italic">No bank account details configured for this team member.</p>
+            )}
           </div>
+
+          <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border shadow-xs space-y-4">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold text-slate-900 dark:text-gray-100">Salary History & Payslips</h2>
+            </div>
 
           <div className="overflow-x-auto">
             <table className="w-full text-left text-xs">
@@ -730,6 +774,7 @@ export const EmployeeDossierView: React.FC = () => {
             </table>
           </div>
         </div>
+      </div>
       )}
 
       {/* TAB 5: ASSETS */}
@@ -951,6 +996,7 @@ export const EmployeeDossierView: React.FC = () => {
             onClose={() => setIsBankModalOpen(false)}
             employeeId={targetId || ''}
             existingBankDetails={bankDetails}
+            isManager={isManager}
             onSuccess={loadDossier}
           />
 

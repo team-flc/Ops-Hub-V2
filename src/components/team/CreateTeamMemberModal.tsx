@@ -76,7 +76,8 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
   // Bank Details State
   const [bankName, setBankName] = useState('');
   const [accountTitle, setAccountTitle] = useState('');
-  const [accountNumberOrIban, setAccountNumberOrIban] = useState('');
+  const [accountNumber, setAccountNumber] = useState('');
+  const [iban, setIban] = useState('');
 
   // UI State
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -297,11 +298,11 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
       } else {
         // Upsert companion employee record
         if (result.user?.id && currentUserProfile?.id) {
-          await employeeOperationsService.upsertEmployeeRecord({
+          const empRecRes = await employeeOperationsService.upsertEmployeeRecord({
             id: result.user.id,
             employeeId: empId.trim() || undefined,
             employmentType,
-            dateOfBirth: dob || undefined,
+            dateOfBirth: dob || null,
             salary: salary ? Number(salary) : 0,
             jobDescription: jobDescription.trim() || undefined,
             shiftId: selectedShiftId || undefined,
@@ -311,14 +312,29 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
             setupCompletedAt: setupCompleted ? new Date().toISOString() : null
           }, currentUserProfile.id);
 
+          if (empRecRes?.error) {
+            setErrorMessage(empRecRes.error);
+            setIsSubmitting(false);
+            return;
+          }
+
           // If bank details provided, save them
-          if (bankName.trim() && accountTitle.trim() && accountNumberOrIban.trim()) {
-            await employeeOperationsService.upsertBankDetails({
+          if (bankName.trim() || accountNumber.trim() || iban.trim() || accountTitle.trim()) {
+            const accOrIban = (iban.trim() || accountNumber.trim());
+            const bankRes = await employeeOperationsService.upsertBankDetails({
               employeeId: result.user.id,
               bankName: bankName.trim(),
-              accountTitle: accountTitle.trim(),
-              accountNumberOrIban: accountNumberOrIban.trim()
+              accountTitle: accountTitle.trim() || '',
+              accountNumber: accountNumber.trim() || undefined,
+              iban: iban.trim() || undefined,
+              accountNumberOrIban: accOrIban
             }, currentUserProfile.id);
+
+            if (bankRes?.error) {
+              setErrorMessage(bankRes.error);
+              setIsSubmitting(false);
+              return;
+            }
           }
         }
 
@@ -990,7 +1006,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
                       type="text"
                       value={bankName}
                       onChange={(e) => setBankName(e.target.value)}
-                      placeholder="e.g. Meezan Bank, HBL, Standard Chartered"
+                      placeholder="e.g. Meezan Bank, HBL, EasyPaisa"
                       className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
                     />
                   </div>
@@ -1004,22 +1020,36 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
                       type="text"
                       value={accountTitle}
                       onChange={(e) => setAccountTitle(e.target.value)}
-                      placeholder="e.g. Muhammad Atif"
+                      placeholder="e.g. Muhammad Atif (or leave blank if unverified)"
                       className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
                     />
                   </div>
 
-                  <div className="col-span-1 sm:col-span-2 space-y-1">
+                  <div className="space-y-1">
                     <label htmlFor="create-account-number" className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
-                      Account Number or IBAN (24 Characters)
+                      Account Number
                     </label>
                     <input
                       id="create-account-number"
                       type="text"
-                      value={accountNumberOrIban}
-                      onChange={(e) => setAccountNumberOrIban(e.target.value)}
-                      placeholder="e.g. PK36MEZN0000000102030405 or 010203040506"
+                      value={accountNumber}
+                      onChange={(e) => setAccountNumber(e.target.value)}
+                      placeholder="e.g. 010203040506 or 03001234567"
                       className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 font-mono focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label htmlFor="create-iban" className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                      IBAN (24 Characters)
+                    </label>
+                    <input
+                      id="create-iban"
+                      type="text"
+                      value={iban}
+                      onChange={(e) => setIban(e.target.value.toUpperCase())}
+                      placeholder="e.g. PK36MEZN0000000102030405"
+                      className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 font-mono focus:outline-none focus:ring-2 focus:ring-brand-500 uppercase"
                     />
                   </div>
                 </div>
