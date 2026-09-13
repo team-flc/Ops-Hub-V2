@@ -14,9 +14,9 @@ SELECT plan(41);
 -- ------------------------------------------------------------------------------
 
 -- Role memberships to permit seamless role-switching during test execution
-GRANT anon TO postgres, authenticated, service_role, anon;
-GRANT authenticated TO postgres, authenticated, service_role, anon;
-GRANT service_role TO postgres, authenticated, service_role, anon;
+GRANT anon TO authenticated, service_role;
+GRANT authenticated TO anon, service_role;
+GRANT service_role TO anon, authenticated;
 
 CREATE SCHEMA IF NOT EXISTS tests;
 GRANT USAGE ON SCHEMA tests TO PUBLIC, authenticated, anon, service_role;
