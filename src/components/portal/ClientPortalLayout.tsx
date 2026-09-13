@@ -16,6 +16,7 @@ import { PortalRoadmapTab } from './tabs/PortalRoadmapTab';
 import { PortalDeliverablesTab } from './tabs/PortalDeliverablesTab';
 import { ClientReportModal } from './reports/ClientReportModal';
 import { clientPortalService } from '../../lib/clientPortalService';
+import { LiveActivityTicker } from './LiveActivityTicker';
 
 interface ClientPortalLayoutProps {
   portalData: PortalDataResult;
@@ -187,6 +188,12 @@ export const ClientPortalLayout: React.FC<ClientPortalLayoutProps> = ({
           )}
         </div>
       </header>
+
+      {/* Live Activity Ticker — shows when team members are actively working */}
+      <LiveActivityTicker
+        clientId={client.id}
+        testId="portal-live-ticker"
+      />
 
       {/* Mobile Sub-Navigation Bar */}
       <div className="md:hidden flex items-center justify-around bg-white dark:bg-dark-card border-b border-gray-200 dark:border-dark-border px-2 py-2 text-xs font-bold">

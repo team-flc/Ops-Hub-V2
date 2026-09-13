@@ -518,6 +518,7 @@ export interface ClientTask {
   reopenReason?: string | null;
   blockedReason?: string | null;
   timeSpentSeconds?: number;
+  pausedSeconds?: number;
   timerStartedAt?: string | null;
   evidenceUrl?: string | null;
   completionNotes?: string | null;
@@ -540,6 +541,17 @@ export interface ClientTask {
   launchBatchId?: string | null;
   unreadCount?: number;
   hasUnread?: boolean;
+}
+
+export interface ClientActiveAnnouncement {
+  id: string;
+  clientId: string;
+  taskId: string;
+  message: string;
+  teamMemberId: string;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // --- PHASE 3C: TASK TEMPLATES SYSTEM TYPES ---

@@ -1184,6 +1184,233 @@ serve(async (req: Request) => {
     }
 
     // --------------------------------------------------------------------------
+    // ACTION: start_work (Pending/Draft/Assigned -> In Progress + timer start + announcement)
+    // --------------------------------------------------------------------------
+    if (action === 'start_work') {
+      const { task_id } = body;
+      if (!task_id) {
+        return new Response(JSON.stringify({ error: 'Missing required field: task_id' }), { status: 400, headers: corsHeaders });
+      }
+
+      const { data: existingTask } = await supabaseAdmin
+        .from('client_tasks')
+        .select('*')
+        .eq('id', task_id)
+        .single();
+
+      if (!existingTask || existingTask.archived_at) {
+        return new Response(JSON.stringify({ error: 'Task not found or archived.' }), { status: 404, headers: corsHeaders });
+      }
+
+      const canManage = await checkCanManageClient(existingTask.client_id);
+      const isAssigned = existingTask.assignee_id === callerProfile.id;
+
+      if (!canManage && !isAssigned) {
+        return new Response(JSON.stringify({ error: 'Forbidden: You must be assigned or management to start work.' }), { status: 403, headers: corsHeaders });
+      }
+
+      const nowIso = new Date().toISOString();
+      const { data: updatedTask, error: uErr } = await supabaseAdmin
+        .from('client_tasks')
+        .update({
+          status: 'In Progress',
+          timer_started_at: nowIso,
+          feedback: null,
+          updated_at: nowIso,
+          updated_by: callerProfile.id
+        })
+        .eq('id', task_id)
+        .select()
+        .single();
+
+      if (uErr) {
+        return new Response(JSON.stringify({ error: uErr.message }), { status: 500, headers: corsHeaders });
+      }
+
+      // Upsert announcement for ticker
+      const assigneeName = callerProfile.full_name || 'Team Member';
+      const announcementMsg = `${assigneeName} and his team is working on ${existingTask.title}`;
+      try {
+        await supabaseAdmin
+          .from('client_active_announcements')
+          .upsert(
+            {
+              task_id,
+              client_id: existingTask.client_id,
+              message: announcementMsg,
+              team_member_id: callerProfile.id,
+              is_active: true,
+              updated_at: nowIso
+            },
+            { onConflict: 'task_id' }
+          );
+      } catch {
+        // Non-fatal
+      }
+
+      // Audit event
+      await supabaseAdmin.from('client_task_events').insert({
+        task_id,
+        client_id: existingTask.client_id,
+        actor_id: callerProfile.id,
+        event_type: 'start_work',
+        previous_state: existingTask,
+        new_state: updatedTask,
+        notes: `Started work with automatic timer.`
+      });
+
+      return new Response(JSON.stringify({ success: true, task: updatedTask }), { status: 200, headers: corsHeaders });
+    }
+
+    // --------------------------------------------------------------------------
+    // ACTION: pause_timer
+    // --------------------------------------------------------------------------
+    if (action === 'pause_timer') {
+      const { task_id } = body;
+      if (!task_id) {
+        return new Response(JSON.stringify({ error: 'Missing required field: task_id' }), { status: 400, headers: corsHeaders });
+      }
+
+      const { data: existingTask } = await supabaseAdmin
+        .from('client_tasks')
+        .select('*')
+        .eq('id', task_id)
+        .single();
+
+      if (!existingTask || existingTask.archived_at) {
+        return new Response(JSON.stringify({ error: 'Task not found or archived.' }), { status: 404, headers: corsHeaders });
+      }
+
+      const canManage = await checkCanManageClient(existingTask.client_id);
+      const isAssigned = existingTask.assignee_id === callerProfile.id;
+
+      if (!canManage && !isAssigned) {
+        return new Response(JSON.stringify({ error: 'Forbidden: You must be assigned or management to pause timer.' }), { status: 403, headers: corsHeaders });
+      }
+
+      const startMs = existingTask.timer_started_at ? new Date(existingTask.timer_started_at).getTime() : NaN;
+      const additionalSeconds = isNaN(startMs) ? 0 : Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+      const totalActive = (existingTask.time_spent_seconds || 0) + additionalSeconds;
+      const totalPaused = (existingTask.paused_seconds || 0) + additionalSeconds;
+      const nowIso = new Date().toISOString();
+
+      const { data: updatedTask, error: uErr } = await supabaseAdmin
+        .from('client_tasks')
+        .update({
+          timer_started_at: null,
+          time_spent_seconds: totalActive,
+          paused_seconds: totalPaused,
+          updated_at: nowIso,
+          updated_by: callerProfile.id
+        })
+        .eq('id', task_id)
+        .select()
+        .single();
+
+      if (uErr) {
+        return new Response(JSON.stringify({ error: uErr.message }), { status: 500, headers: corsHeaders });
+      }
+
+      // Deactivate announcement
+      try {
+        await supabaseAdmin
+          .from('client_active_announcements')
+          .update({ is_active: false, updated_at: nowIso })
+          .eq('task_id', task_id);
+      } catch {
+        // Non-fatal
+      }
+
+      await supabaseAdmin.from('client_task_events').insert({
+        task_id,
+        client_id: existingTask.client_id,
+        actor_id: callerProfile.id,
+        event_type: 'timer_paused',
+        previous_state: existingTask,
+        new_state: updatedTask,
+        notes: `Paused timer. Total active: ${totalActive}s.`
+      });
+
+      return new Response(JSON.stringify({ success: true, task: updatedTask }), { status: 200, headers: corsHeaders });
+    }
+
+    // --------------------------------------------------------------------------
+    // ACTION: resume_timer
+    // --------------------------------------------------------------------------
+    if (action === 'resume_timer') {
+      const { task_id } = body;
+      if (!task_id) {
+        return new Response(JSON.stringify({ error: 'Missing required field: task_id' }), { status: 400, headers: corsHeaders });
+      }
+
+      const { data: existingTask } = await supabaseAdmin
+        .from('client_tasks')
+        .select('*')
+        .eq('id', task_id)
+        .single();
+
+      if (!existingTask || existingTask.archived_at) {
+        return new Response(JSON.stringify({ error: 'Task not found or archived.' }), { status: 404, headers: corsHeaders });
+      }
+
+      const canManage = await checkCanManageClient(existingTask.client_id);
+      const isAssigned = existingTask.assignee_id === callerProfile.id;
+
+      if (!canManage && !isAssigned) {
+        return new Response(JSON.stringify({ error: 'Forbidden: You must be assigned or management to resume timer.' }), { status: 403, headers: corsHeaders });
+      }
+
+      const nowIso = new Date().toISOString();
+      const { data: updatedTask, error: uErr } = await supabaseAdmin
+        .from('client_tasks')
+        .update({
+          timer_started_at: nowIso,
+          updated_at: nowIso,
+          updated_by: callerProfile.id
+        })
+        .eq('id', task_id)
+        .select()
+        .single();
+
+      if (uErr) {
+        return new Response(JSON.stringify({ error: uErr.message }), { status: 500, headers: corsHeaders });
+      }
+
+      // Re-activate announcement
+      const assigneeName = callerProfile.full_name || 'Team Member';
+      const announcementMsg = `${assigneeName} and his team is working on ${existingTask.title}`;
+      try {
+        await supabaseAdmin
+          .from('client_active_announcements')
+          .upsert(
+            {
+              task_id,
+              client_id: existingTask.client_id,
+              message: announcementMsg,
+              team_member_id: callerProfile.id,
+              is_active: true,
+              updated_at: nowIso
+            },
+            { onConflict: 'task_id' }
+          );
+      } catch {
+        // Non-fatal
+      }
+
+      await supabaseAdmin.from('client_task_events').insert({
+        task_id,
+        client_id: existingTask.client_id,
+        actor_id: callerProfile.id,
+        event_type: 'timer_resumed',
+        previous_state: existingTask,
+        new_state: updatedTask,
+        notes: `Resumed timer.`
+      });
+
+      return new Response(JSON.stringify({ success: true, task: updatedTask }), { status: 200, headers: corsHeaders });
+    }
+
+    // --------------------------------------------------------------------------
     // ACTION: archive
     // --------------------------------------------------------------------------
     if (action === 'archive') {

@@ -204,38 +204,69 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
     }
   };
 
-  const handleToggleTimer = async (task: ClientTask) => {
+  const handleStartWork = async (task: ClientTask) => {
     try {
-      if (task.timerStartedAt) {
-        // Stop timer
-        const res = await taskManagementService.stopTimer(task.id, task.timerStartedAt, task.timeSpentSeconds);
-        if (res.error) {
-          showToast(`Failed to stop timer: ${res.error}`);
-        } else {
-          const updated: ClientTask = {
-            ...task,
-            timerStartedAt: null,
-            timeSpentSeconds: res.elapsedSecs !== undefined ? res.elapsedSecs : task.timeSpentSeconds
-          };
-          handleTaskUpdated(updated);
-          showToast(`Timer stopped for "${task.title}".`);
-        }
+      const assigneeName = task.assigneeName || currentUserProfile?.fullName || 'Team';
+      const res = await taskManagementService.startWork(task.id, task.clientId, assigneeName, task.title);
+      if (res.error) {
+        showToast(`Failed to start work: ${res.error}`);
       } else {
-        // Start timer
-        const res = await taskManagementService.startTimer(task.id);
-        if (res.error) {
-          showToast(`Failed to start timer: ${res.error}`);
-        } else {
-          const updated: ClientTask = {
-            ...task,
-            timerStartedAt: new Date().toISOString()
-          };
-          handleTaskUpdated(updated);
-          showToast(`Timer started for "${task.title}".`);
-        }
+        const updated: ClientTask = {
+          ...task,
+          status: 'In Progress',
+          timerStartedAt: new Date().toISOString(),
+          feedback: null
+        };
+        handleTaskUpdated(updated);
+        showToast(`Started work on "${task.title}". Timer running.`);
       }
     } catch (err: any) {
-      showToast(err?.message || 'Timer update failed.');
+      showToast(err?.message || 'Failed to start work.');
+    }
+  };
+
+  const handlePauseTimer = async (task: ClientTask) => {
+    if (!task.timerStartedAt) return;
+    try {
+      const res = await taskManagementService.pauseTimer(
+        task.id,
+        task.timerStartedAt,
+        task.timeSpentSeconds,
+        task.pausedSeconds
+      );
+      if (res.error) {
+        showToast(`Failed to pause timer: ${res.error}`);
+      } else {
+        const updated: ClientTask = {
+          ...task,
+          timerStartedAt: null,
+          timeSpentSeconds: res.elapsedSecs !== undefined ? res.elapsedSecs : task.timeSpentSeconds,
+          pausedSeconds: (task.pausedSeconds || 0)
+        };
+        handleTaskUpdated(updated);
+        showToast(`Timer paused for "${task.title}".`);
+      }
+    } catch (err: any) {
+      showToast(err?.message || 'Timer pause failed.');
+    }
+  };
+
+  const handleResumeTimer = async (task: ClientTask) => {
+    try {
+      const assigneeName = task.assigneeName || currentUserProfile?.fullName || 'Team';
+      const res = await taskManagementService.resumeTimer(task.id, task.clientId, assigneeName, task.title);
+      if (res.error) {
+        showToast(`Failed to resume timer: ${res.error}`);
+      } else {
+        const updated: ClientTask = {
+          ...task,
+          timerStartedAt: new Date().toISOString()
+        };
+        handleTaskUpdated(updated);
+        showToast(`Timer resumed for "${task.title}".`);
+      }
+    } catch (err: any) {
+      showToast(err?.message || 'Timer resume failed.');
     }
   };
 
@@ -258,6 +289,32 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
         }
       }
 
+      // For Approval submissions: use the new submitForApproval path
+      if (newStatus === 'Approval') {
+        const res = await taskManagementService.submitForApproval(task.id, {
+          timerStartedAt: task.timerStartedAt,
+          timeSpentSeconds: task.timeSpentSeconds,
+          pausedSeconds: task.pausedSeconds,
+          evidenceUrl: options?.evidenceUrl,
+          completionNotes: options?.completionNotes
+        });
+        if (res.error) {
+          showToast(`Submission failed: ${res.error}`);
+        } else {
+          const updated: ClientTask = {
+            ...task,
+            status: 'Approval',
+            timerStartedAt: null,
+            timeSpentSeconds: res.finalActiveSeconds !== undefined ? res.finalActiveSeconds : task.timeSpentSeconds,
+            evidenceUrl: options?.evidenceUrl !== undefined ? options.evidenceUrl : task.evidenceUrl,
+            completionNotes: options?.completionNotes !== undefined ? options.completionNotes : task.completionNotes
+          };
+          handleTaskUpdated(updated);
+          showToast(`Task "${task.title}" submitted for approval.`);
+        }
+        return;
+      }
+
       const res = await taskManagementService.updateKanbanStatus(task.id, newStatus, {
         reason: options?.reason,
         feedback: options?.feedback,
@@ -272,7 +329,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
         showToast(`Status update failed: ${res.error}`);
       } else {
         let computedTime = task.timeSpentSeconds || 0;
-        if ((newStatus === 'Approval' || newStatus === 'Done') && task.timerStartedAt) {
+        if (newStatus === 'Done' && task.timerStartedAt) {
           const startMs = new Date(task.timerStartedAt).getTime();
           if (!isNaN(startMs)) {
             computedTime += Math.max(0, Math.floor((Date.now() - startMs) / 1000));
@@ -285,7 +342,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
           feedback: options?.feedback !== undefined ? options.feedback : task.feedback,
           evidenceUrl: options?.evidenceUrl !== undefined ? options.evidenceUrl : task.evidenceUrl,
           completionNotes: options?.completionNotes !== undefined ? options.completionNotes : task.completionNotes,
-          timerStartedAt: (newStatus === 'Approval' || newStatus === 'Done') ? null : task.timerStartedAt,
+          timerStartedAt: newStatus === 'Done' ? null : task.timerStartedAt,
           timeSpentSeconds: computedTime,
           completedAt: (newStatus === 'Done' || newStatus === 'Completed') ? new Date().toISOString() : task.completedAt
         };
@@ -424,7 +481,9 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                 onOpenEditModal={(t) => setEditingTask(t)}
                 onOpenCreateTask={handleOpenCreateTaskFlow}
                 onStatusChange={handleKanbanStatusChange}
-                onToggleTimer={handleToggleTimer}
+                onStartWork={handleStartWork}
+                onPauseTimer={handlePauseTimer}
+                onResumeTimer={handleResumeTimer}
                 onShowToast={showToast}
               />
             </div>

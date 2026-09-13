@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import {
   Calendar, Clock, Play, Pause, ExternalLink, Send, CheckCircle2, RotateCcw,
-  Edit3, AlertTriangle, MessageSquare, Check, User
+  Edit3, AlertTriangle, MessageSquare, Check, User, Timer
 } from 'lucide-react';
 import { ClientTask, ClientTaskStatus, UserProfile } from '../../types';
 
@@ -11,10 +11,30 @@ interface ClientKanbanCardProps {
   onSelectTask: (task: ClientTask) => void;
   onOpenEditModal: (task: ClientTask) => void;
   onStatusChange: (task: ClientTask, targetStatus: ClientTaskStatus, options?: any) => void;
-  onToggleTimer: (task: ClientTask) => void;
+  onStartWork: (task: ClientTask) => void;
+  onPauseTimer: (task: ClientTask) => void;
+  onResumeTimer: (task: ClientTask) => void;
   onRequestApproval: (task: ClientTask) => void;
   onRequestFeedback: (task: ClientTask) => void;
   isDragging?: boolean;
+}
+
+function formatDuration(secs: number): string {
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = secs % 60;
+  if (h > 0) {
+    return `${h}h ${m.toString().padStart(2, '0')}m ${s.toString().padStart(2, '0')}s`;
+  }
+  return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
+}
+
+function formatCompact(secs: number): string {
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m`;
+  return `${secs}s`;
 }
 
 export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
@@ -23,7 +43,9 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
   onSelectTask,
   onOpenEditModal,
   onStatusChange,
-  onToggleTimer,
+  onStartWork,
+  onPauseTimer,
+  onResumeTimer,
   onRequestApproval,
   onRequestFeedback,
   isDragging
@@ -31,6 +53,7 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
   const isOwnerOrManager =
     currentUserProfile?.role === 'owner' || currentUserProfile?.role === 'operational_manager';
   const isAssignedMember = task.assigneeId === currentUserProfile?.id;
+  const canActOnTask = isAssignedMember || isOwnerOrManager;
   const isTimerRunning = Boolean(task.timerStartedAt);
 
   // Live seconds ticker when timer is running
@@ -55,16 +78,6 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
       if (interval) clearInterval(interval);
     };
   }, [isTimerRunning, task.timerStartedAt, task.timeSpentSeconds]);
-
-  const formatTimerDisplay = (secs: number) => {
-    const h = Math.floor(secs / 3600);
-    const m = Math.floor((secs % 3600) / 60);
-    const s = secs % 60;
-    if (h > 0) {
-      return `${h}h ${m.toString().padStart(2, '0')}m ${s.toString().padStart(2, '0')}s`;
-    }
-    return `${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
-  };
 
   const formatDate = (iso?: string | null) => {
     if (!iso) return '';
@@ -99,6 +112,13 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
     e.dataTransfer.setData('text/plain', JSON.stringify({ taskId: task.id, currentStatus: task.status }));
     e.dataTransfer.effectAllowed = 'move';
   };
+
+  const isPending = task.status === 'Pending' || task.status === 'Draft' || task.status === 'Assigned';
+  const isInProgress = task.status === 'In Progress';
+  const isApproval = task.status === 'Approval' || task.status === 'Team Review' || task.status === 'Client Review';
+  const isDone = task.status === 'Done' || task.status === 'Completed';
+
+  const pausedSecs = task.pausedSeconds || 0;
 
   return (
     <div
@@ -156,7 +176,7 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
       </div>
 
       {/* Feedback Banner if returned with feedback */}
-      {task.feedback && task.status === 'In Progress' && (
+      {task.feedback && isInProgress && (
         <div className="p-2 rounded-lg bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/40 text-[11px] text-amber-800 dark:text-amber-300 flex items-start gap-1.5">
           <MessageSquare className="w-3.5 h-3.5 flex-shrink-0 mt-0.5 text-amber-600" />
           <div className="min-w-0">
@@ -166,10 +186,29 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
         </div>
       )}
 
-      {/* Evidence & Timer Meta Bar */}
-      <div className="flex items-center justify-between gap-2 text-[10px] pt-1">
-        {/* Timer Display & Quick Start/Pause */}
-        <div className="flex items-center gap-1.5">
+      {/* Approval: "Work Completed" summary */}
+      {isApproval && (
+        <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40 space-y-1">
+          <div className="flex items-center gap-1.5 text-[11px] font-black text-emerald-700 dark:text-emerald-400">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            <span>Work Completed</span>
+          </div>
+          {(task.timeSpentSeconds || 0) > 0 && (
+            <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
+              Completed in: {formatCompact(task.timeSpentSeconds || 0)}
+              {pausedSecs > 0 && (
+                <span className="text-gray-500 dark:text-gray-400 font-normal ml-1.5">
+                  · Paused: {formatCompact(pausedSecs)}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Timer Meta Bar (In Progress) */}
+      {(isInProgress || isPending) && (
+        <div className="flex items-center gap-1.5 text-[10px] pt-0.5">
           <span
             className={`px-2 py-0.5 rounded-md font-mono font-bold flex items-center gap-1 ${
               isTimerRunning
@@ -181,45 +220,49 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
             title={isTimerRunning ? 'Timer active' : 'Time recorded'}
           >
             <Clock className="w-3 h-3" />
-            <span>{formatTimerDisplay(liveSeconds)}</span>
+            <span>{formatDuration(liveSeconds)}</span>
           </span>
 
-          {(isAssignedMember || isOwnerOrManager) && (task.status === 'In Progress' || task.status === 'Pending') && (
+          {isInProgress && canActOnTask && (
             <button
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                onToggleTimer(task);
+                if (isTimerRunning) {
+                  onPauseTimer(task);
+                } else {
+                  onResumeTimer(task);
+                }
               }}
-              data-testid={`timer-btn-${task.id}`}
+              data-testid={`timer-toggle-btn-${task.id}`}
               className={`p-1 rounded-md transition-colors cursor-pointer flex items-center justify-center ${
                 isTimerRunning
-                  ? 'bg-rose-500/10 text-rose-600 hover:bg-rose-500 hover:text-white'
+                  ? 'bg-amber-500/10 text-amber-600 hover:bg-amber-500 hover:text-white'
                   : 'bg-emerald-500/10 text-emerald-600 hover:bg-emerald-500 hover:text-white'
               }`}
-              title={isTimerRunning ? 'Pause Timer' : 'Start Timer'}
+              title={isTimerRunning ? 'Pause Timer' : 'Resume Timer'}
             >
               {isTimerRunning ? <Pause className="w-3 h-3" /> : <Play className="w-3 h-3" />}
             </button>
           )}
         </div>
+      )}
 
-        {/* Evidence Link */}
-        {task.evidenceUrl && (
-          <a
-            href={task.evidenceUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            onClick={(e) => e.stopPropagation()}
-            data-testid={`evidence-link-${task.id}`}
-            className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-900/40 hover:underline"
-            title={task.evidenceUrl}
-          >
-            <ExternalLink className="w-3 h-3" />
-            <span className="font-bold">Evidence</span>
-          </a>
-        )}
-      </div>
+      {/* Evidence Link (Approval/Done) */}
+      {task.evidenceUrl && (isApproval || isDone) && (
+        <a
+          href={task.evidenceUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+          data-testid={`evidence-link-${task.id}`}
+          className="flex items-center gap-1 px-2 py-0.5 rounded-md bg-purple-50 dark:bg-purple-950/30 text-purple-600 dark:text-purple-400 border border-purple-200 dark:border-purple-900/40 hover:underline text-[10px] w-fit"
+          title={task.evidenceUrl}
+        >
+          <ExternalLink className="w-3 h-3" />
+          <span className="font-bold">Evidence</span>
+        </a>
+      )}
 
       {/* Bottom Row: Assignee, Due Date & Accessible Actions */}
       <div className="pt-2 border-t border-gray-100 dark:border-dark-border flex items-center justify-between gap-2 text-[11px]">
@@ -250,11 +293,12 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
 
         {/* Accessible Kanban Status Action Buttons */}
         <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-          {/* Pending -> In Progress */}
-          {(task.status === 'Pending' || task.status === 'Draft' || task.status === 'Assigned') && (isAssignedMember || isOwnerOrManager) && (
+
+          {/* Pending → In Progress + Start Timer (single click) */}
+          {isPending && canActOnTask && (
             <button
               type="button"
-              onClick={() => onStatusChange(task, 'In Progress')}
+              onClick={() => onStartWork(task)}
               data-testid={`start-task-btn-${task.id}`}
               className="px-2 py-1 rounded-lg bg-brand-500/10 text-brand-600 dark:text-brand-400 hover:bg-brand-500 hover:text-white text-[10px] font-bold transition-colors cursor-pointer flex items-center gap-1"
               title="Start Work (Move to In Progress)"
@@ -264,8 +308,8 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
             </button>
           )}
 
-          {/* In Progress -> Approval */}
-          {task.status === 'In Progress' && (isAssignedMember || isOwnerOrManager) && (
+          {/* In Progress → Approval (Submit for Approval) */}
+          {isInProgress && canActOnTask && (
             <button
               type="button"
               onClick={() => onRequestApproval(task)}
@@ -278,8 +322,8 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
             </button>
           )}
 
-          {/* Approval Actions */}
-          {(task.status === 'Approval' || task.status === 'Team Review' || task.status === 'Client Review') && (
+          {/* Approval Actions: Manager can Approve to Done or Return with Feedback */}
+          {isApproval && (
             isOwnerOrManager ? (
               <div className="flex items-center gap-1">
                 <button
@@ -303,14 +347,15 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
                 </button>
               </div>
             ) : (
-              <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/30 px-2 py-0.5 rounded-md border border-purple-200 dark:border-purple-900/30">
+              <span className="text-[10px] font-bold text-purple-600 dark:text-purple-400 bg-purple-50 dark:bg-purple-950/30 px-2 py-0.5 rounded-md border border-purple-200 dark:border-purple-900/30 flex items-center gap-1">
+                <Timer className="w-3 h-3" />
                 In Review
               </span>
             )
           )}
 
           {/* Done status indicator */}
-          {(task.status === 'Done' || task.status === 'Completed') && (
+          {isDone && (
             <span className="flex items-center gap-1 text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/30 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-900/30">
               <CheckCircle2 className="w-3 h-3" />
               <span>Done</span>

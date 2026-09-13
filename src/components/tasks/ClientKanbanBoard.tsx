@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  Clock, PlayCircle, ShieldCheck, CheckCheck, Plus, AlertTriangle
+  Clock, PlayCircle, ShieldCheck, CheckCheck
 } from 'lucide-react';
 import { ClientRecord, ClientTask, ClientTaskStatus, UserProfile } from '../../types';
 import { ClientKanbanCard } from './ClientKanbanCard';
@@ -14,8 +14,10 @@ interface ClientKanbanBoardProps {
   onSelectTask: (task: ClientTask) => void;
   onOpenEditModal: (task: ClientTask) => void;
   onOpenCreateTask: () => void;
-  onStatusChange: (task: ClientTask, targetStatus: ClientTaskStatus, options?: any) => Promise<void>;
-  onToggleTimer: (task: ClientTask) => Promise<void>;
+  onStatusChange: (task: ClientTask, targetStatus: ClientTaskStatus, options?: any) => Promise<void> | void;
+  onStartWork: (task: ClientTask) => Promise<void> | void;
+  onPauseTimer: (task: ClientTask) => Promise<void> | void;
+  onResumeTimer: (task: ClientTask) => Promise<void> | void;
   onShowToast: (msg: string) => void;
 }
 
@@ -26,7 +28,6 @@ interface ColumnConfig {
   label: string;
   icon: React.ElementType;
   badgeBg: string;
-  badgeText: string;
   borderAccent: string;
   statuses: ClientTaskStatus[];
 }
@@ -39,7 +40,9 @@ export const ClientKanbanBoard: React.FC<ClientKanbanBoardProps> = ({
   onOpenEditModal,
   onOpenCreateTask,
   onStatusChange,
-  onToggleTimer,
+  onStartWork,
+  onPauseTimer,
+  onResumeTimer,
   onShowToast
 }) => {
   const [dragOverColumn, setDragOverColumn] = useState<KanbanColumnId | null>(null);
@@ -55,7 +58,6 @@ export const ClientKanbanBoard: React.FC<ClientKanbanBoardProps> = ({
       label: 'Pending',
       icon: Clock,
       badgeBg: 'bg-slate-100 dark:bg-dark-100 text-slate-700 dark:text-slate-300',
-      badgeText: 'text-slate-700 dark:text-slate-300',
       borderAccent: 'border-slate-200 dark:border-dark-border',
       statuses: ['Pending', 'Draft', 'Assigned', 'Blocked']
     },
@@ -64,7 +66,6 @@ export const ClientKanbanBoard: React.FC<ClientKanbanBoardProps> = ({
       label: 'In Progress',
       icon: PlayCircle,
       badgeBg: 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300',
-      badgeText: 'text-blue-700 dark:text-blue-300',
       borderAccent: 'border-blue-200 dark:border-blue-900/40',
       statuses: ['In Progress']
     },
@@ -73,7 +74,6 @@ export const ClientKanbanBoard: React.FC<ClientKanbanBoardProps> = ({
       label: 'Approval',
       icon: ShieldCheck,
       badgeBg: 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300',
-      badgeText: 'text-purple-700 dark:text-purple-300',
       borderAccent: 'border-purple-200 dark:border-purple-900/40',
       statuses: ['Approval', 'Team Review', 'Client Review']
     },
@@ -82,7 +82,6 @@ export const ClientKanbanBoard: React.FC<ClientKanbanBoardProps> = ({
       label: 'Done',
       icon: CheckCheck,
       badgeBg: 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300',
-      badgeText: 'text-emerald-700 dark:text-emerald-300',
       borderAccent: 'border-emerald-200 dark:border-emerald-900/40',
       statuses: ['Done', 'Completed']
     }
@@ -114,7 +113,7 @@ export const ClientKanbanBoard: React.FC<ClientKanbanBoardProps> = ({
     if (!rawData) return;
 
     try {
-      const { taskId, currentStatus } = JSON.parse(rawData);
+      const { taskId } = JSON.parse(rawData);
       const droppedTask = tasks.find((t) => t.id === taskId);
       if (!droppedTask) return;
 
@@ -132,18 +131,27 @@ export const ClientKanbanBoard: React.FC<ClientKanbanBoardProps> = ({
         return;
       }
 
-      // If moving to Approval, prompt approval modal to capture evidence/notes and stop timer
+      // If dropping onto Approval, prompt approval modal
       if (targetColumn === 'Approval') {
         setApprovalModalTask(droppedTask);
         return;
       }
 
-      // If management moves task from Approval back to In Progress, prompt feedback modal
-      if (targetColumn === 'In Progress' && (droppedTask.status === 'Approval' || droppedTask.status === 'Team Review' || droppedTask.status === 'Client Review')) {
+      // If management moves from Approval back to In Progress, prompt feedback modal
+      if (
+        targetColumn === 'In Progress' &&
+        (droppedTask.status === 'Approval' || droppedTask.status === 'Team Review' || droppedTask.status === 'Client Review')
+      ) {
         if (isOwnerOrManager) {
           setFeedbackModalTask(droppedTask);
           return;
         }
+      }
+
+      // If dragging Pending→In Progress, use startWork (starts timer automatically)
+      if (targetColumn === 'In Progress' && (droppedTask.status === 'Pending' || droppedTask.status === 'Draft' || droppedTask.status === 'Assigned')) {
+        await onStartWork(droppedTask);
+        return;
       }
 
       // Standard transition
@@ -201,7 +209,9 @@ export const ClientKanbanBoard: React.FC<ClientKanbanBoardProps> = ({
                       onSelectTask={onSelectTask}
                       onOpenEditModal={onOpenEditModal}
                       onStatusChange={onStatusChange}
-                      onToggleTimer={onToggleTimer}
+                      onStartWork={onStartWork}
+                      onPauseTimer={onPauseTimer}
+                      onResumeTimer={onResumeTimer}
                       onRequestApproval={(t) => setApprovalModalTask(t)}
                       onRequestFeedback={(t) => setFeedbackModalTask(t)}
                     />
@@ -231,6 +241,7 @@ export const ClientKanbanBoard: React.FC<ClientKanbanBoardProps> = ({
               completionNotes
             });
             onShowToast(`Task "${approvalModalTask.title}" submitted for approval.`);
+            setApprovalModalTask(null);
           }}
         />
       )}
@@ -244,6 +255,7 @@ export const ClientKanbanBoard: React.FC<ClientKanbanBoardProps> = ({
           onSubmit={async (feedback) => {
             await onStatusChange(feedbackModalTask, 'In Progress', { feedback });
             onShowToast(`Task "${feedbackModalTask.title}" returned to In Progress with feedback.`);
+            setFeedbackModalTask(null);
           }}
         />
       )}

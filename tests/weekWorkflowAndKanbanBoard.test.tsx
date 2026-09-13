@@ -318,7 +318,9 @@ describe('Week Workflow UI & Kanban Task Board Comprehensive Test Suite', () => 
           onSelectTask={vi.fn()}
           onOpenEditModal={vi.fn()}
           onStatusChange={vi.fn()}
-          onToggleTimer={vi.fn()}
+          onStartWork={vi.fn()}
+          onPauseTimer={vi.fn()}
+          onResumeTimer={vi.fn()}
           onRequestApproval={vi.fn()}
           onRequestFeedback={vi.fn()}
         />
@@ -338,7 +340,7 @@ describe('Week Workflow UI & Kanban Task Board Comprehensive Test Suite', () => 
   // 3. WORKFLOW PERMISSIONS & ACTIONS
   describe('3. Workflow Permissions, Timer & Approval Transitions', () => {
     it('team member can move Pending -> In Progress and start/stop timer', async () => {
-      const onStatusChangeMock = vi.fn();
+      const onStartWorkMock = vi.fn();
 
       render(
         <ClientKanbanCard
@@ -346,8 +348,10 @@ describe('Week Workflow UI & Kanban Task Board Comprehensive Test Suite', () => 
           currentUserProfile={mockUsers[2]}
           onSelectTask={vi.fn()}
           onOpenEditModal={vi.fn()}
-          onStatusChange={onStatusChangeMock}
-          onToggleTimer={vi.fn()}
+          onStatusChange={vi.fn()}
+          onStartWork={onStartWorkMock}
+          onPauseTimer={vi.fn()}
+          onResumeTimer={vi.fn()}
           onRequestApproval={vi.fn()}
           onRequestFeedback={vi.fn()}
         />
@@ -360,7 +364,7 @@ describe('Week Workflow UI & Kanban Task Board Comprehensive Test Suite', () => 
         fireEvent.click(startProgressBtn);
       });
 
-      expect(onStatusChangeMock).toHaveBeenCalledWith(initialTasks[0], 'In Progress');
+      expect(onStartWorkMock).toHaveBeenCalledWith(initialTasks[0]);
     });
 
     it('submitting for approval captures evidence URL and completion notes via TaskApprovalModal', async () => {

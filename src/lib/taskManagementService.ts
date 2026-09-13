@@ -1238,6 +1238,290 @@ export const taskManagementService = {
   },
 
   /**
+   * Start work on a task — simultaneously moves Pending→In Progress, starts timer,
+   * and upserts a live announcement in client_active_announcements.
+   */
+  async startWork(
+    taskId: string,
+    clientId: string,
+    assigneeName: string,
+    taskTitle: string
+  ): Promise<{ error: string | null; task?: ClientTask }> {
+    if (!isSupabaseConfigured || !supabase || !taskId) {
+      return { error: 'Supabase client not initialized' };
+    }
+
+    try {
+      const nowIso = new Date().toISOString();
+
+      // 1. Move to In Progress + start timer atomically
+      const { data, error } = await supabase
+        .from('client_tasks')
+        .update({
+          status: 'In Progress',
+          timer_started_at: nowIso,
+          feedback: null,
+          updated_at: nowIso
+        })
+        .eq('id', taskId)
+        .select()
+        .single();
+
+      if (error) {
+        return { error: error.message };
+      }
+
+      // 2. Upsert live announcement (don't fail the whole operation if this errors)
+      const message = `${assigneeName} and his team is working on ${taskTitle}`;
+      try {
+        await supabase
+          .from('client_active_announcements')
+          .upsert(
+            {
+              task_id: taskId,
+              client_id: clientId,
+              message,
+              team_member_id: (data as any).assignee_id || taskId,
+              is_active: true,
+              updated_at: nowIso
+            },
+            { onConflict: 'task_id' }
+          );
+      } catch {
+        // Announcement upsert failure is non-fatal
+      }
+
+      return { error: null, task: data ? (data as any) : undefined };
+    } catch (err: any) {
+      return { error: err?.message || 'Failed to start work.' };
+    }
+  },
+
+  /**
+   * Pause the active timer (does NOT change status).
+   * Accumulates elapsed seconds into time_spent_seconds, clears timer_started_at,
+   * increments paused_seconds, and deactivates the live announcement.
+   */
+  async pauseTimer(
+    taskId: string,
+    currentTimerStartedAt: string,
+    currentTimeSpent = 0,
+    currentPausedSeconds = 0
+  ): Promise<{ error: string | null; task?: ClientTask; elapsedSecs?: number }> {
+    if (!isSupabaseConfigured || !supabase || !taskId) {
+      return { error: 'Supabase client not initialized' };
+    }
+
+    try {
+      const startMs = new Date(currentTimerStartedAt).getTime();
+      const additionalSeconds = isNaN(startMs)
+        ? 0
+        : Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+      const totalActive = (currentTimeSpent || 0) + additionalSeconds;
+      const totalPaused = (currentPausedSeconds || 0) + additionalSeconds;
+      const nowIso = new Date().toISOString();
+
+      const { data, error } = await supabase
+        .from('client_tasks')
+        .update({
+          timer_started_at: null,
+          time_spent_seconds: totalActive,
+          paused_seconds: totalPaused,
+          updated_at: nowIso
+        })
+        .eq('id', taskId)
+        .select()
+        .single();
+
+      if (error) {
+        return { error: error.message };
+      }
+
+      // Deactivate live announcement
+      try {
+        await supabase
+          .from('client_active_announcements')
+          .update({ is_active: false, updated_at: nowIso })
+          .eq('task_id', taskId);
+      } catch {
+        // Non-fatal
+      }
+
+      return { error: null, task: data ? (data as any) : undefined, elapsedSecs: totalActive };
+    } catch (err: any) {
+      return { error: err?.message || 'Failed to pause timer.' };
+    }
+  },
+
+  /**
+   * Resume the timer after a pause — sets timer_started_at and re-activates announcement.
+   */
+  async resumeTimer(
+    taskId: string,
+    clientId: string,
+    assigneeName: string,
+    taskTitle: string
+  ): Promise<{ error: string | null; task?: ClientTask }> {
+    if (!isSupabaseConfigured || !supabase || !taskId) {
+      return { error: 'Supabase client not initialized' };
+    }
+
+    try {
+      const nowIso = new Date().toISOString();
+
+      const { data, error } = await supabase
+        .from('client_tasks')
+        .update({
+          timer_started_at: nowIso,
+          updated_at: nowIso
+        })
+        .eq('id', taskId)
+        .select()
+        .single();
+
+      if (error) {
+        return { error: error.message };
+      }
+
+      // Re-upsert live announcement
+      const message = `${assigneeName} and his team is working on ${taskTitle}`;
+      try {
+        await supabase
+          .from('client_active_announcements')
+          .upsert(
+            {
+              task_id: taskId,
+              client_id: clientId,
+              message,
+              team_member_id: (data as any).assignee_id || taskId,
+              is_active: true,
+              updated_at: nowIso
+            },
+            { onConflict: 'task_id' }
+          );
+      } catch {
+        // Non-fatal
+      }
+
+      return { error: null, task: data ? (data as any) : undefined };
+    } catch (err: any) {
+      return { error: err?.message || 'Failed to resume timer.' };
+    }
+  },
+
+  /**
+   * Submit task for approval — enforces at least one of evidenceUrl or completionNotes,
+   * stops timer permanently, removes announcement, moves to Approval.
+   */
+  async submitForApproval(
+    taskId: string,
+    opts: {
+      timerStartedAt?: string | null;
+      timeSpentSeconds?: number;
+      pausedSeconds?: number;
+      evidenceUrl?: string;
+      completionNotes?: string;
+    }
+  ): Promise<{ error: string | null; task?: ClientTask; finalActiveSeconds?: number }> {
+    if (!isSupabaseConfigured || !supabase || !taskId) {
+      return { error: 'Supabase client not initialized' };
+    }
+
+    // Client-side evidence validation
+    const hasEvidence = !!(opts.evidenceUrl && opts.evidenceUrl.trim());
+    const hasNotes = !!(opts.completionNotes && opts.completionNotes.trim());
+    if (!hasEvidence && !hasNotes) {
+      return { error: 'At least a completion note or evidence URL is required before submitting for approval.' };
+    }
+
+    try {
+      // Compute final active seconds (stop timer permanently)
+      let finalActive = opts.timeSpentSeconds || 0;
+      if (opts.timerStartedAt) {
+        const startMs = new Date(opts.timerStartedAt).getTime();
+        if (!isNaN(startMs)) {
+          finalActive += Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+        }
+      }
+
+      const nowIso = new Date().toISOString();
+
+      const updates: Record<string, any> = {
+        status: 'Approval',
+        timer_started_at: null,
+        time_spent_seconds: finalActive,
+        updated_at: nowIso
+      };
+      if (hasEvidence) updates.evidence_url = opts.evidenceUrl!.trim();
+      if (hasNotes) updates.completion_notes = opts.completionNotes!.trim();
+
+      const { data, error } = await supabase
+        .from('client_tasks')
+        .update(updates)
+        .eq('id', taskId)
+        .select()
+        .single();
+
+      if (error) {
+        return { error: error.message };
+      }
+
+      // Remove live announcement (delete entirely to hide from ticker)
+      try {
+        await supabase
+          .from('client_active_announcements')
+          .delete()
+          .eq('task_id', taskId);
+      } catch {
+        // Non-fatal
+      }
+
+      return { error: null, task: data ? (data as any) : undefined, finalActiveSeconds: finalActive };
+    } catch (err: any) {
+      return { error: err?.message || 'Failed to submit for approval.' };
+    }
+  },
+
+  /**
+   * Fetch active announcements for a client (for portal ticker + internal live bar).
+   */
+  async fetchActiveAnnouncements(
+    clientId: string
+  ): Promise<{ data: import('../types').ClientActiveAnnouncement[]; error: string | null }> {
+    if (!isSupabaseConfigured || !supabase || !clientId) {
+      return { data: [], error: 'Supabase client not initialized' };
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('client_active_announcements')
+        .select('id, client_id, task_id, message, team_member_id, is_active, created_at, updated_at')
+        .eq('client_id', clientId)
+        .eq('is_active', true)
+        .order('created_at', { ascending: true });
+
+      if (error) {
+        return { data: [], error: error.message };
+      }
+
+      const mapped = (data || []).map((row: any) => ({
+        id: row.id,
+        clientId: row.client_id,
+        taskId: row.task_id,
+        message: row.message,
+        teamMemberId: row.team_member_id,
+        isActive: row.is_active,
+        createdAt: row.created_at,
+        updatedAt: row.updated_at
+      }));
+
+      return { data: mapped, error: null };
+    } catch (err: any) {
+      return { data: [], error: err?.message || 'Failed to fetch announcements.' };
+    }
+  },
+
+  /**
    * Archive Task (Requires mandatory reason) - Strictly Edge-Function Authoritative
    */
   async archiveTask(taskId: string, reason: string): Promise<{ error: string | null }> {
