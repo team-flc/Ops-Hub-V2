@@ -13,7 +13,10 @@ SELECT plan(41);
 -- 1. FIXTURE SETUP (Transactional Test Users & Entities)
 -- ------------------------------------------------------------------------------
 
--- Auth helper routines
+CREATE SCHEMA IF NOT EXISTS tests;
+GRANT USAGE ON SCHEMA tests TO PUBLIC, authenticated, anon, service_role;
+
+-- Auth helper routines with SECURITY DEFINER to permit switching roles
 CREATE OR REPLACE FUNCTION tests.authenticate_as(p_user_id UUID, p_role TEXT DEFAULT 'authenticated')
 RETURNS void AS $$
 BEGIN
@@ -21,7 +24,7 @@ BEGIN
     PERFORM set_config('request.jwt.claim.sub', p_user_id::text, true);
     PERFORM set_config('request.jwt.claims', json_build_object('sub', p_user_id::text, 'role', p_role)::text, true);
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
 CREATE OR REPLACE FUNCTION tests.authenticate_service_role()
 RETURNS void AS $$
@@ -30,7 +33,7 @@ BEGIN
     PERFORM set_config('request.jwt.claim.sub', '', true);
     PERFORM set_config('request.jwt.claims', '{"role": "service_role"}'::text, true);
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
 
 CREATE OR REPLACE FUNCTION tests.clear_auth()
 RETURNS void AS $$
@@ -39,7 +42,9 @@ BEGIN
     PERFORM set_config('request.jwt.claim.sub', '', true);
     PERFORM set_config('request.jwt.claims', '', true);
 END;
-$$ LANGUAGE plpgsql;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public, pg_temp;
+
+GRANT ALL ON ALL FUNCTIONS IN SCHEMA tests TO PUBLIC, authenticated, anon, service_role;
 
 -- Insert Work Shifts
 INSERT INTO public.work_shifts (id, name, code, start_time, end_time, crosses_midnight)
