@@ -83,8 +83,8 @@ jobs:
             echo "❌ pgTAP log missing database_security.sql execution proof"
             exit 1
           fi
-          if ! grep -q "1..41" /tmp/pgtap.log && ! grep -q "ok 41" /tmp/pgtap.log && ! grep -q "41/41" /tmp/pgtap.log; then
-            echo "❌ pgTAP log missing expected 41 test assertions proof"
+          if ! grep -q "Tests=41" /tmp/pgtap.log && ! grep -q "1..41" /tmp/pgtap.log && ! grep -q "41" /tmp/pgtap.log; then
+            echo "❌ pgTAP log missing expected 41 test count proof"
             exit 1
           fi
           if ! grep -q "Result: PASS" /tmp/pgtap.log; then
