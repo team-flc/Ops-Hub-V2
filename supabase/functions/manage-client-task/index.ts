@@ -183,35 +183,17 @@ serve(async (req: Request) => {
     );
   }
 
-  // Helper: Verify Manager/Owner Permissions for Client (Operational Manager strictly assigned)
-  async function checkCanManageClient(clientId: string): Promise<boolean> {
-    if (callerProfile.role === 'owner') return true;
-    if (callerProfile.role === 'operational_manager') {
-      const { data: client } = await supabaseAdmin
-        .from('clients')
-        .select('id, operational_manager_id')
-        .eq('id', clientId)
-        .single();
-      return Boolean(client && client.operational_manager_id === callerProfile.id);
+  // Helper: Verify Manager/Owner/Staff Permissions for Client
+  async function checkCanManageClient(_clientId: string): Promise<boolean> {
+    if (callerProfile.role === 'owner' || callerProfile.role === 'operational_manager' || callerProfile.role === 'team_member') {
+      return true;
     }
     return false;
   }
 
   // Helper: Verify Client Access for Team Member or Client
   async function checkCanAccessClient(clientId: string): Promise<boolean> {
-    if (callerProfile.role === 'owner') return true;
-    if (callerProfile.role === 'operational_manager') {
-      return checkCanManageClient(clientId);
-    }
-    if (callerProfile.role === 'team_member') {
-      const { data: grant } = await supabaseAdmin
-        .from('client_team_access')
-        .select('client_id')
-        .eq('client_id', clientId)
-        .eq('profile_id', callerProfile.id)
-        .single();
-      return Boolean(grant);
-    }
+    if (callerProfile.role === 'owner' || callerProfile.role === 'operational_manager' || callerProfile.role === 'team_member') return true;
     if (callerProfile.role === 'client') {
       return callerProfile.organization_id === clientId;
     }
@@ -219,7 +201,7 @@ serve(async (req: Request) => {
   }
 
   // Helper: Verify Assignee Eligibility
-  async function checkAssigneeEligibility(assigneeId: string, clientId: string, departmentId?: string): Promise<{ valid: boolean; error?: string }> {
+  async function checkAssigneeEligibility(assigneeId: string, _clientId?: string, _departmentId?: string): Promise<{ valid: boolean; error?: string }> {
     const { data: assignee, error: aErr } = await supabaseAdmin
       .from('profiles')
       .select('id, role, status, archived_at')
@@ -232,32 +214,6 @@ serve(async (req: Request) => {
 
     if (assignee.role === 'client') {
       return { valid: false, error: 'Client role users cannot be assigned to tasks.' };
-    }
-
-    if (assignee.role === 'team_member') {
-      const { data: access } = await supabaseAdmin
-        .from('client_team_access')
-        .select('client_id')
-        .eq('client_id', clientId)
-        .eq('profile_id', assigneeId)
-        .single();
-
-      if (!access) {
-        return { valid: false, error: 'Assignee does not have explicit access to this client.' };
-      }
-
-      if (departmentId) {
-        const { data: deptMembership } = await supabaseAdmin
-          .from('profile_departments')
-          .select('profile_id')
-          .eq('profile_id', assigneeId)
-          .eq('department_id', departmentId)
-          .single();
-
-        if (!deptMembership) {
-          return { valid: false, error: 'Assignee does not belong to the responsible department for this task.' };
-        }
-      }
     }
 
     return { valid: true };
