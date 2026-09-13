@@ -1,14 +1,18 @@
-import React, { useState, useEffect } from 'react';
-import { Clock, CheckCircle2, AlertCircle, X, ShieldAlert } from 'lucide-react';
-import { EmployeeAttendance } from '../../types';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Clock, CheckCircle2, AlertCircle, X, User, Search, ShieldCheck } from 'lucide-react';
+import { EmployeeAttendance, EmployeeRecord, Profile, WorkShift } from '../../types';
 import { employeeOperationsService } from '../../lib/employeeOperationsService';
 import { getPKTTodayDateString } from '../../lib/pktDateUtils';
+import { supabase } from '../../lib/supabase';
 
 interface AttendanceCorrectionModalProps {
   isOpen: boolean;
   onClose: () => void;
   attendance: EmployeeAttendance | null;
   employeeId?: string;
+  teamMembers?: Profile[];
+  employeeRecords?: EmployeeRecord[];
+  shifts?: WorkShift[];
   callerId: string;
   onSuccess: () => void;
 }
@@ -18,9 +22,18 @@ export const AttendanceCorrectionModal: React.FC<AttendanceCorrectionModalProps>
   onClose,
   attendance,
   employeeId,
+  teamMembers = [],
+  employeeRecords = [],
+  shifts = [],
   callerId,
   onSuccess
 }) => {
+  const [targetEmployeeId, setTargetEmployeeId] = useState<string>(employeeId || '');
+  const [employeeSearch, setEmployeeSearch] = useState('');
+  const [availableMembers, setAvailableMembers] = useState<Profile[]>(teamMembers);
+  const [availableShifts, setAvailableShifts] = useState<WorkShift[]>(shifts);
+  const [availableRecords, setAvailableRecords] = useState<EmployeeRecord[]>(employeeRecords);
+
   const [workDate, setWorkDate] = useState(getPKTTodayDateString());
   const [checkInTime, setCheckInTime] = useState('');
   const [checkOutTime, setCheckOutTime] = useState('');
@@ -32,8 +45,55 @@ export const AttendanceCorrectionModal: React.FC<AttendanceCorrectionModalProps>
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Load team members if not passed via props
+  useEffect(() => {
+    if (teamMembers.length > 0) {
+      setAvailableMembers(teamMembers);
+    } else if (isOpen && supabase) {
+      supabase
+        .from('profiles')
+        .select('*')
+        .in('role', ['owner', 'operational_manager', 'team_member'])
+        .eq('status', 'active')
+        .order('full_name')
+        .then(({ data }) => {
+          if (data) {
+            setAvailableMembers(data.map((p: any) => ({
+              id: p.id,
+              fullName: p.full_name,
+              workEmail: p.work_email,
+              role: p.role,
+              status: p.status,
+              createdAt: p.created_at,
+              updatedAt: p.updated_at
+            })));
+          }
+        });
+    }
+  }, [teamMembers, isOpen]);
+
+  // Load shifts if not provided
+  useEffect(() => {
+    if (shifts.length > 0) {
+      setAvailableShifts(shifts);
+    } else if (isOpen) {
+      employeeOperationsService.fetchWorkShifts().then(setAvailableShifts);
+    }
+  }, [shifts, isOpen]);
+
+  // Load employee records if not provided
+  useEffect(() => {
+    if (employeeRecords.length > 0) {
+      setAvailableRecords(employeeRecords);
+    } else if (isOpen) {
+      employeeOperationsService.fetchAllEmployeeRecords().then(setAvailableRecords);
+    }
+  }, [employeeRecords, isOpen]);
+
+  // Sync modal state with attendance / employeeId prop
   useEffect(() => {
     if (attendance) {
+      setTargetEmployeeId(attendance.employeeId);
       setWorkDate(attendance.workDate || getPKTTodayDateString());
       setCheckInTime(attendance.checkInTime ? attendance.checkInTime.slice(11, 16) : '');
       setCheckOutTime(attendance.checkOutTime ? attendance.checkOutTime.slice(11, 16) : '');
@@ -42,6 +102,7 @@ export const AttendanceCorrectionModal: React.FC<AttendanceCorrectionModalProps>
       setAbsenceDeduction(attendance.absenceDeduction || 0);
       setOverrideReason(attendance.correctionReason || '');
     } else {
+      setTargetEmployeeId(employeeId || '');
       setWorkDate(getPKTTodayDateString());
       setCheckInTime('11:00');
       setCheckOutTime('20:00');
@@ -51,12 +112,64 @@ export const AttendanceCorrectionModal: React.FC<AttendanceCorrectionModalProps>
       setOverrideReason('');
     }
     setErrorMessage(null);
-  }, [attendance, isOpen]);
+  }, [attendance, employeeId, isOpen]);
+
+  // Identify selected employee details and assigned shift
+  const selectedMember = useMemo(() => {
+    return availableMembers.find(m => m.id === targetEmployeeId);
+  }, [availableMembers, targetEmployeeId]);
+
+  const selectedRecord = useMemo(() => {
+    return availableRecords.find(r => r.id === targetEmployeeId);
+  }, [availableRecords, targetEmployeeId]);
+
+  const assignedShift = useMemo(() => {
+    if (selectedRecord?.shiftId) {
+      return availableShifts.find(s => s.id === selectedRecord.shiftId);
+    }
+    return availableShifts.find(s => s.code === 'DAY') || availableShifts[0];
+  }, [selectedRecord, availableShifts]);
+
+  // Filtered active employees for search
+  const filteredEmployees = useMemo(() => {
+    const q = employeeSearch.toLowerCase().trim();
+    return availableMembers.filter(m => {
+      if (m.status !== 'active' || m.role === 'client') return false;
+      if (!q) return true;
+      return m.fullName.toLowerCase().includes(q) || m.workEmail.toLowerCase().includes(q);
+    });
+  }, [availableMembers, employeeSearch]);
+
+  // Recalculate status and lateness deduction preview automatically when checkInTime changes
+  const handleCheckInChange = (newTime: string) => {
+    setCheckInTime(newTime);
+    if (!newTime) return;
+
+    const scheduledStart = selectedRecord?.customCheckInTime || assignedShift?.startTime || '11:00:00';
+    const [startH, startM] = scheduledStart.split(':').map(Number);
+    const [inH, inM] = newTime.split(':').map(Number);
+
+    const startMinutes = (startH || 0) * 60 + (startM || 0);
+    const inMinutes = (inH || 0) * 60 + (inM || 0);
+
+    if (inMinutes > startMinutes) {
+      setStatus('late');
+      setLateDeduction(500);
+    } else {
+      setStatus('present');
+      setLateDeduction(0);
+    }
+  };
 
   if (!isOpen) return null;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!targetEmployeeId) {
+      setErrorMessage('Please select a target employee before applying manual attendance.');
+      return;
+    }
+
     if (!overrideReason.trim()) {
       setErrorMessage('Correction reason is strictly required for management audit trail.');
       return;
@@ -66,20 +179,13 @@ export const AttendanceCorrectionModal: React.FC<AttendanceCorrectionModalProps>
     setErrorMessage(null);
 
     try {
-      const targetEmpId = attendance?.employeeId || employeeId;
-      if (!targetEmpId) {
-        setErrorMessage('Employee ID missing.');
-        setIsSubmitting(false);
-        return;
-      }
-
       // Format ISO strings
       const checkInIso = checkInTime ? `${workDate}T${checkInTime}:00+05:00` : undefined;
       const checkOutIso = checkOutTime ? `${workDate}T${checkOutTime}:00+05:00` : undefined;
 
       const res = await employeeOperationsService.manualAttendanceCorrection({
         attendanceId: attendance?.id,
-        employeeId: targetEmpId,
+        employeeId: targetEmployeeId,
         workDate,
         checkInTime: checkInIso,
         checkOutTime: checkOutIso,
@@ -104,7 +210,7 @@ export const AttendanceCorrectionModal: React.FC<AttendanceCorrectionModalProps>
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/60 backdrop-blur-xs animate-fade-in">
-      <div className="bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col">
+      <div className="bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border rounded-3xl shadow-2xl w-full max-w-lg overflow-hidden flex flex-col max-h-[90vh]">
         {/* Header */}
         <div className="px-6 py-5 border-b border-slate-100 dark:border-dark-border flex items-center justify-between bg-slate-50/60 dark:bg-dark-sidebar">
           <div className="flex items-center gap-3">
@@ -113,10 +219,10 @@ export const AttendanceCorrectionModal: React.FC<AttendanceCorrectionModalProps>
             </div>
             <div>
               <h2 className="text-base font-bold text-slate-900 dark:text-gray-100">
-                Attendance Correction / Override
+                {attendance?.id ? 'Attendance Correction / Override' : 'Manual Attendance Log'}
               </h2>
               <p className="text-xs text-slate-500 dark:text-gray-400">
-                Authoritative timestamp correction with immutable audit trail
+                Authoritative timestamp governance with immutable audit trail
               </p>
             </div>
           </div>
@@ -130,13 +236,71 @@ export const AttendanceCorrectionModal: React.FC<AttendanceCorrectionModalProps>
         </div>
 
         {/* Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4">
+        <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto">
           {errorMessage && (
             <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium">
               <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
               <span>{errorMessage}</span>
             </div>
           )}
+
+          {/* Target Employee Selection */}
+          <div className="space-y-1.5">
+            <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300 flex items-center justify-between">
+              <span>Target Employee <span className="text-rose-500">*</span></span>
+              {selectedMember && (
+                <span className="text-[11px] font-normal text-brand-600 dark:text-brand-400">
+                  {selectedMember.role.replace('_', ' ')}
+                </span>
+              )}
+            </label>
+
+            {attendance?.id ? (
+              // Locked selection when editing an existing attendance record
+              <div className="p-3 bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl flex items-center gap-2.5 text-xs text-slate-900 dark:text-gray-100 font-semibold">
+                <User className="w-4 h-4 text-brand-500" />
+                <span>{selectedMember?.fullName || 'Selected Employee'} ({selectedMember?.workEmail})</span>
+              </div>
+            ) : (
+              // Searchable selector for new manual log
+              <div className="space-y-2">
+                <div className="relative">
+                  <Search className="w-3.5 h-3.5 text-slate-400 absolute left-3 top-3" />
+                  <input
+                    type="text"
+                    placeholder="Search active employee by name or email..."
+                    value={employeeSearch}
+                    onChange={(e) => setEmployeeSearch(e.target.value)}
+                    className="w-full pl-8 pr-3 py-2 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  />
+                </div>
+
+                <select
+                  required
+                  value={targetEmployeeId}
+                  onChange={(e) => setTargetEmployeeId(e.target.value)}
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                >
+                  <option value="">-- Select Target Employee --</option>
+                  {filteredEmployees.map((emp) => (
+                    <option key={emp.id} value={emp.id}>
+                      {emp.fullName} ({emp.workEmail})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
+
+            {/* Assigned Shift Banner */}
+            {selectedMember && (
+              <div className="p-2.5 rounded-xl bg-brand-50/50 dark:bg-brand-950/20 border border-brand-200/60 dark:border-brand-900/40 text-[11px] text-brand-900 dark:text-brand-300 flex items-center justify-between">
+                <span>
+                  <strong>Assigned Shift:</strong> {assignedShift?.name || 'Standard Day Shift'} ({selectedRecord?.customCheckInTime || assignedShift?.startTime || '11:00'} – {selectedRecord?.customCheckOutTime || assignedShift?.endTime || '20:00'} PKT)
+                </span>
+                <ShieldCheck className="w-3.5 h-3.5 text-brand-600 dark:text-brand-400" />
+              </div>
+            )}
+          </div>
 
           <div className="space-y-1">
             <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
@@ -159,8 +323,8 @@ export const AttendanceCorrectionModal: React.FC<AttendanceCorrectionModalProps>
               <input
                 type="time"
                 value={checkInTime}
-                onChange={(e) => setCheckInTime(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                onChange={(e) => handleCheckInChange(e.target.value)}
+                className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 font-mono"
               />
             </div>
 
@@ -172,7 +336,7 @@ export const AttendanceCorrectionModal: React.FC<AttendanceCorrectionModalProps>
                 type="time"
                 value={checkOutTime}
                 onChange={(e) => setCheckOutTime(e.target.value)}
-                className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 font-mono"
               />
             </div>
           </div>
@@ -230,6 +394,14 @@ export const AttendanceCorrectionModal: React.FC<AttendanceCorrectionModalProps>
                 className="w-full px-3 py-2 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 font-mono"
               />
             </div>
+          </div>
+
+          {/* Deduction Preview Banner */}
+          <div className="p-3 rounded-2xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border flex items-center justify-between text-xs">
+            <span className="text-slate-600 dark:text-gray-400">Total Deduction Preview:</span>
+            <span className="font-mono font-bold text-rose-600 dark:text-rose-400">
+              PKR {(Number(lateDeduction) + Number(absenceDeduction)).toLocaleString()}
+            </span>
           </div>
 
           <div className="space-y-1">

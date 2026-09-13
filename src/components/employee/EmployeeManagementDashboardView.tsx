@@ -1257,6 +1257,9 @@ export const EmployeeManagementDashboardView: React.FC = () => {
             onClose={() => setSelectedAttendanceCorrection(null)}
             attendance={selectedAttendanceCorrection?.id ? selectedAttendanceCorrection : null}
             employeeId={selectedAttendanceCorrection?.employeeId || ''}
+            teamMembers={teamMembers}
+            employeeRecords={employeeRecords}
+            shifts={shifts}
             callerId={currentUserProfile.id}
             onSuccess={loadAllData}
           />
