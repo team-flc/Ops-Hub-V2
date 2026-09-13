@@ -3,6 +3,7 @@ name: Employee Operations Security & Ephemeral Database CI
 on:
   push:
     branches:
+      - main
       - feature/employee-operations-system
   pull_request:
     branches:
