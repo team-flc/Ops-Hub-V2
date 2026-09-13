@@ -258,20 +258,12 @@ export const taskManagementService = {
   },
 
   /**
-   * Fetch active assignees eligible for the selected client and department
+   * Fetch all active assignees (all active team members, operational managers, and owners/CEOs)
    */
-  async fetchEligibleAssignees(clientId: string, departmentId?: string, currentUser?: UserProfile | null): Promise<UserProfile[]> {
-    if (!isSupabaseConfigured || !supabase || !clientId) return [];
+  async fetchEligibleAssignees(clientId?: string, departmentId?: string, currentUser?: UserProfile | null): Promise<UserProfile[]> {
+    if (!isSupabaseConfigured || !supabase) return [];
     try {
-      // 1. Fetch team members with explicit access to this client
-      const { data: grants } = await supabase
-        .from('client_team_access')
-        .select('profile_id')
-        .eq('client_id', clientId);
-
-      const permittedProfileIds = new Set<string>((grants || []).map((g: any) => g.profile_id));
-
-      // 2. Fetch all profile department memberships
+      // 1. Fetch all profile department memberships
       const { data: profileDepts } = await supabase
         .from('profile_departments')
         .select('profile_id, department_id');
@@ -283,7 +275,7 @@ export const taskManagementService = {
         userDeptsMap.set(pd.profile_id, list);
       });
 
-      // 3. Fetch all active profiles
+      // 2. Fetch all active profiles
       const { data: profiles, error: pErr } = await supabase
         .from('profiles')
         .select('id, full_name, role, status, work_email, designation_id, reporting_manager_id, archived_at, created_at, updated_at')
@@ -292,30 +284,10 @@ export const taskManagementService = {
 
       if (pErr || !profiles) return [];
 
-      // Filter:
-      // - No client users
-      // - Team members require explicit client access grant
-      // - Owners & Operational Managers have client access
-      // - If departmentId provided: team members MUST belong to that department (owners & managers exempt)
-      // - If currentUser is operational_manager: must be within their reporting hierarchy or self
+      // Include all active non-client staff members (team members, operational managers, owners)
       const eligible = profiles.filter((p: any) => {
         if (p.archived_at) return false;
         if (p.role === 'client') return false;
-
-        const hasClientAccess = (p.role === 'owner' || p.role === 'operational_manager') || permittedProfileIds.has(p.id);
-        if (!hasClientAccess) return false;
-
-        const depts = userDeptsMap.get(p.id) || [];
-
-        if (departmentId && p.role === 'team_member') {
-          if (!depts.includes(departmentId)) return false;
-        }
-
-        if (currentUser?.role === 'operational_manager') {
-          const inScope = p.role === 'owner' || p.id === currentUser.id || p.reporting_manager_id === currentUser.id;
-          if (!inScope) return false;
-        }
-
         return true;
       });
 

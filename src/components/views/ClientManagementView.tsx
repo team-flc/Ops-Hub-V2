@@ -9,6 +9,7 @@ import { useSafeNavigate } from '../../lib/safeRouterHooks';
 import { useOpsStore } from '../../store/opsStore';
 import { useSignedUrl } from '../../lib/storageService';
 import { clientManagementService } from '../../lib/clientManagementService';
+import { setStoredSelectedClientId } from '../../lib/clientPersistence';
 import { teamManagementService } from '../../lib/teamManagementService';
 import { archiveService } from '../../lib/archiveService';
 import { CreateClientModal } from '../clients/CreateClientModal';
@@ -196,6 +197,9 @@ export const ClientManagementView: React.FC = () => {
 
   const handleOpenClientWorkspace = (client: ClientRecord) => {
     setSelectedClientId(client.id);
+    if (currentUserProfile?.id) {
+      setStoredSelectedClientId(currentUserProfile.id, client.id);
+    }
     setViewMode('client_workspace');
     navigate(`/clients/${client.id}`);
   };

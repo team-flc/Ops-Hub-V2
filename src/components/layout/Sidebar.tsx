@@ -12,6 +12,7 @@ import { ClientSwitcher } from '../clients/ClientSwitcher';
 import { CreateClientModal } from '../clients/CreateClientModal';
 import { DuplicateClientModal } from '../clients/DuplicateClientModal';
 import { clientManagementService, formatWhatsAppUrl } from '../../lib/clientManagementService';
+import { resolveSelectedClientId, setStoredSelectedClientId } from '../../lib/clientPersistence';
 
 // Custom SVG Brand Icons for Client Workspace Links
 const LinkedInIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" }) => (
@@ -74,9 +75,20 @@ export const Sidebar: React.FC = () => {
       if (clientsRes.error) {
         setClientsError(clientsRes.error);
       } else {
-        setClients(clientsRes.data);
-        if (clientsRes.data.length > 0 && !selectedClientId) {
-          setSelectedClientId(clientsRes.data[0].id);
+        const fetchedClients = clientsRes.data || [];
+        setClients(fetchedClients);
+        if (fetchedClients.length > 0) {
+          const resolvedId = resolveSelectedClientId({
+            clients: fetchedClients,
+            userId: profile?.id,
+            currentSelectedId: selectedClientId
+          });
+          if (resolvedId) {
+            setSelectedClientId(resolvedId);
+            if (profile?.id) {
+              setStoredSelectedClientId(profile.id, resolvedId);
+            }
+          }
         }
       }
       setEligibleManagers(fetchedManagers);
@@ -85,14 +97,14 @@ export const Sidebar: React.FC = () => {
     } finally {
       setIsClientsLoading(false);
     }
-  }, [selectedClientId, setClients, setSelectedClientId]);
+  }, [profile?.id, selectedClientId, setClients, setSelectedClientId]);
 
   // Fetch Clients & Managers on mount
   useEffect(() => {
     loadClientData();
   }, [loadClientData]);
 
-  const selectedClient = clients.find((c) => c.id === selectedClientId) || clients[0] || null;
+  const selectedClient = clients.find((c) => c.id === selectedClientId) || clients.find((c) => c.status !== 'Archived') || clients[0] || null;
 
   // Reactive Workspace Links derived from selected client
   const clientLinks = selectedClient?.links || {};
@@ -190,6 +202,9 @@ export const Sidebar: React.FC = () => {
 
   const handleSelectClient = (client: ClientRecord) => {
     setSelectedClientId(client.id);
+    if (profile?.id) {
+      setStoredSelectedClientId(profile.id, client.id);
+    }
     navigate(`/clients/${client.id}`);
     setViewMode('client_workspace');
     setMobileSidebarOpen(false);
@@ -207,6 +222,9 @@ export const Sidebar: React.FC = () => {
   const handleClientCreated = (newClient: ClientRecord) => {
     addClientRecord(newClient);
     setSelectedClientId(newClient.id);
+    if (profile?.id) {
+      setStoredSelectedClientId(profile.id, newClient.id);
+    }
     navigate(`/clients/${newClient.id}`);
     setViewMode('client_workspace');
     setMobileSidebarOpen(false);

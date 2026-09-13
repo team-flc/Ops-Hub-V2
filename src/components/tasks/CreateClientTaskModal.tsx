@@ -49,25 +49,6 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
-  // Filter assignees by selected department (Owners & Managers remain eligible across departments)
-  const departmentAssignees = useMemo(() => {
-    if (!departmentId) return eligibleAssignees;
-    return eligibleAssignees.filter((u) => {
-      if (u.role === 'owner' || u.role === 'operational_manager') return true;
-      return u.departmentIds && u.departmentIds.includes(departmentId);
-    });
-  }, [eligibleAssignees, departmentId]);
-
-  // Reset assignee if current assignee is not eligible for newly selected department
-  useEffect(() => {
-    if (assigneeId && departmentId) {
-      const isStillEligible = departmentAssignees.some((u) => u.id === assigneeId);
-      if (!isStillEligible) {
-        setAssigneeId('');
-      }
-    }
-  }, [departmentId, departmentAssignees, assigneeId]);
-
   // Sync week on modal open
   useEffect(() => {
     if (isOpen) {
@@ -365,7 +346,7 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
                 className="w-full px-3 py-2 rounded-xl bg-gray-50 dark:bg-dark-100 border border-gray-200 dark:border-dark-border focus:ring-2 focus:ring-brand-500/20 focus:border-brand-500 outline-none transition-all font-medium text-gray-900 dark:text-gray-100 min-h-[44px]"
               >
                 <option value="">Leave Unassigned (Draft)</option>
-                {departmentAssignees.map((u) => (
+                {eligibleAssignees.map((u) => (
                   <option key={u.id} value={u.id}>
                     {u.fullName} ({u.role})
                   </option>

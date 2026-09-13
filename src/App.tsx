@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { Routes, Route, useParams, useLocation, Navigate } from 'react-router-dom';
 import { useOpsStore } from './store/opsStore';
 import { clientManagementService } from './lib/clientManagementService';
+import { resolveSelectedClientId, setStoredSelectedClientId } from './lib/clientPersistence';
 import { useAuth } from './context/AuthContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { LoginPage } from './components/auth/LoginPage';
@@ -56,13 +57,16 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
 
   const [eligibleManagers, setEligibleManagers] = useState<UserProfile[]>([]);
 
-  // Synchronize route param clientId with store
+  // Synchronize route param clientId with store and persistence
   useEffect(() => {
     if (params.clientId) {
       setSelectedClientId(params.clientId);
+      if (user?.id) {
+        setStoredSelectedClientId(user.id, params.clientId);
+      }
       setViewMode('client_workspace');
     }
-  }, [params.clientId, setSelectedClientId, setViewMode]);
+  }, [params.clientId, user?.id, setSelectedClientId, setViewMode]);
 
   // Synchronize route pathname with viewMode
   useEffect(() => {
@@ -89,7 +93,7 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
     }
   }, [initialView, setViewMode]);
 
-  // Load clients & managers on mount
+  // Load clients & managers on mount with persistent resolution
   useEffect(() => {
     if (!user) return;
 
@@ -102,17 +106,26 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
       setClients(fetchedClients);
       setEligibleManagers(managers);
 
-      if (params.clientId) {
-        setSelectedClientId(params.clientId);
-      } else if (!selectedClientId && fetchedClients.length > 0) {
-        setSelectedClientId(fetchedClients[0].id);
+      if (fetchedClients.length > 0) {
+        const resolvedId = resolveSelectedClientId({
+          clients: fetchedClients,
+          userId: user?.id,
+          routeClientId: params.clientId,
+          currentSelectedId: selectedClientId
+        });
+        if (resolvedId) {
+          setSelectedClientId(resolvedId);
+          if (user?.id) {
+            setStoredSelectedClientId(user.id, resolvedId);
+          }
+        }
       }
     }
     loadData();
-  }, [user, params.clientId, setClients, selectedClientId, setSelectedClientId]);
+  }, [user?.id, params.clientId, setClients, setSelectedClientId]);
 
   const isManagerOrOwner = profile?.role === 'owner' || profile?.role === 'operational_manager';
-  const selectedClient = clients.find((c) => c.id === selectedClientId) || clients[0] || null;
+  const selectedClient = clients.find((c) => c.id === selectedClientId) || clients.find((c) => c.status !== 'Archived') || clients[0] || null;
 
   const renderActiveView = () => {
     if (location.pathname.startsWith('/settings') || viewMode === 'settings') {
