@@ -2244,8 +2244,8 @@ export const employeeOperationsService = {
     return this.reviewProfileChangeRequest(requestId, 'rejected', reviewerId, reviewNotes);
   },
 
-  // 10.2 Weekly & Monthly Work Reports
-  async fetchWorkReports(employeeId?: string, reportType?: 'weekly' | 'monthly'): Promise<EmployeeWorkReport[]> {
+  // 10.2 Daily, Weekly & Monthly Work Reports
+  async fetchWorkReports(employeeId?: string, reportType?: 'daily' | 'weekly' | 'monthly'): Promise<EmployeeWorkReport[]> {
     if (!supabase) return [];
     try {
       let query = supabase.from('employee_work_reports').select('*').order('period', { ascending: false });
@@ -2266,6 +2266,9 @@ export const employeeOperationsService = {
         achievements: r.achievements,
         blockersOrIncidents: r.blockers_or_incidents,
         managementNotes: r.management_notes,
+        tasksSummary: Array.isArray(r.tasks_summary) ? r.tasks_summary : [],
+        nextPlan: r.next_plan || undefined,
+        missingFlag: Boolean(r.missing_flag),
         status: r.status,
         reviewedBy: r.reviewed_by,
         reviewedAt: r.reviewed_at,
@@ -2277,13 +2280,59 @@ export const employeeOperationsService = {
     }
   },
 
+  async getTodayWorkReport(employeeId: string): Promise<EmployeeWorkReport | null> {
+    if (!supabase || !employeeId) return null;
+    const todayStr = this.getTodayDatePKT();
+    try {
+      const { data, error } = await supabase
+        .from('employee_work_reports')
+        .select('*')
+        .eq('employee_id', employeeId)
+        .eq('report_type', 'daily')
+        .eq('period', todayStr)
+        .maybeSingle();
+
+      if (error || !data) return null;
+      return {
+        id: data.id,
+        employeeId: data.employee_id,
+        reportType: data.report_type,
+        period: data.period,
+        summary: data.summary,
+        achievements: data.achievements,
+        blockersOrIncidents: data.blockers_or_incidents,
+        managementNotes: data.management_notes,
+        tasksSummary: Array.isArray(data.tasks_summary) ? data.tasks_summary : [],
+        nextPlan: data.next_plan || undefined,
+        missingFlag: Boolean(data.missing_flag),
+        status: data.status,
+        reviewedBy: data.reviewed_by,
+        reviewedAt: data.reviewed_at,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at
+      };
+    } catch {
+      return null;
+    }
+  },
+
   async submitWorkReport(report: {
     employeeId: string;
-    reportType: 'weekly' | 'monthly';
+    reportType: 'daily' | 'weekly' | 'monthly';
     period: string;
     summary: string;
     achievements?: string;
     blockersOrIncidents?: string;
+    tasksSummary?: Array<{
+      taskId: string;
+      taskTitle: string;
+      clientName?: string;
+      clientId?: string;
+      status: string;
+      durationMinutes?: number;
+    }>;
+    nextPlan?: string;
+    missingFlag?: boolean;
   }): Promise<{ report?: EmployeeWorkReport; error?: string }> {
     if (!supabase) return { error: 'Database unconfigured.' };
     try {
@@ -2296,6 +2345,9 @@ export const employeeOperationsService = {
           summary: report.summary,
           achievements: report.achievements || null,
           blockers_or_incidents: report.blockersOrIncidents || null,
+          tasks_summary: report.tasksSummary || [],
+          next_plan: report.nextPlan || null,
+          missing_flag: report.missingFlag || false,
           status: 'submitted',
           updated_at: new Date().toISOString()
         }, { onConflict: 'employee_id,report_type,period' })
@@ -2314,6 +2366,9 @@ export const employeeOperationsService = {
           achievements: data.achievements,
           blockersOrIncidents: data.blockers_or_incidents,
           managementNotes: data.management_notes,
+          tasksSummary: Array.isArray(data.tasks_summary) ? data.tasks_summary : [],
+          nextPlan: data.next_plan || undefined,
+          missingFlag: Boolean(data.missing_flag),
           status: data.status,
           reviewedBy: data.reviewed_by,
           reviewedAt: data.reviewed_at,
@@ -2321,6 +2376,29 @@ export const employeeOperationsService = {
           updatedAt: data.updated_at
         }
       };
+    } catch (err: any) {
+      return { error: err.message };
+    }
+  },
+
+  async flagMissingDailyReport(employeeId: string, period?: string): Promise<{ error?: string }> {
+    if (!supabase || !employeeId) return { error: 'Invalid parameters' };
+    const dateStr = period || this.getTodayDatePKT();
+    try {
+      const { error } = await supabase
+        .from('employee_work_reports')
+        .upsert({
+          employee_id: employeeId,
+          report_type: 'daily',
+          period: dateStr,
+          summary: 'Report skipped at checkout. Awaiting submission.',
+          missing_flag: true,
+          status: 'submitted',
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'employee_id,report_type,period' });
+
+      if (error) return { error: error.message };
+      return {};
     } catch (err: any) {
       return { error: err.message };
     }

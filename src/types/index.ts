@@ -497,6 +497,8 @@ export interface TaskReadState {
 export interface ClientTask {
   id: string;
   clientId: string;
+  clientName?: string;
+  clientCompanyName?: string;
   weekNumber: 1 | 2 | 3 | 4;
   title: string;
   details?: string | null;
@@ -1167,15 +1169,27 @@ export interface EmployeeFinalSettlement {
   updatedAt: string;
 }
 
+export interface EmployeeWorkReportTaskItem {
+  taskId: string;
+  taskTitle: string;
+  clientName?: string;
+  clientId?: string;
+  status: string;
+  durationMinutes?: number;
+}
+
 export interface EmployeeWorkReport {
   id: string;
   employeeId: string;
-  reportType: 'weekly' | 'monthly';
-  period: string; // e.g. "2026-W37" or "2026-09"
+  reportType: 'daily' | 'weekly' | 'monthly';
+  period: string; // e.g. "2026-09-14" (daily), "2026-W37" (weekly), "2026-09" (monthly)
   summary: string;
   achievements?: string;
   blockersOrIncidents?: string;
   managementNotes?: string;
+  tasksSummary?: EmployeeWorkReportTaskItem[];
+  nextPlan?: string;
+  missingFlag?: boolean;
   status: 'submitted' | 'reviewed' | 'approved';
   reviewedBy?: string | null;
   reviewedAt?: string | null;

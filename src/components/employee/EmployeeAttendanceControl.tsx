@@ -5,6 +5,8 @@ import {
 } from 'lucide-react';
 import { EmployeeAttendance, EmployeeRecord, WorkShift } from '../../types';
 import { employeeOperationsService } from '../../lib/employeeOperationsService';
+import { useAuth } from '../../context/AuthContext';
+import { DailyWorkReportModal } from '../dashboard/DailyWorkReportModal';
 
 interface EmployeeAttendanceControlProps {
   employeeRecord: EmployeeRecord | null;
@@ -191,8 +193,11 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
     }
   };
 
-  // Clock Out Action
-  const handleClockOut = async () => {
+  const { profile } = useAuth();
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+
+  // Actual Clock Out Execution
+  const performActualClockOut = async () => {
     if (!todayAttendance || !employeeRecord) return;
 
     setIsProcessing(true);
@@ -219,6 +224,12 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
     } finally {
       setIsProcessing(false);
     }
+  };
+
+  // Clock Out Action: Checks for daily report first
+  const handleClockOut = async () => {
+    if (!todayAttendance || !employeeRecord) return;
+    setIsReportModalOpen(true);
   };
 
   const isSetupPending = !employeeRecord || !employeeRecord.setupCompletedAt;
@@ -596,6 +607,22 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
       )}
       </>
       )}
+
+      {/* Daily Work Report Checkout Modal */}
+      <DailyWorkReportModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        currentUserProfile={profile}
+        isCheckoutFlow={true}
+        onConfirmCheckoutWithReport={() => {
+          setIsReportModalOpen(false);
+          performActualClockOut();
+        }}
+        onConfirmCheckoutWithoutReport={() => {
+          setIsReportModalOpen(false);
+          performActualClockOut();
+        }}
+      />
     </div>
   );
 };

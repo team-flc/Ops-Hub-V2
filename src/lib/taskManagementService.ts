@@ -449,6 +449,177 @@ export const taskManagementService = {
   },
 
   /**
+   * Fetch cross-client tasks for My Dashboard & Synchronized Team Operations.
+   * Can be scoped by assigneeId, clientId, departmentId, or status.
+   */
+  async fetchCrossClientTasks(options?: {
+    assigneeId?: string;
+    clientId?: string;
+    departmentId?: string;
+    status?: string;
+    includeArchived?: boolean;
+  }): Promise<{ data: ClientTask[]; error: string | null }> {
+    if (!isSupabaseConfigured || !supabase) {
+      return { data: [], error: null };
+    }
+
+    try {
+      const selectFields = `
+        id, client_id, week_number, title, details, department_id,
+        assignee_id, priority, planned_start, due_date, status,
+        approval_mode, completed_at, completed_by, reopened_at, reopened_by, reopen_reason,
+        blocked_reason, time_spent_seconds, paused_seconds, timer_started_at, evidence_url, completion_notes, feedback,
+        sort_order, created_by, created_at,
+        updated_by, updated_at, archived_at, archived_by, archive_reason,
+        source_template_id, source_template_version,
+        plan_id, plan_week, occurrence_id, launch_batch_id,
+        departments(id, name),
+        assignee:profiles!assignee_id(id, full_name, role, status, avatar_url),
+        creator:profiles!created_by(id, full_name),
+        completer:profiles!completed_by(id, full_name),
+        client:clients!client_id(id, company_name, client_name, status, logo_url)
+      `;
+
+      let query = supabase
+        .from('client_tasks')
+        .select(selectFields)
+        .order('created_at', { ascending: false });
+
+      if (!options?.includeArchived) {
+        query = query.is('archived_at', null);
+      }
+      if (options?.clientId) {
+        query = query.eq('client_id', options.clientId);
+      }
+      if (options?.assigneeId) {
+        query = query.eq('assignee_id', options.assigneeId);
+      }
+      if (options?.departmentId) {
+        query = query.eq('department_id', options.departmentId);
+      }
+      if (options?.status) {
+        query = query.eq('status', options.status);
+      }
+
+      const { data, error } = await query;
+      if (error) {
+        return { data: [], error: error.message };
+      }
+
+      const tasks: ClientTask[] = (data || []).map((row: any) => {
+        const isOverdue = isTaskOverdue({
+          dueDate: row.due_date,
+          status: row.status,
+          archivedAt: row.archived_at
+        });
+
+        const isAssigneeEligible = row.assignee
+          ? row.assignee.status === 'active' && row.assignee.role !== 'client'
+          : true;
+
+        const clientData = Array.isArray(row.client) ? row.client[0] : row.client;
+        const deptData = Array.isArray(row.departments) ? row.departments[0] : row.departments;
+
+        return {
+          id: row.id,
+          clientId: row.client_id,
+          clientName: clientData?.client_name || clientData?.company_name || 'Client Workspace',
+          clientCompanyName: clientData?.company_name || clientData?.client_name || 'Company',
+          weekNumber: row.week_number || 1,
+          title: row.title,
+          details: row.details,
+          departmentId: row.department_id,
+          departmentName: deptData?.name || 'General',
+          assigneeId: row.assignee_id,
+          assigneeName: row.assignee?.full_name || null,
+          assigneeAvatar: row.assignee?.avatar_url || null,
+          assigneeRole: row.assignee?.role || null,
+          isAssigneeEligible,
+          priority: row.priority || 'Medium',
+          plannedStart: row.planned_start,
+          dueDate: row.due_date,
+          status: row.status,
+          approvalMode: row.approval_mode || 'none',
+          completedAt: row.completed_at || null,
+          completedBy: row.completed_by || null,
+          completedByName: row.completer?.full_name || null,
+          reopenedAt: row.reopened_at || null,
+          reopenedBy: row.reopened_by || null,
+          reopenReason: row.reopen_reason || null,
+          blockedReason: row.blocked_reason,
+          timeSpentSeconds: row.time_spent_seconds || 0,
+          pausedSeconds: row.paused_seconds || 0,
+          timerStartedAt: row.timer_started_at || null,
+          evidenceUrl: row.evidence_url || null,
+          completionNotes: row.completion_notes || null,
+          feedback: row.feedback || null,
+          sortOrder: row.sort_order || 0,
+          createdBy: row.created_by,
+          createdByName: row.creator?.full_name || null,
+          createdAt: row.created_at,
+          updatedBy: row.updated_by,
+          updatedAt: row.updated_at,
+          archivedAt: row.archived_at,
+          archivedBy: row.archived_by,
+          archiveReason: row.archive_reason,
+          sourceTemplateId: row.source_template_id || null,
+          sourceTemplateVersion: row.source_template_version || null,
+          planId: row.plan_id || null,
+          planWeek: row.plan_week || null,
+          occurrenceId: row.occurrence_id || null,
+          launchBatchId: row.launch_batch_id || null,
+          isOverdue
+        };
+      });
+
+      return { data: tasks, error: null };
+    } catch (err: any) {
+      return { data: [], error: err?.message || 'Failed to fetch cross-client tasks.' };
+    }
+  },
+
+  /**
+   * Fetch tasks worked on today by a user (for Daily Work Report pre-population)
+   */
+  async fetchTodayWorkedTasks(userId: string): Promise<Array<{
+    taskId: string;
+    taskTitle: string;
+    clientName: string;
+    clientId: string;
+    status: string;
+    durationMinutes: number;
+    evidenceUrl?: string;
+  }>> {
+    if (!isSupabaseConfigured || !supabase || !userId) return [];
+    try {
+      const res = await this.fetchCrossClientTasks({ assigneeId: userId });
+      if (res.error || !res.data) return [];
+
+      return res.data
+        .filter((t) => {
+          // Task has elapsed time OR was updated today OR is currently in progress / completed / under review
+          const isRelevantStatus = ['In Progress', 'Team Review', 'Client Review', 'Completed'].includes(t.status);
+          const hasTime = (t.timeSpentSeconds || 0) > 0 || Boolean(t.timerStartedAt);
+          return isRelevantStatus || hasTime;
+        })
+        .map((t) => {
+          const totalSeconds = (t.timeSpentSeconds || 0) + (t.timerStartedAt ? Math.floor((Date.now() - new Date(t.timerStartedAt).getTime()) / 1000) : 0);
+          return {
+            taskId: t.id,
+            taskTitle: t.title,
+            clientName: t.clientName || 'Client',
+            clientId: t.clientId,
+            status: t.status,
+            durationMinutes: Math.max(1, Math.round(totalSeconds / 60)),
+            evidenceUrl: t.evidenceUrl || undefined
+          };
+        });
+    } catch {
+      return [];
+    }
+  },
+
+  /**
    * Fetch audit events for a task
    */
   async fetchTaskEvents(taskId: string): Promise<ClientTaskEvent[]> {

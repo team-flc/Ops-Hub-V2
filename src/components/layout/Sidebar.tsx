@@ -4,7 +4,8 @@ import { useOpsStore } from '../../store/opsStore';
 import { 
   Building2, ChevronsLeft, ChevronsRight, Briefcase, X,
   Globe, HardDrive, MessageCircle, ExternalLink, Clock, Users, UserCheck,
-  Image, Video, PlaySquare, Sparkles, LayoutGrid, Palette, PhoneCall
+  Image, Video, PlaySquare, Sparkles, LayoutGrid, Palette, PhoneCall,
+  LayoutDashboard
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { ClientRecord, UserProfile } from '../../types';
@@ -246,6 +247,24 @@ export const Sidebar: React.FC = () => {
             <img src="/logo.png" alt="Faseeh Lall Logo" className="w-8 h-8 object-contain" />
           </button>
 
+          {/* My Dashboard button */}
+          <button
+            type="button"
+            onClick={() => {
+              navigate('/');
+              setViewMode('dashboard');
+              setMobileSidebarOpen(false);
+            }}
+            className={`p-2.5 rounded-xl transition-colors touch-target flex items-center justify-center cursor-pointer ${
+              viewMode === 'dashboard'
+                ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
+                : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-100'
+            }`}
+            title="My Dashboard"
+          >
+            <LayoutDashboard className="w-5 h-5" />
+          </button>
+
           {/* Workspace icon button to return to client workspace */}
           <button
             type="button"
@@ -466,8 +485,48 @@ export const Sidebar: React.FC = () => {
             {/* Operational Workspace Links */}
             <div className="space-y-1">
               <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1 px-1">
-                Employee Operations
+                Operations & Workspace
               </div>
+
+              {/* My Dashboard */}
+              <button
+                type="button"
+                onClick={() => {
+                  navigate('/');
+                  setViewMode('dashboard');
+                  setMobileSidebarOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+                  viewMode === 'dashboard'
+                    ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 truncate">
+                  <LayoutDashboard className="w-4 h-4 shrink-0" />
+                  <span className="truncate">My Dashboard</span>
+                </div>
+              </button>
+
+              {/* Client Workspace View */}
+              <button
+                type="button"
+                onClick={() => {
+                  navigate(selectedClientId ? `/clients/${selectedClientId}` : '/');
+                  setViewMode('client_workspace');
+                  setMobileSidebarOpen(false);
+                }}
+                className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
+                  viewMode === 'client_workspace'
+                    ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
+                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100'
+                }`}
+              >
+                <div className="flex items-center gap-2.5 truncate">
+                  <Briefcase className="w-4 h-4 shrink-0" />
+                  <span className="truncate">Client Workspace</span>
+                </div>
+              </button>
 
               {/* My Employee Portal */}
               <button
@@ -510,6 +569,7 @@ export const Sidebar: React.FC = () => {
                   </div>
                 </button>
               )}
+
             </div>
           </div>
         </div>

@@ -70,7 +70,9 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
 
   // Synchronize route pathname with viewMode
   useEffect(() => {
-    if (location.pathname.startsWith('/settings')) {
+    if (location.pathname === '/' || location.pathname.startsWith('/dashboard')) {
+      setViewMode('dashboard');
+    } else if (location.pathname.startsWith('/settings')) {
       setViewMode('settings');
     } else if (location.pathname.startsWith('/profile')) {
       setViewMode('profile');
@@ -147,6 +149,9 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
     if (location.pathname.startsWith('/operations/employees') || viewMode === 'employee_operations') {
       return isManagerOrOwner ? <EmployeeManagementDashboardView /> : <EmployeeDashboardView />;
     }
+    if (location.pathname === '/' || location.pathname.startsWith('/dashboard') || viewMode === 'dashboard') {
+      return <DashboardView />;
+    }
 
     switch (viewMode) {
       case 'list':
@@ -159,8 +164,6 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
         return <TimelineView />;
       case 'table':
         return <TableView />;
-      case 'dashboard':
-        return <DashboardView />;
       case 'docs':
         return <DocsView />;
       case 'client_workspace':
@@ -262,6 +265,16 @@ export const App: React.FC = () => {
         element={
           <ProtectedRoute allowedRoles={['client']}>
             <ClientRedirect />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Dedicated My Dashboard Operational Route */}
+      <Route
+        path="/dashboard"
+        element={
+          <ProtectedRoute allowedRoles={['owner', 'operational_manager', 'team_member']}>
+            <OpsHubWorkspace initialView="dashboard" />
           </ProtectedRoute>
         }
       />

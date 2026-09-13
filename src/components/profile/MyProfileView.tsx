@@ -4,9 +4,10 @@ import { useAuth } from '../../context/AuthContext';
 import { 
   User, Shield, Check, AlertCircle, Loader2, Camera, ArrowLeft 
 } from 'lucide-react';
-import { ROLE_DISPLAY_NAMES } from '../../types';
+import { ROLE_DISPLAY_NAMES, EmployeeBankDetails } from '../../types';
 import { profileService } from '../../lib/profileService';
 import { storageService, useSignedUrl } from '../../lib/storageService';
+import { employeeOperationsService } from '../../lib/employeeOperationsService';
 import { useOpsStore } from '../../store/opsStore';
 
 export const MyProfileView: React.FC = () => {
@@ -25,6 +26,7 @@ export const MyProfileView: React.FC = () => {
   const [phone, setPhone] = useState('');
   const [backupPhone, setBackupPhone] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [bankDetails, setBankDetails] = useState<EmployeeBankDetails | null>(null);
 
   // Status & Feedback
   const [isUploading, setIsUploading] = useState(false);
@@ -43,6 +45,12 @@ export const MyProfileView: React.FC = () => {
       setPhone(profile.phone || '');
       setBackupPhone(profile.backupPhone || '');
       setAvatarUrl(profile.avatarUrl || null);
+
+      if (profile.id) {
+        employeeOperationsService.fetchBankDetails(profile.id).then((b) => {
+          if (b) setBankDetails(b);
+        });
+      }
     }
   }, [profile]);
 
@@ -328,7 +336,7 @@ export const MyProfileView: React.FC = () => {
           </div>
         </div>
 
-        {/* Section 2: Protected Governance Fields (Read-Only) */}
+        {/* Section 2: Protected Governance & Employment Fields (Read-Only) */}
         <div className="bg-gray-50 dark:bg-dark-card/50 border border-gray-200 dark:border-dark-border rounded-3xl p-6 md:p-8 shadow-sm space-y-4">
           <div className="border-b border-gray-200 dark:border-dark-border pb-3 flex items-center justify-between">
             <div className="flex items-center gap-2 font-bold text-gray-800 dark:text-gray-200 text-sm">
@@ -382,6 +390,49 @@ export const MyProfileView: React.FC = () => {
             </div>
           </div>
         </div>
+
+        {/* Section 3: Financial & Bank Disbursement Details (Self Read-Only) */}
+        {bankDetails && (
+          <div className="bg-gray-50 dark:bg-dark-card/50 border border-gray-200 dark:border-dark-border rounded-3xl p-6 md:p-8 shadow-sm space-y-4">
+            <div className="border-b border-gray-200 dark:border-dark-border pb-3 flex items-center justify-between">
+              <div className="flex items-center gap-2 font-bold text-gray-800 dark:text-gray-200 text-sm">
+                <Shield className="w-4 h-4 text-brand-500" />
+                <span>Financial & Payroll Disbursement Details</span>
+              </div>
+              <span className="text-[11px] text-gray-400 font-medium">Verified by Management</span>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
+              <div className="p-3 bg-white dark:bg-dark-100 rounded-2xl border border-gray-200 dark:border-dark-border space-y-1">
+                <span className="text-gray-400 font-bold text-[10px] uppercase">Bank Name</span>
+                <div className="font-bold text-gray-800 dark:text-gray-200 truncate">
+                  {bankDetails.bankName || 'Not Provided'}
+                </div>
+              </div>
+
+              <div className="p-3 bg-white dark:bg-dark-100 rounded-2xl border border-gray-200 dark:border-dark-border space-y-1">
+                <span className="text-gray-400 font-bold text-[10px] uppercase">Account Title</span>
+                <div className="font-bold text-gray-800 dark:text-gray-200 truncate">
+                  {bankDetails.accountTitle || 'Not Provided'}
+                </div>
+              </div>
+
+              <div className="p-3 bg-white dark:bg-dark-100 rounded-2xl border border-gray-200 dark:border-dark-border space-y-1">
+                <span className="text-gray-400 font-bold text-[10px] uppercase">Account / IBAN</span>
+                <div className="font-mono font-bold text-gray-800 dark:text-gray-200 truncate">
+                  {bankDetails.iban || bankDetails.accountNumber || 'Not Provided'}
+                </div>
+              </div>
+
+              <div className="p-3 bg-white dark:bg-dark-100 rounded-2xl border border-gray-200 dark:border-dark-border space-y-1">
+                <span className="text-gray-400 font-bold text-[10px] uppercase">Verification</span>
+                <div className="font-bold text-emerald-600 dark:text-emerald-400">
+                  {bankDetails.status === 'active' ? 'Verified' : 'Pending'}
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
 
         {/* Action Bar */}
         <div className="flex items-center justify-end gap-3 pt-2">

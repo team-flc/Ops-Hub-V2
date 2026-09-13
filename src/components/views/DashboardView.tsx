@@ -1,338 +1,377 @@
-import React from 'react';
-import { useOpsStore } from '../../store/opsStore';
-import { 
-  Activity, CheckCircle2, AlertTriangle, Clock, TrendingUp, 
-  Users, ShieldCheck, Zap, CheckSquare, Layers 
+import React, { useState, useEffect, useCallback } from 'react';
+import { useSafeNavigate } from '../../lib/safeRouterHooks';
+import {
+  Activity, CheckCircle2, AlertTriangle, Clock, TrendingUp,
+  Users, ShieldCheck, Zap, Plus, FileText, ArrowRight,
+  Briefcase, Calendar, CheckSquare, Layers
 } from 'lucide-react';
-import { formatTimeMinutes } from '../../utils/helpers';
+import { useAuth } from '../../context/AuthContext';
+import { useOpsStore } from '../../store/opsStore';
+import {
+  ClientTask, ClientRecord, UserProfile, EmployeeRecord,
+  WorkShift, EmployeeAttendance, EmployeeWorkReport, Department
+} from '../../types';
+import { taskManagementService } from '../../lib/taskManagementService';
+import { employeeOperationsService } from '../../lib/employeeOperationsService';
+import { teamManagementService } from '../../lib/teamManagementService';
+import { clientManagementService } from '../../lib/clientManagementService';
+
+// Dashboard Components
+import { PersonalCrossClientKanban } from '../dashboard/PersonalCrossClientKanban';
+import { RoleOwnerDashboard } from '../dashboard/RoleOwnerDashboard';
+import { RoleManagerDashboard } from '../dashboard/RoleManagerDashboard';
+import { RoleTeamMemberDashboard } from '../dashboard/RoleTeamMemberDashboard';
+import { DailyWorkReportModal } from '../dashboard/DailyWorkReportModal';
+import { TaskCompletionTrendChart } from '../dashboard/TaskCompletionTrendChart';
+import { ClientWorkloadDistributionChart } from '../dashboard/ClientWorkloadDistributionChart';
+import { ApprovalTurnaroundChart } from '../dashboard/ApprovalTurnaroundChart';
+import { CreateClientTaskModal } from '../tasks/CreateClientTaskModal';
+import { ClientTaskDetailsModal } from '../tasks/ClientTaskDetailsModal';
 
 export const DashboardView: React.FC = () => {
-  const tasks = useOpsStore((state) => state.tasks);
-  const users = useOpsStore((state) => state.users);
-  const setSelectedTaskId = useOpsStore((state) => state.setSelectedTaskId);
+  const navigate = useSafeNavigate();
+  const { user, profile } = useAuth();
+  const clients = useOpsStore((state) => state.clients);
+  const setClients = useOpsStore((state) => state.setClients);
 
-  // Metrics Calculations
+  // Core Dashboard State
+  const [tasks, setTasks] = useState<ClientTask[]>([]);
+  const [teamMembers, setTeamMembers] = useState<UserProfile[]>([]);
+  const [employeeRecord, setEmployeeRecord] = useState<EmployeeRecord | null>(null);
+  const [shift, setShift] = useState<WorkShift | null>(null);
+  const [todayAttendance, setTodayAttendance] = useState<EmployeeAttendance | null>(null);
+  const [todayReport, setTodayReport] = useState<EmployeeWorkReport | null>(null);
+  const [dailyReports, setDailyReports] = useState<EmployeeWorkReport[]>([]);
+  const [departments, setDepartments] = useState<Department[]>([]);
+  const [eligibleAssignees, setEligibleAssignees] = useState<UserProfile[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  // Modals
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
+  const [isCreateTaskModalOpen, setIsCreateTaskModalOpen] = useState(false);
+  const [selectedTaskForDetails, setSelectedTaskForDetails] = useState<ClientTask | null>(null);
+
+  // Live PKT Date / Time Ticker
+  const [currentTimePKT, setCurrentTimePKT] = useState('');
+  useEffect(() => {
+    const updatePKT = () => {
+      const now = new Date();
+      setCurrentTimePKT(
+        now.toLocaleTimeString('en-US', {
+          timeZone: 'Asia/Karachi',
+          hour: '2-digit',
+          minute: '2-digit',
+          second: '2-digit'
+        })
+      );
+    };
+    updatePKT();
+    const timer = setInterval(updatePKT, 1000);
+    return () => clearInterval(timer);
+  }, []);
+
+  const loadDashboardData = useCallback(async () => {
+    if (!profile?.id) return;
+    setIsLoading(true);
+
+    try {
+      const [
+        tasksRes,
+        clientsRes,
+        membersRes,
+        empRec,
+        shifts,
+        todayAtt,
+        todayRep,
+        allReports,
+        deptRes,
+        assigneesRes
+      ] = await Promise.all([
+        taskManagementService.fetchCrossClientTasks(),
+        clientManagementService.fetchClients(),
+        teamManagementService.fetchTeamMembers(profile.role, profile.id),
+        employeeOperationsService.fetchEmployeeRecord(profile.id),
+        employeeOperationsService.fetchWorkShifts(),
+        employeeOperationsService.fetchTodayAttendance(profile.id),
+        employeeOperationsService.getTodayWorkReport(profile.id),
+        employeeOperationsService.fetchWorkReports(undefined, 'daily'),
+        taskManagementService.fetchDepartments(),
+        taskManagementService.fetchEligibleAssignees(undefined, undefined, profile)
+      ]);
+
+      if (tasksRes.data) setTasks(tasksRes.data);
+      if (clientsRes.data) setClients(clientsRes.data);
+      if (membersRes) setTeamMembers(membersRes);
+      if (deptRes) setDepartments(deptRes);
+      if (assigneesRes) setEligibleAssignees(assigneesRes);
+      setEmployeeRecord(empRec);
+      setTodayAttendance(todayAtt);
+      setTodayReport(todayRep);
+      setDailyReports(allReports);
+
+      if (empRec?.shiftId && shifts.length > 0) {
+        const matchingShift = shifts.find((s) => s.id === empRec.shiftId) || null;
+        setShift(matchingShift);
+      }
+    } catch (err) {
+      console.error('Failed to load dashboard telemetry:', err);
+    } finally {
+      setIsLoading(false);
+    }
+  }, [profile, setClients]);
+
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
+
+  // Role Scope
+  const isOwner = profile?.role === 'owner';
+  const isManager = profile?.role === 'operational_manager';
+  const isTeamMember = profile?.role === 'team_member';
+
+  // Direct Reports for Operational Manager
+  const reportingMembers = teamMembers.filter((m) => m.reportingManagerId === profile?.id);
+
+  // Top Metrics Calculation
   const totalTasks = tasks.length;
-  const completedTasks = tasks.filter((t) => t.status === 'completed').length;
-  const inProgressTasks = tasks.filter((t) => t.status === 'in_progress' || t.status === 'under_review').length;
-  const todoTasks = tasks.filter((t) => t.status === 'todo').length;
-  const blockedTasks = tasks.filter((t) => t.status === 'blocked').length;
+  const completedTasks = tasks.filter((t) => t.status === 'Completed').length;
+  const inProgressTasks = tasks.filter((t) => t.status === 'In Progress').length;
+  const awaitingApprovalTasks = tasks.filter((t) => ['Team Review', 'Client Review'].includes(t.status)).length;
+  const overdueTasks = tasks.filter((t) => t.isOverdue && t.status !== 'Completed').length;
 
-  const urgentTasks = tasks.filter((t) => t.priority === 'urgent' && t.status !== 'completed').length;
-  const slaAlertTasks = tasks.filter(
-    (t) => (t.customFields?.slaStatus === 'at_risk' || t.customFields?.slaStatus === 'breached') && t.status !== 'completed'
-  );
+  const todayStr = new Date().toISOString().split('T')[0];
+  const dueTodayTasks = tasks.filter((t) => t.dueDate === todayStr && t.status !== 'Completed').length;
 
-  const totalLoggedMinutes = tasks.reduce(
-    (acc, t) => acc + t.timeLogs.reduce((sub, l) => sub + l.durationMinutes, 0),
-    0
-  );
+  const resolutionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 100;
+  const healthScore = Math.max(10, Math.min(100, Math.round(100 - (overdueTasks * 5) - (awaitingApprovalTasks * 2) + (resolutionRate * 0.1))));
 
-  // Operations Health Index (0 - 100%)
-  const completionRate = totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0;
-  const penalty = (urgentTasks * 5) + (slaAlertTasks.length * 8) + (blockedTasks * 10);
-  const healthScore = Math.max(10, Math.min(100, Math.round(100 - penalty + (completionRate * 0.2))));
+  const greeting = (() => {
+    const hour = new Date().getHours();
+    if (hour < 12) return 'Good morning';
+    if (hour < 18) return 'Good afternoon';
+    return 'Good evening';
+  })();
 
-  // Recent system activity
-  const allActivities = tasks
-    .flatMap((t) =>
-      t.activityLogs.map((a) => ({
-        ...a,
-        taskTitle: t.title,
-        taskId: t.id,
-        taskNumber: t.taskNumber
-      }))
-    )
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-    .slice(0, 8);
+  const displayName = profile?.fullName || user?.email?.split('@')[0] || 'Team Member';
 
   return (
-    <div className="p-4 sm:p-6 space-y-6 max-w-7xl mx-auto">
-      {/* Top Welcome & Health Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 bg-slate-900 dark:bg-dark-300 p-5 sm:p-6 rounded-3xl border border-slate-800 dark:border-dark-border shadow-lg">
-        <div>
+    <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto select-none animate-in fade-in duration-200">
+      {/* 1. Header & Quick Actions Bar */}
+      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-slate-900 dark:bg-dark-300 p-6 rounded-3xl border border-slate-800 dark:border-dark-border shadow-lg">
+        <div className="space-y-1">
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-brand-400">
             <Zap className="w-4 h-4 fill-current" />
-            <span>Executive Operations Control Center</span>
+            <span>Operational Headquarters & Intelligence</span>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-white mt-1">
-            Ops Hub Intelligence Dashboard
+          <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
+            {greeting}, {displayName}
           </h1>
-          <p className="text-xs sm:text-sm text-gray-400 mt-1">
-            Real-time telemetry, shift progress, SLA compliance, and cross-team workload.
+          <p className="text-xs sm:text-sm text-gray-400">
+            Pakistan Standard Time: <span className="font-mono font-bold text-gray-200">{currentTimePKT}</span> (PKT / UTC+5)
           </p>
         </div>
 
-        {/* Health Score Gauge */}
-        <div className="flex items-center gap-4 bg-white/5 backdrop-blur-md px-5 py-3.5 rounded-2xl border border-white/10">
-          <div>
-            <div className="text-[11px] font-semibold text-gray-400 uppercase tracking-wider">
-              Operations Health
-            </div>
-            <div className="text-3xl font-extrabold text-emerald-400 flex items-center gap-1.5">
-              <span>{healthScore}%</span>
-              <ShieldCheck className="w-6 h-6 text-emerald-400" />
-            </div>
-          </div>
-          <div className="text-right border-l border-white/10 pl-4">
-            <div className="text-[11px] text-gray-400">Status</div>
-            <span className="inline-block px-2 py-0.5 rounded-full text-xs font-bold bg-emerald-500/20 text-emerald-300">
-              {healthScore >= 80 ? 'Optimal' : healthScore >= 60 ? 'Degraded' : 'Attention Req.'}
-            </span>
-          </div>
+        {/* Quick Actions */}
+        <div className="flex flex-wrap items-center gap-2.5 self-start lg:self-auto">
+          {/* Quick Create Task */}
+          <button
+            type="button"
+            onClick={() => setIsCreateTaskModalOpen(true)}
+            className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs shadow-md shadow-brand-500/25 transition-all hover:scale-[1.02] active:scale-[0.98] cursor-pointer"
+          >
+            <Plus className="w-4 h-4" />
+            <span>Create Task</span>
+          </button>
+
+          {/* Submit Daily Report */}
+          <button
+            type="button"
+            onClick={() => setIsReportModalOpen(true)}
+            className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/15 text-white font-bold text-xs border border-white/15 backdrop-blur-xs transition-colors cursor-pointer"
+          >
+            <FileText className="w-4 h-4" />
+            <span>Daily Report</span>
+          </button>
+
+          {/* Attendance Portal Link */}
+          <button
+            type="button"
+            onClick={() => navigate('/employee/dashboard')}
+            className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/15 text-white font-bold text-xs border border-white/15 backdrop-blur-xs transition-colors cursor-pointer"
+          >
+            <Clock className="w-4 h-4" />
+            <span>Attendance</span>
+          </button>
         </div>
       </div>
 
-      {/* 4 Main KPI Cards */}
+      {/* 2. Top 4 KPI Metrics */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Card 1: Active In-Flight */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-dark-300 border border-gray-200 dark:border-dark-border shadow-sm">
+        {/* Card 1: Due Today */}
+        <div className="p-5 rounded-3xl bg-white dark:bg-dark-300 border border-gray-200 dark:border-dark-border shadow-sm flex flex-col justify-between space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-gray-400">
-              Active In-Flight
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-gray-400">
+              Tasks Due Today
+            </span>
+            <div className="p-2 rounded-xl bg-amber-500/10 text-amber-500">
+              <Calendar className="w-4 h-4" />
+            </div>
+          </div>
+          <div className="text-3xl font-black text-gray-900 dark:text-gray-100">
+            {dueTodayTasks}
+          </div>
+          <div className="text-xs text-gray-500">
+            <span>Target resolution date today</span>
+          </div>
+        </div>
+
+        {/* Card 2: In Flight */}
+        <div className="p-5 rounded-3xl bg-white dark:bg-dark-300 border border-gray-200 dark:border-dark-border shadow-sm flex flex-col justify-between space-y-2">
+          <div className="flex items-center justify-between">
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-gray-400">
+              Active In Flight
             </span>
             <div className="p-2 rounded-xl bg-blue-500/10 text-blue-500">
               <Activity className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-black text-gray-900 dark:text-gray-100 mt-2">
-            {inProgressTasks + todoTasks}
+          <div className="text-3xl font-black text-blue-600 dark:text-blue-400">
+            {inProgressTasks}
           </div>
-          <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
-            <span className="font-semibold text-blue-500">{inProgressTasks} In Progress</span>
-            <span>•</span>
-            <span>{todoTasks} Queued</span>
+          <div className="text-xs text-gray-500">
+            <span>Actively being worked on</span>
           </div>
         </div>
 
-        {/* Card 2: Completed */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-dark-300 border border-gray-200 dark:border-dark-border shadow-sm">
+        {/* Card 3: Awaiting Approval */}
+        <div className="p-5 rounded-3xl bg-white dark:bg-dark-300 border border-gray-200 dark:border-dark-border shadow-sm flex flex-col justify-between space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-gray-400">
-              Completed Tasks
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-gray-400">
+              Awaiting Approval
             </span>
-            <div className="p-2 rounded-xl bg-emerald-500/10 text-emerald-500">
+            <div className="p-2 rounded-xl bg-purple-500/10 text-purple-500">
               <CheckCircle2 className="w-4 h-4" />
             </div>
           </div>
-          <div className="text-2xl font-black text-gray-900 dark:text-gray-100 mt-2">
-            {completedTasks}
+          <div className="text-3xl font-black text-purple-600 dark:text-purple-400">
+            {awaitingApprovalTasks}
           </div>
-          <div className="flex items-center gap-1.5 mt-2 text-xs text-emerald-600 dark:text-emerald-400 font-semibold">
-            <TrendingUp className="w-3.5 h-3.5" />
-            <span>{Math.round(completionRate)}% Overall Resolution</span>
-          </div>
-        </div>
-
-        {/* Card 3: SLA Alerts & Blocked */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-dark-300 border border-gray-200 dark:border-dark-border shadow-sm">
-          <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-gray-400">
-              SLA Risk / Blocked
-            </span>
-            <div className="p-2 rounded-xl bg-rose-500/10 text-rose-500">
-              <AlertTriangle className="w-4 h-4" />
-            </div>
-          </div>
-          <div className="text-2xl font-black text-rose-600 dark:text-rose-400 mt-2">
-            {slaAlertTasks.length + blockedTasks}
-          </div>
-          <div className="flex items-center gap-2 mt-2 text-xs text-gray-500">
-            <span className="text-rose-500 font-semibold">{slaAlertTasks.length} At Risk</span>
-            <span>•</span>
-            <span>{blockedTasks} Blocked</span>
+          <div className="text-xs text-gray-500">
+            <span>Submitted for management review</span>
           </div>
         </div>
 
-        {/* Card 4: Logged Hours */}
-        <div className="p-5 rounded-2xl bg-white dark:bg-dark-300 border border-gray-200 dark:border-dark-border shadow-sm">
+        {/* Card 4: Overdue & Health */}
+        <div className="p-5 rounded-3xl bg-white dark:bg-dark-300 border border-gray-200 dark:border-dark-border shadow-sm flex flex-col justify-between space-y-2">
           <div className="flex items-center justify-between">
-            <span className="text-xs font-bold uppercase tracking-wider text-gray-400">
-              Logged Work Time
+            <span className="text-[11px] font-extrabold uppercase tracking-wider text-gray-400">
+              {overdueTasks > 0 ? 'Overdue Tasks' : 'Operations Health'}
             </span>
-            <div className="p-2 rounded-xl bg-brand-500/10 text-brand-500">
-              <Clock className="w-4 h-4" />
+            <div className={`p-2 rounded-xl ${overdueTasks > 0 ? 'bg-rose-500/10 text-rose-500' : 'bg-emerald-500/10 text-emerald-500'}`}>
+              {overdueTasks > 0 ? <AlertTriangle className="w-4 h-4" /> : <ShieldCheck className="w-4 h-4" />}
             </div>
           </div>
-          <div className="text-2xl font-black text-gray-900 dark:text-gray-100 mt-2 font-mono">
-            {formatTimeMinutes(totalLoggedMinutes)}
+          <div className={`text-3xl font-black ${overdueTasks > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
+            {overdueTasks > 0 ? overdueTasks : `${healthScore}%`}
           </div>
-          <div className="flex items-center gap-1.5 mt-2 text-xs text-brand-500 font-semibold">
-            <span>Stopwatch & manual logs</span>
+          <div className="text-xs text-gray-500">
+            <span>{overdueTasks > 0 ? 'Passed target deadline' : 'Optimal operational efficiency'}</span>
           </div>
         </div>
       </div>
 
-      {/* Workflow Status Distribution Progress Bar */}
-      <div className="p-6 rounded-2xl bg-white dark:bg-dark-300 border border-gray-200 dark:border-dark-border shadow-sm space-y-3">
-        <div className="flex items-center justify-between">
-          <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-            <Layers className="w-4 h-4 text-brand-500" />
-            <span>Workflow Pipeline Distribution</span>
-          </h3>
-          <span className="text-xs text-gray-500 font-semibold">{totalTasks} Total Tasks</span>
-        </div>
+      {/* 3. Role-Specific Section */}
+      {isOwner && (
+        <RoleOwnerDashboard
+          tasks={tasks}
+          clients={clients}
+          teamMembers={teamMembers}
+          dailyReports={dailyReports}
+          currentUserProfile={profile}
+          onRefreshData={loadDashboardData}
+          onOpenCreateTaskModal={() => setIsCreateTaskModalOpen(true)}
+        />
+      )}
 
-        {/* Segmented Bar */}
-        <div className="w-full h-3 rounded-full bg-gray-100 dark:bg-dark-200 overflow-hidden flex">
-          <div
-            style={{ width: `${totalTasks > 0 ? (completedTasks / totalTasks) * 100 : 0}%` }}
-            className="bg-emerald-500 transition-all duration-500"
-            title={`Completed: ${completedTasks}`}
-          />
-          <div
-            style={{ width: `${totalTasks > 0 ? (inProgressTasks / totalTasks) * 100 : 0}%` }}
-            className="bg-blue-500 transition-all duration-500"
-            title={`In Progress: ${inProgressTasks}`}
-          />
-          <div
-            style={{ width: `${totalTasks > 0 ? (todoTasks / totalTasks) * 100 : 0}%` }}
-            className="bg-slate-400 transition-all duration-500"
-            title={`To Do: ${todoTasks}`}
-          />
-          <div
-            style={{ width: `${totalTasks > 0 ? (blockedTasks / totalTasks) * 100 : 0}%` }}
-            className="bg-rose-500 transition-all duration-500"
-            title={`Blocked: ${blockedTasks}`}
-          />
-        </div>
+      {isManager && (
+        <RoleManagerDashboard
+          tasks={tasks}
+          clients={clients}
+          reportingMembers={reportingMembers}
+          dailyReports={dailyReports}
+          currentUserProfile={profile}
+          onRefreshData={loadDashboardData}
+        />
+      )}
 
-        {/* Legend */}
-        <div className="flex items-center gap-4 flex-wrap text-xs pt-1">
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-            <span className="text-gray-600 dark:text-gray-300 font-medium">Completed ({completedTasks})</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
-            <span className="text-gray-600 dark:text-gray-300 font-medium">In Progress ({inProgressTasks})</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-slate-400" />
-            <span className="text-gray-600 dark:text-gray-300 font-medium">Queued ({todoTasks})</span>
-          </div>
-          <div className="flex items-center gap-1.5">
-            <span className="w-2.5 h-2.5 rounded-full bg-rose-500" />
-            <span className="text-gray-600 dark:text-gray-300 font-medium">Blocked ({blockedTasks})</span>
-          </div>
-        </div>
-      </div>
+      {isTeamMember && (
+        <RoleTeamMemberDashboard
+          tasks={tasks}
+          employeeRecord={employeeRecord}
+          shift={shift}
+          todayAttendance={todayAttendance}
+          todayReport={todayReport}
+          currentUserProfile={profile}
+          onOpenReportModal={() => setIsReportModalOpen(true)}
+          onRefreshData={loadDashboardData}
+        />
+      )}
 
-      {/* Two Column Layout: Team Workload & Activity Feed */}
+      {/* 4. Integrated Cross-Client Personal Operations Kanban */}
+      <PersonalCrossClientKanban
+        tasks={tasks}
+        clients={clients}
+        currentUserProfile={profile}
+        onRefreshTasks={loadDashboardData}
+        onSelectTask={(t) => setSelectedTaskForDetails(t)}
+      />
+
+      {/* 5. Reporting & Progress Analytics Visualizations */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Team Workload & Capacity */}
-        <div className="p-6 rounded-2xl bg-white dark:bg-dark-300 border border-gray-200 dark:border-dark-border shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-              <Users className="w-4 h-4 text-brand-500" />
-              <span>Team Operational Workload</span>
-            </h3>
-            <span className="text-xs text-gray-400">{users.length} Active Staff</span>
-          </div>
-
-          <div className="space-y-3">
-            {users.map((u) => {
-              const userTasks = tasks.filter((t) => t.assigneeIds.includes(u.id));
-              const userActiveTasks = userTasks.filter((t) => t.status !== 'completed').length;
-              const userLoggedMins = userTasks.reduce(
-                (sum, t) =>
-                  sum +
-                  t.timeLogs.filter((l) => l.userId === u.id).reduce((s, l) => s + l.durationMinutes, 0),
-                0
-              );
-              const maxCapacity = 5;
-              const loadPercent = Math.min(100, Math.round((userActiveTasks / maxCapacity) * 100));
-
-              return (
-                <div
-                  key={u.id}
-                  className="p-3.5 rounded-xl bg-gray-50 dark:bg-dark-200 border border-gray-100 dark:border-dark-border flex items-center justify-between gap-3"
-                >
-                  <div className="flex items-center gap-3">
-                    <img src={u.avatar} alt={u.name} className="w-9 h-9 rounded-full object-cover" />
-                    <div>
-                      <div className="text-xs font-bold text-gray-900 dark:text-gray-100 flex items-center gap-1.5">
-                        <span>{u.name}</span>
-                        <span
-                          className={`w-2 h-2 rounded-full ${
-                            u.status === 'online'
-                              ? 'bg-emerald-500'
-                              : u.status === 'busy'
-                              ? 'bg-red-500'
-                              : 'bg-amber-500'
-                          }`}
-                        />
-                      </div>
-                      <div className="text-[11px] text-gray-500">{u.role}</div>
-                    </div>
-                  </div>
-
-                  <div className="text-right w-36">
-                    <div className="text-xs font-semibold text-gray-800 dark:text-gray-200">
-                      {userActiveTasks} active • {formatTimeMinutes(userLoggedMins)}
-                    </div>
-                    {/* Capacity meter */}
-                    <div className="w-full h-1.5 bg-gray-200 dark:bg-dark-400 rounded-full overflow-hidden mt-1">
-                      <div
-                        className={`h-full ${
-                          loadPercent > 80 ? 'bg-red-500' : loadPercent > 50 ? 'bg-amber-500' : 'bg-brand-500'
-                        }`}
-                        style={{ width: `${loadPercent}%` }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Live System Activity Feed */}
-        <div className="p-6 rounded-2xl bg-white dark:bg-dark-300 border border-gray-200 dark:border-dark-border shadow-sm space-y-4">
-          <div className="flex items-center justify-between">
-            <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100 flex items-center gap-2">
-              <Activity className="w-4 h-4 text-brand-500" />
-              <span>Real-Time Audit Stream</span>
-            </h3>
-            <span className="text-xs font-semibold px-2 py-0.5 rounded bg-brand-500/10 text-brand-500">
-              Live Feed
-            </span>
-          </div>
-
-          <div className="space-y-2.5 max-h-[380px] overflow-y-auto">
-            {allActivities.length === 0 ? (
-              <div className="text-xs text-gray-400 text-center py-8 italic">
-                No recent activity logged.
-              </div>
-            ) : (
-              allActivities.map((act) => (
-                <div
-                  key={act.id}
-                  onClick={() => setSelectedTaskId(act.taskId)}
-                  className="p-3 rounded-xl bg-gray-50/80 dark:bg-dark-200/60 hover:bg-gray-100 dark:hover:bg-dark-200 border border-gray-100 dark:border-dark-border/60 cursor-pointer transition-colors flex items-start gap-3"
-                >
-                  <div className="p-1.5 rounded-lg bg-brand-500/10 text-brand-500 mt-0.5 flex-shrink-0">
-                    <CheckSquare className="w-3.5 h-3.5" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="text-xs text-gray-800 dark:text-gray-200">
-                      <span className="font-bold text-brand-600 dark:text-brand-400">{act.userName}</span>{' '}
-                      <span className="text-gray-600 dark:text-gray-300">{act.action}</span>
-                    </div>
-                    <div className="flex items-center gap-2 mt-0.5 text-[11px] text-gray-400 truncate">
-                      <span className="font-semibold text-gray-500">{act.taskNumber}:</span>
-                      <span className="truncate">{act.taskTitle}</span>
-                    </div>
-                  </div>
-                  <span className="text-[10px] text-gray-400 flex-shrink-0">
-                    {new Date(act.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
-        </div>
+        <TaskCompletionTrendChart tasks={tasks} />
+        <ApprovalTurnaroundChart tasks={tasks} />
       </div>
+
+      <ClientWorkloadDistributionChart tasks={tasks} clients={clients} />
+
+      {/* Global Modals */}
+      <DailyWorkReportModal
+        isOpen={isReportModalOpen}
+        onClose={() => setIsReportModalOpen(false)}
+        currentUserProfile={profile}
+        onSuccess={loadDashboardData}
+      />
+
+      {isCreateTaskModalOpen && clients.length > 0 && (
+        <CreateClientTaskModal
+          isOpen={isCreateTaskModalOpen}
+          onClose={() => setIsCreateTaskModalOpen(false)}
+          onSuccess={() => {
+            setIsCreateTaskModalOpen(false);
+            loadDashboardData();
+          }}
+          client={clients[0]}
+          weekNumber={1}
+          departments={departments}
+          eligibleAssignees={eligibleAssignees}
+        />
+      )}
+
+      {selectedTaskForDetails && (
+        <ClientTaskDetailsModal
+          isOpen={Boolean(selectedTaskForDetails)}
+          onClose={() => setSelectedTaskForDetails(null)}
+          task={selectedTaskForDetails}
+          client={clients.find((c) => c.id === selectedTaskForDetails.clientId) || null}
+          currentUserProfile={profile}
+          departments={departments}
+          eligibleAssignees={eligibleAssignees}
+          onTaskUpdated={() => {
+            setSelectedTaskForDetails(null);
+            loadDashboardData();
+          }}
+        />
+      )}
     </div>
   );
 };
