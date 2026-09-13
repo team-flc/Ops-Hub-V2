@@ -1,15 +1,17 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { Calendar, Info, Plus, Sparkles, Loader2, Layers, AlertTriangle } from 'lucide-react';
 import { 
   ClientRecord, 
   ClientTask, 
   ClientTaskStatus, 
   Department, 
-  UserProfile 
+  UserProfile,
+  DEFAULT_WEEK_NAMES
 } from '../../types';
 import { SelectedClientHeader } from './SelectedClientHeader';
 import { ClientDetailsTab } from './ClientDetailsTab';
-import { ClientTaskCard } from '../tasks/ClientTaskCard';
+import { ClientWeekStepper } from './ClientWeekStepper';
+import { ClientKanbanBoard } from '../tasks/ClientKanbanBoard';
 import { TaskCreationModeModal } from '../tasks/TaskCreationModeModal';
 import { CreateClientTaskModal } from '../tasks/CreateClientTaskModal';
 import { EditClientTaskModal } from '../tasks/EditClientTaskModal';
@@ -49,8 +51,11 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
   const [activeWeek, setActiveWeek] = useState<WeekTab>('week1');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
+  // Week Names State
+  const [weekNames, setWeekNames] = useState<Record<1 | 2 | 3 | 4, string>>(DEFAULT_WEEK_NAMES);
+
   // Phase 3A Tasks State
-  const [tasks, setTasks] = useState<ClientTask[]>([]);
+  const [allTasks, setAllTasks] = useState<ClientTask[]>([]);
   const [isLoadingTasks, setIsLoadingTasks] = useState(false);
 
   // Departments & Eligible Assignees
@@ -66,6 +71,15 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
   const [modalWeekNumber, setModalWeekNumber] = useState<1 | 2 | 3 | 4>(1);
   const [editingTask, setEditingTask] = useState<ClientTask | null>(null);
   const [selectedTaskDetails, setSelectedTaskDetails] = useState<ClientTask | null>(null);
+
+  const weekTabs: { id: WeekTab; weekNum: 1 | 2 | 3 | 4; label: string }[] = [
+    { id: 'week1', weekNum: 1, label: 'Week 1' },
+    { id: 'week2', weekNum: 2, label: 'Week 2' },
+    { id: 'week3', weekNum: 3, label: 'Week 3' },
+    { id: 'week4', weekNum: 4, label: 'Week 4' }
+  ];
+
+  const currentWeekNum = (weekTabs.find((w) => w.id === activeWeek)?.weekNum || 1) as 1 | 2 | 3 | 4;
 
   const handleOpenCreateTaskFlow = () => {
     setModalWeekNumber(currentWeekNum);
@@ -97,27 +111,22 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
 
   const isOwnerOrManager = currentUserProfile?.role === 'owner' || currentUserProfile?.role === 'operational_manager';
 
-  const weekTabs: { id: WeekTab; weekNum: 1 | 2 | 3 | 4; label: string }[] = [
-    { id: 'week1', weekNum: 1, label: 'Week 1' },
-    { id: 'week2', weekNum: 2, label: 'Week 2' },
-    { id: 'week3', weekNum: 3, label: 'Week 3' },
-    { id: 'week4', weekNum: 4, label: 'Week 4' }
-  ];
-
-  const currentWeekNum = weekTabs.find((w) => w.id === activeWeek)?.weekNum || 1;
-
-  // Load Departments & Eligible Assignees on mount
+  // Load Departments & Eligible Assignees & Week Names on mount
   useEffect(() => {
     let isMounted = true;
     async function loadMeta() {
       try {
-        const [depts, assignees] = await Promise.all([
+        const [depts, assignees, weeksRes] = await Promise.all([
           taskManagementService.fetchDepartments(),
-          taskManagementService.fetchEligibleAssignees(client.id)
+          taskManagementService.fetchEligibleAssignees(client.id),
+          taskManagementService.fetchClientWeeks(client.id)
         ]);
         if (isMounted) {
           setDepartments(depts);
           setEligibleAssignees(assignees);
+          if (weeksRes.data) {
+            setWeekNames(weeksRes.data);
+          }
         }
       } catch (err) {
         console.warn('Failed to load task metadata:', err);
@@ -129,38 +138,61 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
     };
   }, [client.id]);
 
-  // Fetch Tasks for the selected week
+  // Fetch all tasks for this client to populate week-stepper counts and active week Kanban board
   const loadTasks = useCallback(async () => {
     if (!client.id) return;
     setIsLoadingTasks(true);
     try {
-      const res = await taskManagementService.fetchClientTasks(client.id, currentWeekNum);
+      const res = await taskManagementService.fetchClientTasks(client.id);
       if (!res.error && res.data) {
-        setTasks(res.data);
+        setAllTasks(res.data);
       }
     } catch {
       // Keep current tasks on failure
     } finally {
       setIsLoadingTasks(false);
     }
-  }, [client.id, currentWeekNum]);
+  }, [client.id]);
 
   useEffect(() => {
     loadTasks();
   }, [loadTasks]);
+
+  const tasksByWeek: Record<1 | 2 | 3 | 4, ClientTask[]> = useMemo(() => {
+    return {
+      1: allTasks.filter((t) => t.weekNumber === 1),
+      2: allTasks.filter((t) => t.weekNumber === 2),
+      3: allTasks.filter((t) => t.weekNumber === 3),
+      4: allTasks.filter((t) => t.weekNumber === 4)
+    };
+  }, [allTasks]);
+
+  const currentWeekTasks = useMemo(() => {
+    return tasksByWeek[currentWeekNum] || [];
+  }, [tasksByWeek, currentWeekNum]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3500);
   };
 
+  const handleRenameWeek = async (weekNum: 1 | 2 | 3 | 4, newName: string) => {
+    const res = await taskManagementService.renameClientWeek(client.id, weekNum, newName);
+    if (res.error) {
+      showToast(`Rename failed: ${res.error}`);
+    } else {
+      setWeekNames((prev) => ({ ...prev, [weekNum]: newName }));
+      showToast(`Week ${weekNum} renamed to "${newName}".`);
+    }
+  };
+
   const handleTaskCreated = (newTask: ClientTask) => {
-    setTasks((prev) => [newTask, ...prev]);
+    setAllTasks((prev) => [newTask, ...prev]);
     showToast(`Task "${newTask.title}" created successfully.`);
   };
 
   const handleTaskUpdated = (updatedTask: ClientTask) => {
-    setTasks((prev) => {
+    setAllTasks((prev) => {
       if (updatedTask.archivedAt) {
         return prev.filter((t) => t.id !== updatedTask.id);
       }
@@ -170,24 +202,97 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
     if (selectedTaskDetails?.id === updatedTask.id) {
       setSelectedTaskDetails(updatedTask.archivedAt ? null : updatedTask);
     }
-    showToast(`Task updated successfully.`);
   };
 
-  const handleStatusChange = async (task: ClientTask, newStatus: ClientTaskStatus, reason?: string) => {
+  const handleToggleTimer = async (task: ClientTask) => {
     try {
-      const res = await taskManagementService.updateStatus(task.id, newStatus, reason);
+      if (task.timerStartedAt) {
+        // Stop timer
+        const res = await taskManagementService.stopTimer(task.id, task.timerStartedAt, task.timeSpentSeconds);
+        if (res.error) {
+          showToast(`Failed to stop timer: ${res.error}`);
+        } else {
+          const updated: ClientTask = {
+            ...task,
+            timerStartedAt: null,
+            timeSpentSeconds: res.elapsedSecs !== undefined ? res.elapsedSecs : task.timeSpentSeconds
+          };
+          handleTaskUpdated(updated);
+          showToast(`Timer stopped for "${task.title}".`);
+        }
+      } else {
+        // Start timer
+        const res = await taskManagementService.startTimer(task.id);
+        if (res.error) {
+          showToast(`Failed to start timer: ${res.error}`);
+        } else {
+          const updated: ClientTask = {
+            ...task,
+            timerStartedAt: new Date().toISOString()
+          };
+          handleTaskUpdated(updated);
+          showToast(`Timer started for "${task.title}".`);
+        }
+      }
+    } catch (err: any) {
+      showToast(err?.message || 'Timer update failed.');
+    }
+  };
+
+  const handleKanbanStatusChange = async (
+    task: ClientTask,
+    newStatus: ClientTaskStatus,
+    options?: {
+      reason?: string;
+      feedback?: string;
+      evidenceUrl?: string;
+      completionNotes?: string;
+    }
+  ) => {
+    try {
+      // Role permission check: only management can approve to Done
+      if (newStatus === 'Done' || newStatus === 'Completed') {
+        if (!isOwnerOrManager) {
+          showToast('Forbidden: Only Owner or Operational Manager can approve tasks to Done.');
+          return;
+        }
+      }
+
+      const res = await taskManagementService.updateKanbanStatus(task.id, newStatus, {
+        reason: options?.reason,
+        feedback: options?.feedback,
+        evidenceUrl: options?.evidenceUrl,
+        completionNotes: options?.completionNotes,
+        timerStartedAt: task.timerStartedAt,
+        timeSpentSeconds: task.timeSpentSeconds,
+        currentStatus: task.status
+      });
+
       if (res.error) {
         showToast(`Status update failed: ${res.error}`);
       } else {
+        let computedTime = task.timeSpentSeconds || 0;
+        if ((newStatus === 'Approval' || newStatus === 'Done') && task.timerStartedAt) {
+          const startMs = new Date(task.timerStartedAt).getTime();
+          if (!isNaN(startMs)) {
+            computedTime += Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+          }
+        }
+
         const updated: ClientTask = {
           ...task,
           status: newStatus,
-          blockedReason: newStatus === 'Blocked' ? (reason || null) : null
+          feedback: options?.feedback !== undefined ? options.feedback : task.feedback,
+          evidenceUrl: options?.evidenceUrl !== undefined ? options.evidenceUrl : task.evidenceUrl,
+          completionNotes: options?.completionNotes !== undefined ? options.completionNotes : task.completionNotes,
+          timerStartedAt: (newStatus === 'Approval' || newStatus === 'Done') ? null : task.timerStartedAt,
+          timeSpentSeconds: computedTime,
+          completedAt: (newStatus === 'Done' || newStatus === 'Completed') ? new Date().toISOString() : task.completedAt
         };
         handleTaskUpdated(updated);
       }
     } catch (err: any) {
-      showToast(err?.message || 'Failed to update status.');
+      showToast(err?.message || 'Failed to update task status.');
     }
   };
 
@@ -264,32 +369,25 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
       <div className="flex-1 min-w-0">
         {/* TAB 1: 30-DAY SETUP WORKSPACE */}
         {activeTab === 'setup' && (
-          <div className="p-3.5 sm:p-6 max-w-6xl mx-auto space-y-6">
-            {/* 4 Clean Weekly Tabs (Week 1, Week 2, Week 3, Week 4) */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
-              {weekTabs.map((w) => (
-                <button
-                  key={w.id}
-                  type="button"
-                  onClick={() => setActiveWeek(w.id)}
-                  className={`py-3 px-4 min-h-[44px] rounded-xl text-center border transition-all cursor-pointer ${
-                    activeWeek === w.id
-                      ? 'bg-brand-500/10 border-brand-500/40 text-brand-600 dark:text-brand-400 font-bold shadow-xs'
-                      : 'bg-white dark:bg-dark-card border-gray-200 dark:border-dark-border text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-50 dark:hover:bg-dark-200'
-                  }`}
-                >
-                  <span className="text-xs uppercase tracking-wider">{w.label}</span>
-                </button>
-              ))}
-            </div>
+          <div className="p-3.5 sm:p-6 max-w-7xl mx-auto space-y-6">
+            {/* 1. Polished Compact Week Stepper with Rename controls */}
+            <ClientWeekStepper
+              client={client}
+              activeWeekNum={currentWeekNum}
+              onSelectWeek={(wk) => setActiveWeek(`week${wk}` as WeekTab)}
+              weekNames={weekNames}
+              onRenameWeek={handleRenameWeek}
+              tasksByWeek={tasksByWeek}
+              currentUserProfile={currentUserProfile}
+            />
 
-            {/* Selected Week Task List Area */}
+            {/* 2. Week Action Bar & Kanban Board */}
             <div className="space-y-4">
               {/* Header Action Bar */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                    Week {currentWeekNum} Tasks ({tasks.length})
+                    Week {currentWeekNum}: {weekNames[currentWeekNum]} ({currentWeekTasks.length} {currentWeekTasks.length === 1 ? 'Task' : 'Tasks'})
                   </span>
                   {isLoadingTasks && <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-500" />}
                 </div>
@@ -306,46 +404,29 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                   ) : (
                     <button
                       type="button"
+                      aria-label="+ Add Task"
                       onClick={handleOpenCreateTaskFlow}
                       className="flex items-center gap-1.5 px-4 py-2 min-h-[44px] bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-xs font-bold shadow-md shadow-brand-500/25 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
                     >
                       <Plus className="w-4 h-4" />
-                      <span>+ Add Task</span>
+                      <span>Add Task</span>
                     </button>
                   )
                 )}
               </div>
 
-              {/* Tasks Content */}
-              {tasks.length > 0 ? (
-                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
-                  {tasks.map((task) => (
-                    <ClientTaskCard
-                      key={task.id}
-                      task={task}
-                      currentUserProfile={currentUserProfile}
-                      onSelectTask={(t) => setSelectedTaskDetails(t)}
-                      onOpenEditModal={(t) => setEditingTask(t)}
-                      onStatusChange={handleStatusChange}
-                    />
-                  ))}
-                </div>
-              ) : (
-                /* Clean Empty State when no tasks exist */
-                <div className="bg-white dark:bg-dark-card rounded-2xl border border-gray-200 dark:border-dark-border p-12 shadow-sm min-h-[240px] flex flex-col items-center justify-center text-center space-y-3">
-                  <div className="w-12 h-12 rounded-2xl bg-brand-500/10 text-brand-500 flex items-center justify-center border border-brand-500/20">
-                    <Layers className="w-6 h-6" />
-                  </div>
-                  <div>
-                    <h4 className="text-sm font-bold text-gray-800 dark:text-gray-200">
-                      No Operational Tasks in Week {currentWeekNum}
-                    </h4>
-                    <p className="text-xs text-gray-400 mt-1 max-w-sm">
-                      Create operational checklists and deliverables for Week {currentWeekNum} setup using the + Add Task button above.
-                    </p>
-                  </div>
-                </div>
-              )}
+              {/* Responsive 4-Column Kanban Task Board */}
+              <ClientKanbanBoard
+                client={client}
+                tasks={currentWeekTasks}
+                currentUserProfile={currentUserProfile}
+                onSelectTask={(t) => setSelectedTaskDetails(t)}
+                onOpenEditModal={(t) => setEditingTask(t)}
+                onOpenCreateTask={handleOpenCreateTaskFlow}
+                onStatusChange={handleKanbanStatusChange}
+                onToggleTimer={handleToggleTimer}
+                onShowToast={showToast}
+              />
             </div>
           </div>
         )}
@@ -422,7 +503,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
             onSuccess={() => {
               setIsApplyTemplateOpen(false);
               loadTasks();
-              showToast('Service template launched into Draft tasks.');
+              showToast('Service template launched into tasks.');
             }}
             client={client}
             initialWeek={modalWeekNumber}

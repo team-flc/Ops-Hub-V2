@@ -267,12 +267,10 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
 
               {/* Status Badge */}
               <span className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold ${
-                task.status === 'Completed'
+                task.status === 'Done' || task.status === 'Completed'
                   ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300'
-                  : task.status === 'Client Review'
-                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300'
-                  : task.status === 'Team Review'
-                  ? 'bg-blue-100 text-blue-800 dark:bg-blue-950/50 dark:text-blue-300'
+                  : task.status === 'Approval' || task.status === 'Team Review' || task.status === 'Client Review'
+                  ? 'bg-purple-100 text-purple-800 dark:bg-purple-950/50 dark:text-purple-300'
                   : task.status === 'Blocked'
                   ? 'bg-rose-100 text-rose-800 dark:bg-rose-950/50 dark:text-rose-300'
                   : task.status === 'In Progress'
@@ -331,6 +329,19 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
             <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl flex items-center gap-2.5 text-rose-600 dark:text-rose-400 font-semibold">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
               <span>{statusError}</span>
+            </div>
+          )}
+
+          {/* Feedback Alert if Returned */}
+          {task.feedback && task.status === 'In Progress' && (
+            <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-800 dark:text-amber-200 space-y-1">
+              <div className="flex items-center gap-2 font-bold text-amber-700 dark:text-amber-300">
+                <AlertTriangle className="w-4 h-4" />
+                <span>Management Revision Feedback</span>
+              </div>
+              <p className="text-xs pl-6">
+                {task.feedback}
+              </p>
             </div>
           )}
 
@@ -407,6 +418,35 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
                 <span>{formatDatetime(task.dueDate)}</span>
               </div>
             </div>
+
+            {/* Evidence URL */}
+            {task.evidenceUrl && (
+              <div className="sm:col-span-2 pt-2 border-t border-gray-200/50 dark:border-dark-border/50">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
+                  Evidence Deliverable URL
+                </span>
+                <a
+                  href={task.evidenceUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-purple-600 dark:text-purple-400 font-bold hover:underline flex items-center gap-1 truncate"
+                >
+                  <span>{task.evidenceUrl}</span>
+                </a>
+              </div>
+            )}
+
+            {/* Completion Notes */}
+            {task.completionNotes && (
+              <div className="sm:col-span-2 pt-2 border-t border-gray-200/50 dark:border-dark-border/50">
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
+                  Completion Notes
+                </span>
+                <p className="text-gray-700 dark:text-gray-300 whitespace-pre-wrap">
+                  {task.completionNotes}
+                </p>
+              </div>
+            )}
           </div>
 
           {/* Read-Only Legacy Context (task.details) */}

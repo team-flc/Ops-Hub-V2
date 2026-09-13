@@ -46,7 +46,7 @@ export const TaskReviewActions: React.FC<TaskReviewActionsProps> = ({
         {/* Assignee / Team Member Actions */}
         {isAssignedMember && !isClient && (
           <>
-            {task.status === 'Assigned' && (
+            {(task.status === 'Pending' || task.status === 'Assigned') && (
               <button
                 type="button"
                 disabled={disabled}
@@ -99,7 +99,7 @@ export const TaskReviewActions: React.FC<TaskReviewActionsProps> = ({
         {/* Management Actions (Owner & Manager) */}
         {isOwnerOrManager && (
           <>
-            {task.status === 'Team Review' && (
+            {(task.status === 'Approval' || task.status === 'Team Review') && (
               <>
                 <button
                   type="button"
@@ -167,7 +167,7 @@ export const TaskReviewActions: React.FC<TaskReviewActionsProps> = ({
               </>
             )}
 
-            {task.status === 'Completed' && (
+            {(task.status === 'Done' || task.status === 'Completed') && (
               <button
                 type="button"
                 disabled={disabled}
@@ -203,7 +203,7 @@ export const TaskReviewActions: React.FC<TaskReviewActionsProps> = ({
               className="flex items-center gap-1.5 px-3.5 py-2 min-h-[44px] cursor-pointer bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-bold shadow-sm transition-all disabled:opacity-50"
             >
               <CheckCircle2 className="w-3.5 h-3.5" />
-              <span>Approve Deliverables</span>
+              <span>Approve Deliverable</span>
             </button>
 
             <button

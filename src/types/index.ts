@@ -433,16 +433,34 @@ export interface ClientAuditEntry {
   createdAt: string;
 }
 
-// --- PHASE 3A & 3B: OPERATIONAL TASK MANAGEMENT & REVIEW TYPES ---
+// --- PHASE 3A & 3B & KANBAN: OPERATIONAL TASK MANAGEMENT & REVIEW TYPES ---
 export type ClientTaskPriority = 'Low' | 'Normal' | 'High' | 'Urgent';
 export type ClientTaskStatus =
+  | 'Pending'
+  | 'In Progress'
+  | 'Approval'
+  | 'Done'
   | 'Draft'
   | 'Assigned'
-  | 'In Progress'
   | 'Blocked'
   | 'Team Review'
   | 'Client Review'
   | 'Completed';
+
+export interface ClientWeek {
+  clientId: string;
+  weekNumber: 1 | 2 | 3 | 4;
+  name: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export const DEFAULT_WEEK_NAMES: Record<1 | 2 | 3 | 4, string> = {
+  1: 'Social Media Optimization',
+  2: 'LinkedIn Optimization',
+  3: 'Funnel Setup',
+  4: 'Paid Ads Setup'
+};
 
 export type TaskApprovalMode = 'Internal Only' | 'Client Approval Required';
 export type TaskMessageVisibility = 'internal_note' | 'shared_with_client';
@@ -499,6 +517,11 @@ export interface ClientTask {
   reopenedByName?: string | null;
   reopenReason?: string | null;
   blockedReason?: string | null;
+  timeSpentSeconds?: number;
+  timerStartedAt?: string | null;
+  evidenceUrl?: string | null;
+  completionNotes?: string | null;
+  feedback?: string | null;
   sortOrder: number;
   createdBy?: string | null;
   createdByName?: string | null;

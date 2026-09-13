@@ -151,8 +151,8 @@ export function validateMessageLinks(links: any[]): { valid: boolean; error?: st
 
 export function isTaskOverdue(task: { dueDate?: string | null; status: ClientTaskStatus; archivedAt?: string | null }): boolean {
   if (task.archivedAt) return false;
-  if (task.status === 'Team Review' || task.status === 'Client Review' || task.status === 'Completed') return false;
-  if (!['Draft', 'Assigned', 'In Progress', 'Blocked'].includes(task.status)) return false;
+  if (['Approval', 'Done', 'Team Review', 'Client Review', 'Completed'].includes(task.status)) return false;
+  if (!['Pending', 'Draft', 'Assigned', 'In Progress', 'Blocked'].includes(task.status)) return false;
   if (!task.dueDate) return false;
 
   const due = new Date(task.dueDate).getTime();
@@ -350,7 +350,8 @@ export const taskManagementService = {
         id, client_id, week_number, title, details, department_id,
         assignee_id, priority, planned_start, due_date, status,
         approval_mode, completed_at, completed_by, reopened_at, reopened_by, reopen_reason,
-        blocked_reason, sort_order, created_by, created_at,
+        blocked_reason, time_spent_seconds, timer_started_at, evidence_url, completion_notes, feedback,
+        sort_order, created_by, created_at,
         updated_by, updated_at, archived_at, archived_by, archive_reason,
         source_template_id, source_template_version,
         plan_id, plan_week, occurrence_id, launch_batch_id,
@@ -378,7 +379,7 @@ export const taskManagementService = {
       error = res.error;
 
       // Graceful fallback if source_template or plan columns do not exist in database yet (e.g. on un-migrated preview)
-      if (error && (error.message?.includes('source_template') || error.message?.includes('plan_') || error.code === 'PGRST204')) {
+      if (error && (error.message?.includes('source_template') || error.message?.includes('plan_') || error.message?.includes('time_spent_seconds') || error.code === 'PGRST204')) {
         const fallbackFields = `
           id, client_id, week_number, title, details, department_id,
           assignee_id, priority, planned_start, due_date, status,
@@ -445,6 +446,11 @@ export const taskManagementService = {
           reopenedBy: row.reopened_by || null,
           reopenReason: row.reopen_reason || null,
           blockedReason: row.blocked_reason,
+          timeSpentSeconds: row.time_spent_seconds || 0,
+          timerStartedAt: row.timer_started_at || null,
+          evidenceUrl: row.evidence_url || null,
+          completionNotes: row.completion_notes || null,
+          feedback: row.feedback || null,
           sortOrder: row.sort_order || 0,
           createdBy: row.created_by,
           createdByName: row.creator?.full_name || null,
@@ -996,6 +1002,239 @@ export const taskManagementService = {
       return { error: 'A reason is mandatory to reopen a completed task.' };
     }
     return this.updateStatus(taskId, 'In Progress', reason.trim(), currentStatus, options);
+  },
+
+  /**
+   * Fetch week names for a client
+   */
+  async fetchClientWeeks(clientId: string): Promise<{ data: Record<1 | 2 | 3 | 4, string>; error: string | null }> {
+    const defaultMap: Record<1 | 2 | 3 | 4, string> = {
+      1: 'Social Media Optimization',
+      2: 'LinkedIn Optimization',
+      3: 'Funnel Setup',
+      4: 'Paid Ads Setup'
+    };
+
+    if (!isSupabaseConfigured || !supabase || !clientId) {
+      return { data: defaultMap, error: null };
+    }
+
+    try {
+      const { data, error } = await supabase
+        .from('client_weeks')
+        .select('week_number, name')
+        .eq('client_id', clientId);
+
+      if (error) {
+        return { data: defaultMap, error: null };
+      }
+
+      if (data && data.length > 0) {
+        data.forEach((row: any) => {
+          if (row.week_number >= 1 && row.week_number <= 4 && row.name) {
+            defaultMap[row.week_number as 1 | 2 | 3 | 4] = row.name;
+          }
+        });
+      }
+
+      return { data: defaultMap, error: null };
+    } catch {
+      return { data: defaultMap, error: null };
+    }
+  },
+
+  /**
+   * Rename a specific week for a client (restricted to Owner & Operational Manager)
+   */
+  async renameClientWeek(
+    clientId: string,
+    weekNumber: 1 | 2 | 3 | 4,
+    name: string
+  ): Promise<{ error: string | null }> {
+    if (!name || !name.trim()) {
+      return { error: 'Week name cannot be empty.' };
+    }
+    const trimmedName = name.trim().slice(0, 100);
+
+    if (!isSupabaseConfigured || !supabase) {
+      return { error: 'Supabase client not initialized' };
+    }
+
+    try {
+      const { error } = await supabase
+        .from('client_weeks')
+        .upsert(
+          {
+            client_id: clientId,
+            week_number: weekNumber,
+            name: trimmedName,
+            updated_at: new Date().toISOString()
+          },
+          { onConflict: 'client_id,week_number' }
+        );
+
+      if (error) {
+        return { error: error.message };
+      }
+
+      return { error: null };
+    } catch (err: any) {
+      return { error: err?.message || 'Failed to rename week.' };
+    }
+  },
+
+  /**
+   * Start task timer
+   */
+  async startTimer(taskId: string): Promise<{ error: string | null; task?: ClientTask }> {
+    if (!isSupabaseConfigured || !supabase || !taskId) {
+      return { error: 'Supabase client not initialized' };
+    }
+
+    try {
+      const nowIso = new Date().toISOString();
+      const { data, error } = await supabase
+        .from('client_tasks')
+        .update({
+          timer_started_at: nowIso,
+          updated_at: nowIso
+        })
+        .eq('id', taskId)
+        .select()
+        .single();
+
+      if (error) {
+        return { error: error.message };
+      }
+
+      return { error: null, task: data ? (data as any) : undefined };
+    } catch (err: any) {
+      return { error: err?.message || 'Failed to start timer.' };
+    }
+  },
+
+  /**
+   * Stop / pause task timer (computes elapsed time and persists)
+   */
+  async stopTimer(
+    taskId: string,
+    currentTimerStartedAt?: string | null,
+    currentTimeSpent = 0
+  ): Promise<{ error: string | null; task?: ClientTask; elapsedSecs?: number }> {
+    if (!isSupabaseConfigured || !supabase || !taskId) {
+      return { error: 'Supabase client not initialized' };
+    }
+
+    try {
+      let additionalSeconds = 0;
+      if (currentTimerStartedAt) {
+        const startMs = new Date(currentTimerStartedAt).getTime();
+        if (!isNaN(startMs)) {
+          additionalSeconds = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+        }
+      }
+      const totalSeconds = (currentTimeSpent || 0) + additionalSeconds;
+      const nowIso = new Date().toISOString();
+
+      const { data, error } = await supabase
+        .from('client_tasks')
+        .update({
+          timer_started_at: null,
+          time_spent_seconds: totalSeconds,
+          updated_at: nowIso
+        })
+        .eq('id', taskId)
+        .select()
+        .single();
+
+      if (error) {
+        return { error: error.message };
+      }
+
+      return { error: null, task: data ? (data as any) : undefined, elapsedSecs: totalSeconds };
+    } catch (err: any) {
+      return { error: err?.message || 'Failed to stop timer.' };
+    }
+  },
+
+  /**
+   * Update task Kanban status, handling timer stoppage, evidence, notes, and feedback
+   */
+  async updateKanbanStatus(
+    taskId: string,
+    targetStatus: ClientTaskStatus,
+    options?: {
+      reason?: string;
+      feedback?: string;
+      evidenceUrl?: string;
+      completionNotes?: string;
+      timerStartedAt?: string | null;
+      timeSpentSeconds?: number;
+      currentStatus?: ClientTaskStatus;
+    }
+  ): Promise<{ error: string | null; task?: ClientTask }> {
+    if (!isSupabaseConfigured || !supabase || !taskId) {
+      return { error: 'Supabase client not initialized' };
+    }
+
+    try {
+      const nowIso = new Date().toISOString();
+      const updates: Record<string, any> = {
+        status: targetStatus,
+        updated_at: nowIso
+      };
+
+      // If moving to Approval, automatically stop timer
+      if (targetStatus === 'Approval' || targetStatus === 'Team Review') {
+        let totalSeconds = options?.timeSpentSeconds || 0;
+        if (options?.timerStartedAt) {
+          const startMs = new Date(options.timerStartedAt).getTime();
+          if (!isNaN(startMs)) {
+            totalSeconds += Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+          }
+        }
+        updates.timer_started_at = null;
+        updates.time_spent_seconds = totalSeconds;
+        if (options?.evidenceUrl !== undefined) {
+          updates.evidence_url = options.evidenceUrl;
+        }
+        if (options?.completionNotes !== undefined) {
+          updates.completion_notes = options.completionNotes;
+        }
+      }
+
+      // If moving to Done
+      if (targetStatus === 'Done' || targetStatus === 'Completed') {
+        updates.completed_at = nowIso;
+        updates.timer_started_at = null;
+      }
+
+      // If returning to In Progress with feedback
+      if (targetStatus === 'In Progress' && options?.feedback) {
+        updates.feedback = options.feedback.trim();
+      }
+
+      if (options?.reason) {
+        updates.blocked_reason = options.reason;
+      }
+
+      const { data, error } = await supabase
+        .from('client_tasks')
+        .update(updates)
+        .eq('id', taskId)
+        .select()
+        .single();
+
+      if (error) {
+        // Fallback to updateStatus edge function if direct RLS returns error or for full audit trail
+        const edgeRes = await this.updateStatus(taskId, targetStatus, options?.feedback || options?.reason, options?.currentStatus);
+        return edgeRes;
+      }
+
+      return { error: null, task: data ? (data as any) : undefined };
+    } catch (err: any) {
+      return { error: err?.message || 'Failed to update Kanban status.' };
+    }
   },
 
   /**

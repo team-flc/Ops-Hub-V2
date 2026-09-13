@@ -364,7 +364,7 @@ serve(async (req: Request) => {
         }
       }
 
-      const initialStatus = assignee_id ? 'Assigned' : 'Draft';
+      const initialStatus = 'Pending';
 
       const { data: newTask, error: insertError } = await supabaseAdmin
         .from('client_tasks')
@@ -624,7 +624,10 @@ serve(async (req: Request) => {
         return new Response(JSON.stringify({ error: 'Missing task_id or target status.' }), { status: 400, headers: corsHeaders });
       }
 
-      const validStatuses = ['Draft', 'Assigned', 'In Progress', 'Blocked', 'Team Review', 'Client Review', 'Completed'];
+      const validStatuses = [
+        'Pending', 'In Progress', 'Approval', 'Done',
+        'Draft', 'Assigned', 'Blocked', 'Team Review', 'Client Review', 'Completed'
+      ];
       if (!validStatuses.includes(targetStatus)) {
         return new Response(JSON.stringify({ error: 'Invalid target status.' }), { status: 400, headers: corsHeaders });
       }
@@ -705,10 +708,10 @@ serve(async (req: Request) => {
         if (callerProfile.organization_id !== existingTask.client_id) {
           return new Response(JSON.stringify({ error: 'Forbidden: Access to this client is not permitted.' }), { status: 403, headers: corsHeaders });
         }
-        if (current !== 'Client Review') {
-          return new Response(JSON.stringify({ error: 'Clients can only review tasks in Client Review status.' }), { status: 403, headers: corsHeaders });
+        if (current !== 'Client Review' && current !== 'Approval') {
+          return new Response(JSON.stringify({ error: 'Clients can only review tasks in review status.' }), { status: 403, headers: corsHeaders });
         }
-        if (targetStatus === 'Completed') {
+        if (targetStatus === 'Completed' || targetStatus === 'Done') {
           eventType = 'client_approved';
           completedAtValue = new Date().toISOString();
           completedByValue = callerProfile.id;
@@ -727,6 +730,10 @@ serve(async (req: Request) => {
           return new Response(JSON.stringify({ error: 'Forbidden: Team members may only update their own assigned tasks.' }), { status: 403, headers: corsHeaders });
         }
 
+        if (targetStatus === 'Done' || targetStatus === 'Completed') {
+          return new Response(JSON.stringify({ error: 'Forbidden: Only management can approve tasks to Done.' }), { status: 403, headers: corsHeaders });
+        }
+
         if (targetStatus === 'Blocked') {
           if (current !== 'In Progress') {
             return new Response(JSON.stringify({ error: 'Only In Progress tasks can be marked as Blocked.' }), { status: 400, headers: corsHeaders });
@@ -740,19 +747,29 @@ serve(async (req: Request) => {
         } else if (current === 'Blocked' && targetStatus === 'In Progress') {
           eventType = 'unblocked';
           blockedReasonValue = null;
-        } else if (targetStatus === 'Team Review') {
-          if (current !== 'In Progress') {
-            return new Response(JSON.stringify({ error: 'Only In Progress tasks can be submitted for Team Review.' }), { status: 400, headers: corsHeaders });
+        } else if (targetStatus === 'Approval' || targetStatus === 'Team Review') {
+          if (current !== 'In Progress' && current !== 'Pending' && current !== 'Assigned') {
+            return new Response(JSON.stringify({ error: 'Only In Progress tasks can be submitted for Approval.' }), { status: 400, headers: corsHeaders });
           }
           eventType = 'submitted_for_review';
-        } else if (current === 'Assigned' && targetStatus === 'In Progress') {
+        } else if ((current === 'Pending' || current === 'Assigned' || current === 'Draft') && targetStatus === 'In Progress') {
           eventType = 'status_changed';
         } else {
           return new Response(JSON.stringify({ error: 'Forbidden: Unauthorized transition for team member.' }), { status: 403, headers: corsHeaders });
         }
       } else if (canManage) {
         // Operational Manager or Owner
-        if (targetStatus === 'Blocked') {
+        if (targetStatus === 'Done' || targetStatus === 'Completed') {
+          eventType = 'completed';
+          completedAtValue = new Date().toISOString();
+          completedByValue = callerProfile.id;
+        } else if (targetStatus === 'In Progress' && (current === 'Approval' || current === 'Team Review' || current === 'Client Review')) {
+          if (!reason || !reason.trim()) {
+            return new Response(JSON.stringify({ error: 'Returning a task to In Progress requires feedback.' }), { status: 400, headers: corsHeaders });
+          }
+          eventType = 'review_returned';
+          finalEventNotes = reason.trim();
+        } else if (targetStatus === 'Blocked') {
           if (!reason || !reason.trim()) {
             return new Response(JSON.stringify({ error: 'Blocked status requires a non-empty reason.' }), { status: 400, headers: corsHeaders });
           }
@@ -762,68 +779,9 @@ serve(async (req: Request) => {
         } else if (current === 'Blocked' && targetStatus === 'In Progress') {
           eventType = 'unblocked';
           blockedReasonValue = null;
-        } else if (targetStatus === 'Team Review') {
+        } else if (targetStatus === 'Approval' || targetStatus === 'Team Review' || targetStatus === 'Client Review') {
           eventType = 'submitted_for_review';
-        } else if (current === 'Team Review' && targetStatus === 'In Progress') {
-          if (!reason || !reason.trim()) {
-            return new Response(JSON.stringify({ error: 'Returning a Team Review task to In Progress requires a reason.' }), { status: 400, headers: corsHeaders });
-          }
-          eventType = 'review_returned';
-          finalEventNotes = reason.trim();
-        } else if (current === 'Team Review' && targetStatus === 'Completed') {
-          if (existingTask.approval_mode === 'Client Approval Required') {
-            return new Response(
-              JSON.stringify({ error: 'This task requires Client Approval and must be submitted for Client Review first.' }),
-              { status: 400, headers: corsHeaders }
-            );
-          }
-          eventType = 'completed';
-          completedAtValue = new Date().toISOString();
-          completedByValue = callerProfile.id;
-        } else if (current === 'Team Review' && targetStatus === 'Client Review') {
-          if (existingTask.approval_mode !== 'Client Approval Required') {
-            return new Response(
-              JSON.stringify({ error: 'This task is Internal Only and cannot be moved to Client Review.' }),
-              { status: 400, headers: corsHeaders }
-            );
-          }
-          eventType = 'client_review_submitted';
-        } else if (current === 'Client Review' && targetStatus === 'Completed') {
-          // Operational Manager CANNOT approve Client Approval Required tasks on behalf of the client
-          if (callerProfile.role === 'operational_manager') {
-            return new Response(
-              JSON.stringify({ error: 'Forbidden: Operational Managers cannot approve Client Approval Required tasks on behalf of the client.' }),
-              { status: 403, headers: corsHeaders }
-            );
-          }
-
-          // Owner override is allowed only with explicit override flag and mandatory reason
-          if (callerProfile.role === 'owner') {
-            const isOverride = body.is_override === true || body.override === true;
-            const overrideReason = (body.override_reason || reason || '').trim();
-            if (!isOverride || !overrideReason) {
-              return new Response(
-                JSON.stringify({ error: 'Owner override requires explicit is_override: true and a mandatory override_reason.' }),
-                { status: 400, headers: corsHeaders }
-              );
-            }
-            eventType = 'client_approval_override';
-            completedAtValue = new Date().toISOString();
-            completedByValue = callerProfile.id;
-            finalEventNotes = overrideReason;
-          } else {
-            return new Response(
-              JSON.stringify({ error: 'Forbidden: Only mapped client or authorized owner override can approve.' }),
-              { status: 403, headers: corsHeaders }
-            );
-          }
-        } else if (current === 'Client Review' && targetStatus === 'In Progress') {
-          if (!reason || !reason.trim()) {
-            return new Response(JSON.stringify({ error: 'A mandatory reason is required when returning a Client Review task to In Progress.' }), { status: 400, headers: corsHeaders });
-          }
-          eventType = 'changes_requested';
-          finalEventNotes = reason.trim();
-        } else if (current === 'Completed' && targetStatus === 'In Progress') {
+        } else if ((current === 'Done' || current === 'Completed') && targetStatus === 'In Progress') {
           if (!reason || !reason.trim()) {
             return new Response(JSON.stringify({ error: 'A mandatory reason is required to reopen a completed task.' }), { status: 400, headers: corsHeaders });
           }
@@ -834,7 +792,7 @@ serve(async (req: Request) => {
           reopenedByValue = callerProfile.id;
           reopenReasonValue = reason.trim();
           finalEventNotes = reason.trim();
-        } else if (targetStatus === 'In Progress') {
+        } else if (targetStatus === 'In Progress' || targetStatus === 'Pending' || targetStatus === 'Draft' || targetStatus === 'Assigned') {
           eventType = 'status_changed';
         } else {
           return new Response(JSON.stringify({ error: 'Invalid or unsupported status transition.' }), { status: 400, headers: corsHeaders });
