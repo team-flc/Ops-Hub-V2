@@ -48,6 +48,10 @@ jobs:
             exit 1
           }
           echo "## ✅ Supabase Stack Started" >> $GITHUB_STEP_SUMMARY
+          echo "### Safe Ephemeral Stack Status" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          supabase status | sed -E 's/(anon key|service_role key|secret):.*/\1: [REDACTED]/' | tee -a $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
 
       - name: Reset Database & Apply Ephemeral Schema
         run: |
@@ -67,14 +71,27 @@ jobs:
 
       - name: Run Ephemeral Database Behavioral Security Tests (pgTAP)
         run: |
-          supabase test db 2>&1 | tee /tmp/pgtap.log || {
+          supabase test db --debug 2>&1 | tee /tmp/pgtap.log || {
             echo "## ❌ pgTAP Security Tests Failed" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
             cat /tmp/pgtap.log >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
             exit 1
           }
-          echo "## ✅ pgTAP Security Tests Passed" >> $GITHUB_STEP_SUMMARY
+          # Validate pgtap log contains file name, expected 41 test count, and Result: PASS
+          if ! grep -q "database_security.sql" /tmp/pgtap.log; then
+            echo "❌ pgTAP log missing database_security.sql execution proof"
+            exit 1
+          fi
+          if ! grep -q "1..41" /tmp/pgtap.log && ! grep -q "ok 41" /tmp/pgtap.log && ! grep -q "41/41" /tmp/pgtap.log; then
+            echo "❌ pgTAP log missing expected 41 test assertions proof"
+            exit 1
+          fi
+          if ! grep -q "Result: PASS" /tmp/pgtap.log; then
+            echo "❌ pgTAP log missing Result: PASS proof"
+            exit 1
+          fi
+          echo "## ✅ pgTAP Security Tests Passed (41 Assertions Proven)" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           cat /tmp/pgtap.log >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY

@@ -14,11 +14,11 @@ import { ClientManagementView, ClientLogoAvatar } from '../src/components/views/
 import { SettingsLayout } from '../src/components/settings/SettingsLayout';
 import { Header } from '../src/components/layout/Header';
 import { useOpsStore } from '../src/store/opsStore';
-import {
+import { 
   clientManagementService,
-  sanitizeUrl,
-  isValidLinkedInUrl,
-  calculateLinkedInReadiness
+  sanitizeUrl, 
+  isValidLinkedInUrl, 
+  calculateLinkedInReadiness 
 } from '../src/lib/clientManagementService';
 import { ClientRecord, UserProfile, ClientLinkedInProfile } from '../src/types';
 

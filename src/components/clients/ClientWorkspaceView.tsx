@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Calendar, Info, Plus, Sparkles, Loader2, Layers, AlertTriangle } from 'lucide-react';
-import {
-  ClientRecord,
-  ClientTask,
-  ClientTaskStatus,
-  Department,
-  UserProfile
+import { 
+  ClientRecord, 
+  ClientTask, 
+  ClientTaskStatus, 
+  Department, 
+  UserProfile 
 } from '../../types';
 import { SelectedClientHeader } from './SelectedClientHeader';
 import { ClientDetailsTab } from './ClientDetailsTab';
@@ -296,7 +296,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
 
                 {isOwnerOrManager && (
                   client.status === 'Paused' ? (
-                    <span
+                    <span 
                       className="px-3.5 py-2 min-h-[44px] rounded-xl bg-gray-100 dark:bg-dark-200 border border-gray-300 dark:border-dark-border text-gray-500 dark:text-gray-400 text-xs font-bold flex items-center gap-1.5 opacity-80 cursor-not-allowed"
                       title="Task creation is blocked while client organization is paused."
                     >

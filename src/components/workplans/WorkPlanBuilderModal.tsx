@@ -1,27 +1,27 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import {
-  X, Calendar, Layers, Plus, Trash2,
-  Copy, Check, AlertCircle, AlertTriangle, Loader2, Clock,
+import { 
+  X, Calendar, Layers, Plus, Trash2, 
+  Copy, Check, AlertCircle, AlertTriangle, Loader2, Clock, 
   ShieldAlert, Eye
 } from 'lucide-react';
-import {
-  ClientRecord,
-  ClientWorkPlan,
-  WorkPlanWeek,
-  WorkPlanOccurrence,
-  ServiceTemplate,
-  ServiceTemplateTask,
-  Department,
-  ClientTaskPriority
+import { 
+  ClientRecord, 
+  ClientWorkPlan, 
+  WorkPlanWeek, 
+  WorkPlanOccurrence, 
+  ServiceTemplate, 
+  ServiceTemplateTask, 
+  Department, 
+  ClientTaskPriority 
 } from '../../types';
 import { serviceTemplateService } from '../../lib/serviceTemplateService';
 import { workPlanService } from '../../lib/workPlanService';
-import {
-  compute90DayPlanRange,
-  generate13PlanWeeks,
-  calculateTaskDatesForWeek,
-  formatPlanDate
+import { 
+  compute90DayPlanRange, 
+  generate13PlanWeeks, 
+  calculateTaskDatesForWeek, 
+  formatPlanDate 
 } from '../../lib/workPlanCalendar';
 
 interface WorkPlanBuilderModalProps {
@@ -487,7 +487,7 @@ export const WorkPlanBuilderModal: React.FC<WorkPlanBuilderModalProps> = ({
 
   const modalContent = (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4 bg-slate-900/60 backdrop-blur-sm animate-fade-in">
-      <div
+      <div 
         role="dialog"
         aria-modal="true"
         aria-labelledby="work-plan-modal-title"
@@ -730,7 +730,7 @@ export const WorkPlanBuilderModal: React.FC<WorkPlanBuilderModalProps> = ({
 
                   {/* Render Occurrences in Week */}
                   {currentWeek.occurrences.map((occ) => (
-                    <div
+                    <div 
                       key={occ.occurrenceId}
                       className="p-4 rounded-2xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border space-y-3"
                     >
@@ -794,7 +794,7 @@ export const WorkPlanBuilderModal: React.FC<WorkPlanBuilderModalProps> = ({
                             durationBusinessDays: t.durationBusinessDays
                           });
                           return (
-                            <div
+                            <div 
                               key={t.definitionId || tIdx}
                               className="p-2.5 rounded-xl bg-white dark:bg-dark-200 border border-slate-200 dark:border-dark-border flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs"
                             >
@@ -839,7 +839,7 @@ export const WorkPlanBuilderModal: React.FC<WorkPlanBuilderModalProps> = ({
                       </h4>
                       <div className="space-y-2">
                         {currentWeek.customTasks.map((t, tIdx) => (
-                          <div
+                          <div 
                             key={t.definitionId || tIdx}
                             className="p-3 rounded-xl bg-white dark:bg-dark-200 border border-slate-200 dark:border-dark-border space-y-2"
                           >

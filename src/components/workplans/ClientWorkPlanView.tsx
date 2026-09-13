@@ -6,9 +6,9 @@
 // ==============================================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
-import {
-  Calendar, Plus, Clock, CheckCircle2,
-  AlertCircle, Edit3, Trash2,
+import { 
+  Calendar, Plus, Clock, CheckCircle2, 
+  AlertCircle, Edit3, Trash2, 
   Rocket, Loader2
 } from 'lucide-react';
 import { ClientRecord, ClientWorkPlan, Department, UserProfile } from '../../types';
@@ -213,7 +213,7 @@ export const ClientWorkPlanView: React.FC<ClientWorkPlanViewProps> = ({
                       <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">
                         {plan.name}
                       </h3>
-
+                      
                       {/* Status Badge */}
                       <span
                         className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border ${
