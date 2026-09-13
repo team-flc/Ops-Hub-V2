@@ -191,6 +191,7 @@ export interface TeamMemberRecord {
   fullName: string;
   workEmail: string;
   phone?: string | null;
+  avatarUrl?: string | null;
   role: UserRole;
   status: AccountStatus;
   designationId?: string | null;

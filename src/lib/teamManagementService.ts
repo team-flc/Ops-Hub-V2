@@ -73,7 +73,7 @@ export const teamManagementService = {
       let query = supabase
         .from('profiles')
         .select(`
-          id, full_name, work_email, phone, role, status,
+          id, full_name, work_email, phone, role, status, avatar_url,
           designation_id, reporting_manager_id, start_date,
           suspended_at, suspended_by, created_at, updated_at
         `);
@@ -153,6 +153,7 @@ export const teamManagementService = {
           fullName: p.full_name,
           workEmail: p.work_email || '',
           phone: p.phone,
+          avatarUrl: p.avatar_url || null,
           role: p.role,
           status: p.status,
           designationId: p.designation_id,

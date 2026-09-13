@@ -55,7 +55,12 @@ export const MyProfileView: React.FC = () => {
     .substring(0, 2)
     .toUpperCase() || 'FL';
 
+  const [imageError, setImageError] = useState(false);
   const displayAvatarUrl = useSignedUrl('profile-avatars', avatarUrl);
+
+  useEffect(() => {
+    setImageError(false);
+  }, [avatarUrl, displayAvatarUrl]);
 
   const handleAvatarFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -131,10 +136,11 @@ export const MyProfileView: React.FC = () => {
       <div className="bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-3xl p-6 md:p-8 shadow-sm flex flex-col md:flex-row items-center md:items-start gap-6">
         {/* Avatar Upload Container */}
         <div className="relative group">
-          {displayAvatarUrl ? (
+          {displayAvatarUrl && !imageError ? (
             <img
               src={displayAvatarUrl}
               alt={displayName}
+              onError={() => setImageError(true)}
               className="w-24 h-24 md:w-28 md:h-28 rounded-3xl object-cover border-2 border-brand-500/30 shadow-md"
             />
           ) : (

@@ -12,6 +12,7 @@ import {
   UserProfile 
 } from '../../types';
 import { teamManagementService } from '../../lib/teamManagementService';
+import { useSignedUrl } from '../../lib/storageService';
 
 import { CreateTeamMemberModal } from '../team/CreateTeamMemberModal';
 import { EditTeamMemberModal } from '../team/EditTeamMemberModal';
@@ -19,6 +20,38 @@ import { ResetPasswordModal } from '../team/ResetPasswordModal';
 import { DesignationManagerModal } from '../team/DesignationManagerModal';
 import { SuspendUserModal } from '../team/SuspendUserModal';
 import { ArchiveTeamMemberModal } from '../team/ArchiveTeamMemberModal';
+
+const TeamMemberAvatar: React.FC<{ avatarUrl?: string | null; name: string }> = ({ avatarUrl, name }) => {
+  const [imageError, setImageError] = useState(false);
+  const displayUrl = useSignedUrl('profile-avatars', avatarUrl);
+  const initials = name
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .substring(0, 2)
+    .toUpperCase() || 'FL';
+
+  useEffect(() => {
+    setImageError(false);
+  }, [avatarUrl, displayUrl]);
+
+  if (displayUrl && !imageError) {
+    return (
+      <img
+        src={displayUrl}
+        alt={name}
+        onError={() => setImageError(true)}
+        className="w-8 h-8 rounded-xl object-cover border border-slate-200 dark:border-dark-border flex-shrink-0 shadow-sm"
+      />
+    );
+  }
+
+  return (
+    <div className="w-8 h-8 rounded-xl bg-brand-50 border border-brand-200 text-brand-600 font-bold text-xs flex items-center justify-center flex-shrink-0">
+      {initials}
+    </div>
+  );
+};
 
 export const TeamManagementView: React.FC = () => {
   const { profile: currentUserProfile } = useAuth();
@@ -314,9 +347,7 @@ export const TeamManagementView: React.FC = () => {
                       {/* Name & Work Email */}
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="w-8 h-8 rounded-xl bg-brand-50 border border-brand-200 text-brand-600 font-bold text-xs flex items-center justify-center flex-shrink-0">
-                            {initials}
-                          </div>
+                          <TeamMemberAvatar avatarUrl={member.avatarUrl} name={member.fullName} />
                           <div>
                             <div className="flex items-center gap-2">
                               <span className="font-bold text-slate-900 dark:text-gray-100">{member.fullName}</span>

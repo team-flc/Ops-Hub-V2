@@ -38,7 +38,33 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, full_name, role, status, organization_id, created_at, updated_at')
+        .select(`
+          id,
+          full_name,
+          work_email,
+          phone,
+          backup_phone,
+          bio,
+          avatar_url,
+          linkedin_url,
+          facebook_url,
+          instagram_url,
+          contact_email,
+          role,
+          status,
+          designation_id,
+          reporting_manager_id,
+          start_date,
+          suspended_at,
+          suspended_by,
+          archived_at,
+          archived_by,
+          archive_reason,
+          previous_status,
+          organization_id,
+          created_at,
+          updated_at
+        `)
         .eq('id', userId)
         .maybeSingle();
 
@@ -63,10 +89,28 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
       const userProf: UserProfile = {
         id: data.id,
-        email: userEmail,
+        email: userEmail || data.work_email,
+        workEmail: data.work_email,
         fullName: data.full_name || 'Ops User',
+        phone: data.phone,
+        backupPhone: data.backup_phone,
+        bio: data.bio,
+        avatarUrl: data.avatar_url || null,
+        linkedinUrl: data.linkedin_url,
+        facebookUrl: data.facebook_url,
+        instagramUrl: data.instagram_url,
+        contactEmail: data.contact_email,
         role,
         status,
+        designationId: data.designation_id,
+        reportingManagerId: data.reporting_manager_id,
+        startDate: data.start_date,
+        suspendedAt: data.suspended_at,
+        suspendedBy: data.suspended_by,
+        archivedAt: data.archived_at,
+        archivedBy: data.archived_by,
+        archiveReason: data.archive_reason,
+        previousStatus: data.previous_status,
         organizationId: data.organization_id || null,
         createdAt: data.created_at || new Date().toISOString(),
         updatedAt: data.updated_at || new Date().toISOString()
@@ -85,8 +129,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         currentUser: {
           id: prof.id,
           name: prof.fullName,
-          email: prof.email || '',
-          avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80',
+          email: prof.email || prof.workEmail || '',
+          avatar: prof.avatarUrl || '',
           role: prof.role === 'owner' ? 'Ops Director' : prof.role === 'operational_manager' ? 'Operations Lead' : 'Ops Specialist',
           department: 'Faseeh Lall & Co. Operations',
           status: 'online',

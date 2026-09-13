@@ -120,7 +120,12 @@ export const storageService = {
       return path;
     }
 
-    const cacheKey = `${bucket}:${path}`;
+    // Clean leading bucket name or slashes if passed as "profile-avatars/avatars/..."
+    const cleanPath = path
+      .replace(new RegExp(`^/?${bucket}/`), '')
+      .replace(/^\/+/, '');
+
+    const cacheKey = `${bucket}:${cleanPath}`;
     const cached = signedUrlCache.get(cacheKey);
     const now = Date.now();
 
@@ -132,18 +137,26 @@ export const storageService = {
     try {
       const { data, error } = await supabase.storage
         .from(bucket)
-        .createSignedUrl(path, 3600);
+        .createSignedUrl(cleanPath, 3600);
 
-      if (error || !data?.signedUrl) {
-        return null;
+      if (data?.signedUrl) {
+        signedUrlCache.set(cacheKey, {
+          url: data.signedUrl,
+          expiresAt: now + 3600 * 1000
+        });
+        return data.signedUrl;
       }
 
-      signedUrlCache.set(cacheKey, {
-        url: data.signedUrl,
-        expiresAt: now + 3600 * 1000
-      });
+      // Fallback: Check public URL if bucket is public
+      const { data: publicData } = supabase.storage
+        .from(bucket)
+        .getPublicUrl(cleanPath);
 
-      return data.signedUrl;
+      if (publicData?.publicUrl) {
+        return publicData.publicUrl;
+      }
+
+      return null;
     } catch {
       return null;
     }

@@ -4,6 +4,7 @@ import {
   Edit3, AlertTriangle, MessageSquare, Check, User, Timer
 } from 'lucide-react';
 import { ClientTask, ClientTaskStatus, UserProfile } from '../../types';
+import { useSignedUrl } from '../../lib/storageService';
 
 interface ClientKanbanCardProps {
   task: ClientTask;
@@ -18,6 +19,32 @@ interface ClientKanbanCardProps {
   onRequestFeedback: (task: ClientTask) => void;
   isDragging?: boolean;
 }
+
+const AssigneeAvatar: React.FC<{ avatarPath?: string | null; name?: string | null }> = ({ avatarPath, name }) => {
+  const [imageError, setImageError] = useState(false);
+  const displayUrl = useSignedUrl('profile-avatars', avatarPath);
+
+  useEffect(() => {
+    setImageError(false);
+  }, [avatarPath, displayUrl]);
+
+  if (displayUrl && !imageError) {
+    return (
+      <img
+        src={displayUrl}
+        alt={name || 'User'}
+        onError={() => setImageError(true)}
+        className="w-4 h-4 rounded-full object-cover flex-shrink-0"
+      />
+    );
+  }
+
+  return (
+    <div className="w-4 h-4 rounded-full bg-brand-500/10 text-brand-600 dark:text-brand-400 flex items-center justify-center font-bold text-[8px] flex-shrink-0">
+      {name ? name[0].toUpperCase() : <User className="w-2.5 h-2.5" />}
+    </div>
+  );
+};
 
 function formatDuration(secs: number): string {
   const h = Math.floor(secs / 3600);
@@ -269,17 +296,7 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
         {/* Assignee & Due Date */}
         <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 min-w-0">
           <div className="flex items-center gap-1.5 truncate">
-            {task.assigneeAvatar ? (
-              <img
-                src={task.assigneeAvatar}
-                alt={task.assigneeName || 'User'}
-                className="w-4 h-4 rounded-full object-cover flex-shrink-0"
-              />
-            ) : (
-              <div className="w-4 h-4 rounded-full bg-brand-500/10 text-brand-600 dark:text-brand-400 flex items-center justify-center font-bold text-[8px] flex-shrink-0">
-                {task.assigneeName ? task.assigneeName[0].toUpperCase() : <User className="w-2.5 h-2.5" />}
-              </div>
-            )}
+            <AssigneeAvatar avatarPath={task.assigneeAvatar} name={task.assigneeName} />
             <span className="truncate font-semibold text-gray-700 dark:text-gray-300 text-[10px]">
               {task.assigneeName || 'Unassigned'}
             </span>
