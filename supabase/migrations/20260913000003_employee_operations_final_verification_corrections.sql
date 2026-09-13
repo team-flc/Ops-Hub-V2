@@ -161,7 +161,7 @@ DROP POLICY IF EXISTS "Employee can read own assigned assets" ON public.company_
 CREATE POLICY "Employee can read own assigned assets"
     ON public.company_assets FOR SELECT TO authenticated
     USING (
-        (employee_id = auth.uid() OR assigned_to = auth.uid())
+        employee_id = auth.uid()
         AND EXISTS (
             SELECT 1 FROM public.profiles 
             WHERE id = auth.uid() 
