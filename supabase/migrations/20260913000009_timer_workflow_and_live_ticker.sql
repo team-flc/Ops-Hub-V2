@@ -71,7 +71,7 @@ CREATE POLICY "caa_select_policy" ON public.client_active_announcements
                       WHERE cta.client_id = client_id AND cta.profile_id = p.id
                   ))
                   -- Client role: only their own organization (portal ticker)
-                  OR (p.role = 'client' AND p.organization_id = client_id)
+                  OR (p.role = 'client' AND p.organization_id = client_id::text)
               )
         )
     );
