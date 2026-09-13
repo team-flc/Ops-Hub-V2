@@ -205,8 +205,12 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
   };
 
   const handleStartWork = async (task: ClientTask) => {
+    if (!task.assigneeId) {
+      showToast('Assign a Team Member before starting this task.');
+      return;
+    }
     try {
-      const assigneeName = task.assigneeName || currentUserProfile?.fullName || 'Team';
+      const assigneeName = task.assigneeName || 'Team Member';
       const res = await taskManagementService.startWork(task.id, task.clientId, assigneeName, task.title);
       if (res.error) {
         showToast(`Failed to start work: ${res.error}`);

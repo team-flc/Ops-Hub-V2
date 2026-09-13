@@ -1254,6 +1254,17 @@ export const taskManagementService = {
     try {
       const nowIso = new Date().toISOString();
 
+      // Check task first to ensure it has an assignee
+      const { data: existingTask } = await supabase
+        .from('client_tasks')
+        .select('id, assignee_id, title')
+        .eq('id', taskId)
+        .single();
+
+      if (!existingTask?.assignee_id) {
+        return { error: 'Assign a Team Member before starting this task.' };
+      }
+
       // 1. Move to In Progress + start timer atomically
       const { data, error } = await supabase
         .from('client_tasks')
@@ -1271,8 +1282,25 @@ export const taskManagementService = {
         return { error: error.message };
       }
 
-      // 2. Upsert live announcement (don't fail the whole operation if this errors)
-      const message = `${assigneeName} and his team is working on ${taskTitle}`;
+      // 2. Fetch actual assigned worker's name to never display manager name
+      let resolvedAssigneeName = assigneeName;
+      if (existingTask.assignee_id) {
+        try {
+          const { data: prof } = await supabase
+            .from('profiles')
+            .select('full_name')
+            .eq('id', existingTask.assignee_id)
+            .single();
+          if (prof?.full_name) {
+            resolvedAssigneeName = prof.full_name;
+          }
+        } catch {
+          // fallback to assigneeName
+        }
+      }
+
+      // 3. Upsert live announcement (don't fail the whole operation if this errors)
+      const message = `${resolvedAssigneeName} and his team is working on ${taskTitle}`;
       try {
         await supabase
           .from('client_active_announcements')
@@ -1281,7 +1309,7 @@ export const taskManagementService = {
               task_id: taskId,
               client_id: clientId,
               message,
-              team_member_id: (data as any).assignee_id || taskId,
+              team_member_id: existingTask.assignee_id,
               is_active: true,
               updated_at: nowIso
             },

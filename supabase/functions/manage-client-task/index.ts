@@ -1202,6 +1202,10 @@ serve(async (req: Request) => {
         return new Response(JSON.stringify({ error: 'Task not found or archived.' }), { status: 404, headers: corsHeaders });
       }
 
+      if (!existingTask.assignee_id) {
+        return new Response(JSON.stringify({ error: 'Assign a Team Member before starting this task.' }), { status: 400, headers: corsHeaders });
+      }
+
       const canManage = await checkCanManageClient(existingTask.client_id);
       const isAssigned = existingTask.assignee_id === callerProfile.id;
 
@@ -1227,8 +1231,19 @@ serve(async (req: Request) => {
         return new Response(JSON.stringify({ error: uErr.message }), { status: 500, headers: corsHeaders });
       }
 
-      // Upsert announcement for ticker
-      const assigneeName = callerProfile.full_name || 'Team Member';
+      // Upsert announcement for ticker using assigned worker's name
+      let assigneeName = 'Team Member';
+      if (existingTask.assignee_id) {
+        const { data: assigneeProf } = await supabaseAdmin
+          .from('profiles')
+          .select('full_name')
+          .eq('id', existingTask.assignee_id)
+          .single();
+        if (assigneeProf?.full_name) {
+          assigneeName = assigneeProf.full_name;
+        }
+      }
+
       const announcementMsg = `${assigneeName} and his team is working on ${existingTask.title}`;
       try {
         await supabaseAdmin
@@ -1238,7 +1253,7 @@ serve(async (req: Request) => {
               task_id,
               client_id: existingTask.client_id,
               message: announcementMsg,
-              team_member_id: callerProfile.id,
+              team_member_id: existingTask.assignee_id,
               is_active: true,
               updated_at: nowIso
             },

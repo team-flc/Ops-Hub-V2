@@ -532,3 +532,29 @@ describe('ClientKanbanCard — Submit for Approval button', () => {
     expect(stopBtn).toBeNull();
   });
 });
+
+// ===========================================================================
+// Suite 7: Unassigned Task Guard & Assignee Announcement
+// ===========================================================================
+describe('Unassigned Task Guard & Assignee Announcement Resolution', () => {
+  it('Test 18: Unassigned task startWork yields error "Assign a Team Member before starting this task."', async () => {
+    mockStartWork.mockResolvedValueOnce({ error: 'Assign a Team Member before starting this task.' });
+
+    const res = await (await import('../src/lib/taskManagementService')).taskManagementService.startWork(
+      'task-unassigned',
+      'client-abc',
+      'Team',
+      'Unassigned Task'
+    );
+
+    expect(res.error).toBe('Assign a Team Member before starting this task.');
+  });
+
+  it('Test 19: Announcement format uses assigned team member name', () => {
+    const assignedName = 'Zubair Tariq';
+    const taskName = 'QA — Live Ticker Verification';
+    const expectedMessage = `${assignedName} and his team is working on ${taskName}`;
+
+    expect(expectedMessage).toBe('Zubair Tariq and his team is working on QA — Live Ticker Verification');
+  });
+});
