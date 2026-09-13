@@ -49,8 +49,8 @@ GRANT ALL ON ALL FUNCTIONS IN SCHEMA tests TO PUBLIC, authenticated, anon, servi
 -- Insert Work Shifts
 INSERT INTO public.work_shifts (id, name, code, start_time, end_time, crosses_midnight)
 VALUES
-  ('s1111111-1111-1111-1111-111111111111', 'Standard Day Shift', 'DAY', '11:00:00', '20:00:00', false),
-  ('s2222222-2222-2222-2222-222222222222', 'Overnight Shift', 'NIGHT', '20:00:00', '05:00:00', true)
+  ('a1111111-1111-1111-1111-111111111111', 'Standard Day Shift', 'DAY', '11:00:00', '20:00:00', false),
+  ('a2222222-2222-2222-2222-222222222222', 'Overnight Shift', 'NIGHT', '20:00:00', '05:00:00', true)
 ON CONFLICT (id) DO NOTHING;
 
 -- Insert Work Schedules:
@@ -58,8 +58,8 @@ ON CONFLICT (id) DO NOTHING;
 -- 2) Future 5-Day Work Week (effective 2026-10-01, Mon-Fri)
 INSERT INTO public.company_work_schedules (id, effective_from, working_days, description)
 VALUES
-  ('sch11111-1111-1111-1111-111111111111', '2026-01-01', ARRAY[1, 2, 3, 4, 5, 6], 'Standard 6-Day Work Week'),
-  ('sch22222-2222-2222-2222-222222222222', '2026-10-01', ARRAY[1, 2, 3, 4, 5], 'Future 5-Day Work Week')
+  ('c1111111-1111-1111-1111-111111111111', '2026-01-01', ARRAY[1, 2, 3, 4, 5, 6], 'Standard 6-Day Work Week'),
+  ('c2222222-2222-2222-2222-222222222222', '2026-10-01', ARRAY[1, 2, 3, 4, 5], 'Future 5-Day Work Week')
 ON CONFLICT (id) DO NOTHING;
 
 -- Insert Test Users into auth.users and profiles
@@ -88,9 +88,9 @@ ON CONFLICT (id) DO UPDATE SET role = EXCLUDED.role, status = EXCLUDED.status, f
 -- Insert Employee Companion Records
 INSERT INTO public.employee_records (id, employee_id, employment_type, salary, shift_id, employment_status, sop_acknowledged, setup_completed_at)
 VALUES
-  ('22222222-2222-2222-2222-222222222222', 'EMP-001', 'full_time', 150000.00, 's1111111-1111-1111-1111-111111111111', 'active', true, now()),
-  ('33333333-3333-3333-3333-333333333333', 'EMP-002', 'full_time', 180000.00, 's2222222-2222-2222-2222-222222222222', 'active', true, now()),
-  ('44444444-4444-4444-4444-444444444444', 'EMP-003', 'full_time', 100000.00, 's1111111-1111-1111-1111-111111111111', 'inactive', false, now()),
+  ('22222222-2222-2222-2222-222222222222', 'EMP-001', 'full_time', 150000.00, 'a1111111-1111-1111-1111-111111111111', 'active', true, now()),
+  ('33333333-3333-3333-3333-333333333333', 'EMP-002', 'full_time', 180000.00, 'a2222222-2222-2222-2222-222222222222', 'active', true, now()),
+  ('44444444-4444-4444-4444-444444444444', 'EMP-003', 'full_time', 100000.00, 'a1111111-1111-1111-1111-111111111111', 'inactive', false, now()),
   ('55555555-5555-5555-5555-555555555555', 'EMP-004', 'full_time', 0.00, NULL, 'active', false, NULL)
 ON CONFLICT (id) DO UPDATE SET setup_completed_at = EXCLUDED.setup_completed_at, employment_status = EXCLUDED.employment_status, salary = EXCLUDED.salary;
 
@@ -103,14 +103,14 @@ ON CONFLICT (employee_id) DO NOTHING;
 
 INSERT INTO public.employee_payroll_records (id, employee_id, payroll_period, gross_salary, late_deductions_total, absence_deductions_total, net_payable, scheduled_payment_date, status)
 VALUES
-  ('p1111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', '2026-09', 150000.00, 1000.00, 5000.00, 144000.00, '2026-09-15', 'Draft'),
-  ('p2222222-2222-2222-2222-222222222222', '33333333-3333-3333-3333-333333333333', '2026-09', 180000.00, 0.00, 0.00, 180000.00, '2026-09-15', 'Draft')
+  ('e1111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', '2026-09', 150000.00, 1000.00, 5000.00, 144000.00, '2026-09-15', 'Draft'),
+  ('e2222222-2222-2222-2222-222222222222', '33333333-3333-3333-3333-333333333333', '2026-09', 180000.00, 0.00, 0.00, 180000.00, '2026-09-15', 'Draft')
 ON CONFLICT (id) DO NOTHING;
 
 INSERT INTO public.company_assets (id, employee_id, item_name, issue_date, price, status)
 VALUES
-  ('a1111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', 'MacBook Pro M3 Max', '2026-09-01', 350000.00, 'assigned'),
-  ('a2222222-2222-2222-2222-222222222222', '33333333-3333-3333-3333-333333333333', 'Dell Precision Workstation', '2026-09-01', 280000.00, 'assigned')
+  ('ba111111-1111-1111-1111-111111111111', '22222222-2222-2222-2222-222222222222', 'MacBook Pro M3 Max', '2026-09-01', 350000.00, 'assigned'),
+  ('ba222222-2222-2222-2222-222222222222', '33333333-3333-3333-3333-333333333333', 'Dell Precision Workstation', '2026-09-01', 280000.00, 'assigned')
 ON CONFLICT (id) DO NOTHING;
 
 -- Seed known attendance record owned by Emp A for mutation RLS testing
@@ -121,7 +121,7 @@ INSERT INTO public.employee_attendance (
     '99999999-9999-9999-9999-999999999999',
     '22222222-2222-2222-2222-222222222222',
     '2026-09-10',
-    's1111111-1111-1111-1111-111111111111',
+    'a1111111-1111-1111-1111-111111111111',
     '2026-09-10 11:00:00+05'::timestamptz,
     '2026-09-10 20:00:00+05'::timestamptz,
     '2026-09-10 11:00:00+05'::timestamptz,
@@ -141,7 +141,7 @@ INSERT INTO public.employee_attendance (
     '88888888-8888-8888-8888-888888888888',
     '33333333-3333-3333-3333-333333333333',
     (timezone('Asia/Karachi', now()) - interval '1 day')::date,
-    's2222222-2222-2222-2222-222222222222',
+    'a2222222-2222-2222-2222-222222222222',
     ((timezone('Asia/Karachi', now()) - interval '1 day')::date || ' 20:00:00')::timestamp AT TIME ZONE 'Asia/Karachi',
     (timezone('Asia/Karachi', now())::date || ' 05:00:00')::timestamp AT TIME ZONE 'Asia/Karachi',
     ((timezone('Asia/Karachi', now()) - interval '1 day')::date || ' 20:00:00')::timestamp AT TIME ZONE 'Asia/Karachi',
@@ -332,32 +332,32 @@ SELECT is(
 -- 11. Asset Acknowledgement Protected Fields
 SELECT tests.authenticate_as('22222222-2222-2222-2222-222222222222');
 SELECT lives_ok(
-    $$ SELECT public.fn_employee_acknowledge_asset('a1111111-1111-1111-1111-111111111111'::uuid) $$,
+    $$ SELECT public.fn_employee_acknowledge_asset('ba111111-1111-1111-1111-111111111111'::uuid) $$,
     '31. Emp A can acknowledge assigned asset'
 );
 SELECT is(
-    (SELECT status FROM public.company_assets WHERE id = 'a1111111-1111-1111-1111-111111111111'::uuid),
+    (SELECT status FROM public.company_assets WHERE id = 'ba111111-1111-1111-1111-111111111111'::uuid),
     'acknowledged',
     '32. Asset status updated to acknowledged'
 );
 SELECT is(
-    (SELECT price FROM public.company_assets WHERE id = 'a1111111-1111-1111-1111-111111111111'::uuid),
+    (SELECT price FROM public.company_assets WHERE id = 'ba111111-1111-1111-1111-111111111111'::uuid),
     350000.00,
     '33. Asset price remains immutable during acknowledgement'
 );
 
 -- 12. Payroll Concern Protected Fields
 SELECT lives_ok(
-    $$ SELECT public.fn_employee_raise_payroll_concern('p1111111-1111-1111-1111-111111111111'::uuid, 'Late deduction dispute for Sept 10') $$,
+    $$ SELECT public.fn_employee_raise_payroll_concern('e1111111-1111-1111-1111-111111111111'::uuid, 'Late deduction dispute for Sept 10') $$,
     '34. Emp A can raise payroll concern'
 );
 SELECT is(
-    (SELECT gross_salary FROM public.employee_payroll_records WHERE id = 'p1111111-1111-1111-1111-111111111111'::uuid),
+    (SELECT gross_salary FROM public.employee_payroll_records WHERE id = 'e1111111-1111-1111-1111-111111111111'::uuid),
     150000.00,
     '35. Gross salary remains immutable when concern is raised'
 );
 SELECT is(
-    (SELECT net_payable FROM public.employee_payroll_records WHERE id = 'p1111111-1111-1111-1111-111111111111'::uuid),
+    (SELECT net_payable FROM public.employee_payroll_records WHERE id = 'e1111111-1111-1111-1111-111111111111'::uuid),
     144000.00,
     '36. Net payable remains immutable when concern is raised'
 );
