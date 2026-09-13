@@ -228,7 +228,7 @@ SELECT throws_ok(
 
 -- Direct UPDATE fails RLS: returns zero rows and leaves underlying data unchanged
 SELECT is_empty(
-    $$ UPDATE public.employee_attendance SET check_out_time = now() WHERE id = '99999999-9999-9999-9999-999999999999' RETURNING id $$,
+    $$ WITH updated AS (UPDATE public.employee_attendance SET check_out_time = now() WHERE id = '99999999-9999-9999-9999-999999999999' RETURNING id) SELECT * FROM updated $$,
     '16. Direct employee UPDATE on attendance affects 0 rows under RLS'
 );
 SELECT tests.authenticate_service_role();
@@ -241,7 +241,7 @@ SELECT is(
 -- Direct DELETE fails RLS: returns zero rows and leaves row in database
 SELECT tests.authenticate_as('22222222-2222-2222-2222-222222222222');
 SELECT is_empty(
-    $$ DELETE FROM public.employee_attendance WHERE id = '99999999-9999-9999-9999-999999999999' RETURNING id $$,
+    $$ WITH deleted AS (DELETE FROM public.employee_attendance WHERE id = '99999999-9999-9999-9999-999999999999' RETURNING id) SELECT * FROM deleted $$,
     '18. Direct employee DELETE on attendance affects 0 rows under RLS'
 );
 SELECT tests.authenticate_service_role();
@@ -254,7 +254,7 @@ SELECT is(
 -- 7. Direct Employee Modification of Protected Governance Fields Denied
 SELECT tests.authenticate_as('22222222-2222-2222-2222-222222222222');
 SELECT is_empty(
-    $$ UPDATE public.employee_records SET salary = 999999.00 WHERE id = '22222222-2222-2222-2222-222222222222' RETURNING id $$,
+    $$ WITH updated AS (UPDATE public.employee_records SET salary = 999999.00 WHERE id = '22222222-2222-2222-2222-222222222222' RETURNING id) SELECT * FROM updated $$,
     '20. Direct employee UPDATE on salary affects 0 rows under RLS'
 );
 SELECT tests.authenticate_service_role();
