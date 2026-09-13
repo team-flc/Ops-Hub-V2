@@ -23,6 +23,15 @@ BEGIN
 END;
 $$ LANGUAGE plpgsql;
 
+CREATE OR REPLACE FUNCTION tests.authenticate_service_role()
+RETURNS void AS $$
+BEGIN
+    PERFORM set_config('role', 'service_role', true);
+    PERFORM set_config('request.jwt.claim.sub', '', true);
+    PERFORM set_config('request.jwt.claims', '{"role": "service_role"}'::text, true);
+END;
+$$ LANGUAGE plpgsql;
+
 CREATE OR REPLACE FUNCTION tests.clear_auth()
 RETURNS void AS $$
 BEGIN
@@ -222,10 +231,10 @@ SELECT is_empty(
     $$ UPDATE public.employee_attendance SET check_out_time = now() WHERE id = '99999999-9999-9999-9999-999999999999' RETURNING id $$,
     '16. Direct employee UPDATE on attendance affects 0 rows under RLS'
 );
-PERFORM set_config('role', 'service_role', true);
+SELECT tests.authenticate_service_role();
 SELECT is(
-    (SELECT check_out_time FROM public.employee_attendance WHERE id = '99999999-9999-9999-9999-999999999999'::uuid),
-    '2026-09-10 20:00:00+05'::timestamptz,
+    (SELECT check_out_time = '2026-09-10 20:00:00+05'::timestamptz FROM public.employee_attendance WHERE id = '99999999-9999-9999-9999-999999999999'::uuid),
+    true,
     '17. Attendance check_out_time remains unchanged in database after denied direct UPDATE'
 );
 
@@ -235,7 +244,7 @@ SELECT is_empty(
     $$ DELETE FROM public.employee_attendance WHERE id = '99999999-9999-9999-9999-999999999999' RETURNING id $$,
     '18. Direct employee DELETE on attendance affects 0 rows under RLS'
 );
-PERFORM set_config('role', 'service_role', true);
+SELECT tests.authenticate_service_role();
 SELECT is(
     (SELECT COUNT(*)::int FROM public.employee_attendance WHERE id = '99999999-9999-9999-9999-999999999999'::uuid),
     1,
@@ -248,7 +257,7 @@ SELECT is_empty(
     $$ UPDATE public.employee_records SET salary = 999999.00 WHERE id = '22222222-2222-2222-2222-222222222222' RETURNING id $$,
     '20. Direct employee UPDATE on salary affects 0 rows under RLS'
 );
-PERFORM set_config('role', 'service_role', true);
+SELECT tests.authenticate_service_role();
 SELECT is(
     (SELECT salary FROM public.employee_records WHERE id = '22222222-2222-2222-2222-222222222222'::uuid),
     150000.00,
@@ -289,7 +298,7 @@ SELECT throws_ok(
     '26. Operational Manager role cannot execute cron RPC (service_role only)'
 );
 
-PERFORM set_config('role', 'service_role', true);
+SELECT tests.authenticate_service_role();
 SELECT lives_ok(
     $$ SELECT public.fn_cron_process_attendance_automation() $$,
     '27. Service role can execute attendance automation cron RPC'
@@ -374,7 +383,7 @@ SELECT is(
 );
 
 -- 15. Repeated Automation Cycle Row Count Comparison & Idempotency
-PERFORM set_config('role', 'service_role', true);
+SELECT tests.authenticate_service_role();
 DO $$
 DECLARE
     v_tasks_before int;
