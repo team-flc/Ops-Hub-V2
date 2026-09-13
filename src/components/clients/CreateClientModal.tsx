@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { 
-  Building2, 
-  Link2, Check, AlertCircle, X, Loader2, Plus, 
-  Trash2 
+import {
+  Building2,
+  Link2, Check, AlertCircle, X, Loader2, Plus,
+  Trash2
 } from 'lucide-react';
 
 const LinkedInIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" }) => (
@@ -11,19 +11,19 @@ const LinkedInIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" 
     <path d="M19 0h-14c-2.761 0-5 2.239-5 5v14c0 2.761 2.239 5 5 5h14c2.762 0 5-2.239 5-5v-14c0-2.761-2.762-5-5-5zm-11 19h-3v-11h3v11zm-1.5-12.268c-.966 0-1.75-.79-1.75-1.764s.784-1.764 1.75-1.764 1.75.79 1.75 1.764-.783 1.764-1.75 1.764zm13.5 12.268h-3v-5.604c0-3.368-4-3.113-4 0v5.604h-3v-11h3v1.765c1.396-2.586 7-2.777 7 2.476v6.759z"/>
   </svg>
 );
-import { 
-  ClientPackage, 
-  ClientStatus, 
-  ClientPauseReason, 
-  ClientLinkType, 
-  UserProfile, 
-  ClientRecord 
+import {
+  ClientPackage,
+  ClientStatus,
+  ClientPauseReason,
+  ClientLinkType,
+  UserProfile,
+  ClientRecord
 } from '../../types';
-import { 
-  clientManagementService, 
-  sanitizeUrl, 
+import {
+  clientManagementService,
+  sanitizeUrl,
   isValidLinkedInUrl,
-  LinkedInProfileInput 
+  LinkedInProfileInput
 } from '../../lib/clientManagementService';
 
 interface CreateClientModalProps {
@@ -262,7 +262,7 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
 
   const modalContent = (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
-      <div 
+      <div
         className="relative w-full max-w-3xl bg-white dark:bg-dark-card rounded-2xl shadow-2xl border border-gray-200 dark:border-dark-border overflow-hidden animate-scale-up max-h-[calc(100dvh-2rem)] flex flex-col"
         onClick={(e) => e.stopPropagation()}
       >
@@ -634,8 +634,8 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
             {/* Profile Rows */}
             <div className="space-y-3">
               {profileRows.map((row, index) => (
-                <div 
-                  key={row.id} 
+                <div
+                  key={row.id}
                   className="p-3.5 rounded-xl border border-gray-200 dark:border-dark-border bg-gray-50/50 dark:bg-dark-200/50 space-y-3"
                 >
                   <div className="flex items-center justify-between">
@@ -719,7 +719,7 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
               className="flex items-center gap-1.5 px-3 py-1.5 text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-500/10 hover:bg-blue-500/20 rounded-xl transition-colors"
             >
               <Plus className="w-3.5 h-3.5" />
-              <span>Add LinkedIn Profile</span>
+              <span>+ Add LinkedIn Profile</span>
             </button>
           </div>
 

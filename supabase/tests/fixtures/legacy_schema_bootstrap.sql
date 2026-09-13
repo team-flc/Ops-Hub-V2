@@ -1,16 +1,14 @@
 -- ==============================================================================
--- BASELINE LEGACY SCHEMA MIGRATION: Pre-existing Operational Tables & Helper Schema
--- Location: supabase/migrations/20260830000000_baseline_legacy_schema.sql
--- Database: PostgreSQL / Supabase (Ephemeral Stack & Clean Resets)
+-- TEST-ONLY FIXTURE: Legacy Schema Bootstrap (Ephemeral CI Database Stack Only)
+-- Location: supabase/tests/fixtures/legacy_schema_bootstrap.sql
+-- NOT A PRODUCTION MIGRATION — DO NOT DEPLOY TO PRODUCTION
 -- ==============================================================================
 
--- 1. Create Private Helper Schema Foundation
 CREATE SCHEMA IF NOT EXISTS app_private;
 REVOKE ALL ON SCHEMA app_private FROM PUBLIC;
 REVOKE ALL ON SCHEMA app_private FROM anon, authenticated;
 GRANT USAGE ON SCHEMA app_private TO authenticated;
 
--- Helper to safely get the caller profile role
 CREATE OR REPLACE FUNCTION app_private.get_caller_role()
 RETURNS TEXT
 LANGUAGE sql
@@ -24,7 +22,6 @@ $$;
 REVOKE ALL ON ALL FUNCTIONS IN SCHEMA app_private FROM PUBLIC, anon;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA app_private TO authenticated;
 
--- 2. Baseline Legacy Operational Tables (Pre-existing prior to Phase 1 migrations)
 CREATE TABLE IF NOT EXISTS public.users (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email TEXT,

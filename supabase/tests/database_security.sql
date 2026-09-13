@@ -1,11 +1,13 @@
 -- ==============================================================================
 -- COMPREHENSIVE BEHAVIORAL pgTAP SECURITY & RLS TEST SUITE
+-- Location: supabase/tests/database_security.sql
+-- Database: PostgreSQL / Ephemeral Local Supabase Stack
 -- ==============================================================================
 
 BEGIN;
 
--- 32 Planned Behavioral Assertions
-SELECT plan(32);
+-- 38 Planned Behavioral Assertions
+SELECT plan(38);
 
 -- ------------------------------------------------------------------------------
 -- 1. FIXTURE SETUP (Transactional Test Users & Entities)
@@ -37,10 +39,13 @@ VALUES
   ('s2222222-2222-2222-2222-222222222222', 'Overnight Shift', 'NIGHT', '20:00:00', '05:00:00', true)
 ON CONFLICT (id) DO NOTHING;
 
--- Insert Work Schedule (Mon-Sat standard)
+-- Insert Work Schedules:
+-- 1) Standard 6-Day Work Week (effective 2026-01-01, Mon-Sat)
+-- 2) Future 5-Day Work Week (effective 2026-10-01, Mon-Fri)
 INSERT INTO public.company_work_schedules (id, effective_from, working_days, description)
 VALUES
-  ('sch11111-1111-1111-1111-111111111111', '2026-01-01', ARRAY[1, 2, 3, 4, 5, 6], 'Standard 6-Day Work Week')
+  ('sch11111-1111-1111-1111-111111111111', '2026-01-01', ARRAY[1, 2, 3, 4, 5, 6], 'Standard 6-Day Work Week'),
+  ('sch22222-2222-2222-2222-222222222222', '2026-10-01', ARRAY[1, 2, 3, 4, 5], 'Future 5-Day Work Week')
 ON CONFLICT (id) DO NOTHING;
 
 -- Insert Test Users into auth.users and profiles
@@ -75,7 +80,7 @@ VALUES
   ('55555555-5555-5555-5555-555555555555', 'EMP-004', 'full_time', 0.00, NULL, 'active', false, NULL)
 ON CONFLICT (id) DO UPDATE SET setup_completed_at = EXCLUDED.setup_completed_at, employment_status = EXCLUDED.employment_status, salary = EXCLUDED.salary;
 
--- Seed Bank Details, Payroll, Assets, Documents for Emp A and Emp B
+-- Seed Bank Details, Payroll, Assets for Emp A and Emp B
 INSERT INTO public.employee_bank_details (employee_id, bank_name, account_title, account_number_or_iban)
 VALUES
   ('22222222-2222-2222-2222-222222222222', 'Meezan Bank', 'Emp A Title', 'PK36MEZN0000001234567890'),
@@ -178,129 +183,191 @@ SELECT is(
     0,
     '13. Cross-employee company asset access is denied'
 );
+SELECT is(
+    (SELECT COUNT(*)::int FROM public.employee_attendance WHERE employee_id = '33333333-3333-3333-3333-333333333333'),
+    0,
+    '14. Cross-employee attendance SELECT is denied by RLS'
+);
 
--- 6. Direct Employee INSERT/UPDATE Denied on Attendance (Must use RPC)
+-- 6. Direct Employee INSERT, UPDATE, DELETE Denied on Attendance (Must use RPC)
 SELECT throws_ok(
     $$ INSERT INTO public.employee_attendance (employee_id, work_date, scheduled_check_in, scheduled_check_out, status)
        VALUES ('22222222-2222-2222-2222-222222222222', '2026-09-12', now(), now() + interval '8 hours', 'on_time') $$,
     '%violates row-level security policy%',
-    '14. Direct employee INSERT on attendance table is denied by RLS'
+    '15. Direct employee INSERT on attendance table is denied by RLS'
 );
 
--- 7. Screenshot Path Ownership & Traversal Defense
+SELECT throws_ok(
+    $$ UPDATE public.employee_attendance SET status = 'on_time' WHERE employee_id = '22222222-2222-2222-2222-222222222222' $$,
+    '%violates row-level security policy%',
+    '16. Direct employee UPDATE on attendance table is denied by RLS'
+);
+
+SELECT throws_ok(
+    $$ DELETE FROM public.employee_attendance WHERE employee_id = '22222222-2222-2222-2222-222222222222' $$,
+    '%violates row-level security policy%',
+    '17. Direct employee DELETE on attendance table is denied by RLS'
+);
+
+-- 7. Direct Employee Modification of Protected Governance Fields Denied
+SELECT throws_ok(
+    $$ UPDATE public.employee_records SET salary = 999999 WHERE id = '22222222-2222-2222-2222-222222222222' $$,
+    '%violates row-level security policy%',
+    '18. Direct employee modification of salary/status in employee_records is denied by RLS'
+);
+
+-- 8. Screenshot Path Ownership & Traversal Defense
 SELECT tests.authenticate_as('22222222-2222-2222-2222-222222222222');
 SELECT throws_ok(
     $$ SELECT public.fn_employee_check_in('33333333-3333-3333-3333-333333333333/checkin.jpg') $$,
     '%must reside in authenticated employee directory%',
-    '15. Using another employee screenshot path is strictly rejected'
+    '19. Using another employee screenshot path is strictly rejected'
 );
 SELECT throws_ok(
     $$ SELECT public.fn_employee_check_in('22222222-2222-2222-2222-222222222222/../../../etc/passwd.jpg') $$,
     '%must reside in authenticated employee directory%',
-    '16. Directory traversal in screenshot path is strictly rejected'
+    '20. Directory traversal in screenshot path is strictly rejected'
 );
 
--- 8. Cron RPC Access Control (Service Role ONLY)
+-- 9. Cron RPC Access Control (Service Role ONLY)
 SELECT throws_ok(
     $$ SELECT public.fn_cron_process_attendance_automation() $$,
     '%permission denied%',
-    '17. Employee role cannot execute attendance automation cron RPC'
+    '21. Employee role cannot execute attendance automation cron RPC'
 );
 
 SELECT tests.authenticate_as('77777777-7777-7777-7777-777777777777'); -- Owner
 SELECT throws_ok(
     $$ SELECT public.fn_cron_process_attendance_automation() $$,
     '%permission denied%',
-    '18. Owner role cannot execute cron RPC (service_role only)'
+    '22. Owner role cannot execute cron RPC (service_role only)'
 );
 
 SELECT tests.authenticate_as('66666666-6666-6666-6666-666666666666'); -- Manager
 SELECT throws_ok(
     $$ SELECT public.fn_cron_process_attendance_automation() $$,
     '%permission denied%',
-    '19. Operational Manager role cannot execute cron RPC (service_role only)'
+    '23. Operational Manager role cannot execute cron RPC (service_role only)'
 );
 
 PERFORM set_config('role', 'service_role', true);
 SELECT lives_ok(
     $$ SELECT public.fn_cron_process_attendance_automation() $$,
-    '20. Service role can execute attendance automation cron RPC'
+    '24. Service role can execute attendance automation cron RPC'
 );
 
--- 9. Management Visibility for Owner & Operational Manager
+-- 10. Management Visibility for Owner & Operational Manager
 SELECT tests.authenticate_as('77777777-7777-7777-7777-777777777777'); -- Owner
 SELECT is(
     (SELECT COUNT(*)::int FROM public.employee_records),
     4,
-    '21. Owner can view all internal employee companion records'
+    '25. Owner can view all internal employee companion records'
 );
 SELECT is(
     (SELECT COUNT(*)::int FROM public.employee_payroll_records),
     2,
-    '22. Owner can view all payroll records across employees'
+    '26. Owner can view all payroll records across employees'
 );
 
 SELECT tests.authenticate_as('66666666-6666-6666-6666-666666666666'); -- Manager
 SELECT is(
     (SELECT COUNT(*)::int FROM public.employee_records),
     4,
-    '23. Operational Manager can view all internal employee companion records'
+    '27. Operational Manager can view all internal employee companion records'
 );
 
--- 10. Asset Acknowledgement Protected Fields
+-- 11. Asset Acknowledgement Protected Fields
 SELECT tests.authenticate_as('22222222-2222-2222-2222-222222222222');
 SELECT lives_ok(
     $$ SELECT public.fn_employee_acknowledge_asset('a1111111-1111-1111-1111-111111111111'::uuid) $$,
-    '24. Emp A can acknowledge assigned asset'
+    '28. Emp A can acknowledge assigned asset'
 );
 SELECT is(
     (SELECT status FROM public.company_assets WHERE id = 'a1111111-1111-1111-1111-111111111111'::uuid),
     'acknowledged',
-    '25. Asset status updated to acknowledged'
+    '29. Asset status updated to acknowledged'
 );
 SELECT is(
     (SELECT price FROM public.company_assets WHERE id = 'a1111111-1111-1111-1111-111111111111'::uuid),
     350000.00,
-    '26. Asset price remains immutable during acknowledgement'
+    '30. Asset price remains immutable during acknowledgement'
 );
 
--- 11. Payroll Concern Protected Fields
+-- 12. Payroll Concern Protected Fields
 SELECT lives_ok(
     $$ SELECT public.fn_employee_raise_payroll_concern('p1111111-1111-1111-1111-111111111111'::uuid, 'Late deduction dispute for Sept 10') $$,
-    '27. Emp A can raise payroll concern'
+    '31. Emp A can raise payroll concern'
 );
 SELECT is(
     (SELECT gross_salary FROM public.employee_payroll_records WHERE id = 'p1111111-1111-1111-1111-111111111111'::uuid),
     150000.00,
-    '28. Gross salary remains immutable when concern is raised'
+    '32. Gross salary remains immutable when concern is raised'
 );
 SELECT is(
     (SELECT net_payable FROM public.employee_payroll_records WHERE id = 'p1111111-1111-1111-1111-111111111111'::uuid),
     144000.00,
-    '29. Net payable remains immutable when concern is raised'
+    '33. Net payable remains immutable when concern is raised'
 );
 
--- 12. Overnight Shift Retrieval & Late Checkout after 5:00 AM
-SELECT tests.authenticate_as('33333333-3333-3333-3333-333333333333'); -- Emp B (Night Shift 20:00 - 05:00)
-SELECT isnt(
-    public.fn_employee_get_current_attendance(),
-    NULL,
-    '30. Unclosed night shift attendance record is returned for late checkout after 05:00 AM'
+-- 13. Dynamic Company Working Schedule: Sunday Excluded & Future 5-Day Schedule
+SELECT is(
+    public.fn_is_company_working_day('2026-09-13'::date),
+    false,
+    '34. Sunday (2026-09-13) is excluded under current 6-day schedule'
 );
+SELECT is(
+    public.fn_is_company_working_day('2026-09-14'::date),
+    true,
+    '35. Monday (2026-09-14) is included under current 6-day schedule'
+);
+SELECT is(
+    public.fn_is_company_working_day('2026-10-03'::date),
+    false,
+    '36. Saturday (2026-10-03) is excluded under future effective 5-day schedule without code change'
+);
+
+-- 14. Overnight Shift Retrieval & Late Checkout after 5:00 AM
+SELECT tests.authenticate_as('33333333-3333-3333-3333-333333333333'); -- Emp B (Night Shift 20:00 - 05:00)
 SELECT is(
     (public.fn_employee_get_current_attendance() ->> 'id'),
     '88888888-8888-8888-8888-888888888888',
-    '31. Correct unclosed night shift attendance ID is returned'
+    '37. Correct unclosed night shift attendance ID is returned for late checkout after 05:00 AM'
 );
 
--- 13. Repeated Automation Idempotency
+-- 15. Repeated Automation Cycle Row Count Comparison & Idempotency
 PERFORM set_config('role', 'service_role', true);
-SELECT lives_ok(
-    $$
-       SELECT public.fn_cron_process_attendance_automation();
-       SELECT public.fn_cron_process_attendance_automation();
-    $$,
-    '32. Repeated automation cycles execute idempotently without duplicating tasks or errors'
+DO $$
+DECLARE
+    v_tasks_before int;
+    v_att_before int;
+    v_tasks_after int;
+    v_att_after int;
+BEGIN
+    -- First cycle
+    PERFORM public.fn_cron_process_attendance_automation();
+
+    SELECT count(*)::int INTO v_tasks_before FROM public.tasks WHERE task_type = 'attendance_anomaly' OR title LIKE '%Attendance%';
+    SELECT count(*)::int INTO v_att_before FROM public.employee_attendance;
+
+    -- Second cycle
+    PERFORM public.fn_cron_process_attendance_automation();
+
+    SELECT count(*)::int INTO v_tasks_after FROM public.tasks WHERE task_type = 'attendance_anomaly' OR title LIKE '%Attendance%';
+    SELECT count(*)::int INTO v_att_after FROM public.employee_attendance;
+
+    IF v_tasks_after <> v_tasks_before THEN
+        RAISE EXCEPTION 'Idempotency violation: tasks increased from % to %', v_tasks_before, v_tasks_after;
+    END IF;
+
+    IF v_att_after <> v_att_before THEN
+        RAISE EXCEPTION 'Idempotency violation: attendance records increased from % to %', v_att_before, v_att_after;
+    END IF;
+END;
+$$;
+
+SELECT ok(
+    true,
+    '38. Running automation cycle twice creates ZERO duplicate anomaly tasks or attendance records'
 );
 
 SELECT * FROM finish();

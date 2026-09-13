@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import { useOpsStore } from '../../store/opsStore';
-import { 
-  Building2, Plus, Mail, Phone, ShieldCheck, 
-  Search, DollarSign, 
-  CheckCircle2, Clock, ArrowUpRight 
+import {
+  Building2, Plus, Mail, Phone, ShieldCheck,
+  Search, DollarSign,
+  CheckCircle2, Clock, ArrowUpRight
 } from 'lucide-react';
 import { Modal } from '../common/Modal';
 
@@ -88,7 +88,7 @@ export const ClientsView: React.FC = () => {
           className="flex items-center justify-center gap-2 px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-sm font-bold shadow-lg shadow-brand-500/25 hover:shadow-brand-500/40 hover:scale-[1.02] active:scale-[0.98] transition-all"
         >
           <Plus className="w-4 h-4" />
-          <span>Add New Client</span>
+          <span>+ Add New Client</span>
         </button>
       </div>
 

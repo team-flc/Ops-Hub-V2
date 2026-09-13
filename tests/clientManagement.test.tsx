@@ -14,11 +14,11 @@ import { ClientManagementView, ClientLogoAvatar } from '../src/components/views/
 import { SettingsLayout } from '../src/components/settings/SettingsLayout';
 import { Header } from '../src/components/layout/Header';
 import { useOpsStore } from '../src/store/opsStore';
-import { 
+import {
   clientManagementService,
-  sanitizeUrl, 
-  isValidLinkedInUrl, 
-  calculateLinkedInReadiness 
+  sanitizeUrl,
+  isValidLinkedInUrl,
+  calculateLinkedInReadiness
 } from '../src/lib/clientManagementService';
 import { ClientRecord, UserProfile, ClientLinkedInProfile } from '../src/types';
 
@@ -328,7 +328,7 @@ describe('Phase 2B: Client Management & Dynamic LinkedIn Access Tests', () => {
     expect(screen.getByPlaceholderText('https://clientwebsite.com')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('https://linkedin.com/company/...')).toBeInTheDocument();
     expect(screen.getByText('LinkedIn Lead Generation Profiles')).toBeInTheDocument();
-    expect(screen.getByText('Add LinkedIn Profile')).toBeInTheDocument();
+    expect(screen.getByText('+ Add LinkedIn Profile')).toBeInTheDocument();
   });
 
   // 8. DUPLICATE CLIENT PREFILLS REQUIREMENTS AND LEAVES LINKS/PROFILES BLANK
@@ -392,7 +392,7 @@ describe('Phase 2B: Client Management & Dynamic LinkedIn Access Tests', () => {
     expect(screen.getByText('Week 3')).toBeInTheDocument();
     expect(screen.getByText('Week 4')).toBeInTheDocument();
 
-    const addTaskBtns = screen.getAllByRole('button', { name: /(?:\+\s*)?add task/i });
+    const addTaskBtns = screen.getAllByRole('button', { name: /\+ add task/i });
     expect(addTaskBtns.length).toBe(1);
 
     fireEvent.click(addTaskBtns[0]);
@@ -522,7 +522,7 @@ describe('Phase 2B: Client Management & Dynamic LinkedIn Access Tests', () => {
     expect(screen.queryByText(/Initial 30-Day Setup Plan/i)).not.toBeInTheDocument();
 
     // Exactly one + Add Task button exists
-    expect(screen.getAllByRole('button', { name: /(?:\+\s*)?add task/i }).length).toBe(1);
+    expect(screen.getAllByRole('button', { name: /\+ add task/i }).length).toBe(1);
   });
 
   // 16. CLIENT MANAGEMENT DASHBOARD KPI CARDS & HEADER

@@ -6,9 +6,9 @@
 // ==============================================================================
 
 import React, { useState, useEffect, useCallback } from 'react';
-import { 
-  Calendar, Plus, Clock, CheckCircle2, 
-  AlertCircle, Edit3, Trash2, 
+import {
+  Calendar, Plus, Clock, CheckCircle2,
+  AlertCircle, Edit3, Trash2,
   Rocket, Loader2
 } from 'lucide-react';
 import { ClientRecord, ClientWorkPlan, Department, UserProfile } from '../../types';
@@ -150,7 +150,7 @@ export const ClientWorkPlanView: React.FC<ClientWorkPlanViewProps> = ({
               className="flex items-center gap-1.5 px-4 py-2.5 min-h-[44px] bg-brand-500 hover:bg-brand-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold shadow-md shadow-brand-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
             >
               <Plus className="w-4 h-4" />
-              <span>Build 90-Day Plan</span>
+              <span>+ Build 90-Day Plan</span>
             </button>
           </div>
         )}
@@ -213,7 +213,7 @@ export const ClientWorkPlanView: React.FC<ClientWorkPlanViewProps> = ({
                       <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">
                         {plan.name}
                       </h3>
-                      
+
                       {/* Status Badge */}
                       <span
                         className={`text-[10px] font-black uppercase px-2.5 py-0.5 rounded-full border ${
@@ -364,7 +364,7 @@ export const ClientWorkPlanView: React.FC<ClientWorkPlanViewProps> = ({
               className="flex items-center gap-1.5 px-4 py-2.5 min-h-[44px] bg-brand-500 hover:bg-brand-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold shadow-md shadow-brand-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
             >
               <Plus className="w-4 h-4" />
-              <span>Create First 90-Day Work Plan</span>
+              <span>+ Create First 90-Day Work Plan</span>
             </button>
           )}
         </div>

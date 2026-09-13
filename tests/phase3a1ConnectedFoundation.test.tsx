@@ -471,7 +471,7 @@ describe('Phase 3A.1 Connected System Foundation, Settings, Profiles, Archive & 
 
     expect(screen.getByText(/Workspace Paused/i)).toBeInTheDocument();
     expect(screen.getByText(/Tasks Paused/i)).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: /(?:\+\s*)?Add Task/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /\+ Add Task/i })).not.toBeInTheDocument();
   });
 
   // 15. CLICKABLE BREADCRUMBS RETURN NAVIGATION

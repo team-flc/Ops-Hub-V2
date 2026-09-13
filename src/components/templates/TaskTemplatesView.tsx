@@ -235,7 +235,7 @@ export const TaskTemplatesView: React.FC<TaskTemplatesViewProps> = ({ currentUse
             }`}
           >
             <Plus className="w-4 h-4" />
-            <span>Create Template</span>
+            <span>+ Create Template</span>
           </button>
         )}
       </div>

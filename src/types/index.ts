@@ -409,7 +409,6 @@ export interface ClientRecord {
   sourceClientId?: string | null;
   sourceCompanyName?: string | null;
   links: Partial<Record<ClientLinkType, string>>;
-  customWeekTitles?: Record<number | string, string> | null;
   assignedTeamMemberIds?: string[];
   createdBy?: string;
   createdAt: string;
@@ -1034,17 +1033,17 @@ export interface EmployeePayrollRecord {
   updatedBy?: string | null;
 }
 
-export type PerformanceRecordType = 
-  | 'goal' 
-  | 'achievement' 
-  | 'incident_coaching' 
+export type PerformanceRecordType =
+  | 'goal'
+  | 'achievement'
+  | 'incident_coaching'
   | 'incident'
   | 'coaching'
   | 'commendation'
-  | 'warning' 
-  | 'salary_hike' 
-  | 'contract_document' 
-  | 'status_change' 
+  | 'warning'
+  | 'salary_hike'
+  | 'contract_document'
+  | 'status_change'
   | 'exit_settlement';
 
 export interface EmployeePerformanceRecord {
@@ -1068,13 +1067,13 @@ export interface EmployeePerformanceRecord {
   createdBy?: string | null;
 }
 
-export type EmployeeTaskType = 
-  | 'missing_checkin_60m' 
-  | 'early_checkout_review' 
-  | 'missing_checkout' 
-  | 'employee_concern' 
-  | 'profile_change_request' 
-  | 'payroll_approval' 
+export type EmployeeTaskType =
+  | 'missing_checkin_60m'
+  | 'early_checkout_review'
+  | 'missing_checkout'
+  | 'employee_concern'
+  | 'profile_change_request'
+  | 'payroll_approval'
   | 'asset_review';
 
 export interface EmployeeManagementTask {

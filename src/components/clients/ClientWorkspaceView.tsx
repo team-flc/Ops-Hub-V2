@@ -1,12 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { Calendar, Info, Plus, Sparkles, Loader2, Layers, AlertTriangle, Edit3 } from 'lucide-react';
-import { 
-  ClientRecord, 
-  ClientTask, 
-  ClientTaskStatus, 
-  Department, 
-  UserProfile,
-  TaskTemplate
+import { Calendar, Info, Plus, Sparkles, Loader2, Layers, AlertTriangle } from 'lucide-react';
+import {
+  ClientRecord,
+  ClientTask,
+  ClientTaskStatus,
+  Department,
+  UserProfile
 } from '../../types';
 import { SelectedClientHeader } from './SelectedClientHeader';
 import { ClientDetailsTab } from './ClientDetailsTab';
@@ -14,6 +13,7 @@ import { ClientTaskCard } from '../tasks/ClientTaskCard';
 import { TaskCreationModeModal } from '../tasks/TaskCreationModeModal';
 import { CreateClientTaskModal } from '../tasks/CreateClientTaskModal';
 import { EditClientTaskModal } from '../tasks/EditClientTaskModal';
+import { TaskTemplate } from '../../types';
 import { taskManagementService } from '../../lib/taskManagementService';
 
 const TaskTemplatePickerModal = React.lazy(() =>
@@ -27,9 +27,6 @@ const ClientTaskDetailsModal = React.lazy(() =>
 );
 const ClientWorkPlanView = React.lazy(() =>
   import('../workplans/ClientWorkPlanView').then((m) => ({ default: m.ClientWorkPlanView }))
-);
-const CustomizeWeekTitlesModal = React.lazy(() =>
-  import('./CustomizeWeekTitlesModal').then((m) => ({ default: m.CustomizeWeekTitlesModal }))
 );
 
 interface ClientWorkspaceViewProps {
@@ -69,7 +66,6 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
   const [modalWeekNumber, setModalWeekNumber] = useState<1 | 2 | 3 | 4>(1);
   const [editingTask, setEditingTask] = useState<ClientTask | null>(null);
   const [selectedTaskDetails, setSelectedTaskDetails] = useState<ClientTask | null>(null);
-  const [isCustomizeWeeksOpen, setIsCustomizeWeeksOpen] = useState(false);
 
   const handleOpenCreateTaskFlow = () => {
     setModalWeekNumber(currentWeekNum);
@@ -101,16 +97,11 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
 
   const isOwnerOrManager = currentUserProfile?.role === 'owner' || currentUserProfile?.role === 'operational_manager';
 
-  const customWeekTitles = client.customWeekTitles || {};
-  const getWeekCustomTitle = (weekNum: 1 | 2 | 3 | 4): string => {
-    return (customWeekTitles[weekNum] || (customWeekTitles as any)[String(weekNum)] || '').trim();
-  };
-
-  const weekTabs: { id: WeekTab; weekNum: 1 | 2 | 3 | 4; label: string; customTitle: string }[] = [
-    { id: 'week1', weekNum: 1, label: 'Week 1', customTitle: getWeekCustomTitle(1) },
-    { id: 'week2', weekNum: 2, label: 'Week 2', customTitle: getWeekCustomTitle(2) },
-    { id: 'week3', weekNum: 3, label: 'Week 3', customTitle: getWeekCustomTitle(3) },
-    { id: 'week4', weekNum: 4, label: 'Week 4', customTitle: getWeekCustomTitle(4) }
+  const weekTabs: { id: WeekTab; weekNum: 1 | 2 | 3 | 4; label: string }[] = [
+    { id: 'week1', weekNum: 1, label: 'Week 1' },
+    { id: 'week2', weekNum: 2, label: 'Week 2' },
+    { id: 'week3', weekNum: 3, label: 'Week 3' },
+    { id: 'week4', weekNum: 4, label: 'Week 4' }
   ];
 
   const currentWeekNum = weekTabs.find((w) => w.id === activeWeek)?.weekNum || 1;
@@ -180,15 +171,6 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
       setSelectedTaskDetails(updatedTask.archivedAt ? null : updatedTask);
     }
     showToast(`Task updated successfully.`);
-  };
-
-  const handleSaveCustomWeekTitles = (newTitles: Record<number, string>) => {
-    const updatedClient: ClientRecord = {
-      ...client,
-      customWeekTitles: newTitles
-    };
-    onClientUpdated(updatedClient);
-    showToast('Week milestone titles updated successfully.');
   };
 
   const handleStatusChange = async (task: ClientTask, newStatus: ClientTaskStatus, reason?: string) => {
@@ -283,46 +265,22 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
         {/* TAB 1: 30-DAY SETUP WORKSPACE */}
         {activeTab === 'setup' && (
           <div className="p-3.5 sm:p-6 max-w-6xl mx-auto space-y-6">
-            {/* 4 Clean Weekly Tabs with Customizable Milestone Titles */}
-            <div className="space-y-2.5">
-              <div className="flex items-center justify-between">
-                <span className="text-[11px] font-bold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                  30-Day Setup Milestones
-                </span>
-                {isOwnerOrManager && (
-                  <button
-                    type="button"
-                    onClick={() => setIsCustomizeWeeksOpen(true)}
-                    className="flex items-center gap-1.5 px-2.5 py-1 text-xs font-semibold text-gray-600 dark:text-gray-300 hover:text-brand-600 dark:hover:text-brand-400 bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border hover:border-brand-500/40 rounded-lg transition-colors cursor-pointer"
-                    title="Rename Week 1-4 milestones for this workspace"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" />
-                    <span>Customize Week Titles</span>
-                  </button>
-                )}
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
-                {weekTabs.map((w) => (
-                  <button
-                    key={w.id}
-                    type="button"
-                    onClick={() => setActiveWeek(w.id)}
-                    className={`py-2.5 px-3 min-h-[48px] rounded-xl text-center border transition-all cursor-pointer flex flex-col items-center justify-center ${
-                      activeWeek === w.id
-                        ? 'bg-brand-500/10 border-brand-500/40 text-brand-600 dark:text-brand-400 font-bold shadow-xs'
-                        : 'bg-white dark:bg-dark-card border-gray-200 dark:border-dark-border text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-50 dark:hover:bg-dark-200'
-                    }`}
-                  >
-                    <span className="text-xs uppercase tracking-wider font-bold">{w.label}</span>
-                    {w.customTitle && (
-                      <span className="text-[11px] font-medium text-gray-600 dark:text-gray-300 truncate max-w-full mt-0.5" title={w.customTitle}>
-                        {w.customTitle}
-                      </span>
-                    )}
-                  </button>
-                ))}
-              </div>
+            {/* 4 Clean Weekly Tabs (Week 1, Week 2, Week 3, Week 4) */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-2.5 sm:gap-3">
+              {weekTabs.map((w) => (
+                <button
+                  key={w.id}
+                  type="button"
+                  onClick={() => setActiveWeek(w.id)}
+                  className={`py-3 px-4 min-h-[44px] rounded-xl text-center border transition-all cursor-pointer ${
+                    activeWeek === w.id
+                      ? 'bg-brand-500/10 border-brand-500/40 text-brand-600 dark:text-brand-400 font-bold shadow-xs'
+                      : 'bg-white dark:bg-dark-card border-gray-200 dark:border-dark-border text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-50 dark:hover:bg-dark-200'
+                  }`}
+                >
+                  <span className="text-xs uppercase tracking-wider">{w.label}</span>
+                </button>
+              ))}
             </div>
 
             {/* Selected Week Task List Area */}
@@ -331,14 +289,14 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                    Week {currentWeekNum}{getWeekCustomTitle(currentWeekNum) ? `: ${getWeekCustomTitle(currentWeekNum)}` : ''} Tasks ({tasks.length})
+                    Week {currentWeekNum} Tasks ({tasks.length})
                   </span>
                   {isLoadingTasks && <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-500" />}
                 </div>
 
                 {isOwnerOrManager && (
                   client.status === 'Paused' ? (
-                    <span 
+                    <span
                       className="px-3.5 py-2 min-h-[44px] rounded-xl bg-gray-100 dark:bg-dark-200 border border-gray-300 dark:border-dark-border text-gray-500 dark:text-gray-400 text-xs font-bold flex items-center gap-1.5 opacity-80 cursor-not-allowed"
                       title="Task creation is blocked while client organization is paused."
                     >
@@ -352,7 +310,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                       className="flex items-center gap-1.5 px-4 py-2 min-h-[44px] bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-xs font-bold shadow-md shadow-brand-500/25 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
                     >
                       <Plus className="w-4 h-4" />
-                      <span>Add Task</span>
+                      <span>+ Add Task</span>
                     </button>
                   )
                 )}
@@ -380,10 +338,10 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                   </div>
                   <div>
                     <h4 className="text-sm font-bold text-gray-800 dark:text-gray-200">
-                      No Operational Tasks in Week {currentWeekNum}{getWeekCustomTitle(currentWeekNum) ? ` (${getWeekCustomTitle(currentWeekNum)})` : ''}
+                      No Operational Tasks in Week {currentWeekNum}
                     </h4>
                     <p className="text-xs text-gray-400 mt-1 max-w-sm">
-                      Create operational checklists and deliverables for Week {currentWeekNum} setup using the "Add Task" button above.
+                      Create operational checklists and deliverables for Week {currentWeekNum} setup using the + Add Task button above.
                     </p>
                   </div>
                 </div>
@@ -503,17 +461,6 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
             onSuccess={handleTaskUpdated}
             task={editingTask}
             departments={departments}
-          />
-        </React.Suspense>
-      )}
-
-      {isCustomizeWeeksOpen && (
-        <React.Suspense fallback={null}>
-          <CustomizeWeekTitlesModal
-            isOpen={isCustomizeWeeksOpen}
-            onClose={() => setIsCustomizeWeeksOpen(false)}
-            client={client}
-            onSave={handleSaveCustomWeekTitles}
           />
         </React.Suspense>
       )}
