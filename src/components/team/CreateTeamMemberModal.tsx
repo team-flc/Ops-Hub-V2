@@ -6,12 +6,12 @@ import {
   Loader2, CheckCircle2, Camera, Trash2, Clock, DollarSign,
   UserCog
 } from 'lucide-react';
-import { Department, Designation, UserProfile, WorkShift, EmploymentType, EmploymentStatus } from '../../types';
+import { Department, Designation, UserProfile, WorkShift, EmploymentType, EmploymentStatus, CompanyWorkSchedule } from '../../types';
 import { useOpsStore } from '../../store/opsStore';
 import { teamManagementService } from '../../lib/teamManagementService';
 import { employeeOperationsService } from '../../lib/employeeOperationsService';
 import { storageService, useSignedUrl } from '../../lib/storageService';
-import { getPKTTodayDateString } from '../../lib/pktDateUtils';
+import { getPKTTodayDateString, formatWorkingScheduleDescription } from '../../lib/pktDateUtils';
 
 interface CreateTeamMemberModalProps {
   isOpen: boolean;
@@ -65,6 +65,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
   const [dob, setDob] = useState('');
   const [salary, setSalary] = useState<number | ''>('');
   const [shifts, setShifts] = useState<WorkShift[]>([]);
+  const [companySchedules, setCompanySchedules] = useState<CompanyWorkSchedule[]>([]);
   const [selectedShiftId, setSelectedShiftId] = useState('');
   const [customCheckInTime, setCustomCheckInTime] = useState('');
   const [customCheckOutTime, setCustomCheckOutTime] = useState('');
@@ -88,13 +89,23 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
   } | null>(null);
   const [copied, setCopied] = useState(false);
 
-  // Load Work Shifts
+  // Load Work Shifts & Schedules
   useEffect(() => {
     async function loadShifts() {
-      const fetchedShifts = await employeeOperationsService.fetchWorkShifts();
-      setShifts(fetchedShifts);
-      if (fetchedShifts.length > 0 && !selectedShiftId) {
-        setSelectedShiftId(fetchedShifts[0].id);
+      try {
+        const fetchedShifts = typeof employeeOperationsService?.fetchWorkShifts === 'function'
+          ? await employeeOperationsService.fetchWorkShifts()
+          : [];
+        const fetchedSchedules = typeof employeeOperationsService?.fetchCompanyWorkSchedules === 'function'
+          ? await employeeOperationsService.fetchCompanyWorkSchedules()
+          : [];
+        setShifts(fetchedShifts);
+        setCompanySchedules(fetchedSchedules);
+        if (fetchedShifts.length > 0 && !selectedShiftId) {
+          setSelectedShiftId(fetchedShifts[0].id);
+        }
+      } catch (e) {
+        console.error('Failed to load shifts/schedules:', e);
       }
     }
     if (isOpen) {
@@ -935,7 +946,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
                 <div className="p-3 rounded-2xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border flex items-center justify-between text-xs">
                   <div className="flex items-center gap-2 text-slate-700 dark:text-gray-300">
                     <Clock className="w-4 h-4 text-brand-600 shrink-0" />
-                    <span><strong>Working Schedule:</strong> Monday – Saturday (Company Standard Schedule • Off Days Excluded)</span>
+                    <span><strong>Working Schedule:</strong> {formatWorkingScheduleDescription(companySchedules)} (Company Standard Schedule • Off Days Excluded)</span>
                   </div>
                   <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-brand-50 text-brand-700 dark:bg-brand-900/30 dark:text-brand-300 border border-brand-200 dark:border-brand-800">
                     PKT UTC+5

@@ -14,7 +14,7 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.39.0';
  * - No browser CORS headers enabled.
  */
 
-serve(async (req: Request) => {
+export async function handleRequest(req: Request): Promise<Response> {
   // 1. Strictly accept only POST requests
   if (req.method !== 'POST') {
     return new Response(
@@ -83,4 +83,8 @@ serve(async (req: Request) => {
       { status: 500, headers: { 'Content-Type': 'application/json' } }
     );
   }
-});
+}
+
+if ((import.meta as any).main) {
+  serve((req) => handleRequest(req));
+}

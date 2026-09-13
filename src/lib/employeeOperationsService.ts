@@ -121,6 +121,10 @@ export const employeeOperationsService = {
     }
   },
 
+  async fetchCompanyWorkSchedules(): Promise<CompanyWorkSchedule[]> {
+    return this.fetchCompanySchedules();
+  },
+
   isWorkingDay(date: Date, schedules: CompanyWorkSchedule[]): boolean {
     const dateStr = this.getTodayDatePKT(date);
     const dayOfWeek = date.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday

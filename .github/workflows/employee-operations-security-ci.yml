@@ -26,22 +26,30 @@ jobs:
           node-version: 20
           cache: 'npm'
 
-      - name: Install Dependencies
+      - name: Setup Deno Runtime for Edge Function Tests
+        uses: denoland/setup-deno@v2
+        with:
+          deno-version: v1.x
+
+      - name: Install Node Dependencies
         run: npm ci
 
-      - name: Setup Supabase CLI
+      - name: Setup Pinned Supabase CLI
         uses: supabase/setup-cli@v1
         with:
-          version: latest
+          version: 2.15.5
 
-      - name: Start Ephemeral Supabase Database Stack
+      - name: Start Ephemeral Local Supabase Stack
         run: supabase start
 
-      - name: Reset Database & Apply All Migrations
+      - name: Reset Database & Apply All Migrations Cleanly
         run: supabase db reset
 
-      - name: Run Ephemeral Database Security Tests (pgTAP)
+      - name: Run Ephemeral Database Behavioral Security Tests (pgTAP)
         run: supabase test db
+
+      - name: Run Edge Function Deno Test Suite
+        run: deno test --allow-net --allow-env supabase/functions/attendance-automation/index.test.ts
 
       - name: Run Linter (oxlint)
         run: npx oxlint .
@@ -49,7 +57,7 @@ jobs:
       - name: Verify Clean Git Working Tree (diff-check)
         run: git diff --check
 
-      - name: Run Full Vitest Test Suite
+      - name: Run Full Vitest Test Suite (Unit & Edge Specs)
         run: npm test -- --run
 
       - name: Run Production TypeScript & Vite Build

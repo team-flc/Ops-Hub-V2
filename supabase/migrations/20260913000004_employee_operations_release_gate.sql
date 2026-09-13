@@ -120,6 +120,10 @@ $$;
 REVOKE ALL ON FUNCTION public.fn_employee_get_current_attendance FROM PUBLIC, anon;
 GRANT EXECUTE ON FUNCTION public.fn_employee_get_current_attendance TO authenticated;
 
+-- Ensure cron automation RPC is strictly service_role only
+REVOKE ALL ON FUNCTION public.fn_cron_process_attendance_automation FROM PUBLIC, anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.fn_cron_process_attendance_automation TO service_role;
+
 -- ------------------------------------------------------------------------------
 -- 2. COMPANY WORK SCHEDULES RLS POLICIES
 -- ------------------------------------------------------------------------------
