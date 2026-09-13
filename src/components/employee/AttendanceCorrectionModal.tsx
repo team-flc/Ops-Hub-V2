@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { Clock, CheckCircle2, AlertCircle, X, User, Search, ShieldCheck } from 'lucide-react';
-import { EmployeeAttendance, EmployeeRecord, Profile, WorkShift } from '../../types';
+import { EmployeeAttendance, EmployeeRecord, UserProfile, TeamMemberRecord, WorkShift } from '../../types';
 import { employeeOperationsService } from '../../lib/employeeOperationsService';
 import { getPKTTodayDateString } from '../../lib/pktDateUtils';
 import { supabase } from '../../lib/supabase';
@@ -10,7 +10,7 @@ interface AttendanceCorrectionModalProps {
   onClose: () => void;
   attendance: EmployeeAttendance | null;
   employeeId?: string;
-  teamMembers?: Profile[];
+  teamMembers?: (UserProfile | TeamMemberRecord)[];
   employeeRecords?: EmployeeRecord[];
   shifts?: WorkShift[];
   callerId: string;
@@ -30,7 +30,7 @@ export const AttendanceCorrectionModal: React.FC<AttendanceCorrectionModalProps>
 }) => {
   const [targetEmployeeId, setTargetEmployeeId] = useState<string>(employeeId || '');
   const [employeeSearch, setEmployeeSearch] = useState('');
-  const [availableMembers, setAvailableMembers] = useState<Profile[]>(teamMembers);
+  const [availableMembers, setAvailableMembers] = useState<(UserProfile | TeamMemberRecord)[]>(teamMembers);
   const [availableShifts, setAvailableShifts] = useState<WorkShift[]>(shifts);
   const [availableRecords, setAvailableRecords] = useState<EmployeeRecord[]>(employeeRecords);
 
@@ -136,7 +136,8 @@ export const AttendanceCorrectionModal: React.FC<AttendanceCorrectionModalProps>
     return availableMembers.filter(m => {
       if (m.status !== 'active' || m.role === 'client') return false;
       if (!q) return true;
-      return m.fullName.toLowerCase().includes(q) || m.workEmail.toLowerCase().includes(q);
+      const email = ((m as any).workEmail || (m as any).email || '').toLowerCase();
+      return m.fullName.toLowerCase().includes(q) || email.includes(q);
     });
   }, [availableMembers, employeeSearch]);
 
