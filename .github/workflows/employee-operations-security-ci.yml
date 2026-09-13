@@ -38,40 +38,28 @@ jobs:
         with:
           version: latest
 
-      - name: Start Ephemeral Local Supabase Stack
+      - name: Start Ephemeral Local Supabase Stack & Apply Schema
         run: |
+          # Inject test-only bootstrap fixture into ephemeral migrations before startup
+          cp supabase/tests/fixtures/legacy_schema_bootstrap.sql supabase/migrations/00000000000000_legacy_schema_bootstrap.sql
           supabase start --debug 2>&1 | tee /tmp/supabase_start.log || {
+            rm -f supabase/migrations/00000000000000_legacy_schema_bootstrap.sql
             echo "## ❌ Supabase Start Failed" >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
             tail -n 120 /tmp/supabase_start.log >> $GITHUB_STEP_SUMMARY
             echo '```' >> $GITHUB_STEP_SUMMARY
             exit 1
           }
-          echo "## ✅ Supabase Stack Started" >> $GITHUB_STEP_SUMMARY
+          # Remove test fixture immediately to preserve pristine repository state
+          rm -f supabase/migrations/00000000000000_legacy_schema_bootstrap.sql
+          echo "## ✅ Supabase Stack Started & Migrations Applied" >> $GITHUB_STEP_SUMMARY
           echo "### Safe Ephemeral Stack Status" >> $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
           supabase status | sed -E 's/(anon key|service_role key|secret):.*/\1: [REDACTED]/' | tee -a $GITHUB_STEP_SUMMARY
           echo '```' >> $GITHUB_STEP_SUMMARY
 
-      - name: Reset Database & Apply Ephemeral Schema
-        run: |
-          # Inject test-only bootstrap fixture into ephemeral migrations
-          cp supabase/tests/fixtures/legacy_schema_bootstrap.sql supabase/migrations/00000000000000_legacy_schema_bootstrap.sql
-          supabase db reset 2>&1 | tee /tmp/db_reset.log || {
-            rm -f supabase/migrations/00000000000000_legacy_schema_bootstrap.sql
-            echo "## ❌ Database Reset / Migrations Failed" >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            tail -n 120 /tmp/db_reset.log >> $GITHUB_STEP_SUMMARY
-            echo '```' >> $GITHUB_STEP_SUMMARY
-            exit 1
-          }
-          # Remove test fixture immediately to preserve pristine repository state
-          rm -f supabase/migrations/00000000000000_legacy_schema_bootstrap.sql
-          echo "## ✅ Ephemeral Database Reset & Migrations Applied" >> $GITHUB_STEP_SUMMARY
-
       - name: Run Ephemeral Database Behavioral Security Tests (pgTAP)
         run: |
-          sleep 3
           set +e
           supabase test db --debug > /tmp/pgtap.log 2>&1
           TEST_EXIT=$?
