@@ -55,7 +55,7 @@ VALUES
   ('77777777-7777-7777-7777-777777777777', 'owner@ops-hub-test.local', '{"full_name": "Test Owner"}'::jsonb, '{"provider": "email"}'::jsonb, now(), now(), 'authenticated', 'authenticated')
 ON CONFLICT (id) DO NOTHING;
 
-INSERT INTO public.profiles (id, full_name, email, role, status)
+INSERT INTO public.profiles (id, full_name, work_email, role, status)
 VALUES
   ('11111111-1111-1111-1111-111111111111', 'Test Client', 'client@ops-hub-test.local', 'client', 'active'),
   ('22222222-2222-2222-2222-222222222222', 'Test Emp A', 'empa@ops-hub-test.local', 'team_member', 'active'),
@@ -99,7 +99,7 @@ INSERT INTO public.employee_attendance (
     id, employee_id, work_date, shift_id, scheduled_check_in, scheduled_check_out,
     check_in_time, check_out_time, status, check_in_screenshot_path
 ) VALUES (
-    'att-night-open-b',
+    '88888888-8888-8888-8888-888888888888',
     '33333333-3333-3333-3333-333333333333',
     (timezone('Asia/Karachi', now()) - interval '1 day')::date,
     's2222222-2222-2222-2222-222222222222',
@@ -188,6 +188,7 @@ SELECT throws_ok(
 );
 
 -- 7. Screenshot Path Ownership & Traversal Defense
+SELECT tests.authenticate_as('22222222-2222-2222-2222-222222222222');
 SELECT throws_ok(
     $$ SELECT public.fn_employee_check_in('33333333-3333-3333-3333-333333333333/checkin.jpg') $$,
     '%must reside in authenticated employee directory%',
@@ -288,7 +289,7 @@ SELECT isnt(
 );
 SELECT is(
     (public.fn_employee_get_current_attendance() ->> 'id'),
-    'att-night-open-b',
+    '88888888-8888-8888-8888-888888888888',
     '31. Correct unclosed night shift attendance ID is returned'
 );
 
