@@ -38,8 +38,8 @@ import {
 } from './pktDateUtils';
 
 export interface CheckInPayload {
-  employeeId: string;
-  workDate: string; // YYYY-MM-DD
+  employeeId?: string; // Optional legacy compatibility
+  workDate?: string;   // Optional legacy compatibility
   shiftId?: string;
   evidenceBlob?: Blob;
   manualFile?: File;
@@ -47,8 +47,8 @@ export interface CheckInPayload {
 }
 
 export interface CheckOutPayload {
-  attendanceId: string;
-  employeeId: string;
+  attendanceId?: string;
+  employeeId?: string;
   evidenceBlob?: Blob;
   manualFile?: File;
   earlyCheckoutReason?: string;
@@ -453,63 +453,100 @@ export const employeeOperationsService = {
     }
   },
 
+  async fetchCurrentShiftAttendance(): Promise<EmployeeAttendance | null> {
+    if (!supabase) return null;
+    try {
+      const { data, error } = await supabase.rpc('fn_employee_get_current_attendance');
+      if (error || !data) return null;
+      return {
+        id: data.id,
+        employeeId: data.employee_id,
+        workDate: data.work_date,
+        shiftId: data.shift_id,
+        scheduledCheckIn: data.scheduled_check_in,
+        scheduledCheckOut: data.scheduled_check_out,
+        checkInTime: data.check_in_time,
+        checkOutTime: data.check_out_time,
+        status: data.status,
+        minutesLate: data.minutes_late || 0,
+        lateDeduction: Number(data.late_deduction || 0),
+        absenceDeduction: Number(data.absence_deduction || 0),
+        checkInScreenshotPath: data.check_in_screenshot_path,
+        checkOutScreenshotPath: data.check_out_screenshot_path,
+        checkInEvidenceType: data.check_in_evidence_type,
+        checkOutEvidenceType: data.check_out_evidence_type,
+        earlyCheckoutReason: data.early_checkout_reason,
+        earlyCheckoutStatus: data.early_checkout_status,
+        correctionReason: data.correction_reason,
+        correctedBy: data.corrected_by,
+        correctedAt: data.corrected_at,
+        createdAt: data.created_at,
+        updatedAt: data.updated_at
+      };
+    } catch {
+      return null;
+    }
+  },
+
   async checkIn(payload: CheckInPayload): Promise<{ attendance?: EmployeeAttendance; error?: string }> {
     if (!supabase) return { error: 'Database unconfigured.' };
 
     try {
-      // 1. Client pre-flight check on setup completion (also authoritatively enforced in server RPC)
-      const empRecord = await this.fetchEmployeeRecord(payload.employeeId);
+      // 1. Resolve Authenticated User Session
+      const { data: authData, error: authErr } = await supabase.auth.getUser();
+      const authenticatedUser = authData?.user;
+      const targetUserId = authenticatedUser?.id || payload.employeeId;
+
+      if (!targetUserId) {
+        return { error: authErr?.message || 'Unauthorized: Authenticated session required to check in.' };
+      }
+
+      // 2. Client pre-flight check on setup completion (also authoritatively verified in server RPC)
+      const empRecord = await this.fetchEmployeeRecord(targetUserId);
       if (!empRecord || !empRecord.setupCompletedAt) {
         return { error: 'Employee setup is pending. Management must complete employment, shift, and payroll configuration before attendance can be recorded.' };
       }
 
-      // 2. Upload Screenshot Evidence to Private Bucket
+      // 3. Upload Screenshot Evidence to Private Bucket
       let screenshotPath: string | null = null;
       let evidenceType: 'screen_capture' | 'manual_upload' = 'screen_capture';
 
       if (payload.evidenceBlob) {
-        const fileName = `${payload.employeeId}/${payload.workDate || 'shift'}_checkin_${Date.now()}.jpg`;
-        try {
-          const { data: uploadData, error: uploadErr } = await supabase.storage
-            .from('employee-attendance-evidence')
-            .upload(fileName, payload.evidenceBlob, { contentType: 'image/jpeg', upsert: true });
+        const fileName = `${targetUserId}/checkin_${Date.now()}.jpg`;
+        const { data: uploadData, error: uploadErr } = await supabase.storage
+          .from('employee-attendance-evidence')
+          .upload(fileName, payload.evidenceBlob, { contentType: 'image/jpeg', upsert: true });
 
-          if (!uploadErr && uploadData?.path) {
-            screenshotPath = uploadData.path;
-          } else {
-            screenshotPath = fileName;
-          }
-        } catch {
-          screenshotPath = fileName;
+        if (uploadErr || !uploadData?.path) {
+          return { error: uploadErr?.message || 'Screenshot upload failed. Please try again.' };
         }
+        screenshotPath = uploadData.path;
       } else if (payload.manualFile) {
         evidenceType = 'manual_upload';
         const fileExt = payload.manualFile.name.split('.').pop() || 'jpg';
-        const fileName = `${payload.employeeId}/${payload.workDate || 'shift'}_checkin_manual_${Date.now()}.${fileExt}`;
-        try {
-          const { data: uploadData, error: uploadErr } = await supabase.storage
-            .from('employee-attendance-evidence')
-            .upload(fileName, payload.manualFile, { upsert: true });
+        const fileName = `${targetUserId}/checkin_manual_${Date.now()}.${fileExt}`;
+        const { data: uploadData, error: uploadErr } = await supabase.storage
+          .from('employee-attendance-evidence')
+          .upload(fileName, payload.manualFile, { upsert: true });
 
-          if (!uploadErr && uploadData?.path) {
-            screenshotPath = uploadData.path;
-          } else {
-            screenshotPath = fileName;
-          }
-        } catch {
-          screenshotPath = fileName;
+        if (uploadErr || !uploadData?.path) {
+          return { error: uploadErr?.message || 'Screenshot upload failed. Please try again.' };
         }
+        screenshotPath = uploadData.path;
       }
 
       if (!screenshotPath) {
         return { error: 'Attendance proof screenshot is required to complete check-in.' };
       }
 
-      // 3. Call Server-Authoritative Check-In RPC
+      // 4. Call Server-Authoritative Check-In RPC
+      const metadataPayload = { ...(payload.metadata || {}) };
+      delete (metadataPayload as any).browserTime;
+
       const { data: saved, error: rpcErr } = await supabase.rpc('fn_employee_check_in', {
         p_screenshot_path: screenshotPath,
         p_evidence_type: evidenceType,
-        p_metadata: payload.metadata || { userAgent: navigator.userAgent }
+        p_metadata: metadataPayload
       });
 
       if (rpcErr || !saved) {
@@ -555,61 +592,63 @@ export const employeeOperationsService = {
     if (!supabase) return { error: 'Database unconfigured.' };
 
     try {
-      // 1. Client pre-flight check on setup completion (also authoritatively enforced in server RPC)
-      const empRecord = await this.fetchEmployeeRecord(payload.employeeId);
+      // 1. Resolve Authenticated User Session
+      const { data: authData, error: authErr } = await supabase.auth.getUser();
+      const authenticatedUser = authData?.user;
+      const targetUserId = authenticatedUser?.id || payload.employeeId;
+
+      if (!targetUserId) {
+        return { error: authErr?.message || 'Unauthorized: Authenticated session required to check out.' };
+      }
+
+      // 2. Client pre-flight check on setup completion (also authoritatively enforced in server RPC)
+      const empRecord = await this.fetchEmployeeRecord(targetUserId);
       if (!empRecord || !empRecord.setupCompletedAt) {
         return { error: 'Employee setup is pending. Management must complete employment, shift, and payroll configuration before attendance can be recorded.' };
       }
 
-      // 2. Upload Screenshot Evidence to Private Bucket
+      // 3. Upload Screenshot Evidence to Private Bucket
       let screenshotPath: string | null = null;
       let evidenceType: 'screen_capture' | 'manual_upload' = 'screen_capture';
 
       if (payload.evidenceBlob) {
-        const fileName = `${payload.employeeId}/checkout_${Date.now()}.jpg`;
-        try {
-          const { data: uploadData, error: uploadErr } = await supabase.storage
-            .from('employee-attendance-evidence')
-            .upload(fileName, payload.evidenceBlob, { contentType: 'image/jpeg', upsert: true });
+        const fileName = `${targetUserId}/checkout_${Date.now()}.jpg`;
+        const { data: uploadData, error: uploadErr } = await supabase.storage
+          .from('employee-attendance-evidence')
+          .upload(fileName, payload.evidenceBlob, { contentType: 'image/jpeg', upsert: true });
 
-          if (!uploadErr && uploadData?.path) {
-            screenshotPath = uploadData.path;
-          } else {
-            screenshotPath = fileName;
-          }
-        } catch {
-          screenshotPath = fileName;
+        if (uploadErr || !uploadData?.path) {
+          return { error: uploadErr?.message || 'Screenshot upload failed. Please try again.' };
         }
+        screenshotPath = uploadData.path;
       } else if (payload.manualFile) {
         evidenceType = 'manual_upload';
         const fileExt = payload.manualFile.name.split('.').pop() || 'jpg';
-        const fileName = `${payload.employeeId}/checkout_manual_${Date.now()}.${fileExt}`;
-        try {
-          const { data: uploadData, error: uploadErr } = await supabase.storage
-            .from('employee-attendance-evidence')
-            .upload(fileName, payload.manualFile, { upsert: true });
+        const fileName = `${targetUserId}/checkout_manual_${Date.now()}.${fileExt}`;
+        const { data: uploadData, error: uploadErr } = await supabase.storage
+          .from('employee-attendance-evidence')
+          .upload(fileName, payload.manualFile, { upsert: true });
 
-          if (!uploadErr && uploadData?.path) {
-            screenshotPath = uploadData.path;
-          } else {
-            screenshotPath = fileName;
-          }
-        } catch {
-          screenshotPath = fileName;
+        if (uploadErr || !uploadData?.path) {
+          return { error: uploadErr?.message || 'Screenshot upload failed. Please try again.' };
         }
+        screenshotPath = uploadData.path;
       }
 
       if (!screenshotPath) {
         return { error: 'Attendance proof screenshot is required to complete checkout.' };
       }
 
-      // 3. Call Server-Authoritative Check-Out RPC
+      // 4. Call Server-Authoritative Check-Out RPC
+      const metadataPayload = { ...(payload.metadata || {}) };
+      delete (metadataPayload as any).browserTime;
+
       const { data: updated, error: rpcErr } = await supabase.rpc('fn_employee_check_out', {
-        p_attendance_id: payload.attendanceId,
+        p_attendance_id: payload.attendanceId || null,
         p_screenshot_path: screenshotPath,
         p_evidence_type: evidenceType,
         p_early_reason: payload.earlyCheckoutReason || null,
-        p_metadata: payload.metadata || { userAgent: navigator.userAgent }
+        p_metadata: metadataPayload
       });
 
       if (rpcErr || !updated) {
@@ -2578,18 +2617,6 @@ export const employeeOperationsService = {
           createdAt: data.created_at
         }
       };
-    } catch (err: any) {
-      return { error: err.message };
-    }
-  },
-
-  // 10.6 Attendance Automation RPC Runner
-  async processAttendanceAutomation(): Promise<{ result?: any; error?: string }> {
-    if (!supabase) return { error: 'Database unconfigured.' };
-    try {
-      const { data, error } = await supabase.rpc('fn_cron_process_attendance_automation');
-      if (error) return { error: error.message };
-      return { result: data };
     } catch (err: any) {
       return { error: err.message };
     }

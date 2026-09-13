@@ -165,14 +165,10 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
 
     try {
       const res = await employeeOperationsService.checkIn({
-        employeeId: employeeRecord.id,
-        workDate: todayWorkDate,
-        shiftId: shift?.id,
         evidenceBlob: capturedBlob || undefined,
         manualFile: manualFile || undefined,
         metadata: {
           workMode,
-          browserTime: new Date().toISOString(),
           userAgent: navigator.userAgent
         }
       });
@@ -206,13 +202,9 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
     try {
       const res = await employeeOperationsService.checkOut({
         attendanceId: todayAttendance.id,
-        employeeId: employeeRecord.id,
         evidenceBlob: capturedBlob || undefined,
         manualFile: manualFile || undefined,
-        earlyCheckoutReason: earlyCheckoutReason.trim() || undefined,
-        metadata: {
-          browserTime: new Date().toISOString()
-        }
+        earlyCheckoutReason: earlyCheckoutReason.trim() || undefined
       });
 
       if (res.error) {

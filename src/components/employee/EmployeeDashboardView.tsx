@@ -13,7 +13,8 @@ import {
   CompanyAsset, EmployeeBankDetails, EmployeePayrollRecord,
   EmployeePerformanceRecord, EmployeeManagementTask,
   EmployeeProfileChangeRequest, ROLE_DISPLAY_NAMES,
-  EmployeeWorkReport, EmployeeGoal, EmployeeDocument, EmployeeSalaryHike
+  EmployeeWorkReport, EmployeeGoal, EmployeeDocument, EmployeeSalaryHike,
+  CompanyWorkSchedule
 } from '../../types';
 import { employeeOperationsService } from '../../lib/employeeOperationsService';
 import {
@@ -35,6 +36,7 @@ export const EmployeeDashboardView: React.FC = () => {
   // Data States
   const [employeeRecord, setEmployeeRecord] = useState<EmployeeRecord | null>(null);
   const [shifts, setShifts] = useState<WorkShift[]>([]);
+  const [companySchedules, setCompanySchedules] = useState<CompanyWorkSchedule[]>([]);
   const [todayAttendance, setTodayAttendance] = useState<EmployeeAttendance | null>(null);
   const [attendanceHistory, setAttendanceHistory] = useState<EmployeeAttendance[]>([]);
   const [bankDetails, setBankDetails] = useState<EmployeeBankDetails | null>(null);
@@ -67,12 +69,10 @@ export const EmployeeDashboardView: React.FC = () => {
     setIsLoading(true);
 
     try {
-      // Work date in PKT
-      const todayDate = getPKTTodayDateString();
-
       const [
         rec,
         allShifts,
+        allSchedules,
         todayAtt,
         history,
         bank,
@@ -88,7 +88,8 @@ export const EmployeeDashboardView: React.FC = () => {
       ] = await Promise.all([
         employeeOperationsService.fetchEmployeeRecord(profile.id),
         employeeOperationsService.fetchWorkShifts(),
-        employeeOperationsService.fetchTodayAttendance(profile.id, todayDate),
+        employeeOperationsService.fetchCompanySchedules(),
+        employeeOperationsService.fetchCurrentShiftAttendance(),
         employeeOperationsService.fetchAttendanceHistory(profile.id, 30),
         employeeOperationsService.fetchBankDetails(profile.id),
         employeeOperationsService.fetchEmployeeAssets(profile.id),
@@ -104,6 +105,7 @@ export const EmployeeDashboardView: React.FC = () => {
 
       setEmployeeRecord(rec);
       setShifts(allShifts);
+      setCompanySchedules(allSchedules);
       setTodayAttendance(todayAtt);
       setAttendanceHistory(history);
       setBankDetails(bank);
@@ -225,7 +227,7 @@ export const EmployeeDashboardView: React.FC = () => {
   // Graph 2: Monthly Composition Data
   const monthlyComposition = useMemo(() => {
     const { year, month } = getPKTDateTimeParts();
-    const totalWorkingDays = employeeOperationsService.calculateMonthScheduledWorkingDays(year, month);
+    const totalWorkingDays = employeeOperationsService.calculateMonthScheduledWorkingDays(year, month, companySchedules);
     const onTimeDays = Math.max(0, presentDays - lateDays);
     const absent = unapprovedAbsences;
     const remainingDays = Math.max(0, totalWorkingDays - (onTimeDays + lateDays + absent));
@@ -237,7 +239,7 @@ export const EmployeeDashboardView: React.FC = () => {
       remainingDays,
       totalWorkingDays
     };
-  }, [presentDays, lateDays, unapprovedAbsences]);
+  }, [presentDays, lateDays, unapprovedAbsences, companySchedules]);
 
   // Graph 3: Punctuality Trend (Last 10 attendance records)
   const punctualityTrend = useMemo(() => {
@@ -493,17 +495,17 @@ export const EmployeeDashboardView: React.FC = () => {
           <div className="space-y-2 pt-1">
             <div className="h-4 rounded-full bg-slate-100 dark:bg-dark-sidebar flex overflow-hidden">
               <div
-                style={{ width: `${(monthlyComposition.onTimeDays / (monthlyComposition.totalWorkingDays || 26)) * 100}%` }}
+                style={{ width: `${monthlyComposition.totalWorkingDays > 0 ? (monthlyComposition.onTimeDays / monthlyComposition.totalWorkingDays) * 100 : 0}%` }}
                 className="bg-emerald-500 h-full"
                 title={`On-time: ${monthlyComposition.onTimeDays}d`}
               />
               <div
-                style={{ width: `${(monthlyComposition.lateDays / (monthlyComposition.totalWorkingDays || 26)) * 100}%` }}
+                style={{ width: `${monthlyComposition.totalWorkingDays > 0 ? (monthlyComposition.lateDays / monthlyComposition.totalWorkingDays) * 100 : 0}%` }}
                 className="bg-amber-500 h-full"
                 title={`Late: ${monthlyComposition.lateDays}d`}
               />
               <div
-                style={{ width: `${(monthlyComposition.absent / (monthlyComposition.totalWorkingDays || 26)) * 100}%` }}
+                style={{ width: `${monthlyComposition.totalWorkingDays > 0 ? (monthlyComposition.absent / monthlyComposition.totalWorkingDays) * 100 : 0}%` }}
                 className="bg-rose-500 h-full"
                 title={`Absent: ${monthlyComposition.absent}d`}
               />
