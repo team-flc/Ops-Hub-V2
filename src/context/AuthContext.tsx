@@ -36,41 +36,25 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     try {
-      const { data, error } = await supabase
+      let { data, error } = await supabase
         .from('profiles')
-        .select(`
-          id,
-          full_name,
-          work_email,
-          phone,
-          backup_phone,
-          bio,
-          avatar_url,
-          linkedin_url,
-          facebook_url,
-          instagram_url,
-          contact_email,
-          role,
-          status,
-          designation_id,
-          reporting_manager_id,
-          start_date,
-          suspended_at,
-          suspended_by,
-          archived_at,
-          archived_by,
-          archive_reason,
-          previous_status,
-          organization_id,
-          created_at,
-          updated_at
-        `)
+        .select('*')
         .eq('id', userId)
         .maybeSingle();
 
       if (error) {
-        console.error('Profile fetch database error:', error.message);
-        return { profile: null, error: 'Unable to verify account profile. Please check your connection and try again.' };
+        console.warn('Full profile select encountered an issue, trying core fields fallback:', error.message);
+        const fallbackRes = await supabase
+          .from('profiles')
+          .select('id, full_name, role, status, work_email, avatar_url, phone, bio, designation_id, reporting_manager_id, start_date, organization_id, created_at, updated_at')
+          .eq('id', userId)
+          .maybeSingle();
+
+        if (fallbackRes.error) {
+          console.error('Profile fetch database error:', fallbackRes.error.message);
+          return { profile: null, error: 'Unable to verify account profile. Please check your connection and try again.' };
+        }
+        data = fallbackRes.data;
       }
 
       if (!data) {
