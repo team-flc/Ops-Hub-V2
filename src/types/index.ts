@@ -346,6 +346,8 @@ export type ClientLinkType =
   | 'flc_landing_page'
   | 'brand_identity'
   | 'google_drive'
+  | 'important_docs'
+  | 'important_documents'
   | 'static_creatives'
   | 'videos'
   | 'grid'

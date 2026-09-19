@@ -5,7 +5,7 @@ import {
   Building2, ChevronsLeft, ChevronsRight, Briefcase, X,
   Globe, HardDrive, MessageCircle, ExternalLink, Clock, Users, UserCheck,
   Image, Video, PlaySquare, Sparkles, LayoutGrid, Palette, PhoneCall,
-  LayoutDashboard
+  LayoutDashboard, FileText
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { ClientRecord, UserProfile } from '../../types';
@@ -133,6 +133,12 @@ export const Sidebar: React.FC = () => {
       label: 'Google Drive',
       url: clientLinks.google_drive,
       icon: <HardDrive className="w-3.5 h-3.5" />
+    },
+    {
+      key: 'important_docs',
+      label: 'Important Documents',
+      url: clientLinks.important_docs || clientLinks.important_documents,
+      icon: <FileText className="w-3.5 h-3.5" />
     },
     {
       key: 'static_creatives',

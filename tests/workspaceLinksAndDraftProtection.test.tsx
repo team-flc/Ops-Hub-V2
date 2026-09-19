@@ -35,6 +35,7 @@ const mockClientA: ClientRecord = {
     flc_landing_page: 'https://flc-landing.com/apex',
     brand_identity: 'https://brand.apex.com/guidelines',
     google_drive: 'https://drive.google.com/drive/folders/apex-root',
+    important_docs: 'https://docs.google.com/document/d/apex-sop',
     static_creatives: 'https://drive.google.com/drive/folders/apex-statics',
     videos: 'https://drive.google.com/drive/folders/apex-videos',
     grid: 'https://grid.app/apex-dashboard',
@@ -130,8 +131,8 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
     sessionStorage.clear();
   });
 
-  // 1. EXACT 14-ITEM ORDER, LABELS, AND ICONS IN SIDEBAR
-  it('1. Sidebar renders all 14 workspace links in exact required order with correct labels and icons', async () => {
+  // 1. EXACT 15-ITEM ORDER, LABELS, AND ICONS IN SIDEBAR
+  it('1. Sidebar renders all 15 workspace links in exact required order with correct labels and icons', async () => {
     await act(async () => {
       render(
         <MemoryRouter>
@@ -143,7 +144,7 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('14 active')).toBeInTheDocument();
+      expect(screen.getByText('15 active')).toBeInTheDocument();
     });
 
     // Query all rendered links inside sidebar
@@ -155,6 +156,7 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
       'Landing Page',
       'Brand Identity',
       'Google Drive',
+      'Important Documents',
       'Statics',
       'Videos',
       'Grid',
@@ -174,6 +176,12 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
     expect(brandIdentityLink).toHaveAttribute('href', 'https://brand.apex.com/guidelines');
     expect(brandIdentityLink).toHaveAttribute('target', '_blank');
     expect(brandIdentityLink).toHaveAttribute('rel', 'noopener noreferrer');
+
+    // Verify Important Documents link attributes
+    const importantDocsLink = screen.getByRole('link', { name: /Important Documents/i });
+    expect(importantDocsLink).toHaveAttribute('href', 'https://docs.google.com/document/d/apex-sop');
+    expect(importantDocsLink).toHaveAttribute('target', '_blank');
+    expect(importantDocsLink).toHaveAttribute('rel', 'noopener noreferrer');
 
     // Verify POC WhatsApp link attributes
     const pocWhatsAppLink = screen.getByRole('link', { name: /POC WhatsApp/i });
@@ -199,7 +207,7 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('14 active')).toBeInTheDocument();
+      expect(screen.getByText('15 active')).toBeInTheDocument();
     });
 
     // Update client A in store to have only 3 links
@@ -589,5 +597,58 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
     expect(formatWhatsAppUrl('')).toBe('');
     expect(formatWhatsAppUrl(null)).toBe('');
     expect(formatWhatsAppUrl(undefined)).toBe('');
+  });
+
+  // 12. IMPORTANT DOCUMENTS WORKSPACE LINK CRUD & DRAFT PROTECTION
+  it('12. Important Documents URL is configurable in ClientDetailsTab, CreateClientModal, and DuplicateClientModal', async () => {
+    const updatedClientWithDocs: ClientRecord = {
+      ...mockClientA,
+      links: {
+        ...mockClientA.links,
+        important_docs: 'https://notion.so/apex/important-docs'
+      }
+    };
+
+    const updateClientSpy = vi.spyOn(clientManagementService, 'updateClient').mockResolvedValue({
+      data: updatedClientWithDocs,
+      error: undefined
+    });
+
+    const onClientUpdatedMock = vi.fn();
+
+    render(
+      <ClientDetailsTab
+        client={mockClientA}
+        currentUserProfile={mockOwnerProfile}
+        eligibleManagers={[mockOwnerProfile]}
+        onClientUpdated={onClientUpdatedMock}
+      />
+    );
+
+    const importantDocsInput = screen.getByLabelText(/Important Documents URL/i) as HTMLInputElement;
+    expect(importantDocsInput).toBeInTheDocument();
+    expect(importantDocsInput.value).toBe('https://docs.google.com/document/d/apex-sop');
+
+    fireEvent.change(importantDocsInput, { target: { value: 'https://notion.so/apex/important-docs' } });
+    expect(screen.getByTestId('unsaved-changes-indicator')).toBeInTheDocument();
+
+    const saveBtn = screen.getByRole('button', { name: /Save Changes/i });
+    await act(async () => {
+      fireEvent.click(saveBtn);
+    });
+
+    await waitFor(() => {
+      expect(updateClientSpy).toHaveBeenCalledWith(
+        mockClientA.id,
+        expect.objectContaining({
+          links: expect.objectContaining({
+            important_docs: 'https://notion.so/apex/important-docs'
+          })
+        }),
+        'usr-owner-1'
+      );
+    });
+
+    expect(onClientUpdatedMock).toHaveBeenCalledWith(updatedClientWithDocs);
   });
 });

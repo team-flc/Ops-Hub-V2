@@ -73,6 +73,7 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
   const [flcLandingPageUrl, setFlcLandingPageUrl] = useState('');
   const [brandIdentityUrl, setBrandIdentityUrl] = useState('');
   const [driveUrl, setDriveUrl] = useState('');
+  const [importantDocsUrl, setImportantDocsUrl] = useState('');
   const [staticCreativesUrl, setStaticCreativesUrl] = useState('');
   const [videosUrl, setVideosUrl] = useState('');
   const [vslUrl, setVslUrl] = useState('');
@@ -172,6 +173,7 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
       flc_landing_page: flcLandingPageUrl,
       brand_identity: brandIdentityUrl,
       google_drive: driveUrl,
+      important_docs: importantDocsUrl,
       static_creatives: staticCreativesUrl,
       videos: videosUrl,
       vsl: vslUrl,
@@ -491,6 +493,21 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
                   value={driveUrl}
                   onChange={(e) => setDriveUrl(e.target.value)}
                   placeholder="https://drive.google.com/drive/folders/..."
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="link-important-docs" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Important Documents URL
+                </label>
+                <input
+                  id="link-important-docs"
+                  data-testid="link-important-docs"
+                  type="url"
+                  value={importantDocsUrl}
+                  onChange={(e) => setImportantDocsUrl(e.target.value)}
+                  placeholder="https://... (Important Documents / Notion / Google Doc Link)"
                   className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
                 />
               </div>
