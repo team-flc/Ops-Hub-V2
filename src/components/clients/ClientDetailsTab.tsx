@@ -3,9 +3,10 @@ import {
   Building2, 
   Link2, Check, AlertCircle, Save, Loader2, Plus, 
   Trash2, ExternalLink,
-  Camera, Archive, X, MessageCircle
+  Camera, Archive, X, MessageCircle, Calendar
 } from 'lucide-react';
 import { useOpsStore } from '../../store/opsStore';
+import { useDaysSinceOnboarding, formatOnboardingDate } from '../../lib/pktDateUtils';
 
 const LinkedInIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" }) => (
   <svg className={className} viewBox="0 0 24 24" fill="currentColor">
@@ -113,6 +114,8 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
   const [isSaving, setIsSaving] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+
+  const onboardingInfo = useDaysSinceOnboarding(activationDate);
 
   // Check if form is modified from saved client prop
   const isDirty = useMemo(() => {
@@ -780,9 +783,16 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
             </div>
 
             <div>
-              <label htmlFor="detail-activation-date" className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
-                Activation Date <span className="text-rose-500">*</span>
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label htmlFor="detail-activation-date" className="block text-xs font-bold text-gray-700 dark:text-gray-300">
+                  Project Start Date <span className="text-rose-500">*</span>
+                </label>
+                {!onboardingInfo.isMissing && (
+                  <span className="text-[11px] font-bold text-brand-600 dark:text-brand-400">
+                    {onboardingInfo.badgeLabel}
+                  </span>
+                )}
+              </div>
               <input
                 id="detail-activation-date"
                 type="date"
@@ -792,6 +802,9 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 required
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60"
               />
+              <p className="text-[11px] text-gray-400 mt-1">
+                {onboardingInfo.formattedBadge}
+              </p>
             </div>
 
             <div>

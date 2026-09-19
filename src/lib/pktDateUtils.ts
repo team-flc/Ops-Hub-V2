@@ -1,3 +1,5 @@
+import { useState, useEffect, useMemo } from 'react';
+
 /**
  * Authoritative PKT (Asia/Karachi - UTC+5) Date & Time Utilities
  * Enforces strict timezone boundaries across all Employee Operations modules.
@@ -345,4 +347,168 @@ export function formatWorkingScheduleDescription(
   }
 
   return 'Monday – Saturday';
+}
+
+/**
+ * Formats an ISO string, Date object, or "YYYY-MM-DD" string into readable PKT onboarding date.
+ * Example: "19 September 2026"
+ */
+export function formatOnboardingDate(isoOrDate: string | Date | null | undefined): string {
+  if (!isoOrDate) return '--';
+  const d = typeof isoOrDate === 'string'
+    ? (isoOrDate.length === 10 ? new Date(`${isoOrDate}T12:00:00+05:00`) : new Date(isoOrDate))
+    : isoOrDate;
+
+  if (isNaN(d.getTime())) return typeof isoOrDate === 'string' ? isoOrDate : '--';
+
+  return new Intl.DateTimeFormat('en-GB', {
+    timeZone: PKT_TIMEZONE,
+    day: 'numeric',
+    month: 'long',
+    year: 'numeric'
+  }).format(d);
+}
+
+export interface DaysSinceOnboardingResult {
+  isMissing: boolean;
+  isFuture: boolean;
+  dayNumber: number | null;
+  weekNumber: 1 | 2 | 3 | 4 | null;
+  formattedBadge: string;
+  badgeLabel: string;
+  startedFormatted: string;
+  statusLabel: string;
+}
+
+/**
+ * Pure calculation of Days Since Onboarding counter in company timezone (PKT - Asia/Karachi).
+ * - Day 1 is the onboarding start date itself (calendar days between today and start date + 1).
+ * - During first 30 days, shows informational setup week:
+ *     Days 1–7: Week 1
+ *     Days 8–14: Week 2
+ *     Days 15–21: Week 3
+ *     Days 22–30: Week 4
+ * - Beyond Day 30: continues day count without week label.
+ * - Missing date: isMissing = true, formattedBadge = "Start date required".
+ * - Future date: isFuture = true, formattedBadge = "Starts on [date]".
+ */
+export function calculateDaysSinceOnboarding(
+  startDateStr: string | null | undefined,
+  refDate: Date = new Date()
+): DaysSinceOnboardingResult {
+  if (!startDateStr || typeof startDateStr !== 'string' || !startDateStr.trim()) {
+    return {
+      isMissing: true,
+      isFuture: false,
+      dayNumber: null,
+      weekNumber: null,
+      formattedBadge: 'Start date required',
+      badgeLabel: 'Start date required',
+      startedFormatted: '',
+      statusLabel: 'Start date required'
+    };
+  }
+
+  const cleanDateStr = startDateStr.slice(0, 10);
+  const parts = cleanDateStr.split('-').map(Number);
+  if (parts.length < 3 || isNaN(parts[0]) || isNaN(parts[1]) || isNaN(parts[2])) {
+    return {
+      isMissing: true,
+      isFuture: false,
+      dayNumber: null,
+      weekNumber: null,
+      formattedBadge: 'Start date required',
+      badgeLabel: 'Start date required',
+      startedFormatted: '',
+      statusLabel: 'Start date required'
+    };
+  }
+
+  const [startYear, startMonth, startDay] = parts;
+  const { year: curYear, month: curMonth, day: curDay } = getPKTDateTimeParts(refDate);
+
+  const startUtc = Date.UTC(startYear, startMonth - 1, startDay);
+  const currentUtc = Date.UTC(curYear, curMonth - 1, curDay);
+
+  const diffMs = currentUtc - startUtc;
+  const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+  const startedFormatted = formatOnboardingDate(cleanDateStr);
+
+  if (diffDays < 0) {
+    const formatted = `Starts on ${startedFormatted}`;
+    return {
+      isMissing: false,
+      isFuture: true,
+      dayNumber: null,
+      weekNumber: null,
+      formattedBadge: formatted,
+      badgeLabel: formatted,
+      startedFormatted,
+      statusLabel: formatted
+    };
+  }
+
+  // Count onboarding day as Day 1: calendar days between today and start date + 1
+  const dayNumber = diffDays + 1;
+
+  let weekNumber: 1 | 2 | 3 | 4 | null = null;
+  if (dayNumber >= 1 && dayNumber <= 7) {
+    weekNumber = 1;
+  } else if (dayNumber >= 8 && dayNumber <= 14) {
+    weekNumber = 2;
+  } else if (dayNumber >= 15 && dayNumber <= 21) {
+    weekNumber = 3;
+  } else if (dayNumber >= 22 && dayNumber <= 30) {
+    weekNumber = 4;
+  }
+
+  let badgeLabel = `Day ${dayNumber} with us`;
+  if (weekNumber !== null) {
+    badgeLabel = `Day ${dayNumber} with us (Week ${weekNumber})`;
+  }
+
+  const formattedBadge = `${badgeLabel} · Started ${startedFormatted}`;
+
+  return {
+    isMissing: false,
+    isFuture: false,
+    dayNumber,
+    weekNumber,
+    formattedBadge,
+    badgeLabel,
+    startedFormatted,
+    statusLabel: `Day ${dayNumber} with us`
+  };
+}
+
+/**
+ * React hook that provides the reactive Days Since Onboarding counter.
+ * Automatically updates when date changes or when window regains focus.
+ */
+export function useDaysSinceOnboarding(startDateStr: string | null | undefined): DaysSinceOnboardingResult {
+  const [currentDate, setCurrentDate] = useState<Date>(() => new Date());
+
+  useEffect(() => {
+    const handleRecompute = () => {
+      setCurrentDate(new Date());
+    };
+
+    window.addEventListener('focus', handleRecompute);
+    document.addEventListener('visibilitychange', handleRecompute);
+
+    // Periodic check every 60s to detect midnight transition across long-open tabs
+    const timer = setInterval(() => {
+      setCurrentDate(new Date());
+    }, 60000);
+
+    return () => {
+      window.removeEventListener('focus', handleRecompute);
+      document.removeEventListener('visibilitychange', handleRecompute);
+      clearInterval(timer);
+    };
+  }, []);
+
+  return useMemo(() => {
+    return calculateDaysSinceOnboarding(startDateStr, currentDate);
+  }, [startDateStr, currentDate]);
 }

@@ -2,12 +2,15 @@ import React, { useState, useRef, useEffect } from 'react';
 import { 
   Building2, User, AlertTriangle,
   CheckCircle2, Clock, Archive,
-  X, ChevronDown, ChevronUp, Link2, Eye
+  X, ChevronDown, ChevronUp, Link2, Eye,
+  Calendar, Edit3, Loader2, Check
 } from 'lucide-react';
 import { ClientRecord, ClientStatus, UserProfile } from '../../types';
-import { calculateLinkedInReadiness } from '../../lib/clientManagementService';
+import { calculateLinkedInReadiness, clientManagementService } from '../../lib/clientManagementService';
 import { useAuth } from '../../context/AuthContext';
 import { ClientLinkSharingModal } from '../portal/ClientLinkSharingModal';
+import { useDaysSinceOnboarding, formatOnboardingDate } from '../../lib/pktDateUtils';
+import { useOpsStore } from '../../store/opsStore';
 
 const LinkedInIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" }) => (
   <svg className={className} viewBox="0 0 24 24" fill="currentColor">
@@ -19,6 +22,7 @@ interface SelectedClientHeaderProps {
   client: ClientRecord;
   currentUserProfile?: UserProfile | null;
   currentUserRole?: string;
+  onClientUpdated?: (updated: ClientRecord) => void;
 }
 
 // Restrained Color Palette: Brand Red, Black, White, Neutral Grayscale
@@ -54,15 +58,28 @@ const PACKAGE_STYLES: Record<string, string> = {
 export const SelectedClientHeader: React.FC<SelectedClientHeaderProps> = ({ 
   client,
   currentUserProfile,
-  currentUserRole
+  currentUserRole,
+  onClientUpdated
 }) => {
   const auth = useAuth();
   const profile = currentUserProfile ?? auth?.profile;
   const role = currentUserRole ?? profile?.role;
   const [isLinkedInPopoverOpen, setIsLinkedInPopoverOpen] = useState(false);
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
+  const [isEditStartDateOpen, setIsEditStartDateOpen] = useState(false);
+  const [editDateValue, setEditDateValue] = useState(client.activationDate || '');
+  const [isSavingDate, setIsSavingDate] = useState(false);
+  const [dateError, setDateError] = useState<string | null>(null);
+
   const isManagerOrOwner = role === 'owner' || role === 'operational_manager';
   const popoverRef = useRef<HTMLDivElement>(null);
+
+  const onboardingInfo = useDaysSinceOnboarding(client.activationDate);
+
+  // Sync date input with client prop
+  useEffect(() => {
+    setEditDateValue(client.activationDate || '');
+  }, [client.activationDate]);
 
   // Close LinkedIn popover on outside click
   useEffect(() => {
@@ -88,6 +105,36 @@ export const SelectedClientHeader: React.FC<SelectedClientHeaderProps> = ({
 
   const activeProfiles = (client.linkedinProfiles || []).filter((p) => p.status === 'active');
 
+  const handleSaveStartDate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editDateValue) {
+      setDateError('Please select a valid start date.');
+      return;
+    }
+    setIsSavingDate(true);
+    setDateError(null);
+    try {
+      const res = await clientManagementService.updateClient(
+        client.id,
+        { activationDate: editDateValue },
+        profile?.id
+      );
+      if (res.error || !res.data) {
+        setDateError(res.error || 'Failed to update start date.');
+      } else {
+        useOpsStore.getState().updateClientRecord(res.data);
+        if (onClientUpdated) {
+          onClientUpdated(res.data);
+        }
+        setIsEditStartDateOpen(false);
+      }
+    } catch (err: any) {
+      setDateError(err.message || 'Error updating start date.');
+    } finally {
+      setIsSavingDate(false);
+    }
+  };
+
   return (
     <div className="bg-white dark:bg-dark-card border-b border-gray-200 dark:border-dark-border px-4 sm:px-6 py-3.5 sm:py-4 flex flex-col md:flex-row md:items-center justify-between gap-4 select-none">
       {/* Client Identity & Badges */}
@@ -112,6 +159,43 @@ export const SelectedClientHeader: React.FC<SelectedClientHeaderProps> = ({
                 : statusCfg.label}
             </span>
           </div>
+
+          {/* Days Since Onboarding Counter Badge */}
+          <div
+            data-testid="onboarding-days-badge"
+            className={`inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-0.5 rounded-full border ${
+              onboardingInfo.isMissing
+                ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 border-amber-500/30'
+                : onboardingInfo.isFuture
+                ? 'bg-blue-500/10 text-blue-700 dark:text-blue-400 border-blue-500/30'
+                : 'bg-gray-100 text-gray-800 dark:bg-dark-100 dark:text-gray-200 border-gray-300 dark:border-dark-border'
+            }`}
+            title={
+              onboardingInfo.isMissing
+                ? isManagerOrOwner
+                  ? 'Click to set project start date'
+                  : 'Start date required (Management action needed)'
+                : onboardingInfo.formattedBadge
+            }
+          >
+            <Calendar className="w-3.5 h-3.5 text-brand-500 flex-shrink-0" />
+            <span>{onboardingInfo.formattedBadge}</span>
+            {isManagerOrOwner && (
+              <button
+                type="button"
+                data-testid="edit-start-date-btn"
+                onClick={() => {
+                  setEditDateValue(client.activationDate || '');
+                  setDateError(null);
+                  setIsEditStartDateOpen(true);
+                }}
+                className="ml-0.5 p-0.5 text-gray-400 hover:text-gray-700 dark:hover:text-gray-200 cursor-pointer"
+                title="Edit Project Start Date"
+              >
+                <Edit3 className="w-3 h-3" />
+              </button>
+            )}
+          </div>
         </div>
 
         <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
@@ -128,8 +212,8 @@ export const SelectedClientHeader: React.FC<SelectedClientHeaderProps> = ({
 
           <span className="text-gray-300 dark:text-gray-600">•</span>
 
-          <div>
-            <span>Activated: <strong className="text-gray-700 dark:text-gray-300 font-semibold">{client.activationDate}</strong></span>
+          <div className="flex items-center gap-1">
+            <span>Started: <strong className="text-gray-700 dark:text-gray-300 font-semibold">{client.activationDate ? formatOnboardingDate(client.activationDate) : 'Not set'}</strong></span>
           </div>
         </div>
       </div>
@@ -283,6 +367,88 @@ export const SelectedClientHeader: React.FC<SelectedClientHeaderProps> = ({
           companyName={client.companyName}
           currentUserRole={role}
         />
+      )}
+
+      {/* Quick Edit Start Date Modal (Owner / Operational Manager only) */}
+      {isEditStartDateOpen && isManagerOrOwner && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm animate-fade-in">
+          <div
+            className="w-full max-w-md bg-white dark:bg-dark-card rounded-2xl shadow-2xl border border-gray-200 dark:border-dark-border p-6 space-y-4 animate-scale-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="flex items-center justify-between pb-3 border-b border-gray-100 dark:border-dark-border">
+              <div className="flex items-center gap-2">
+                <Calendar className="w-4 h-4 text-brand-500" />
+                <h3 className="text-sm font-bold text-gray-900 dark:text-gray-100">
+                  Update Project Start Date
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsEditStartDateOpen(false)}
+                className="p-1 rounded-lg text-gray-400 hover:text-gray-700 dark:hover:text-gray-200"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <p className="text-xs text-gray-500">
+              Set the authoritative client onboarding start date for <strong>{client.companyName}</strong>. This date determines the active Days Since Onboarding counter in company timezone (PKT).
+            </p>
+
+            {dateError && (
+              <div className="p-3 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-semibold">
+                {dateError}
+              </div>
+            )}
+
+            <form onSubmit={handleSaveStartDate} className="space-y-4">
+              <div>
+                <label htmlFor="quick-start-date-input" className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
+                  Project Start Date (Asia/Karachi)
+                </label>
+                <input
+                  id="quick-start-date-input"
+                  data-testid="quick-start-date-input"
+                  type="date"
+                  value={editDateValue}
+                  onChange={(e) => setEditDateValue(e.target.value)}
+                  required
+                  className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsEditStartDateOpen(false)}
+                  disabled={isSavingDate}
+                  className="px-4 py-2 rounded-xl border border-gray-200 dark:border-dark-border text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  data-testid="save-start-date-btn"
+                  disabled={isSavingDate}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold transition-all disabled:opacity-50 cursor-pointer shadow-sm"
+                >
+                  {isSavingDate ? (
+                    <>
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      <span>Saving...</span>
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-3.5 h-3.5" />
+                      <span>Save Date</span>
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
       )}
     </div>
   );

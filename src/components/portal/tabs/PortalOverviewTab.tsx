@@ -12,6 +12,7 @@ import {
   ClientDeliverableItem,
   UserProfile
 } from '../../../types';
+import { useDaysSinceOnboarding } from '../../../lib/pktDateUtils';
 
 
 export function getFriendlyTaskStatus(status: string): 'Action Needed' | 'In Progress' | 'Completed' | 'Upcoming' {
@@ -52,6 +53,8 @@ export const PortalOverviewTab: React.FC<PortalOverviewTabProps> = ({
   const [feedbackText, setFeedbackText] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [feedbackError, setFeedbackError] = useState<string | null>(null);
+
+  const onboardingInfo = useDaysSinceOnboarding(client.activationDate);
 
   // Review Tasks (Action Needed)
   const reviewTasks = tasks.filter((t) => t.status === 'Client Review');
@@ -110,7 +113,17 @@ export const PortalOverviewTab: React.FC<PortalOverviewTabProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Days Since Onboarding Badge */}
+            <span
+              data-testid="portal-overview-onboarding-badge"
+              className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-gray-100 text-gray-800 dark:bg-dark-100 dark:text-gray-200 text-xs font-bold border border-gray-300 dark:border-dark-border"
+              title={onboardingInfo.formattedBadge}
+            >
+              <Calendar className="w-3.5 h-3.5 text-brand-500 flex-shrink-0" />
+              <span>{onboardingInfo.formattedBadge}</span>
+            </span>
+
             <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-bold border border-emerald-500/20">
               <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
               <span>{client.status === 'Paused' ? 'Workspace Paused' : 'Workspace Active'}</span>

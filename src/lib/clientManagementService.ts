@@ -4,6 +4,7 @@
 // ==============================================================================
 
 import { supabase, isSupabaseConfigured } from './supabase';
+import { getPKTTodayDateString } from './pktDateUtils';
 import { 
   ClientRecord, 
   ClientPackage, 
@@ -728,6 +729,25 @@ export const clientManagementService = {
         return { error: 'Direct modification or restoration of an Archived client is prohibited. Use the dedicated Restore flow.' };
       }
 
+      // Permission Enforcement: Only Owner and authorized Operational Manager can edit activationDate
+      if (input.activationDate !== undefined && input.activationDate !== previousClient?.activation_date) {
+        if (actorId) {
+          const { data: actorProfile } = await supabase
+            .from('profiles')
+            .select('id, role')
+            .eq('id', actorId)
+            .maybeSingle();
+
+          if (actorProfile && actorProfile.role !== 'owner') {
+            const isAssignedManager = actorProfile.role === 'operational_manager' &&
+              (previousClient?.operational_manager_id === actorId || previousClient?.created_by === actorId);
+            if (!isAssignedManager) {
+              return { error: 'Only Owner and authorized Operational Managers are permitted to modify the client start date.' };
+            }
+          }
+        }
+      }
+
       const updates: any = {
         updated_at: new Date().toISOString()
       };
@@ -739,7 +759,15 @@ export const clientManagementService = {
       if (input.logoUrl !== undefined) updates.logo_url = input.logoUrl;
       if (input.package !== undefined) updates.package = input.package;
       if (input.operationalManagerId !== undefined) updates.operational_manager_id = input.operationalManagerId;
-      if (input.activationDate !== undefined) updates.activation_date = input.activationDate;
+
+      // Authoritative start date update or automatic save on onboarding completion
+      if (input.activationDate !== undefined) {
+        updates.activation_date = input.activationDate;
+      } else if (input.status === 'Active' && previousClient?.status === 'Onboarding' && !previousClient?.activation_date) {
+        // Automatically save project start date once upon onboarding completion in company timezone
+        updates.activation_date = getPKTTodayDateString();
+      }
+
       if (input.requiredLinkedinProfileCount !== undefined) {
         updates.required_linkedin_profile_count = Math.max(1, input.requiredLinkedinProfileCount);
       }

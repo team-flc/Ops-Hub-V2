@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Building2, FileDown, LogOut, ArrowLeft,
-  LayoutDashboard, CheckSquare, Map, FolderOpen
+  LayoutDashboard, CheckSquare, Map, FolderOpen, Calendar
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { 
@@ -17,6 +17,7 @@ import { PortalDeliverablesTab } from './tabs/PortalDeliverablesTab';
 import { ClientReportModal } from './reports/ClientReportModal';
 import { clientPortalService } from '../../lib/clientPortalService';
 import { LiveActivityTicker } from './LiveActivityTicker';
+import { useDaysSinceOnboarding } from '../../lib/pktDateUtils';
 
 interface ClientPortalLayoutProps {
   portalData: PortalDataResult;
@@ -42,6 +43,8 @@ export const ClientPortalLayout: React.FC<ClientPortalLayoutProps> = ({
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
   const client = portalData.client;
+  const onboardingInfo = useDaysSinceOnboarding(client?.activationDate);
+
   if (!client) return null;
 
   const reviewTasksCount = (portalData.tasks || []).filter((t: ClientTask) => t.status === 'Client Review').length;
@@ -86,9 +89,19 @@ export const ClientPortalLayout: React.FC<ClientPortalLayoutProps> = ({
             <div className="w-7 h-7 rounded-lg bg-brand-500 text-white font-black text-xs flex items-center justify-center flex-shrink-0 shadow-xs">
               {client.companyName ? client.companyName[0].toUpperCase() : 'C'}
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 flex items-center gap-2">
               <span className="text-xs sm:text-sm font-bold text-gray-800 dark:text-gray-200 truncate block">
                 {client.companyName}
+              </span>
+
+              {/* Days Since Onboarding Badge */}
+              <span
+                data-testid="portal-onboarding-days-badge"
+                className="hidden sm:inline-flex items-center gap-1.5 text-[11px] font-bold px-2.5 py-0.5 rounded-full border bg-gray-100 text-gray-800 dark:bg-dark-100 dark:text-gray-200 border-gray-300 dark:border-dark-border flex-shrink-0"
+                title={onboardingInfo.formattedBadge}
+              >
+                <Calendar className="w-3 h-3 text-brand-500 flex-shrink-0" />
+                <span>{onboardingInfo.formattedBadge}</span>
               </span>
             </div>
           </div>
