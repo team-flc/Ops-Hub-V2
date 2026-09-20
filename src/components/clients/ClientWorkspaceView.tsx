@@ -204,6 +204,13 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
     }
   };
 
+  const handleTasksArchived = (archivedTaskIds: string[]) => {
+    setAllTasks((prev) => prev.filter((t) => !archivedTaskIds.includes(t.id)));
+    if (selectedTaskDetails && archivedTaskIds.includes(selectedTaskDetails.id)) {
+      setSelectedTaskDetails(null);
+    }
+  };
+
   const handleStartWork = async (task: ClientTask) => {
     if (!task.assigneeId) {
       showToast('Assign a Team Member before starting this task.');
@@ -480,6 +487,8 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
               <ClientKanbanBoard
                 client={client}
                 tasks={currentWeekTasks}
+                weekNumber={currentWeekNum}
+                weekName={weekNames[currentWeekNum]}
                 currentUserProfile={currentUserProfile}
                 onSelectTask={(t) => setSelectedTaskDetails(t)}
                 onOpenEditModal={(t) => setEditingTask(t)}
@@ -488,6 +497,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                 onStartWork={handleStartWork}
                 onPauseTimer={handlePauseTimer}
                 onResumeTimer={handleResumeTimer}
+                onTasksArchived={handleTasksArchived}
                 onShowToast={showToast}
               />
             </div>

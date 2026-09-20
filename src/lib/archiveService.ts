@@ -306,5 +306,50 @@ export const archiveService = {
       entityId: taskId,
       newAssigneeId: newAssigneeId || undefined
     });
+  },
+
+  /**
+   * Archive Multiple Tasks - Authoritatively executed by manage-archive
+   */
+  async archiveMultipleTasks(
+    taskIds: string[],
+    reason: string
+  ): Promise<{ successfulIds: string[]; failedIds: string[]; errors: string[] }> {
+    const trimmed = (reason || '').trim();
+    if (!trimmed) {
+      return { successfulIds: [], failedIds: taskIds, errors: ['Mandatory archive reason is required.'] };
+    }
+    if (!taskIds || taskIds.length === 0) {
+      return { successfulIds: [], failedIds: [], errors: [] };
+    }
+
+    const successfulIds: string[] = [];
+    const failedIds: string[] = [];
+    const errors: string[] = [];
+
+    const results = await Promise.allSettled(
+      taskIds.map(async (id) => {
+        const res = await this.archiveTask(id, trimmed);
+        if (!res.success || res.error) {
+          throw new Error(res.error || `Failed to archive task ${id}`);
+        }
+        return id;
+      })
+    );
+
+    results.forEach((r, idx) => {
+      const id = taskIds[idx];
+      if (r.status === 'fulfilled') {
+        successfulIds.push(id);
+      } else {
+        failedIds.push(id);
+        const errMsg = r.reason?.message || `Failed to archive task ${id}`;
+        if (!errors.includes(errMsg)) {
+          errors.push(errMsg);
+        }
+      }
+    });
+
+    return { successfulIds, failedIds, errors };
   }
 };

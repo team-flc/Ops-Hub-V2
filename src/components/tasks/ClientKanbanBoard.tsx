@@ -1,15 +1,18 @@
 import React, { useState } from 'react';
 import {
-  Clock, PlayCircle, ShieldCheck, CheckCheck
+  Clock, PlayCircle, ShieldCheck, CheckCheck, Archive
 } from 'lucide-react';
 import { ClientRecord, ClientTask, ClientTaskStatus, UserProfile } from '../../types';
 import { ClientKanbanCard } from './ClientKanbanCard';
 import { TaskApprovalModal } from './TaskApprovalModal';
 import { TaskFeedbackModal } from './TaskFeedbackModal';
+import { ArchiveColumnTasksModal } from './ArchiveColumnTasksModal';
 
 interface ClientKanbanBoardProps {
   client: ClientRecord;
   tasks: ClientTask[];
+  weekNumber?: 1 | 2 | 3 | 4;
+  weekName?: string;
   currentUserProfile?: UserProfile | null;
   onSelectTask: (task: ClientTask) => void;
   onOpenEditModal: (task: ClientTask) => void;
@@ -18,6 +21,7 @@ interface ClientKanbanBoardProps {
   onStartWork: (task: ClientTask) => Promise<void> | void;
   onPauseTimer: (task: ClientTask) => Promise<void> | void;
   onResumeTimer: (task: ClientTask) => Promise<void> | void;
+  onTasksArchived?: (archivedTaskIds: string[]) => void;
   onShowToast: (msg: string) => void;
 }
 
@@ -35,6 +39,8 @@ interface ColumnConfig {
 export const ClientKanbanBoard: React.FC<ClientKanbanBoardProps> = ({
   client,
   tasks,
+  weekNumber,
+  weekName,
   currentUserProfile,
   onSelectTask,
   onOpenEditModal,
@@ -43,11 +49,13 @@ export const ClientKanbanBoard: React.FC<ClientKanbanBoardProps> = ({
   onStartWork,
   onPauseTimer,
   onResumeTimer,
+  onTasksArchived,
   onShowToast
 }) => {
   const [dragOverColumn, setDragOverColumn] = useState<KanbanColumnId | null>(null);
   const [approvalModalTask, setApprovalModalTask] = useState<ClientTask | null>(null);
   const [feedbackModalTask, setFeedbackModalTask] = useState<ClientTask | null>(null);
+  const [archiveModalColumn, setArchiveModalColumn] = useState<{ id: KanbanColumnId; label: string; tasks: ClientTask[] } | null>(null);
 
   const isOwnerOrManager =
     currentUserProfile?.role === 'owner' || currentUserProfile?.role === 'operational_manager';
@@ -200,6 +208,29 @@ export const ClientKanbanBoard: React.FC<ClientKanbanBoardProps> = ({
                     {colTasks.length}
                   </span>
                 </div>
+
+                {/* Top-right Archive All Icon (Management Only) */}
+                {isOwnerOrManager && (
+                  <button
+                    type="button"
+                    disabled={colTasks.length === 0}
+                    onClick={() => setArchiveModalColumn({ id: col.id, label: col.label, tasks: colTasks })}
+                    data-testid={`archive-all-${col.id.toLowerCase().replace(/\s+/g, '-')}-btn`}
+                    title={
+                      colTasks.length === 0
+                        ? `No tasks in ${col.label} to archive`
+                        : `Archive all ${colTasks.length} ${col.label} tasks`
+                    }
+                    aria-label={`Archive all ${col.label} tasks`}
+                    className={`p-1.5 rounded-lg transition-colors cursor-pointer flex items-center justify-center ${
+                      colTasks.length === 0
+                        ? 'text-gray-300 dark:text-gray-600 cursor-not-allowed opacity-40'
+                        : 'text-gray-400 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10'
+                    }`}
+                  >
+                    <Archive className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
 
               {/* Task Cards List */}
@@ -260,6 +291,28 @@ export const ClientKanbanBoard: React.FC<ClientKanbanBoardProps> = ({
             await onStatusChange(feedbackModalTask, 'In Progress', { feedback });
             onShowToast(`Task "${feedbackModalTask.title}" returned to In Progress with feedback.`);
             setFeedbackModalTask(null);
+          }}
+        />
+      )}
+
+      {/* Archive All Column Tasks Modal */}
+      {archiveModalColumn && (
+        <ArchiveColumnTasksModal
+          isOpen={Boolean(archiveModalColumn)}
+          onClose={() => setArchiveModalColumn(null)}
+          client={client}
+          weekNumber={weekNumber || (tasks[0]?.weekNumber as 1 | 2 | 3 | 4) || 1}
+          weekName={weekName}
+          columnName={archiveModalColumn.label}
+          tasks={archiveModalColumn.tasks}
+          onSuccess={(archivedIds) => {
+            if (onTasksArchived) {
+              onTasksArchived(archivedIds);
+            }
+            onShowToast(
+              `Successfully archived ${archivedIds.length} task${archivedIds.length === 1 ? '' : 's'} from ${archiveModalColumn.label}.`
+            );
+            setArchiveModalColumn(null);
           }}
         />
       )}

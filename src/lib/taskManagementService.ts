@@ -1710,5 +1710,56 @@ export const taskManagementService = {
     }
 
     return { error: null };
+  },
+
+  /**
+   * Archive Multiple Tasks (Requires mandatory reason)
+   * Safely batch archives all provided task IDs with scope isolation and error accumulation.
+   */
+  async archiveMultipleTasks(
+    taskIds: string[],
+    reason: string
+  ): Promise<{ successfulIds: string[]; failedIds: string[]; errors: string[] }> {
+    const trimmedReason = (reason || '').trim();
+    if (!trimmedReason) {
+      return {
+        successfulIds: [],
+        failedIds: taskIds,
+        errors: ['A reason is mandatory to archive tasks.']
+      };
+    }
+
+    if (!taskIds || taskIds.length === 0) {
+      return { successfulIds: [], failedIds: [], errors: [] };
+    }
+
+    const successfulIds: string[] = [];
+    const failedIds: string[] = [];
+    const errors: string[] = [];
+
+    const results = await Promise.allSettled(
+      taskIds.map(async (id) => {
+        const res = await this.archiveTask(id, trimmedReason);
+        if (res.error) {
+          throw new Error(res.error);
+        }
+        return id;
+      })
+    );
+
+    results.forEach((r, idx) => {
+      const id = taskIds[idx];
+      if (r.status === 'fulfilled') {
+        successfulIds.push(id);
+      } else {
+        failedIds.push(id);
+        const errMsg = r.reason?.message || `Failed to archive task ${id}`;
+        if (!errors.includes(errMsg)) {
+          errors.push(errMsg);
+        }
+      }
+    });
+
+    return { successfulIds, failedIds, errors };
   }
 };
