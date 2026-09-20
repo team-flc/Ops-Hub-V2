@@ -132,7 +132,8 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
   const renderActiveView = () => {
     if (location.pathname.startsWith('/settings') || viewMode === 'settings') {
       const tabParam = params.tab || location.pathname.split('/settings/')[1];
-      return <SettingsLayout initialTab={(tabParam as SettingsTab) || initialSettingsTab || 'team'} />;
+      const defaultTab = isManagerOrOwner ? (initialSettingsTab || 'team') : 'dashboard';
+      return <SettingsLayout initialTab={(tabParam as SettingsTab) || defaultTab} />;
     }
     if (location.pathname.startsWith('/profile') || viewMode === 'profile') {
       return <MyProfileView />;
@@ -317,11 +318,11 @@ export const App: React.FC = () => {
         }
       />
 
-      {/* Dedicated Settings Route for Owner and Operational Manager */}
+      {/* Dedicated Settings Route for All Staff */}
       <Route
         path="/settings/:tab"
         element={
-          <ProtectedRoute allowedRoles={['owner', 'operational_manager']}>
+          <ProtectedRoute allowedRoles={['owner', 'operational_manager', 'team_member']}>
             <OpsHubWorkspace initialView="settings" />
           </ProtectedRoute>
         }
@@ -329,7 +330,7 @@ export const App: React.FC = () => {
       <Route
         path="/settings"
         element={
-          <ProtectedRoute allowedRoles={['owner', 'operational_manager']}>
+          <ProtectedRoute allowedRoles={['owner', 'operational_manager', 'team_member']}>
             <OpsHubWorkspace initialView="settings" />
           </ProtectedRoute>
         }

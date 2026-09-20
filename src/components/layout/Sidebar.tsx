@@ -258,93 +258,19 @@ export const Sidebar: React.FC = () => {
   if (sidebarCollapsed && !mobileSidebarOpen) {
     return (
       <aside className="hidden md:flex w-16 bg-white dark:bg-dark-sidebar border-r border-gray-200 dark:border-dark-border h-screen flex-col items-center py-4 justify-between z-30 flex-shrink-0 select-none">
-        <div className="flex flex-col items-center gap-4 w-full px-2">
+        <div className="flex flex-col items-center gap-4 w-full px-2 flex-1 min-h-0">
           <button
             type="button"
             onClick={toggleSidebar}
-            className="w-10 h-10 rounded-xl bg-white p-1 flex items-center justify-center shadow-md border border-gray-100 hover:scale-105 transition-transform touch-target cursor-pointer"
+            className="w-10 h-10 rounded-xl bg-white p-1 flex items-center justify-center shadow-md border border-gray-100 hover:scale-105 transition-transform touch-target cursor-pointer flex-shrink-0"
             title="Expand Sidebar"
           >
             <img src="/logo.png" alt="Faseeh Lall Logo" className="w-8 h-8 object-contain" />
           </button>
 
-          {/* My Dashboard button */}
-          <button
-            type="button"
-            onClick={() => {
-              navigate('/');
-              setViewMode('dashboard');
-              setMobileSidebarOpen(false);
-            }}
-            className={`p-2.5 rounded-xl transition-colors touch-target flex items-center justify-center cursor-pointer ${
-              viewMode === 'dashboard'
-                ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
-                : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-100'
-            }`}
-            title="My Dashboard"
-          >
-            <LayoutDashboard className="w-5 h-5" />
-          </button>
-
-          {/* Workspace icon button to return to client workspace */}
-          <button
-            type="button"
-            onClick={() => {
-              navigate(selectedClientId ? `/clients/${selectedClientId}` : '/');
-              setViewMode('client_workspace');
-              setMobileSidebarOpen(false);
-            }}
-            className={`p-2.5 rounded-xl transition-colors touch-target flex items-center justify-center cursor-pointer ${
-              viewMode === 'client_workspace'
-                ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
-                : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-100'
-            }`}
-            title="Client Workspace"
-          >
-            <Briefcase className="w-5 h-5" />
-          </button>
-
-          {/* Employee Attendance & Portal button */}
-          <button
-            type="button"
-            onClick={() => {
-              navigate('/employee/dashboard');
-              setViewMode('employee_dashboard');
-              setMobileSidebarOpen(false);
-            }}
-            className={`p-2.5 rounded-xl transition-colors touch-target flex items-center justify-center cursor-pointer ${
-              viewMode === 'employee_dashboard'
-                ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
-                : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-100'
-            }`}
-            title="Employee Attendance Portal"
-          >
-            <Clock className="w-5 h-5" />
-          </button>
-
-          {/* Employee Operations Management (Owner / Manager) */}
-          {isManagerOrOwner && (
-            <button
-              type="button"
-              onClick={() => {
-                navigate('/operations/employees');
-                setViewMode('employee_operations');
-                setMobileSidebarOpen(false);
-              }}
-              className={`p-2.5 rounded-xl transition-colors touch-target flex items-center justify-center cursor-pointer ${
-                viewMode === 'employee_operations' || viewMode === 'employee_dossier'
-                  ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
-                  : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-100'
-              }`}
-              title="Employee Operations & HR"
-            >
-              <Users className="w-5 h-5" />
-            </button>
-          )}
-
           {/* Collapsed Workspace Links Icons with Tooltips */}
           {selectedClient && (
-            <div className="flex flex-col items-center gap-1.5 py-2 border-y border-gray-100 dark:border-dark-border/60 w-full max-h-72 overflow-y-auto scrollbar-none">
+            <div className="flex flex-col items-center gap-1.5 py-2 border-y border-gray-100 dark:border-dark-border/60 w-full flex-1 overflow-y-auto scrollbar-none">
               {workspaceLinks.map((link) => {
                 const hasUrl = Boolean(link.url && link.url.trim());
                 if (hasUrl) {
@@ -380,26 +306,24 @@ export const Sidebar: React.FC = () => {
           )}
         </div>
 
-        <div className="flex flex-col items-center gap-3">
-          {/* Settings icon for Owner and Manager */}
-          {isManagerOrOwner && (
-            <button
-              type="button"
-              onClick={() => {
-                navigate('/settings');
-                setViewMode('settings');
-                setMobileSidebarOpen(false);
-              }}
-              className={`p-2.5 rounded-xl transition-colors touch-target flex items-center justify-center cursor-pointer ${
-                isSettingsActive
-                  ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
-                  : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-100'
-              }`}
-              title="Settings"
-            >
-              <Building2 className="w-5 h-5" />
-            </button>
-          )}
+        <div className="flex flex-col items-center gap-3 flex-shrink-0">
+          {/* Settings icon for All Staff */}
+          <button
+            type="button"
+            onClick={() => {
+              navigate('/settings');
+              setViewMode('settings');
+              setMobileSidebarOpen(false);
+            }}
+            className={`p-2.5 rounded-xl transition-colors touch-target flex items-center justify-center cursor-pointer ${
+              isSettingsActive
+                ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
+                : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-100'
+            }`}
+            title="Settings"
+          >
+            <Building2 className="w-5 h-5" />
+          </button>
 
           <button
             type="button"
@@ -483,12 +407,12 @@ export const Sidebar: React.FC = () => {
 
           {/* Client Workspace Links */}
           {selectedClient && (
-            <div className="p-3 border-b border-gray-100 dark:border-dark-border/60 flex-shrink-0">
+            <div className="flex-1 p-3 overflow-y-auto min-h-0">
               <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2 px-1 flex items-center justify-between">
                 <span>Workspace Links</span>
                 <span className="text-[9px] font-mono text-gray-400 font-semibold">{activeWorkspaceLinks.length} active</span>
               </div>
-              <div className="space-y-0.5 max-h-56 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-gray-200 dark:scrollbar-thumb-dark-100">
+              <div className="space-y-0.5 pr-1 scrollbar-thin scrollbar-thumb-gray-200 dark:scrollbar-thumb-dark-100">
                 {workspaceLinks.map((link) => {
                   const hasUrl = Boolean(link.url && link.url.trim());
                   if (hasUrl) {
@@ -498,7 +422,7 @@ export const Sidebar: React.FC = () => {
                         href={link.url}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors group cursor-pointer"
+                        className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:white hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors group cursor-pointer"
                         title={`Open ${link.label}`}
                         aria-label={link.label}
                       >
@@ -532,122 +456,27 @@ export const Sidebar: React.FC = () => {
               </div>
             </div>
           )}
-
-          {/* Staff & Management Operational Modules */}
-          <div className="flex-1 overflow-y-auto p-3 space-y-4">
-            {/* Operational Workspace Links */}
-            <div className="space-y-1">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1 px-1">
-                Operations & Workspace
-              </div>
-
-              {/* My Dashboard */}
-              <button
-                type="button"
-                onClick={() => {
-                  navigate('/');
-                  setViewMode('dashboard');
-                  setMobileSidebarOpen(false);
-                }}
-                className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
-                  viewMode === 'dashboard'
-                    ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
-                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100'
-                }`}
-              >
-                <div className="flex items-center gap-2.5 truncate">
-                  <LayoutDashboard className="w-4 h-4 shrink-0" />
-                  <span className="truncate">My Dashboard</span>
-                </div>
-              </button>
-
-              {/* Client Workspace View */}
-              <button
-                type="button"
-                onClick={() => {
-                  navigate(selectedClientId ? `/clients/${selectedClientId}` : '/');
-                  setViewMode('client_workspace');
-                  setMobileSidebarOpen(false);
-                }}
-                className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
-                  viewMode === 'client_workspace'
-                    ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
-                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100'
-                }`}
-              >
-                <div className="flex items-center gap-2.5 truncate">
-                  <Briefcase className="w-4 h-4 shrink-0" />
-                  <span className="truncate">Client Workspace</span>
-                </div>
-              </button>
-
-              {/* My Employee Portal */}
-              <button
-                type="button"
-                onClick={() => {
-                  navigate('/employee/dashboard');
-                  setViewMode('employee_dashboard');
-                  setMobileSidebarOpen(false);
-                }}
-                className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
-                  viewMode === 'employee_dashboard'
-                    ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
-                    : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100'
-                }`}
-              >
-                <div className="flex items-center gap-2.5 truncate">
-                  <Clock className="w-4 h-4 shrink-0" />
-                  <span className="truncate">My Attendance & Portal</span>
-                </div>
-              </button>
-
-              {/* Operations & HR Management (Owner / Manager) */}
-              {isManagerOrOwner && (
-                <button
-                  type="button"
-                  onClick={() => {
-                    navigate('/operations/employees');
-                    setViewMode('employee_operations');
-                    setMobileSidebarOpen(false);
-                  }}
-                  className={`w-full flex items-center justify-between px-2.5 py-2 rounded-xl text-xs font-semibold transition-colors cursor-pointer ${
-                    viewMode === 'employee_operations' || viewMode === 'employee_dossier'
-                      ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
-                      : 'text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100'
-                  }`}
-                >
-                  <div className="flex items-center gap-2.5 truncate">
-                    <Users className="w-4 h-4 shrink-0" />
-                    <span className="truncate">Employee Operations</span>
-                  </div>
-                </button>
-              )}
-
-            </div>
-          </div>
         </div>
 
-        {/* Bottom Section: Single Settings Action for Owner/Manager */}
-        {isManagerOrOwner && (
-          <div className="p-3 border-t border-gray-100 dark:border-dark-border/60 bg-gray-50/50 dark:bg-dark-300/30 flex-shrink-0 pb-safe md:pb-3">
-            <button
-              type="button"
-              onClick={() => {
-                navigate('/settings');
-                setViewMode('settings');
-                setMobileSidebarOpen(false);
-              }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer touch-target ${
-                isSettingsActive
-                  ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
-                  : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-dark-100'
-              }`}
-            >
-              <Building2 className="w-4 h-4 shrink-0" />
-              <span className="truncate">Settings</span>
-            </button>
-          </div>
-        )}
+        {/* Bottom Section: Settings Action for All Staff */}
+        <div className="p-3 border-t border-gray-100 dark:border-dark-border/60 bg-gray-50/50 dark:bg-dark-300/30 flex-shrink-0 pb-safe md:pb-3">
+          <button
+            type="button"
+            onClick={() => {
+              navigate('/settings');
+              setViewMode('settings');
+              setMobileSidebarOpen(false);
+            }}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer touch-target ${
+              isSettingsActive
+                ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
+                : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-dark-100'
+            }`}
+          >
+            <Building2 className="w-4 h-4 shrink-0" />
+            <span className="truncate">Settings</span>
+          </button>
+        </div>
       </aside>
 
       {/* Portalled Modals: mounted direct to document.body to prevent CSS transform containment */}

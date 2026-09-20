@@ -323,7 +323,16 @@ export type ViewMode =
   | 'employee_operations'
   | 'employee_dossier';
 
-export type SettingsTab = 'team' | 'clients' | 'templates' | 'archive' | 'audit';
+export type SettingsTab =
+  | 'dashboard'
+  | 'workspace'
+  | 'attendance'
+  | 'employee_operations'
+  | 'team'
+  | 'clients'
+  | 'templates'
+  | 'archive'
+  | 'audit';
 
 export type GroupByOption = 'status' | 'priority' | 'assignee' | 'dueDate' | 'none';
 

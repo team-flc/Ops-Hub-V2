@@ -158,8 +158,8 @@ describe('Phase 3A.1 Connected System Foundation, Settings, Profiles, Archive & 
     expect(screen.queryByRole('button', { name: /^client management$/i })).not.toBeInTheDocument();
   });
 
-  // 2. TEAM MEMBER DOES NOT SEE SETTINGS IN SIDEBAR
-  it('2. Team Member has Settings action hidden in sidebar', () => {
+  // 2. TEAM MEMBER SEES SETTINGS IN SIDEBAR (FOR PERSONAL OPERATIONAL TABS)
+  it('2. Team Member has Settings action visible in sidebar and old main links removed', () => {
     mockCurrentProfile = {
       id: 'tm-1',
       fullName: 'Zaid Khan',
@@ -171,7 +171,9 @@ describe('Phase 3A.1 Connected System Foundation, Settings, Profiles, Archive & 
     };
 
     render(<Sidebar />);
-    expect(screen.queryByRole('button', { name: /settings/i })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /settings/i })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^team management$/i })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /^client management$/i })).not.toBeInTheDocument();
   });
 
   // 3. TOP-RIGHT PROFILE DROPDOWN WITH SINGLE SIGN OUT
