@@ -114,91 +114,106 @@ export const Sidebar: React.FC = () => {
       key: 'website',
       label: 'Website',
       url: clientLinks.website,
-      icon: <Globe className="w-3.5 h-3.5" />
+      icon: <Globe className="w-3.5 h-3.5" />,
+      activeColorClass: 'text-blue-500 dark:text-blue-400'
     },
     {
       key: 'flc_landing_page',
       label: 'Landing Page',
       url: clientLinks.flc_landing_page,
-      icon: <Sparkles className="w-3.5 h-3.5" />
+      icon: <Sparkles className="w-3.5 h-3.5" />,
+      activeColorClass: 'text-amber-500 dark:text-amber-400'
     },
     {
       key: 'brand_identity',
       label: 'Brand Identity',
       url: clientLinks.brand_identity,
-      icon: <Palette className="w-3.5 h-3.5" />
+      icon: <Palette className="w-3.5 h-3.5" />,
+      activeColorClass: 'text-purple-500 dark:text-purple-400'
     },
     {
       key: 'google_drive',
       label: 'Google Drive',
       url: clientLinks.google_drive,
-      icon: <HardDrive className="w-3.5 h-3.5" />
+      icon: <HardDrive className="w-3.5 h-3.5" />,
+      activeColorClass: 'text-emerald-500 dark:text-emerald-400'
     },
     {
       key: 'important_docs',
       label: 'Important Documents',
       url: clientLinks.important_docs || clientLinks.important_documents,
-      icon: <FileText className="w-3.5 h-3.5" />
+      icon: <FileText className="w-3.5 h-3.5" />,
+      activeColorClass: 'text-indigo-500 dark:text-indigo-400'
     },
     {
       key: 'static_creatives',
       label: 'Statics',
       url: clientLinks.static_creatives,
-      icon: <Image className="w-3.5 h-3.5" />
+      icon: <Image className="w-3.5 h-3.5" />,
+      activeColorClass: 'text-pink-500 dark:text-pink-400'
     },
     {
       key: 'videos',
       label: 'Videos',
       url: clientLinks.videos,
-      icon: <Video className="w-3.5 h-3.5" />
+      icon: <Video className="w-3.5 h-3.5" />,
+      activeColorClass: 'text-red-500 dark:text-red-400'
     },
     {
       key: 'grid',
       label: 'Grid',
       url: clientLinks.grid,
-      icon: <LayoutGrid className="w-3.5 h-3.5" />
+      icon: <LayoutGrid className="w-3.5 h-3.5" />,
+      activeColorClass: 'text-cyan-500 dark:text-cyan-400'
     },
     {
       key: 'vsl',
       label: 'VSL',
       url: clientLinks.vsl,
-      icon: <PlaySquare className="w-3.5 h-3.5" />
+      icon: <PlaySquare className="w-3.5 h-3.5" />,
+      activeColorClass: 'text-orange-500 dark:text-orange-400'
     },
     {
       key: 'linkedin_company_page',
       label: 'LinkedIn',
       url: clientLinks.linkedin_company_page,
-      icon: <LinkedInIcon className="w-3.5 h-3.5" />
+      icon: <LinkedInIcon className="w-3.5 h-3.5" />,
+      activeColorClass: 'text-[#0A66C2]'
     },
     {
       key: 'facebook',
       label: 'Facebook',
       url: clientLinks.facebook,
-      icon: <FacebookIcon className="w-3.5 h-3.5" />
+      icon: <FacebookIcon className="w-3.5 h-3.5" />,
+      activeColorClass: 'text-[#1877F2]'
     },
     {
       key: 'instagram',
       label: 'Instagram',
       url: clientLinks.instagram,
-      icon: <InstagramIcon className="w-3.5 h-3.5" />
+      icon: <InstagramIcon className="w-3.5 h-3.5" />,
+      activeColorClass: 'text-[#E4405F]'
     },
     {
       key: 'slack_channel',
       label: 'Slack',
       url: clientLinks.slack_channel,
-      icon: <SlackIcon className="w-3.5 h-3.5" />
+      icon: <SlackIcon className="w-3.5 h-3.5" />,
+      activeColorClass: 'text-[#4A154B] dark:text-[#ECB22E]'
     },
     {
       key: 'whatsapp_group',
       label: 'WhatsApp',
       url: clientLinks.whatsapp_group,
-      icon: <MessageCircle className="w-3.5 h-3.5" />
+      icon: <MessageCircle className="w-3.5 h-3.5" />,
+      activeColorClass: 'text-[#25D366]'
     },
     {
       key: 'poc_number',
       label: 'POC WhatsApp',
-      url: formatWhatsAppUrl(clientLinks.poc_number),
-      icon: <PhoneCall className="w-3.5 h-3.5" />
+      url: formatWhatsAppUrl(clientLinks.poc_number || clientLinks.poc_whatsapp),
+      icon: <PhoneCall className="w-3.5 h-3.5" />,
+      activeColorClass: 'text-emerald-600 dark:text-emerald-400'
     }
   ];
 
@@ -327,22 +342,40 @@ export const Sidebar: React.FC = () => {
             </button>
           )}
 
-          {/* Collapsed Workspace Links Icons with Tooltips (Phase 3D) */}
-          {activeWorkspaceLinks.length > 0 && (
-            <div className="flex flex-col items-center gap-1.5 py-2 border-y border-gray-100 dark:border-dark-border/60 w-full">
-              {activeWorkspaceLinks.map((link) => (
-                <a
-                  key={link.key}
-                  href={link.url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="p-2 text-gray-400 hover:text-brand-500 hover:bg-gray-100 dark:hover:bg-dark-100 rounded-lg transition-colors touch-target flex items-center justify-center relative group"
-                  title={`${link.label}: ${link.url}`}
-                  aria-label={link.label}
-                >
-                  {link.icon}
-                </a>
-              ))}
+          {/* Collapsed Workspace Links Icons with Tooltips */}
+          {selectedClient && (
+            <div className="flex flex-col items-center gap-1.5 py-2 border-y border-gray-100 dark:border-dark-border/60 w-full max-h-72 overflow-y-auto scrollbar-none">
+              {workspaceLinks.map((link) => {
+                const hasUrl = Boolean(link.url && link.url.trim());
+                if (hasUrl) {
+                  return (
+                    <a
+                      key={link.key}
+                      href={link.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="p-2 hover:bg-gray-100 dark:hover:bg-dark-100 rounded-lg transition-colors touch-target flex items-center justify-center relative group cursor-pointer"
+                      title={`${link.label}: ${link.url}`}
+                      aria-label={link.label}
+                    >
+                      <span className={link.activeColorClass}>
+                        {link.icon}
+                      </span>
+                    </a>
+                  );
+                }
+                return (
+                  <div
+                    key={link.key}
+                    className="p-2 text-gray-300 dark:text-gray-600 rounded-lg cursor-not-allowed opacity-40 flex items-center justify-center select-none"
+                    title="Link not added"
+                    aria-label={`${link.label} (Link not added)`}
+                    aria-disabled="true"
+                  >
+                    {link.icon}
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
@@ -448,41 +481,55 @@ export const Sidebar: React.FC = () => {
             />
           </div>
 
-          {/* Client Workspace Links (Relocated from Header in Phase 3D) */}
+          {/* Client Workspace Links */}
           {selectedClient && (
             <div className="p-3 border-b border-gray-100 dark:border-dark-border/60 flex-shrink-0">
               <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2 px-1 flex items-center justify-between">
                 <span>Workspace Links</span>
-                {activeWorkspaceLinks.length > 0 && (
-                  <span className="text-[9px] font-mono text-gray-400 font-semibold">{activeWorkspaceLinks.length} active</span>
-                )}
+                <span className="text-[9px] font-mono text-gray-400 font-semibold">{activeWorkspaceLinks.length} active</span>
               </div>
-              {activeWorkspaceLinks.length > 0 ? (
-                <div className="space-y-1">
-                  {activeWorkspaceLinks.map((link) => (
-                    <a
+              <div className="space-y-0.5 max-h-56 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-gray-200 dark:scrollbar-thumb-dark-100">
+                {workspaceLinks.map((link) => {
+                  const hasUrl = Boolean(link.url && link.url.trim());
+                  if (hasUrl) {
+                    return (
+                      <a
+                        key={link.key}
+                        href={link.url}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors group cursor-pointer"
+                        title={`Open ${link.label}`}
+                        aria-label={link.label}
+                      >
+                        <div className="flex items-center gap-2 truncate">
+                          <span className={`shrink-0 transition-colors ${link.activeColorClass}`}>
+                            {link.icon}
+                          </span>
+                          <span className="truncate">{link.label}</span>
+                        </div>
+                        <ExternalLink className="w-3 h-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                      </a>
+                    );
+                  }
+                  return (
+                    <div
                       key={link.key}
-                      href={link.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-700 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors group cursor-pointer"
-                      title={`Open ${link.label}`}
+                      className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-400/80 dark:text-gray-500/80 opacity-50 cursor-not-allowed select-none transition-colors"
+                      title="Link not added"
+                      aria-label={`${link.label} (Link not added)`}
+                      aria-disabled="true"
                     >
                       <div className="flex items-center gap-2 truncate">
-                        <span className="text-gray-400 group-hover:text-brand-500 transition-colors shrink-0">
+                        <span className="text-gray-300 dark:text-gray-600 shrink-0">
                           {link.icon}
                         </span>
                         <span className="truncate">{link.label}</span>
                       </div>
-                      <ExternalLink className="w-3 h-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-                    </a>
-                  ))}
-                </div>
-              ) : (
-                <div className="px-2 py-1 text-[11px] text-gray-400 italic">
-                  No links configured
-                </div>
-              )}
+                    </div>
+                  );
+                })}
+              </div>
             </div>
           )}
 

@@ -224,11 +224,18 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
 
     await waitFor(() => {
       expect(screen.getByText('3 active')).toBeInTheDocument();
+      // Configured links are clickable <a> elements
       expect(screen.getByRole('link', { name: /Website/i })).toBeInTheDocument();
       expect(screen.getByRole('link', { name: /Brand Identity/i })).toBeInTheDocument();
       expect(screen.getByRole('link', { name: /Google Drive/i })).toBeInTheDocument();
+
+      // Missing links are still rendered in the sidebar, but disabled with "Link not added"
+      expect(screen.getByText('Landing Page')).toBeInTheDocument();
       expect(screen.queryByRole('link', { name: /Landing Page/i })).not.toBeInTheDocument();
+      expect(screen.getByText('Statics')).toBeInTheDocument();
       expect(screen.queryByRole('link', { name: /Statics/i })).not.toBeInTheDocument();
+      expect(screen.getByText('Important Documents')).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /Important Documents/i })).not.toBeInTheDocument();
     });
 
     // Switch to Client B with 1 link
@@ -239,12 +246,13 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
     await waitFor(() => {
       expect(screen.getByText('1 active')).toBeInTheDocument();
       expect(screen.getByRole('link', { name: /Website/i })).toBeInTheDocument();
+      expect(screen.getByText('Brand Identity')).toBeInTheDocument();
       expect(screen.queryByRole('link', { name: /Brand Identity/i })).not.toBeInTheDocument();
     });
   });
 
-  // 3. EMPTY STATE WHEN NO LINKS CONFIGURED
-  it('3. Sidebar displays "No links configured" when client has no workspace links', async () => {
+  // 3. ALL LINKS DISPLAYED WITH DISABLED STATE WHEN NO LINKS CONFIGURED
+  it('3. Sidebar displays all 15 workspace links as disabled with "Link not added" and "0 active" when client has no workspace links', async () => {
     const clientWithNoLinks: ClientRecord = {
       ...mockClientA,
       id: 'client-empty',
@@ -272,8 +280,27 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('No links configured')).toBeInTheDocument();
-      expect(screen.queryByText(/active/i)).not.toBeInTheDocument();
+      expect(screen.getByText('0 active')).toBeInTheDocument();
+      // All 15 link labels are present in the sidebar
+      expect(screen.getByText('Website')).toBeInTheDocument();
+      expect(screen.getByText('Landing Page')).toBeInTheDocument();
+      expect(screen.getByText('Brand Identity')).toBeInTheDocument();
+      expect(screen.getByText('Google Drive')).toBeInTheDocument();
+      expect(screen.getByText('Important Documents')).toBeInTheDocument();
+      expect(screen.getByText('Statics')).toBeInTheDocument();
+      expect(screen.getByText('Videos')).toBeInTheDocument();
+      expect(screen.getByText('Grid')).toBeInTheDocument();
+      expect(screen.getByText('VSL')).toBeInTheDocument();
+      expect(screen.getByText('LinkedIn')).toBeInTheDocument();
+      expect(screen.getByText('Facebook')).toBeInTheDocument();
+      expect(screen.getByText('Instagram')).toBeInTheDocument();
+      expect(screen.getByText('Slack')).toBeInTheDocument();
+      expect(screen.getByText('WhatsApp')).toBeInTheDocument();
+      expect(screen.getByText('POC WhatsApp')).toBeInTheDocument();
+
+      // No clickable <a> links rendered for workspace links
+      expect(screen.queryByRole('link', { name: /Website/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /Google Drive/i })).not.toBeInTheDocument();
     });
   });
 
