@@ -1,9 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
-  User, Clock, Calendar, DollarSign, Laptop, Award,
+  Clock, Calendar, DollarSign, Laptop, Award,
   MessageSquare, ShieldCheck, AlertTriangle, CheckCircle2,
-  ChevronRight, Lock, Plus, FileText, ExternalLink, RefreshCw,
-  TrendingUp, AlertCircle, Eye, X, Building2, Briefcase,
+  Lock, Plus, FileText, ExternalLink, RefreshCw,
+  TrendingUp, AlertCircle, Eye, X, Briefcase,
   BarChart3, PieChart, Activity,
   Sparkles, FileCheck, Landmark
 } from 'lucide-react';

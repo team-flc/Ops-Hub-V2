@@ -26,7 +26,10 @@ import { TaskCompletionTrendChart } from '../dashboard/TaskCompletionTrendChart'
 import { ClientWorkloadDistributionChart } from '../dashboard/ClientWorkloadDistributionChart';
 import { ApprovalTurnaroundChart } from '../dashboard/ApprovalTurnaroundChart';
 import { CreateClientTaskModal } from '../tasks/CreateClientTaskModal';
-import { ClientTaskDetailsModal } from '../tasks/ClientTaskDetailsModal';
+
+const ClientTaskDetailsModal = React.lazy(() =>
+  import('../tasks/ClientTaskDetailsModal').then((m) => ({ default: m.ClientTaskDetailsModal }))
+);
 
 export const DashboardView: React.FC = () => {
   const navigate = useSafeNavigate();
@@ -358,19 +361,21 @@ export const DashboardView: React.FC = () => {
       )}
 
       {selectedTaskForDetails && (
-        <ClientTaskDetailsModal
-          isOpen={Boolean(selectedTaskForDetails)}
-          onClose={() => setSelectedTaskForDetails(null)}
-          task={selectedTaskForDetails}
-          client={clients.find((c) => c.id === selectedTaskForDetails.clientId) || null}
-          currentUserProfile={profile}
-          departments={departments}
-          eligibleAssignees={eligibleAssignees}
-          onTaskUpdated={() => {
-            setSelectedTaskForDetails(null);
-            loadDashboardData();
-          }}
-        />
+        <React.Suspense fallback={null}>
+          <ClientTaskDetailsModal
+            isOpen={Boolean(selectedTaskForDetails)}
+            onClose={() => setSelectedTaskForDetails(null)}
+            task={selectedTaskForDetails}
+            client={clients.find((c) => c.id === selectedTaskForDetails.clientId) || null}
+            currentUserProfile={profile}
+            departments={departments}
+            eligibleAssignees={eligibleAssignees}
+            onTaskUpdated={() => {
+              setSelectedTaskForDetails(null);
+              loadDashboardData();
+            }}
+          />
+        </React.Suspense>
       )}
     </div>
   );

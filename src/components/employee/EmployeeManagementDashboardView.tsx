@@ -1,10 +1,9 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Users, Clock, DollarSign, Laptop, Award, MessageSquare, 
-  Calculator, AlertTriangle, CheckCircle2, Search, Filter, 
-  Plus, Eye, Edit3, UserCheck, ChevronRight, RefreshCw, 
-  ExternalLink, FileText, Check, X, ShieldAlert, ArrowUpRight,
-  TrendingDown, TrendingUp, Settings, Shield
+  Calculator, AlertTriangle, CheckCircle2, Search, 
+  Plus, Eye, Edit3, RefreshCw, 
+  X, ShieldAlert, Settings
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useSafeNavigate } from '../../lib/safeRouterHooks';

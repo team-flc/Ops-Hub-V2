@@ -5,16 +5,28 @@ import {
   Users, Building2, Archive, Activity, ShieldAlert, ArrowLeft, BookTemplate,
   LayoutDashboard, Briefcase, Clock, UserCheck
 } from 'lucide-react';
-import { TeamManagementView } from '../views/TeamManagementView';
-import { ClientManagementView } from '../views/ClientManagementView';
-import { DashboardView } from '../views/DashboardView';
-import { EmployeeDashboardView } from '../employee/EmployeeDashboardView';
-import { EmployeeManagementDashboardView } from '../employee/EmployeeManagementDashboardView';
-import { ClientWorkspaceView } from '../clients/ClientWorkspaceView';
 import { SettingsTab, UserProfile } from '../../types';
 import { useOpsStore } from '../../store/opsStore';
 import { clientManagementService } from '../../lib/clientManagementService';
 
+const TeamManagementView = React.lazy(() =>
+  import('../views/TeamManagementView').then((m) => ({ default: m.TeamManagementView }))
+);
+const ClientManagementView = React.lazy(() =>
+  import('../views/ClientManagementView').then((m) => ({ default: m.ClientManagementView }))
+);
+const DashboardView = React.lazy(() =>
+  import('../views/DashboardView').then((m) => ({ default: m.DashboardView }))
+);
+const EmployeeDashboardView = React.lazy(() =>
+  import('../employee/EmployeeDashboardView').then((m) => ({ default: m.EmployeeDashboardView }))
+);
+const EmployeeManagementDashboardView = React.lazy(() =>
+  import('../employee/EmployeeManagementDashboardView').then((m) => ({ default: m.EmployeeManagementDashboardView }))
+);
+const ClientWorkspaceView = React.lazy(() =>
+  import('../clients/ClientWorkspaceView').then((m) => ({ default: m.ClientWorkspaceView }))
+);
 const ServiceTemplatesView = React.lazy(() =>
   import('../templates/ServiceTemplatesView').then((m) => ({ default: m.ServiceTemplatesView }))
 );
@@ -159,7 +171,13 @@ export const SettingsLayout: React.FC<{ initialTab?: SettingsTab }> = ({ initial
             </p>
           </div>
         ) : (
-          <>
+          <React.Suspense
+            fallback={
+              <div className="p-8 flex items-center justify-center text-gray-400 text-xs">
+                <span className="animate-pulse">Loading view...</span>
+              </div>
+            }
+          >
             {/* 1. My Dashboard */}
             {normalizedTab === 'dashboard' && <DashboardView />}
 
@@ -200,44 +218,14 @@ export const SettingsLayout: React.FC<{ initialTab?: SettingsTab }> = ({ initial
             {normalizedTab === 'clients' && <ClientManagementView />}
 
             {/* 7. Service Templates */}
-            {normalizedTab === 'templates' && (
-              <React.Suspense
-                fallback={
-                  <div className="p-8 flex items-center justify-center text-gray-400 text-xs">
-                    <span className="animate-pulse">Loading Service Templates...</span>
-                  </div>
-                }
-              >
-                <ServiceTemplatesView currentUserProfile={profile} />
-              </React.Suspense>
-            )}
+            {normalizedTab === 'templates' && <ServiceTemplatesView currentUserProfile={profile} />}
 
             {/* 8. Archive Center */}
-            {normalizedTab === 'archive' && (
-              <React.Suspense
-                fallback={
-                  <div className="p-8 flex items-center justify-center text-gray-400 text-xs">
-                    <span className="animate-pulse">Loading Archive Center...</span>
-                  </div>
-                }
-              >
-                <ArchiveCenterView />
-              </React.Suspense>
-            )}
+            {normalizedTab === 'archive' && <ArchiveCenterView />}
 
             {/* 9. Audit Log */}
-            {normalizedTab === 'audit' && (
-              <React.Suspense
-                fallback={
-                  <div className="p-8 flex items-center justify-center text-gray-400 text-xs">
-                    <span className="animate-pulse">Loading Audit Log...</span>
-                  </div>
-                }
-              >
-                <AuditLogView />
-              </React.Suspense>
-            )}
-          </>
+            {normalizedTab === 'audit' && <AuditLogView />}
+          </React.Suspense>
         )}
       </div>
     </div>

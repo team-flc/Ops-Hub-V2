@@ -44,7 +44,7 @@ export const ClientKanbanBoard: React.FC<ClientKanbanBoardProps> = ({
   currentUserProfile,
   onSelectTask,
   onOpenEditModal,
-  onOpenCreateTask,
+  onOpenCreateTask: _onOpenCreateTask,
   onStatusChange,
   onStartWork,
   onPauseTimer,

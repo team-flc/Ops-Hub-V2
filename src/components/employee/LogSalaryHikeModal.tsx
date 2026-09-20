@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { TrendingUp, CheckCircle2, AlertCircle, X, DollarSign } from 'lucide-react';
+import { TrendingUp, CheckCircle2, AlertCircle, X } from 'lucide-react';
 import { employeeOperationsService } from '../../lib/employeeOperationsService';
 
 interface LogSalaryHikeModalProps {

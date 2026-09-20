@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Award, AlertOctagon, HelpCircle, CheckCircle2, AlertCircle, X, Star } from 'lucide-react';
+import { Award, AlertOctagon, HelpCircle, CheckCircle2, AlertCircle, X } from 'lucide-react';
 import { EmployeePerformanceRecord, TeamMemberRecord, UserProfile } from '../../types';
 import { employeeOperationsService } from '../../lib/employeeOperationsService';
 

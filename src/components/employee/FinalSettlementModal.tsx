@@ -1,8 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { 
   Calculator, CheckCircle2, AlertCircle, X, DollarSign, 
-  Laptop, Calendar, UserCheck, ArrowRight, ArrowLeft, ShieldCheck, 
-  AlertTriangle, FileText, Info
+  Laptop, UserCheck, ArrowRight, ArrowLeft
 } from 'lucide-react';
 import { CompanyAsset, EmployeeRecord, TeamMemberRecord, UserProfile, NoticePeriodStatus, GoodStandingStatus } from '../../types';
 import { employeeOperationsService } from '../../lib/employeeOperationsService';
