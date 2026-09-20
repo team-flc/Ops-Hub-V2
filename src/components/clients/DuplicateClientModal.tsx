@@ -68,6 +68,11 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
   const [videosUrl, setVideosUrl] = useState('');
   const [vslUrl, setVslUrl] = useState('');
   const [gridUrl, setGridUrl] = useState('');
+  const [socialMediaManagementUrl, setSocialMediaManagementUrl] = useState('');
+  const [linkedinManagementUrl, setLinkedinManagementUrl] = useState('');
+  const [seoManagementUrl, setSeoManagementUrl] = useState('');
+  const [emailMarketingManagementUrl, setEmailMarketingManagementUrl] = useState('');
+  const [paidAdsManagementUrl, setPaidAdsManagementUrl] = useState('');
   const [facebookUrl, setFacebookUrl] = useState('');
   const [instagramUrl, setInstagramUrl] = useState('');
   const [linkedinPageUrl, setLinkedinPageUrl] = useState('');
@@ -122,6 +127,11 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
       videos: videosUrl,
       vsl: vslUrl,
       grid: gridUrl,
+      social_media_management: socialMediaManagementUrl,
+      linkedin_management: linkedinManagementUrl,
+      seo_management: seoManagementUrl,
+      email_marketing_management: emailMarketingManagementUrl,
+      paid_ads_management: paidAdsManagementUrl,
       facebook: facebookUrl,
       instagram: instagramUrl,
       linkedin_company_page: linkedinPageUrl,
@@ -488,6 +498,81 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
                   value={gridUrl}
                   onChange={(e) => setGridUrl(e.target.value)}
                   placeholder="https://... (Grid Link)"
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="dup-social-media-management" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Social Media Management URL
+                </label>
+                <input
+                  id="dup-social-media-management"
+                  data-testid="dup-social-media-management"
+                  type="url"
+                  value={socialMediaManagementUrl}
+                  onChange={(e) => setSocialMediaManagementUrl(e.target.value)}
+                  placeholder="https://... (Social Media Management / Buffer / Hootsuite Link)"
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="dup-linkedin-management" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  LinkedIn Management URL
+                </label>
+                <input
+                  id="dup-linkedin-management"
+                  data-testid="dup-linkedin-management"
+                  type="url"
+                  value={linkedinManagementUrl}
+                  onChange={(e) => setLinkedinManagementUrl(e.target.value)}
+                  placeholder="https://... (LinkedIn Management / Campaign Link)"
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="dup-seo-management" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  SEO Management URL
+                </label>
+                <input
+                  id="dup-seo-management"
+                  data-testid="dup-seo-management"
+                  type="url"
+                  value={seoManagementUrl}
+                  onChange={(e) => setSeoManagementUrl(e.target.value)}
+                  placeholder="https://... (SEO Management / Ahrefs / SEMrush / Dashboard Link)"
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="dup-email-marketing-management" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Email Marketing Management URL
+                </label>
+                <input
+                  id="dup-email-marketing-management"
+                  data-testid="dup-email-marketing-management"
+                  type="url"
+                  value={emailMarketingManagementUrl}
+                  onChange={(e) => setEmailMarketingManagementUrl(e.target.value)}
+                  placeholder="https://... (Email Marketing / Klaviyo / Mailchimp Link)"
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="dup-paid-ads-management" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Paid Ads Management URL
+                </label>
+                <input
+                  id="dup-paid-ads-management"
+                  data-testid="dup-paid-ads-management"
+                  type="url"
+                  value={paidAdsManagementUrl}
+                  onChange={(e) => setPaidAdsManagementUrl(e.target.value)}
+                  placeholder="https://... (Paid Ads Management / Meta Ads / Google Ads Link)"
                   className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
                 />
               </div>

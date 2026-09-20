@@ -93,6 +93,11 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
   const [videosUrl, setVideosUrl] = useState(client.links?.videos || '');
   const [vslUrl, setVslUrl] = useState(client.links?.vsl || '');
   const [gridUrl, setGridUrl] = useState(client.links?.grid || '');
+  const [socialMediaManagementUrl, setSocialMediaManagementUrl] = useState(client.links?.social_media_management || '');
+  const [linkedinManagementUrl, setLinkedinManagementUrl] = useState(client.links?.linkedin_management || '');
+  const [seoManagementUrl, setSeoManagementUrl] = useState(client.links?.seo_management || '');
+  const [emailMarketingManagementUrl, setEmailMarketingManagementUrl] = useState(client.links?.email_marketing_management || '');
+  const [paidAdsManagementUrl, setPaidAdsManagementUrl] = useState(client.links?.paid_ads_management || '');
   const [facebookUrl, setFacebookUrl] = useState(client.links?.facebook || '');
   const [instagramUrl, setInstagramUrl] = useState(client.links?.instagram || '');
   const [linkedinPageUrl, setLinkedinPageUrl] = useState(client.links?.linkedin_company_page || '');
@@ -140,6 +145,11 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     if (videosUrl !== (client.links?.videos || '')) return true;
     if (vslUrl !== (client.links?.vsl || '')) return true;
     if (gridUrl !== (client.links?.grid || '')) return true;
+    if (socialMediaManagementUrl !== (client.links?.social_media_management || '')) return true;
+    if (linkedinManagementUrl !== (client.links?.linkedin_management || '')) return true;
+    if (seoManagementUrl !== (client.links?.seo_management || '')) return true;
+    if (emailMarketingManagementUrl !== (client.links?.email_marketing_management || '')) return true;
+    if (paidAdsManagementUrl !== (client.links?.paid_ads_management || '')) return true;
     if (facebookUrl !== (client.links?.facebook || '')) return true;
     if (instagramUrl !== (client.links?.instagram || '')) return true;
     if (linkedinPageUrl !== (client.links?.linkedin_company_page || '')) return true;
@@ -151,7 +161,8 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     companyName, clientName, businessBio, industry, logoUrl, pkg, managerId,
     activationDate, status, pauseReason, requiredLinkedInCount,
     websiteUrl, flcLandingPageUrl, brandIdentityUrl, driveUrl, importantDocsUrl, staticCreativesUrl,
-    videosUrl, vslUrl, gridUrl, facebookUrl, instagramUrl, linkedinPageUrl,
+    videosUrl, vslUrl, gridUrl, socialMediaManagementUrl, linkedinManagementUrl, seoManagementUrl,
+    emailMarketingManagementUrl, paidAdsManagementUrl, facebookUrl, instagramUrl, linkedinPageUrl,
     slackUrl, whatsappUrl, pocNumber, client
   ]);
 
@@ -181,6 +192,11 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
         setVideosUrl(parsed.videosUrl ?? (client.links?.videos || ''));
         setVslUrl(parsed.vslUrl ?? (client.links?.vsl || ''));
         setGridUrl(parsed.gridUrl ?? (client.links?.grid || ''));
+        setSocialMediaManagementUrl(parsed.socialMediaManagementUrl ?? (client.links?.social_media_management || ''));
+        setLinkedinManagementUrl(parsed.linkedinManagementUrl ?? (client.links?.linkedin_management || ''));
+        setSeoManagementUrl(parsed.seoManagementUrl ?? (client.links?.seo_management || ''));
+        setEmailMarketingManagementUrl(parsed.emailMarketingManagementUrl ?? (client.links?.email_marketing_management || ''));
+        setPaidAdsManagementUrl(parsed.paidAdsManagementUrl ?? (client.links?.paid_ads_management || ''));
         setFacebookUrl(parsed.facebookUrl ?? (client.links?.facebook || ''));
         setInstagramUrl(parsed.instagramUrl ?? (client.links?.instagram || ''));
         setLinkedinPageUrl(parsed.linkedinPageUrl ?? (client.links?.linkedin_company_page || ''));
@@ -214,6 +230,11 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     setVideosUrl(client.links?.videos || '');
     setVslUrl(client.links?.vsl || '');
     setGridUrl(client.links?.grid || '');
+    setSocialMediaManagementUrl(client.links?.social_media_management || '');
+    setLinkedinManagementUrl(client.links?.linkedin_management || '');
+    setSeoManagementUrl(client.links?.seo_management || '');
+    setEmailMarketingManagementUrl(client.links?.email_marketing_management || '');
+    setPaidAdsManagementUrl(client.links?.paid_ads_management || '');
     setFacebookUrl(client.links?.facebook || '');
     setInstagramUrl(client.links?.instagram || '');
     setLinkedinPageUrl(client.links?.linkedin_company_page || '');
@@ -251,6 +272,11 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
             videosUrl,
             vslUrl,
             gridUrl,
+            socialMediaManagementUrl,
+            linkedinManagementUrl,
+            seoManagementUrl,
+            emailMarketingManagementUrl,
+            paidAdsManagementUrl,
             facebookUrl,
             instagramUrl,
             linkedinPageUrl,
@@ -271,7 +297,8 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     isDirty, client.id, companyName, clientName, businessBio, industry, logoUrl,
     pkg, managerId, activationDate, status, pauseReason, requiredLinkedInCount,
     websiteUrl, flcLandingPageUrl, brandIdentityUrl, driveUrl, importantDocsUrl, staticCreativesUrl,
-    videosUrl, vslUrl, gridUrl, facebookUrl, instagramUrl, linkedinPageUrl,
+    videosUrl, vslUrl, gridUrl, socialMediaManagementUrl, linkedinManagementUrl, seoManagementUrl,
+    emailMarketingManagementUrl, paidAdsManagementUrl, facebookUrl, instagramUrl, linkedinPageUrl,
     slackUrl, whatsappUrl, pocNumber
   ]);
 
@@ -300,6 +327,11 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     setVideosUrl(client.links?.videos || '');
     setVslUrl(client.links?.vsl || '');
     setGridUrl(client.links?.grid || '');
+    setSocialMediaManagementUrl(client.links?.social_media_management || '');
+    setLinkedinManagementUrl(client.links?.linkedin_management || '');
+    setSeoManagementUrl(client.links?.seo_management || '');
+    setEmailMarketingManagementUrl(client.links?.email_marketing_management || '');
+    setPaidAdsManagementUrl(client.links?.paid_ads_management || '');
     setFacebookUrl(client.links?.facebook || '');
     setInstagramUrl(client.links?.instagram || '');
     setLinkedinPageUrl(client.links?.linkedin_company_page || '');
@@ -395,6 +427,11 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
       videos: videosUrl,
       vsl: vslUrl,
       grid: gridUrl,
+      social_media_management: socialMediaManagementUrl,
+      linkedin_management: linkedinManagementUrl,
+      seo_management: seoManagementUrl,
+      email_marketing_management: emailMarketingManagementUrl,
+      paid_ads_management: paidAdsManagementUrl,
       facebook: facebookUrl,
       instagram: instagramUrl,
       linkedin_company_page: linkedinPageUrl,
@@ -1015,6 +1052,81 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 value={gridUrl}
                 onChange={(e) => setGridUrl(e.target.value)}
                 placeholder="https://... (Grid Link)"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="edit-social-media-management" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Social Media Management URL
+              </label>
+              <input
+                id="edit-social-media-management"
+                data-testid="edit-social-media-management"
+                type="url"
+                value={socialMediaManagementUrl}
+                onChange={(e) => setSocialMediaManagementUrl(e.target.value)}
+                placeholder="https://... (Social Media Management / Buffer / Hootsuite Link)"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="edit-linkedin-management" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                LinkedIn Management URL
+              </label>
+              <input
+                id="edit-linkedin-management"
+                data-testid="edit-linkedin-management"
+                type="url"
+                value={linkedinManagementUrl}
+                onChange={(e) => setLinkedinManagementUrl(e.target.value)}
+                placeholder="https://... (LinkedIn Management / Campaign Link)"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="edit-seo-management" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                SEO Management URL
+              </label>
+              <input
+                id="edit-seo-management"
+                data-testid="edit-seo-management"
+                type="url"
+                value={seoManagementUrl}
+                onChange={(e) => setSeoManagementUrl(e.target.value)}
+                placeholder="https://... (SEO Management / Ahrefs / SEMrush / Dashboard Link)"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="edit-email-marketing-management" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Email Marketing Management URL
+              </label>
+              <input
+                id="edit-email-marketing-management"
+                data-testid="edit-email-marketing-management"
+                type="url"
+                value={emailMarketingManagementUrl}
+                onChange={(e) => setEmailMarketingManagementUrl(e.target.value)}
+                placeholder="https://... (Email Marketing / Klaviyo / Mailchimp Link)"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="edit-paid-ads-management" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Paid Ads Management URL
+              </label>
+              <input
+                id="edit-paid-ads-management"
+                data-testid="edit-paid-ads-management"
+                type="url"
+                value={paidAdsManagementUrl}
+                onChange={(e) => setPaidAdsManagementUrl(e.target.value)}
+                placeholder="https://... (Paid Ads Management / Meta Ads / Google Ads Link)"
                 className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
               />
             </div>

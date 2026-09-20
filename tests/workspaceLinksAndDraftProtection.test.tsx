@@ -40,6 +40,11 @@ const mockClientA: ClientRecord = {
     videos: 'https://drive.google.com/drive/folders/apex-videos',
     grid: 'https://grid.app/apex-dashboard',
     vsl: 'https://vimeo.com/apex-vsl-2026',
+    social_media_management: 'https://buffer.com/apex',
+    linkedin_management: 'https://linkedin.com/campaignmanager/apex',
+    seo_management: 'https://app.ahrefs.com/dashboard/apex',
+    email_marketing_management: 'https://klaviyo.com/dashboard/apex',
+    paid_ads_management: 'https://adsmanager.facebook.com/apex',
     linkedin_company_page: 'https://linkedin.com/company/apex-growth',
     facebook: 'https://facebook.com/apexgrowth',
     instagram: 'https://instagram.com/apexgrowth',
@@ -131,8 +136,8 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
     sessionStorage.clear();
   });
 
-  // 1. EXACT 15-ITEM ORDER, LABELS, AND ICONS IN SIDEBAR
-  it('1. Sidebar renders all 15 workspace links in exact required order with correct labels and icons', async () => {
+  // 1. EXACT 20-ITEM ORDER, LABELS, AND ICONS IN SIDEBAR
+  it('1. Sidebar renders all 20 workspace links in exact required order with correct labels and icons', async () => {
     await act(async () => {
       render(
         <MemoryRouter>
@@ -144,7 +149,7 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('15 active')).toBeInTheDocument();
+      expect(screen.getByText('20 active')).toBeInTheDocument();
     });
 
     // Query all rendered links inside sidebar
@@ -161,6 +166,11 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
       'Videos',
       'Grid',
       'VSL',
+      'Social Media Management',
+      'LinkedIn Management',
+      'SEO Management',
+      'Email Marketing Management',
+      'Paid Ads Management',
       'LinkedIn',
       'Facebook',
       'Instagram',
@@ -182,6 +192,18 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
     expect(importantDocsLink).toHaveAttribute('href', 'https://docs.google.com/document/d/apex-sop');
     expect(importantDocsLink).toHaveAttribute('target', '_blank');
     expect(importantDocsLink).toHaveAttribute('rel', 'noopener noreferrer');
+
+    // Verify 5 new client links
+    const socialMediaLink = screen.getByRole('link', { name: /Social Media Management/i });
+    expect(socialMediaLink).toHaveAttribute('href', 'https://buffer.com/apex');
+    const linkedinMgmtLink = screen.getByRole('link', { name: /LinkedIn Management/i });
+    expect(linkedinMgmtLink).toHaveAttribute('href', 'https://linkedin.com/campaignmanager/apex');
+    const seoLink = screen.getByRole('link', { name: /SEO Management/i });
+    expect(seoLink).toHaveAttribute('href', 'https://app.ahrefs.com/dashboard/apex');
+    const emailLink = screen.getByRole('link', { name: /Email Marketing Management/i });
+    expect(emailLink).toHaveAttribute('href', 'https://klaviyo.com/dashboard/apex');
+    const paidAdsLink = screen.getByRole('link', { name: /Paid Ads Management/i });
+    expect(paidAdsLink).toHaveAttribute('href', 'https://adsmanager.facebook.com/apex');
 
     // Verify POC WhatsApp link attributes
     const pocWhatsAppLink = screen.getByRole('link', { name: /POC WhatsApp/i });
@@ -207,7 +229,7 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('15 active')).toBeInTheDocument();
+      expect(screen.getByText('20 active')).toBeInTheDocument();
     });
 
     // Update client A in store to have only 3 links
@@ -232,6 +254,10 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
       // Missing links are still rendered in the sidebar, but disabled with "Link not added"
       expect(screen.getByText('Landing Page')).toBeInTheDocument();
       expect(screen.queryByRole('link', { name: /Landing Page/i })).not.toBeInTheDocument();
+      expect(screen.getByText('Social Media Management')).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /Social Media Management/i })).not.toBeInTheDocument();
+      expect(screen.getByText('SEO Management')).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /SEO Management/i })).not.toBeInTheDocument();
       expect(screen.getByText('Statics')).toBeInTheDocument();
       expect(screen.queryByRole('link', { name: /Statics/i })).not.toBeInTheDocument();
       expect(screen.getByText('Important Documents')).toBeInTheDocument();
@@ -252,7 +278,7 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
   });
 
   // 3. ALL LINKS DISPLAYED WITH DISABLED STATE WHEN NO LINKS CONFIGURED
-  it('3. Sidebar displays all 15 workspace links as disabled with "Link not added" and "0 active" when client has no workspace links', async () => {
+  it('3. Sidebar displays all 20 workspace links as disabled with "Link not added" and "0 active" when client has no workspace links', async () => {
     const clientWithNoLinks: ClientRecord = {
       ...mockClientA,
       id: 'client-empty',
@@ -281,7 +307,7 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
 
     await waitFor(() => {
       expect(screen.getByText('0 active')).toBeInTheDocument();
-      // All 15 link labels are present in the sidebar
+      // All 20 link labels are present in the sidebar
       expect(screen.getByText('Website')).toBeInTheDocument();
       expect(screen.getByText('Landing Page')).toBeInTheDocument();
       expect(screen.getByText('Brand Identity')).toBeInTheDocument();
@@ -291,6 +317,11 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
       expect(screen.getByText('Videos')).toBeInTheDocument();
       expect(screen.getByText('Grid')).toBeInTheDocument();
       expect(screen.getByText('VSL')).toBeInTheDocument();
+      expect(screen.getByText('Social Media Management')).toBeInTheDocument();
+      expect(screen.getByText('LinkedIn Management')).toBeInTheDocument();
+      expect(screen.getByText('SEO Management')).toBeInTheDocument();
+      expect(screen.getByText('Email Marketing Management')).toBeInTheDocument();
+      expect(screen.getByText('Paid Ads Management')).toBeInTheDocument();
       expect(screen.getByText('LinkedIn')).toBeInTheDocument();
       expect(screen.getByText('Facebook')).toBeInTheDocument();
       expect(screen.getByText('Instagram')).toBeInTheDocument();
@@ -304,7 +335,7 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
     });
   });
 
-  // 4. CLIENT DETAILS TAB RENDERS BRAND IDENTITY INPUT AND ALL 13 LINK FIELDS
+  // 4. CLIENT DETAILS TAB RENDERS BRAND IDENTITY INPUT AND ALL 18 LINK FIELDS
   it('4. ClientDetailsTab renders Brand Identity URL field and pre-populates existing links', () => {
     render(
       <ClientDetailsTab
@@ -326,6 +357,11 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
     expect((screen.getByLabelText(/Videos URL/i) as HTMLInputElement).value).toBe('https://drive.google.com/drive/folders/apex-videos');
     expect((screen.getByLabelText(/Grid URL/i) as HTMLInputElement).value).toBe('https://grid.app/apex-dashboard');
     expect((screen.getByLabelText(/VSL \(Video Sales Letter\) URL/i) as HTMLInputElement).value).toBe('https://vimeo.com/apex-vsl-2026');
+    expect((screen.getByLabelText(/Social Media Management URL/i) as HTMLInputElement).value).toBe('https://buffer.com/apex');
+    expect((screen.getByLabelText(/LinkedIn Management URL/i) as HTMLInputElement).value).toBe('https://linkedin.com/campaignmanager/apex');
+    expect((screen.getByLabelText(/SEO Management URL/i) as HTMLInputElement).value).toBe('https://app.ahrefs.com/dashboard/apex');
+    expect((screen.getByLabelText(/Email Marketing Management URL/i) as HTMLInputElement).value).toBe('https://klaviyo.com/dashboard/apex');
+    expect((screen.getByLabelText(/Paid Ads Management URL/i) as HTMLInputElement).value).toBe('https://adsmanager.facebook.com/apex');
     expect((screen.getByLabelText(/LinkedIn Company Page URL/i) as HTMLInputElement).value).toBe('https://linkedin.com/company/apex-growth');
     expect((screen.getByLabelText(/Facebook Page URL/i) as HTMLInputElement).value).toBe('https://facebook.com/apexgrowth');
     expect((screen.getByLabelText(/Instagram Page URL/i) as HTMLInputElement).value).toBe('https://instagram.com/apexgrowth');
@@ -677,5 +713,193 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
     });
 
     expect(onClientUpdatedMock).toHaveBeenCalledWith(updatedClientWithDocs);
+  });
+
+  // 13. FIVE NEW CLIENT-SPECIFIC LINKS CRUD IN CLIENT DETAILS TAB
+  it('13. Five new client-specific link options are configurable and saved in ClientDetailsTab', async () => {
+    const updatedClientWithNewLinks: ClientRecord = {
+      ...mockClientA,
+      links: {
+        ...mockClientA.links,
+        social_media_management: 'https://hootsuite.com/apex-updated',
+        linkedin_management: 'https://linkedin.com/apex-updated',
+        seo_management: 'https://semrush.com/apex-updated',
+        email_marketing_management: 'https://mailchimp.com/apex-updated',
+        paid_ads_management: 'https://ads.google.com/apex-updated'
+      }
+    };
+
+    const updateClientSpy = vi.spyOn(clientManagementService, 'updateClient').mockResolvedValue({
+      data: updatedClientWithNewLinks,
+      error: undefined
+    });
+
+    const onClientUpdatedMock = vi.fn();
+
+    render(
+      <ClientDetailsTab
+        client={mockClientA}
+        currentUserProfile={mockOwnerProfile}
+        eligibleManagers={[mockOwnerProfile]}
+        onClientUpdated={onClientUpdatedMock}
+      />
+    );
+
+    const smmInput = screen.getByLabelText(/Social Media Management URL/i);
+    const liInput = screen.getByLabelText(/LinkedIn Management URL/i);
+    const seoInput = screen.getByLabelText(/SEO Management URL/i);
+    const emailInput = screen.getByLabelText(/Email Marketing Management URL/i);
+    const paidAdsInput = screen.getByLabelText(/Paid Ads Management URL/i);
+
+    expect(smmInput).toBeInTheDocument();
+    expect(liInput).toBeInTheDocument();
+    expect(seoInput).toBeInTheDocument();
+    expect(emailInput).toBeInTheDocument();
+    expect(paidAdsInput).toBeInTheDocument();
+
+    fireEvent.change(smmInput, { target: { value: 'https://hootsuite.com/apex-updated' } });
+    fireEvent.change(liInput, { target: { value: 'https://linkedin.com/apex-updated' } });
+    fireEvent.change(seoInput, { target: { value: 'https://semrush.com/apex-updated' } });
+    fireEvent.change(emailInput, { target: { value: 'https://mailchimp.com/apex-updated' } });
+    fireEvent.change(paidAdsInput, { target: { value: 'https://ads.google.com/apex-updated' } });
+
+    expect(screen.getByTestId('unsaved-changes-indicator')).toBeInTheDocument();
+
+    const saveBtn = screen.getByRole('button', { name: /Save Changes/i });
+    await act(async () => {
+      fireEvent.click(saveBtn);
+    });
+
+    await waitFor(() => {
+      expect(updateClientSpy).toHaveBeenCalledWith(
+        mockClientA.id,
+        expect.objectContaining({
+          links: expect.objectContaining({
+            social_media_management: 'https://hootsuite.com/apex-updated',
+            linkedin_management: 'https://linkedin.com/apex-updated',
+            seo_management: 'https://semrush.com/apex-updated',
+            email_marketing_management: 'https://mailchimp.com/apex-updated',
+            paid_ads_management: 'https://ads.google.com/apex-updated'
+          })
+        }),
+        'usr-owner-1'
+      );
+    });
+
+    expect(onClientUpdatedMock).toHaveBeenCalledWith(updatedClientWithNewLinks);
+  });
+
+  // 14. FIVE NEW LINKS IN CREATE AND DUPLICATE CLIENT MODALS
+  it('14. CreateClientModal and DuplicateClientModal render inputs for 5 new links and include them in payload', async () => {
+    const createSpy = vi.spyOn(clientManagementService, 'createClient').mockResolvedValue({
+      data: mockClientA,
+      error: undefined
+    });
+
+    const { unmount } = render(
+      <CreateClientModal
+        isOpen={true}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+        currentUserProfile={mockOwnerProfile}
+        eligibleManagers={[mockOwnerProfile]}
+      />
+    );
+
+    const smmInput = screen.getByLabelText(/Social Media Management URL/i);
+    const liInput = screen.getByLabelText(/LinkedIn Management URL/i);
+    const seoInput = screen.getByLabelText(/SEO Management URL/i);
+    const emailInput = screen.getByLabelText(/Email Marketing Management URL/i);
+    const paidAdsInput = screen.getByLabelText(/Paid Ads Management URL/i);
+
+    expect(smmInput).toBeInTheDocument();
+    expect(liInput).toBeInTheDocument();
+    expect(seoInput).toBeInTheDocument();
+    expect(emailInput).toBeInTheDocument();
+    expect(paidAdsInput).toBeInTheDocument();
+
+    // Fill required fields
+    fireEvent.change(screen.getByLabelText(/Company Name/i), { target: { value: 'Alpha Marketing Co' } });
+    fireEvent.change(screen.getByLabelText(/Client \/ Owner Full Name/i), { target: { value: 'Alpha Owner' } });
+    fireEvent.change(screen.getByLabelText(/Activation Date/i), { target: { value: '2026-09-20' } });
+    fireEvent.change(smmInput, { target: { value: 'https://buffer.com/alpha' } });
+    fireEvent.change(liInput, { target: { value: 'https://linkedin.com/alpha' } });
+    fireEvent.change(seoInput, { target: { value: 'https://ahrefs.com/alpha' } });
+    fireEvent.change(emailInput, { target: { value: 'https://klaviyo.com/alpha' } });
+    fireEvent.change(paidAdsInput, { target: { value: 'https://facebook.com/ads/alpha' } });
+
+    const submitBtn = screen.getByRole('button', { name: /Create Client Workspace/i });
+    await act(async () => {
+      fireEvent.click(submitBtn);
+    });
+
+    await waitFor(() => {
+      expect(createSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          companyName: 'Alpha Marketing Co',
+          links: expect.objectContaining({
+            social_media_management: 'https://buffer.com/alpha',
+            linkedin_management: 'https://linkedin.com/alpha',
+            seo_management: 'https://ahrefs.com/alpha',
+            email_marketing_management: 'https://klaviyo.com/alpha',
+            paid_ads_management: 'https://facebook.com/ads/alpha'
+          })
+        }),
+        'usr-owner-1'
+      );
+    });
+
+    unmount();
+  });
+
+  // 15. READABILITY OF MISSING LINKS (MEDIUM GREY & TOOLTIP)
+  it('15. Missing links render with readable medium grey styles, disabled state, and "Link not added" tooltip', async () => {
+    const clientPartialLinks: ClientRecord = {
+      ...mockClientA,
+      id: 'client-partial',
+      links: {
+        website: 'https://apexgrowth.com'
+      }
+    };
+
+    vi.spyOn(clientManagementService, 'fetchClients').mockResolvedValue({
+      data: [clientPartialLinks],
+      error: undefined
+    });
+
+    useOpsStore.setState({
+      clients: [clientPartialLinks],
+      selectedClientId: clientPartialLinks.id
+    });
+
+    await act(async () => {
+      render(
+        <MemoryRouter>
+          <AuthProvider>
+            <Sidebar />
+          </AuthProvider>
+        </MemoryRouter>
+      );
+    });
+
+    await waitFor(() => {
+      expect(screen.getByText('1 active')).toBeInTheDocument();
+    });
+
+    // Active link is rendered as <a>
+    const activeLink = screen.getByRole('link', { name: /Website/i });
+    expect(activeLink).toBeInTheDocument();
+
+    // Missing links are rendered as non-clickable containers with title="Link not added" and aria-disabled="true"
+    const missingElements = screen.getAllByTitle('Link not added');
+    expect(missingElements.length).toBe(19); // 20 total - 1 active = 19 missing
+
+    missingElements.forEach((el) => {
+      expect(el).toHaveAttribute('aria-disabled', 'true');
+      expect(el.className).toContain('text-gray-500');
+      expect(el.className).toContain('cursor-not-allowed');
+      expect(el.className).not.toContain('opacity-40');
+      expect(el.className).not.toContain('opacity-50');
+    });
   });
 });

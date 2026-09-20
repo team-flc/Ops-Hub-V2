@@ -5,7 +5,7 @@ import {
   Building2, ChevronsLeft, ChevronsRight, Briefcase, X,
   Globe, HardDrive, MessageCircle, ExternalLink, Clock, Users, UserCheck,
   Image, Video, PlaySquare, Sparkles, LayoutGrid, Palette, PhoneCall,
-  LayoutDashboard, FileText
+  LayoutDashboard, FileText, Share2, Search, Mail, Target
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { ClientRecord, UserProfile } from '../../types';
@@ -174,6 +174,41 @@ export const Sidebar: React.FC = () => {
       activeColorClass: 'text-orange-500 dark:text-orange-400'
     },
     {
+      key: 'social_media_management',
+      label: 'Social Media Management',
+      url: clientLinks.social_media_management,
+      icon: <Share2 className="w-3.5 h-3.5" />,
+      activeColorClass: 'text-teal-500 dark:text-teal-400'
+    },
+    {
+      key: 'linkedin_management',
+      label: 'LinkedIn Management',
+      url: clientLinks.linkedin_management,
+      icon: <Briefcase className="w-3.5 h-3.5" />,
+      activeColorClass: 'text-[#0A66C2]'
+    },
+    {
+      key: 'seo_management',
+      label: 'SEO Management',
+      url: clientLinks.seo_management,
+      icon: <Search className="w-3.5 h-3.5" />,
+      activeColorClass: 'text-emerald-500 dark:text-emerald-400'
+    },
+    {
+      key: 'email_marketing_management',
+      label: 'Email Marketing Management',
+      url: clientLinks.email_marketing_management,
+      icon: <Mail className="w-3.5 h-3.5" />,
+      activeColorClass: 'text-violet-500 dark:text-violet-400'
+    },
+    {
+      key: 'paid_ads_management',
+      label: 'Paid Ads Management',
+      url: clientLinks.paid_ads_management,
+      icon: <Target className="w-3.5 h-3.5" />,
+      activeColorClass: 'text-amber-500 dark:text-amber-400'
+    },
+    {
       key: 'linkedin_company_page',
       label: 'LinkedIn',
       url: clientLinks.linkedin_company_page,
@@ -293,7 +328,7 @@ export const Sidebar: React.FC = () => {
                 return (
                   <div
                     key={link.key}
-                    className="p-2 text-gray-300 dark:text-gray-600 rounded-lg cursor-not-allowed opacity-40 flex items-center justify-center select-none"
+                    className="p-2 text-gray-400 dark:text-gray-500 rounded-lg cursor-not-allowed flex items-center justify-center select-none"
                     title="Link not added"
                     aria-label={`${link.label} (Link not added)`}
                     aria-disabled="true"
@@ -439,13 +474,13 @@ export const Sidebar: React.FC = () => {
                   return (
                     <div
                       key={link.key}
-                      className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-400/80 dark:text-gray-500/80 opacity-50 cursor-not-allowed select-none transition-colors"
+                      className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-500 dark:text-gray-400 cursor-not-allowed select-none transition-colors"
                       title="Link not added"
                       aria-label={`${link.label} (Link not added)`}
                       aria-disabled="true"
                     >
                       <div className="flex items-center gap-2 truncate">
-                        <span className="text-gray-300 dark:text-gray-600 shrink-0">
+                        <span className="text-gray-400 dark:text-gray-500 shrink-0">
                           {link.icon}
                         </span>
                         <span className="truncate">{link.label}</span>
