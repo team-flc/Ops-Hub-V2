@@ -676,7 +676,7 @@ export const WorkPlanBuilderModal: React.FC<WorkPlanBuilderModalProps> = ({
                         className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-dark-100 text-slate-700 dark:text-gray-200 text-xs font-bold cursor-pointer"
                       >
                         <Plus className="w-3.5 h-3.5" />
-                        <span>+ Add Custom Task</span>
+                        <span>Add Custom Task</span>
                       </button>
                     </div>
                   </div>
