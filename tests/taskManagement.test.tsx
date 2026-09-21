@@ -7,16 +7,23 @@ import {
   isTaskOverdue,
   validateTaskDates
 } from '../src/lib/taskManagementService';
-import { ClientTask, ClientRecord, Department, UserProfile } from '../src/types';
+import { ClientTask, ClientRecord, Department, UserProfile, ClientTaskEvent } from '../src/types';
 import { CreateClientTaskModal } from '../src/components/tasks/CreateClientTaskModal';
 import { ClientTaskCard } from '../src/components/tasks/ClientTaskCard';
 import { ClientWorkspaceView } from '../src/components/clients/ClientWorkspaceView';
+import { ClientTaskDetailsModal } from '../src/components/tasks/ClientTaskDetailsModal';
+import { TaskConversationFeed } from '../src/components/tasks/TaskConversationFeed';
 
 // Mock Supabase
 const mockGetUser = vi.fn();
 const mockGetSession = vi.fn();
 const mockFrom = vi.fn();
 const mockFunctionsInvoke = vi.fn();
+const mockRemoveChannel = vi.fn();
+const mockChannel = vi.fn().mockReturnValue({
+  on: vi.fn().mockReturnThis(),
+  subscribe: vi.fn().mockReturnValue({ unsubscribe: vi.fn() })
+});
 
 vi.mock('../src/lib/supabase', () => {
   return {
@@ -30,7 +37,9 @@ vi.mock('../src/lib/supabase', () => {
       from: (table: string) => mockFrom(table),
       functions: {
         invoke: (...args: any[]) => mockFunctionsInvoke(...args)
-      }
+      },
+      channel: (...args: any[]) => mockChannel(...args),
+      removeChannel: (...args: any[]) => mockRemoveChannel(...args)
     }
   };
 });
@@ -292,8 +301,8 @@ describe('Phase 3A: Operational Task Management Core Unit & Security Tests', () 
     expect(onSelect).toHaveBeenCalledWith(mockTask);
   });
 
-  // 9. TEAM MEMBER PERMISSIONS: CANNOT EDIT CORE FIELDS OR ARCHIVE
-  it('9. Team Member sees workflow actions for assigned task but no edit/archive buttons', () => {
+  // 9. TEAM MEMBER PERMISSIONS: SEES WORKFLOW ACTIONS AND CAN EDIT ASSIGNED TASK
+  it('9. Team Member sees workflow actions and Edit Task button for assigned task', () => {
     const onSelect = vi.fn();
     const onEdit = vi.fn();
     const onStatusChange = vi.fn();
@@ -311,8 +320,8 @@ describe('Phase 3A: Operational Task Management Core Unit & Security Tests', () 
     // Has Start Work button when Assigned
     expect(screen.getByTitle('Start Work')).toBeInTheDocument();
 
-    // Does NOT have Edit Task button
-    expect(screen.queryByTitle('Edit Task')).not.toBeInTheDocument();
+    // Has Edit Task button
+    expect(screen.getByTitle('Edit Task')).toBeInTheDocument();
   });
 
   // 10. CLIENT WORKSPACE VIEW RENDERS WEEK 1-4 WITH OPERATIONAL TASKS
@@ -676,5 +685,151 @@ describe('Phase 3A: Operational Task Management Core Unit & Security Tests', () 
 
     const addBtns = screen.getAllByRole('button', { name: /\+ add task/i });
     expect(addBtns.length).toBe(1);
+  });
+
+  // 16. TEAM MEMBER TASK EDIT PERMISSIONS ON TASK CARD & MODAL
+  it('16. Team Member role can see and click Edit Task button on ClientTaskCard and ClientTaskDetailsModal', async () => {
+    const onOpenEditModalCard = vi.fn();
+    const teamMemberProfile: UserProfile = {
+      id: 'tm-1',
+      fullName: 'Hamza Specialist',
+      role: 'team_member',
+      status: 'active'
+    };
+
+    // 16.1 Card Edit Button
+    render(
+      <ClientTaskCard
+        task={mockTask}
+        currentUserProfile={teamMemberProfile}
+        onSelectTask={vi.fn()}
+        onOpenEditModal={onOpenEditModalCard}
+        onStatusChange={vi.fn()}
+      />
+    );
+
+    const editCardBtn = screen.getByTitle('Edit Task');
+    expect(editCardBtn).toBeInTheDocument();
+    fireEvent.click(editCardBtn);
+    expect(onOpenEditModalCard).toHaveBeenCalledWith(mockTask);
+
+    // 16.2 Modal Edit Button
+    vi.spyOn(taskManagementService, 'fetchTaskFeed').mockResolvedValue({
+      messages: [],
+      events: [],
+      combinedFeed: [],
+      nextCursor: null,
+      hasMore: false
+    });
+    vi.spyOn(taskManagementService, 'subscribeToTaskFeed').mockReturnValue(vi.fn());
+
+    const onOpenEditModalDrawer = vi.fn();
+    render(
+      <ClientTaskDetailsModal
+        isOpen={true}
+        onClose={vi.fn()}
+        task={mockTask}
+        client={mockClient}
+        currentUserProfile={teamMemberProfile}
+        departments={mockDepartments}
+        eligibleAssignees={mockUsers}
+        onOpenEditModal={onOpenEditModalDrawer}
+      />
+    );
+
+    const editDrawerBtn = screen.getByTitle('Edit Task Fields');
+    expect(editDrawerBtn).toBeInTheDocument();
+    fireEvent.click(editDrawerBtn);
+    expect(onOpenEditModalDrawer).toHaveBeenCalledWith(mockTask);
+  });
+
+  // 17. CLIENT ROLE RESTRICTIONS: CANNOT EDIT TASKS
+  it('17. Client role cannot see Edit Task button on card or modal drawer', () => {
+    const clientProfile: UserProfile = {
+      id: 'client-user-1',
+      fullName: 'Client User',
+      role: 'client',
+      status: 'active'
+    };
+
+    // Card Check
+    const { unmount } = render(
+      <ClientTaskCard
+        task={mockTask}
+        currentUserProfile={clientProfile}
+        onSelectTask={vi.fn()}
+        onOpenEditModal={vi.fn()}
+        onStatusChange={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByTitle('Edit Task')).not.toBeInTheDocument();
+    unmount();
+
+    // Modal Check
+    vi.spyOn(taskManagementService, 'fetchTaskFeed').mockResolvedValue({
+      messages: [],
+      events: [],
+      combinedFeed: [],
+      nextCursor: null,
+      hasMore: false
+    });
+    vi.spyOn(taskManagementService, 'subscribeToTaskFeed').mockReturnValue(vi.fn());
+
+    render(
+      <ClientTaskDetailsModal
+        isOpen={true}
+        onClose={vi.fn()}
+        task={mockTask}
+        client={mockClient}
+        currentUserProfile={clientProfile}
+        departments={mockDepartments}
+        eligibleAssignees={mockUsers}
+        onOpenEditModal={vi.fn()}
+      />
+    );
+
+    expect(screen.queryByTitle('Edit Task Fields')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('Archive Task')).not.toBeInTheDocument();
+  });
+
+  // 18. TASK TIMELINE & AUDIT FEED DISPLAYS FIELD UPDATES WITH ACTOR & DIFF NOTES
+  it('18. TaskConversationFeed renders field_updated events with actor name and detailed diff notes', () => {
+    const mockFeedEvent: ClientTaskEvent = {
+      id: 'evt-edit-1',
+      taskId: 'task-1',
+      clientId: 'client-1',
+      actorId: 'tm-1',
+      actorName: 'Hamza Specialist',
+      eventType: 'field_updated',
+      notes: 'Title: "Old Title" → "New Title" | Priority: Normal → Urgent',
+      createdAt: '2026-09-22T01:30:00.000Z'
+    };
+
+    const feedItems = [
+      {
+        type: 'event' as const,
+        data: mockFeedEvent,
+        timestamp: mockFeedEvent.createdAt,
+        id: mockFeedEvent.id
+      }
+    ];
+
+    render(
+      <TaskConversationFeed
+        feed={feedItems}
+        events={[mockFeedEvent]}
+        isLoadingFeed={false}
+        hasMoreFeed={false}
+        onLoadOlderFeed={vi.fn()}
+        isClient={false}
+        formatDatetime={(iso) => iso}
+      />
+    );
+
+    // Feed Timeline Check
+    expect(screen.getAllByText('Hamza Specialist').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Task Edited').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('Title: "Old Title" → "New Title" | Priority: Normal → Urgent').length).toBeGreaterThanOrEqual(1);
   });
 });

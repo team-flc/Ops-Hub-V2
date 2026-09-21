@@ -288,28 +288,29 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
 
           {/* Action Icons */}
           <div className="flex items-center gap-1.5 flex-shrink-0">
+            {!isClient && !isTaskArchived && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenEditModal(task);
+                }}
+                className="p-2 text-gray-500 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-500/10 rounded-xl transition-colors cursor-pointer"
+                title="Edit Task Fields"
+              >
+                <Edit3 className="w-4 h-4" />
+              </button>
+            )}
+
             {isOwnerOrManager && !isTaskArchived && (
-              <>
-                <button
-                  type="button"
-                  onClick={() => {
-                    onClose();
-                    onOpenEditModal(task);
-                  }}
-                  className="p-2 text-gray-500 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-brand-50 dark:hover:bg-brand-500/10 rounded-xl transition-colors cursor-pointer"
-                  title="Edit Task Fields"
-                >
-                  <Edit3 className="w-4 h-4" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowArchiveConfirm(true)}
-                  className="p-2 text-gray-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl transition-colors cursor-pointer"
-                  title="Archive Task"
-                >
-                  <Archive className="w-4 h-4" />
-                </button>
-              </>
+              <button
+                type="button"
+                onClick={() => setShowArchiveConfirm(true)}
+                className="p-2 text-gray-500 hover:text-rose-600 dark:hover:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-500/10 rounded-xl transition-colors cursor-pointer"
+                title="Archive Task"
+              >
+                <Archive className="w-4 h-4" />
+              </button>
             )}
 
             <button

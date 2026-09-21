@@ -1,5 +1,5 @@
 import React from 'react';
-import { MessageSquare, Link as LinkIcon, ExternalLink, History } from 'lucide-react';
+import { MessageSquare, Link as LinkIcon, ExternalLink, History, Edit3 } from 'lucide-react';
 import { TaskMessage, ClientTaskEvent } from '../../types';
 
 interface TaskConversationFeedProps {
@@ -122,18 +122,47 @@ export const TaskConversationFeed: React.FC<TaskConversationFeedProps> = ({
 
           // Lifecycle / Audit Event
           const evt = item.data as ClientTaskEvent;
+          const isEditEvent = evt.eventType === 'field_updated';
           return (
-            <div key={evt.id || idx} className="flex items-start gap-2 text-[11px] py-1 text-gray-500 dark:text-gray-400 pl-2">
-              <span className="w-1.5 h-1.5 rounded-full bg-brand-500 mt-1.5 flex-shrink-0" />
+            <div
+              key={evt.id || idx}
+              className={`flex items-start gap-2.5 text-[11px] p-2.5 rounded-xl border transition-all ${
+                isEditEvent
+                  ? 'bg-amber-50/50 dark:bg-amber-950/20 border-amber-200/70 dark:border-amber-900/50'
+                  : 'bg-gray-50/70 dark:bg-dark-100/40 border-gray-200/60 dark:border-dark-border/60'
+              }`}
+            >
+              <div className={`p-1 rounded-md flex-shrink-0 mt-0.5 ${
+                isEditEvent
+                  ? 'bg-amber-100 text-amber-700 dark:bg-amber-900/60 dark:text-amber-300'
+                  : 'bg-brand-100 text-brand-700 dark:bg-brand-900/60 dark:text-brand-300'
+              }`}>
+                {isEditEvent ? <Edit3 className="w-3 h-3" /> : <History className="w-3 h-3" />}
+              </div>
+
               <div className="flex-1 min-w-0">
-                <div className="flex items-center justify-between">
-                  <span className="font-semibold text-gray-700 dark:text-gray-300 capitalize">
-                    {evt.eventType.replace(/_/g, ' ')}
+                <div className="flex items-center justify-between gap-1.5 flex-wrap">
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="font-bold text-gray-900 dark:text-gray-100 truncate">
+                      {evt.actorName || 'Staff Member'}
+                    </span>
+                    <span className={`px-1.5 py-0.2 rounded text-[9px] font-bold border ${
+                      isEditEvent
+                        ? 'bg-amber-100/80 text-amber-800 border-amber-300 dark:bg-amber-950/50 dark:text-amber-300'
+                        : 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-dark-100 dark:text-slate-300'
+                    }`}>
+                      {isEditEvent ? 'Task Edited' : evt.eventType.replace(/_/g, ' ')}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-gray-400 font-medium">
+                    {formatDatetime(evt.createdAt)}
                   </span>
-                  <span className="text-[10px] text-gray-400">{formatDatetime(evt.createdAt)}</span>
                 </div>
+
                 {evt.notes && (
-                  <p className="text-[10px] text-gray-500 italic mt-0.5 break-words">{evt.notes}</p>
+                  <p className="text-[11px] text-gray-700 dark:text-gray-300 mt-1 break-words font-medium leading-relaxed">
+                    {evt.notes}
+                  </p>
                 )}
               </div>
             </div>
@@ -145,18 +174,31 @@ export const TaskConversationFeed: React.FC<TaskConversationFeedProps> = ({
       {/* Immutable Audit History Snapshot */}
       <div className="pt-3 border-t border-gray-100 dark:border-dark-border">
         <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5 mb-2">
-          <History className="w-3.5 h-3.5" />
+          <History className="w-3.5 h-3.5 text-brand-500" />
           <span>Immutable Task Audit History</span>
         </span>
-        <div className="space-y-1.5 border-l-2 border-gray-100 dark:border-dark-border pl-3 ml-1.5">
+        <div className="space-y-2 border-l-2 border-gray-200 dark:border-dark-border pl-3 ml-1.5">
           {events.length === 0 && !isLoadingFeed && (
             <p className="text-gray-400 text-xs italic">No previous events recorded.</p>
           )}
-          {events.slice(0, 5).map((evt) => (
-            <div key={evt.id} className="text-[10px] text-gray-500">
-              <span className="font-bold text-gray-700 dark:text-gray-300">{evt.actorName}:</span>{' '}
-              <span className="capitalize">{evt.eventType.replace(/_/g, ' ')}</span>{' '}
-              <span className="text-gray-400">({formatDatetime(evt.createdAt)})</span>
+          {events.slice(0, 10).map((evt) => (
+            <div key={evt.id} className="text-[11px] text-gray-600 dark:text-gray-400 space-y-0.5">
+              <div className="flex items-center justify-between gap-1">
+                <div>
+                  <span className="font-bold text-gray-900 dark:text-gray-100">{evt.actorName || 'Staff'}:</span>{' '}
+                  <span className="capitalize font-semibold text-gray-700 dark:text-gray-300">
+                    {evt.eventType === 'field_updated' ? 'Task Edited' : evt.eventType.replace(/_/g, ' ')}
+                  </span>
+                </div>
+                <span className="text-[10px] text-gray-400 flex-shrink-0">
+                  {formatDatetime(evt.createdAt)}
+                </span>
+              </div>
+              {evt.notes && (
+                <p className="text-[10px] text-gray-600 dark:text-gray-400 italic pl-2 border-l border-brand-200 dark:border-brand-900/60 break-words">
+                  {evt.notes}
+                </p>
+              )}
             </div>
           ))}
         </div>

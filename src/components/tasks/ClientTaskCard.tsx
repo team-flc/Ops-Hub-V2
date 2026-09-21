@@ -24,6 +24,7 @@ export const ClientTaskCard: React.FC<ClientTaskCardProps> = ({
   onStatusChange
 }) => {
   const isOwnerOrManager = currentUserProfile?.role === 'owner' || currentUserProfile?.role === 'operational_manager';
+  const isClient = currentUserProfile?.role === 'client';
   const isAssignedMember = task.assigneeId === currentUserProfile?.id;
 
   const formatDate = (iso?: string | null) => {
@@ -172,7 +173,7 @@ export const ClientTaskCard: React.FC<ClientTaskCardProps> = ({
             </button>
           )}
 
-          {isOwnerOrManager && (
+          {!isClient && (
             <button
               type="button"
               onClick={() => onOpenEditModal(task)}

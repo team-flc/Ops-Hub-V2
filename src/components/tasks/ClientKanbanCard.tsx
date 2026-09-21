@@ -79,6 +79,7 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
 }) => {
   const isOwnerOrManager =
     currentUserProfile?.role === 'owner' || currentUserProfile?.role === 'operational_manager';
+  const isClient = currentUserProfile?.role === 'client';
   const isAssignedMember = task.assigneeId === currentUserProfile?.id;
   const canActOnTask = isAssignedMember || isOwnerOrManager;
   const isTimerRunning = Boolean(task.timerStartedAt);
@@ -174,7 +175,7 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
               Overdue
             </span>
           )}
-          {isOwnerOrManager && (
+          {!isClient && (
             <button
               type="button"
               onClick={(e) => {

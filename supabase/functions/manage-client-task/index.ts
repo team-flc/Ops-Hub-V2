@@ -477,6 +477,33 @@ serve(async (req: Request) => {
         return new Response(JSON.stringify({ error: uErr?.message || 'Failed to update task.' }), { status: 500, headers: corsHeaders });
       }
 
+      // Compute granular field differences for audit trail
+      const diffList: string[] = [];
+      if (title !== undefined && title.trim() !== existingTask.title) {
+        diffList.push(`Title: "${existingTask.title}" → "${title.trim()}"`);
+      }
+      if (priority !== undefined && priority !== existingTask.priority) {
+        diffList.push(`Priority: ${existingTask.priority} → ${priority}`);
+      }
+      if (department_id !== undefined && department_id !== existingTask.department_id) {
+        diffList.push(`Department changed`);
+      }
+      if (approval_mode !== undefined && approval_mode !== existingTask.approval_mode) {
+        diffList.push(`Approval Mode: ${existingTask.approval_mode || 'None'} → ${approval_mode}`);
+      }
+      if (planned_start !== undefined && planned_start !== existingTask.planned_start) {
+        diffList.push(`Planned Start updated`);
+      }
+      if (due_date !== undefined && due_date !== existingTask.due_date) {
+        diffList.push(`Due Date updated`);
+      }
+      if (details !== undefined && (details ? details.trim() : null) !== existingTask.details) {
+        diffList.push(`Instructions updated`);
+      }
+
+      const diffSummary = diffList.length > 0 ? diffList.join(' | ') : 'Task fields updated';
+
+      // Record in task-level chronological timeline
       await supabaseAdmin.from('client_task_events').insert({
         task_id,
         client_id: existingTask.client_id,
@@ -484,7 +511,35 @@ serve(async (req: Request) => {
         event_type: 'field_updated',
         previous_state: existingTask,
         new_state: updatedTask,
-        notes: 'Task fields updated'
+        notes: diffSummary
+      });
+
+      // Fetch client info for global audit record
+      const { data: clientRecord } = await supabaseAdmin
+        .from('clients')
+        .select('name, company_name')
+        .eq('id', existingTask.client_id)
+        .maybeSingle();
+      const clientName = clientRecord?.company_name || clientRecord?.name || 'Client';
+
+      // Record in global immutable system audit log
+      await supabaseAdmin.from('system_audit_events').insert({
+        actor_id: callerProfile.id,
+        actor_name: callerProfile.full_name,
+        actor_role: callerProfile.role,
+        action: 'task_updated',
+        entity_type: 'client_task',
+        entity_id: task_id,
+        entity_name: updatedTask.title,
+        client_id: existingTask.client_id,
+        client_name: clientName,
+        previous_state: existingTask,
+        new_state: updatedTask,
+        reason: diffSummary,
+        metadata: {
+          changes: diffList,
+          actor_email: callerProfile.work_email
+        }
       });
 
       return new Response(JSON.stringify({ success: true, task: updatedTask }), { status: 200, headers: corsHeaders });

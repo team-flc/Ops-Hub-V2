@@ -31,6 +31,10 @@ const ClientTaskDetailsModal = React.lazy(() =>
   import('../tasks/ClientTaskDetailsModal').then((m) => ({ default: m.ClientTaskDetailsModal }))
 );
 
+const EditClientTaskModal = React.lazy(() =>
+  import('../tasks/EditClientTaskModal').then((m) => ({ default: m.EditClientTaskModal }))
+);
+
 export const DashboardView: React.FC = () => {
   const navigate = useSafeNavigate();
   const { user, profile } = useAuth();
@@ -53,6 +57,7 @@ export const DashboardView: React.FC = () => {
   const [isReportModalOpen, setIsReportModalOpen] = useState(false);
   const [isCreateTaskModalOpen, setIsCreateTaskModalOpen] = useState(false);
   const [selectedTaskForDetails, setSelectedTaskForDetails] = useState<ClientTask | null>(null);
+  const [editingTask, setEditingTask] = useState<ClientTask | null>(null);
 
   // Live PKT Date / Time Ticker
   const [currentTimePKT, setCurrentTimePKT] = useState('');
@@ -370,10 +375,27 @@ export const DashboardView: React.FC = () => {
             currentUserProfile={profile}
             departments={departments}
             eligibleAssignees={eligibleAssignees}
+            onOpenEditModal={(t) => setEditingTask(t)}
             onTaskUpdated={() => {
               setSelectedTaskForDetails(null);
               loadDashboardData();
             }}
+          />
+        </React.Suspense>
+      )}
+
+      {editingTask && (
+        <React.Suspense fallback={null}>
+          <EditClientTaskModal
+            isOpen={Boolean(editingTask)}
+            onClose={() => setEditingTask(null)}
+            onSuccess={() => {
+              setEditingTask(null);
+              setSelectedTaskForDetails(null);
+              loadDashboardData();
+            }}
+            task={editingTask}
+            departments={departments}
           />
         </React.Suspense>
       )}
