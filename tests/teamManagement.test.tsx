@@ -500,12 +500,13 @@ describe('Phase 2A Team & User Management Tests', () => {
     const viSupabase = await import('../src/lib/supabase');
     vi.spyOn(viSupabase.supabase, 'from').mockImplementation((table: string) => {
       if (table === 'profiles') {
+        const queryObj: any = Promise.resolve({ data: mockProfiles, error: null });
+        queryObj.order = () => Promise.resolve({ data: mockProfiles, error: null });
+        queryObj.in = () => ({
+          order: () => Promise.resolve({ data: mockProfiles, error: null })
+        });
         return {
-          select: () => ({
-            in: () => ({
-              order: () => Promise.resolve({ data: mockProfiles, error: null })
-            })
-          })
+          select: () => queryObj
         } as any;
       }
       return {
@@ -872,12 +873,13 @@ describe('Phase 2A Team & User Management Tests', () => {
     const viSupabase = await import('../src/lib/supabase');
     vi.spyOn(viSupabase.supabase, 'from').mockImplementation((table: string) => {
       if (table === 'profiles') {
+        const queryObj: any = Promise.resolve({ data: mockProfiles, error: null });
+        queryObj.order = () => Promise.resolve({ data: mockProfiles, error: null });
+        queryObj.in = () => ({
+          order: () => Promise.resolve({ data: mockProfiles, error: null })
+        });
         return {
-          select: () => ({
-            in: () => ({
-              order: () => Promise.resolve({ data: mockProfiles, error: null })
-            })
-          })
+          select: () => queryObj
         } as any;
       }
       // Auxiliary tables reject or return error

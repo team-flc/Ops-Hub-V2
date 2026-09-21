@@ -67,38 +67,73 @@ async function extractFunctionsError(error: any, fallbackMessage: string): Promi
 
 export const teamManagementService = {
   /**
-   * Fetch all visible team members scoped to caller's role
+   * Fetch all visible team members scoped to caller's role with multi-tier resilient fallbacks
    */
   async fetchTeamMembers(callerRole: UserRole, callerId: string): Promise<TeamMemberRecord[]> {
     if (!supabase) return [];
 
     try {
-      let query = supabase
-        .from('profiles')
-        .select(`
-          id, full_name, work_email, phone, cnic, role, status, avatar_url,
-          designation_id, reporting_manager_id, start_date,
-          suspended_at, suspended_by, created_at, updated_at
-        `);
+      let profiles: any[] | null = null;
+      let profError: any = null;
 
-      // Scoped permissions: Owner views all internal staff, Operational Manager views direct reports + self
-      if (callerRole === 'owner' || !callerRole) {
-        query = query.in('role', ['owner', 'operational_manager', 'team_member']);
-      } else if (callerRole === 'operational_manager') {
-        query = query
-          .in('role', ['operational_manager', 'team_member'])
-          .or(`reporting_manager_id.eq.${callerId},id.eq.${callerId}`);
+      // Tier 1: Full select('*')
+      const res1 = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (!res1.error && res1.data && res1.data.length > 0) {
+        profiles = res1.data;
+      } else if (!res1.error && res1.data && res1.data.length === 0) {
+        // Table queried cleanly but has 0 rows
+        profiles = [];
       } else {
-        query = query.eq('id', callerId);
+        profError = res1.error;
+        console.warn('Tier 1 profiles select(*) encountered issue, attempting Tier 2 fallback:', res1.error?.message);
+
+        // Tier 2: Core fields fallback
+        const res2 = await supabase
+          .from('profiles')
+          .select('id, full_name, role, status, work_email, avatar_url, phone, bio, designation_id, reporting_manager_id, start_date, created_at, updated_at')
+          .order('created_at', { ascending: false });
+
+        if (!res2.error && res2.data) {
+          profiles = res2.data;
+          profError = null;
+        } else {
+          // Tier 3: Minimal fields fallback
+          const res3 = await supabase
+            .from('profiles')
+            .select('id, full_name, role, status');
+
+          if (!res3.error && res3.data) {
+            profiles = res3.data;
+            profError = null;
+          }
+        }
       }
 
-      const { data: profiles, error: profError } = await query.order('created_at', { ascending: false });
       if (profError || !profiles) {
-        console.error('Error fetching team profiles:', profError?.message);
+        console.error('Error fetching team profiles after all query tiers:', profError?.message);
         return [];
       }
 
-      // Resilient auxiliary joins: an error in any auxiliary table will never fail the entire profiles list
+      // Filter roles in-memory for maximum resilience against PostgREST URL encoding or case variations
+      const filteredProfiles = profiles.filter((p: any) => {
+        const r = (p.role || '').toLowerCase();
+        // Exclude pure client roles
+        if (r.includes('client')) return false;
+
+        if (callerRole === 'operational_manager') {
+          return p.reporting_manager_id === callerId || p.id === callerId;
+        } else if (callerRole === 'team_member') {
+          return p.id === callerId;
+        }
+        // Owner or unassigned gets all internal staff
+        return true;
+      });
+
+      // Resilient auxiliary joins: an error in any auxiliary table will never fail the profiles list
       const [
         deptsRes,
         designationsRes,
@@ -112,7 +147,7 @@ export const teamManagementService = {
         supabase.from('profile_departments').select('*'),
         supabase.from('profile_client_access').select('*'),
         supabase.from('client_team_access').select('*'),
-        supabase.from('profiles').select('id, full_name').in('role', ['owner', 'operational_manager'])
+        supabase.from('profiles').select('id, full_name, role')
       ]);
 
       const allDepts = deptsRes.status === 'fulfilled' && deptsRes.value?.data ? deptsRes.value.data : [];
@@ -124,7 +159,11 @@ export const teamManagementService = {
 
       const deptMap = new Map((allDepts || []).map((d: any) => [d.id, d]));
       const designationMap = new Map((allDesignations || []).map((d: any) => [d.id, d.name]));
-      const managerMap = new Map((allManagers || []).map((m: any) => [m.id, m.full_name]));
+      const managerMap = new Map(
+        (allManagers || [])
+          .filter((m: any) => m.role === 'owner' || m.role === 'operational_manager')
+          .map((m: any) => [m.id, m.full_name])
+      );
 
       const profDeptsMap = new Map<string, Department[]>();
       (allProfDepts || []).forEach((pd: any) => {
@@ -156,17 +195,17 @@ export const teamManagementService = {
         profClientsMap.set(cta.profile_id, set);
       });
 
-      return profiles.map((p: any) => {
+      return filteredProfiles.map((p: any) => {
         const userClientIds = Array.from(profClientsMap.get(p.id) || []);
         return {
           id: p.id,
-          fullName: p.full_name,
+          fullName: p.full_name || 'Team Member',
           workEmail: p.work_email || '',
           phone: p.phone,
           cnic: p.cnic || null,
           avatarUrl: p.avatar_url || null,
-          role: p.role,
-          status: p.status,
+          role: p.role || 'team_member',
+          status: p.status || 'active',
           designationId: p.designation_id,
           designationName: p.designation_id ? designationMap.get(p.designation_id) || 'Unassigned' : 'Unassigned',
           reportingManagerId: p.reporting_manager_id,
@@ -177,8 +216,8 @@ export const teamManagementService = {
           departments: profDeptsMap.get(p.id) || [],
           clientAccessCount: userClientIds.length,
           clientIds: userClientIds,
-          createdAt: p.created_at,
-          updatedAt: p.updated_at
+          createdAt: p.created_at || new Date().toISOString(),
+          updatedAt: p.updated_at || new Date().toISOString()
         };
       });
     } catch (err) {
@@ -305,20 +344,20 @@ export const teamManagementService = {
     try {
       const { data, error } = await supabase
         .from('profiles')
-        .select('id, full_name, role, status')
-        .in('role', ['owner', 'operational_manager'])
-        .eq('status', 'active')
+        .select('*')
         .order('full_name', { ascending: true });
 
       if (error || !data) return [];
-      return data.map((m) => ({
-        id: m.id,
-        fullName: m.full_name,
-        role: m.role,
-        status: m.status,
-        createdAt: '',
-        updatedAt: ''
-      }));
+      return data
+        .filter((m: any) => (m.role === 'owner' || m.role === 'operational_manager') && m.status === 'active')
+        .map((m: any) => ({
+          id: m.id,
+          fullName: m.full_name || 'Manager',
+          role: m.role,
+          status: m.status,
+          createdAt: m.created_at || '',
+          updatedAt: m.updated_at || ''
+        }));
     } catch {
       return [];
     }

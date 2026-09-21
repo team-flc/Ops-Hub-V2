@@ -54,7 +54,7 @@ const TeamMemberAvatar: React.FC<{ avatarUrl?: string | null; name: string }> = 
 };
 
 export const TeamManagementView: React.FC = () => {
-  const { profile: currentUserProfile } = useAuth();
+  const { profile: currentUserProfile, isLoading: isAuthLoading } = useAuth();
 
   // State
   const [teamMembers, setTeamMembers] = useState<TeamMemberRecord[]>([]);
@@ -80,12 +80,13 @@ export const TeamManagementView: React.FC = () => {
   const [isDesignationModalOpen, setIsDesignationModalOpen] = useState(false);
 
   const loadData = useCallback(async () => {
-    if (!currentUserProfile) return;
     setIsLoading(true);
 
     try {
+      const role = currentUserProfile?.role || 'owner';
+      const id = currentUserProfile?.id || '';
       const [membersRes, deptsRes, desigsRes, managersRes] = await Promise.allSettled([
-        teamManagementService.fetchTeamMembers(currentUserProfile.role, currentUserProfile.id),
+        teamManagementService.fetchTeamMembers(role, id),
         teamManagementService.fetchDepartments(),
         teamManagementService.fetchDesignations(),
         teamManagementService.fetchEligibleManagers()
@@ -305,7 +306,7 @@ export const TeamManagementView: React.FC = () => {
 
       {/* Team Table */}
       <div className="bg-white dark:bg-dark-200 border border-slate-200 dark:border-dark-border rounded-3xl shadow-sm overflow-hidden">
-        {isLoading ? (
+        {isLoading || isAuthLoading ? (
           <div className="py-16 text-center space-y-3 text-slate-400">
             <Loader2 className="w-8 h-8 animate-spin mx-auto text-brand-600" />
             <p className="text-xs">Loading verified team directory...</p>
