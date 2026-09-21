@@ -129,7 +129,7 @@ describe('Navigation Reorganization Test Suite', () => {
   });
 
   describe('2. Settings Top Navigation & Role-Based Permissions', () => {
-    it('2.1 renders all 9 tabs for Owner and Operational Manager', () => {
+    it('2.1 renders all 8 governance tabs for Owner and Operational Manager', () => {
       mockCurrentUser = {
         id: 'owner-1',
         role: 'owner',
@@ -139,7 +139,6 @@ describe('Navigation Reorganization Test Suite', () => {
       render(<SettingsLayout initialTab="dashboard" />);
 
       expect(screen.getByTestId('settings-tab-dashboard')).toBeInTheDocument();
-      expect(screen.getByTestId('settings-tab-workspace')).toBeInTheDocument();
       expect(screen.getByTestId('settings-tab-attendance')).toBeInTheDocument();
       expect(screen.getByTestId('settings-tab-employee_operations')).toBeInTheDocument();
       expect(screen.getByTestId('settings-tab-team')).toBeInTheDocument();
@@ -147,9 +146,12 @@ describe('Navigation Reorganization Test Suite', () => {
       expect(screen.getByTestId('settings-tab-templates')).toBeInTheDocument();
       expect(screen.getByTestId('settings-tab-archive')).toBeInTheDocument();
       expect(screen.getByTestId('settings-tab-audit')).toBeInTheDocument();
+
+      // Client Workspace is not inside SettingsLayout tabs (it is accessed via dedicated Back to Workspace)
+      expect(screen.queryByTestId('settings-tab-workspace')).not.toBeInTheDocument();
     });
 
-    it('2.2 renders only permitted operational tabs (My Dashboard, Client Workspace, My Attendance & Portal) for Team Member', () => {
+    it('2.2 renders only permitted operational tabs (My Dashboard, My Attendance & Portal) for Team Member', () => {
       mockCurrentUser = {
         id: 'tm-1',
         role: 'team_member',
@@ -160,10 +162,10 @@ describe('Navigation Reorganization Test Suite', () => {
 
       // Permitted tabs visible
       expect(screen.getByTestId('settings-tab-dashboard')).toBeInTheDocument();
-      expect(screen.getByTestId('settings-tab-workspace')).toBeInTheDocument();
       expect(screen.getByTestId('settings-tab-attendance')).toBeInTheDocument();
 
       // Restricted tabs must NOT be in navigation
+      expect(screen.queryByTestId('settings-tab-workspace')).not.toBeInTheDocument();
       expect(screen.queryByTestId('settings-tab-employee_operations')).not.toBeInTheDocument();
       expect(screen.queryByTestId('settings-tab-team')).not.toBeInTheDocument();
       expect(screen.queryByTestId('settings-tab-clients')).not.toBeInTheDocument();

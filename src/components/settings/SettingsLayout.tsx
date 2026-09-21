@@ -3,7 +3,7 @@ import { useSafeNavigate, useSafeParams } from '../../lib/safeRouterHooks';
 import { useAuth } from '../../context/AuthContext';
 import {
   Users, Building2, Archive, Activity, ShieldAlert, ArrowLeft, BookTemplate,
-  LayoutDashboard, Briefcase, Clock, UserCheck
+  LayoutDashboard, Clock, UserCheck
 } from 'lucide-react';
 import { SettingsTab, UserProfile } from '../../types';
 import { useOpsStore } from '../../store/opsStore';
@@ -24,9 +24,6 @@ const EmployeeDashboardView = React.lazy(() =>
 const EmployeeManagementDashboardView = React.lazy(() =>
   import('../employee/EmployeeManagementDashboardView').then((m) => ({ default: m.EmployeeManagementDashboardView }))
 );
-const ClientWorkspaceView = React.lazy(() =>
-  import('../clients/ClientWorkspaceView').then((m) => ({ default: m.ClientWorkspaceView }))
-);
 const ServiceTemplatesView = React.lazy(() =>
   import('../templates/ServiceTemplatesView').then((m) => ({ default: m.ServiceTemplatesView }))
 );
@@ -46,7 +43,6 @@ interface TabConfig {
 
 const ALL_TABS: TabConfig[] = [
   { id: 'dashboard', label: 'My Dashboard', icon: LayoutDashboard },
-  { id: 'workspace', label: 'Client Workspace', icon: Briefcase },
   { id: 'attendance', label: 'My Attendance & Portal', icon: Clock },
   { id: 'employee_operations', label: 'Employee Operations', icon: Users, managerOnly: true },
   { id: 'team', label: 'Team Management', icon: UserCheck, managerOnly: true },
@@ -62,9 +58,7 @@ export const SettingsLayout: React.FC<{ initialTab?: SettingsTab }> = ({ initial
   const { profile } = useAuth();
 
   const selectedClientId = useOpsStore((state) => state.selectedClientId);
-  const clients = useOpsStore((state) => state.clients);
   const setViewMode = useOpsStore((state) => state.setViewMode);
-  const updateClientRecord = useOpsStore((state) => state.updateClientRecord);
 
   const [eligibleManagers, setEligibleManagers] = useState<UserProfile[]>([]);
 
@@ -79,21 +73,23 @@ export const SettingsLayout: React.FC<{ initialTab?: SettingsTab }> = ({ initial
   }, []);
 
   const isManagerOrOwner = profile?.role === 'owner' || profile?.role === 'operational_manager';
-  const selectedClient =
-    clients.find((c) => c.id === selectedClientId) ||
-    clients.find((c) => c.status !== 'Archived') ||
-    clients[0] ||
-    null;
+
+  // Normalize tab param with support for hyphenated route aliases
+  const rawTab = params.tab || initialTab;
+
+  // Gracefully redirect legacy /settings/workspace directly to active client workspace
+  useEffect(() => {
+    if (rawTab === 'workspace' || rawTab === 'client_workspace' || rawTab === 'client-workspace') {
+      navigate(selectedClientId ? `/clients/${selectedClientId}` : '/');
+      setViewMode('client_workspace');
+    }
+  }, [rawTab, selectedClientId, navigate, setViewMode]);
 
   // Filter tabs by permission: team members only see permitted operational tabs
   const visibleTabs = ALL_TABS.filter((tab) => !tab.managerOnly || isManagerOrOwner);
 
-  // Normalize tab param with support for hyphenated route aliases
-  const rawTab = params.tab || initialTab;
   let normalizedTab: SettingsTab = 'dashboard';
-  if (rawTab === 'workspace' || rawTab === 'client_workspace' || rawTab === 'client-workspace') {
-    normalizedTab = 'workspace';
-  } else if (rawTab === 'attendance' || rawTab === 'employee_dashboard' || rawTab === 'employee-dashboard' || rawTab === 'my-portal' || rawTab === 'portal') {
+  if (rawTab === 'attendance' || rawTab === 'employee_dashboard' || rawTab === 'employee-dashboard' || rawTab === 'my-portal' || rawTab === 'portal') {
     normalizedTab = 'attendance';
   } else if (rawTab === 'employee_operations' || rawTab === 'employee-operations' || rawTab === 'operations') {
     normalizedTab = 'employee_operations';
@@ -145,11 +141,13 @@ export const SettingsLayout: React.FC<{ initialTab?: SettingsTab }> = ({ initial
 
         <button
           type="button"
+          data-testid="back-to-workspace-btn"
           onClick={() => {
             navigate(selectedClientId ? `/clients/${selectedClientId}` : '/');
             setViewMode('client_workspace');
           }}
-          className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border text-xs font-semibold text-gray-600 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors flex-shrink-0 min-h-[40px] sm:min-h-[36px] cursor-pointer self-start lg:self-auto"
+          className="flex items-center justify-center gap-1.5 px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border text-xs font-bold text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-dark-100 hover:text-brand-600 dark:hover:text-brand-400 transition-colors flex-shrink-0 min-h-[40px] sm:min-h-[36px] cursor-pointer self-start lg:self-auto shadow-2xs"
+          title="Return to active client workspace"
         >
           <ArrowLeft className="w-3.5 h-3.5" />
           <span className="whitespace-nowrap">Back to Workspace</span>
@@ -181,49 +179,25 @@ export const SettingsLayout: React.FC<{ initialTab?: SettingsTab }> = ({ initial
             {/* 1. My Dashboard */}
             {normalizedTab === 'dashboard' && <DashboardView />}
 
-            {/* 2. Client Workspace */}
-            {normalizedTab === 'workspace' && (
-              selectedClient ? (
-                <ClientWorkspaceView
-                  client={selectedClient}
-                  currentUserProfile={profile}
-                  eligibleManagers={eligibleManagers}
-                  onClientUpdated={updateClientRecord}
-                />
-              ) : (
-                <div className="p-12 text-center text-gray-500 max-w-lg mx-auto mt-16 space-y-3">
-                  <div className="w-12 h-12 rounded-2xl bg-brand-500/10 text-brand-500 flex items-center justify-center mx-auto border border-brand-500/20">
-                    <Building2 className="w-6 h-6" />
-                  </div>
-                  <h3 className="text-base font-bold text-gray-800 dark:text-gray-200">
-                    No Accessible Client Workspace
-                  </h3>
-                  <p className="text-xs text-gray-400">
-                    Select an accessible client workspace from the Client Switcher in the left sidebar, or create a new client if authorized.
-                  </p>
-                </div>
-              )
-            )}
-
-            {/* 3. My Attendance & Portal */}
+            {/* 2. My Attendance & Portal */}
             {normalizedTab === 'attendance' && <EmployeeDashboardView />}
 
-            {/* 4. Employee Operations */}
+            {/* 3. Employee Operations */}
             {normalizedTab === 'employee_operations' && <EmployeeManagementDashboardView />}
 
-            {/* 5. Team Management */}
+            {/* 4. Team Management */}
             {normalizedTab === 'team' && <TeamManagementView />}
 
-            {/* 6. Client Management */}
+            {/* 5. Client Management */}
             {normalizedTab === 'clients' && <ClientManagementView />}
 
-            {/* 7. Service Templates */}
+            {/* 6. Service Templates */}
             {normalizedTab === 'templates' && <ServiceTemplatesView currentUserProfile={profile} />}
 
-            {/* 8. Archive Center */}
+            {/* 7. Archive Center */}
             {normalizedTab === 'archive' && <ArchiveCenterView />}
 
-            {/* 9. Audit Log */}
+            {/* 8. Audit Log */}
             {normalizedTab === 'audit' && <AuditLogView />}
           </React.Suspense>
         )}
