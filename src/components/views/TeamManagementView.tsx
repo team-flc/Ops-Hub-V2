@@ -84,17 +84,17 @@ export const TeamManagementView: React.FC = () => {
     setIsLoading(true);
 
     try {
-      const [members, depts, desigs, managers] = await Promise.all([
+      const [membersRes, deptsRes, desigsRes, managersRes] = await Promise.allSettled([
         teamManagementService.fetchTeamMembers(currentUserProfile.role, currentUserProfile.id),
         teamManagementService.fetchDepartments(),
         teamManagementService.fetchDesignations(),
         teamManagementService.fetchEligibleManagers()
       ]);
 
-      setTeamMembers(members);
-      setDepartments(depts);
-      setDesignations(desigs);
-      setEligibleManagers(managers);
+      if (membersRes.status === 'fulfilled') setTeamMembers(membersRes.value);
+      if (deptsRes.status === 'fulfilled') setDepartments(deptsRes.value);
+      if (desigsRes.status === 'fulfilled') setDesignations(desigsRes.value);
+      if (managersRes.status === 'fulfilled') setEligibleManagers(managersRes.value);
       setIsLoading(false);
     } catch (err) {
       console.error('Failed to load team data:', err);

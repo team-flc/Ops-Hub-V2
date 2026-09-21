@@ -1,6 +1,6 @@
 import React, { act } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, fireEvent } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
 import { AuthProvider } from '../src/context/AuthContext';
 import { ProtectedRoute } from '../src/components/auth/ProtectedRoute';
@@ -720,6 +720,176 @@ describe('Phase 2A Team & User Management Tests', () => {
     const editCnicInput = screen.getByPlaceholderText('e.g. 42101-1234567-1');
     expect(editCnicInput).toBeInTheDocument();
     expect(screen.getByText('CNIC Number (Optional)')).toBeInTheDocument();
+  });
+
+  // 17. OWNER ROLE EDITING IN EDIT TEAM MEMBER MODAL
+  it('17. EditTeamMemberModal allows Owner to edit Governed System Role to Operational Manager', async () => {
+    const ownerProfile: UserProfile = {
+      id: 'usr-owner-1',
+      fullName: 'Atif Khan (Owner)',
+      role: 'owner',
+      status: 'active',
+      createdAt: '',
+      updatedAt: ''
+    };
+
+    const mockDepts = [
+      { id: 'd1', name: 'Operations', slug: 'operations', status: 'active' as const, sortOrder: 1, createdAt: '', updatedAt: '' }
+    ];
+
+    const mockDesignations = [
+      { id: 'des-1', name: 'Operations Lead', status: 'active' as const, createdAt: '', updatedAt: '' }
+    ];
+
+    const targetMember: TeamMemberRecord = {
+      id: 'usr-staff-1',
+      fullName: 'John Doe',
+      workEmail: 'john@faseehlall.com',
+      role: 'team_member',
+      status: 'active',
+      startDate: '2026-01-01',
+      departments: mockDepts,
+      designationId: 'des-1',
+      designationName: 'Operations Lead',
+      clientAccessCount: 0,
+      clientIds: [],
+      createdAt: '',
+      updatedAt: ''
+    };
+
+    const updateSpy = vi.spyOn(teamManagementService, 'updateTeamMember').mockResolvedValue({});
+
+    render(
+      <EditTeamMemberModal
+        isOpen={true}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+        member={targetMember}
+        currentUserProfile={ownerProfile}
+        departments={mockDepts}
+        designations={mockDesignations}
+        eligibleManagers={[ownerProfile]}
+      />
+    );
+
+    // As Owner, Governed System Role should be an interactive select
+    const roleSelect = screen.getByLabelText(/Governed System Role/i);
+    expect(roleSelect).toBeInTheDocument();
+    expect(roleSelect.tagName).toBe('SELECT');
+
+    // Change role to Operational Manager
+    fireEvent.change(roleSelect, { target: { value: 'operational_manager' } });
+    expect((roleSelect as HTMLSelectElement).value).toBe('operational_manager');
+
+    // Submit form
+    const saveBtn = screen.getByRole('button', { name: /Save Changes/i });
+    fireEvent.click(saveBtn);
+
+    await waitFor(() => {
+      expect(updateSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          id: 'usr-staff-1',
+          role: 'operational_manager'
+        }),
+        'usr-owner-1'
+      );
+    });
+  });
+
+  // 18. OPERATIONAL MANAGER SEES GOVERNED SYSTEM ROLE AS READ-ONLY
+  it('18. EditTeamMemberModal displays Governed System Role as Read-Only for Operational Manager', () => {
+    const managerProfile: UserProfile = {
+      id: 'usr-mgr-1',
+      fullName: 'Manager User',
+      role: 'operational_manager',
+      status: 'active',
+      createdAt: '',
+      updatedAt: ''
+    };
+
+    const mockDepts = [
+      { id: 'd1', name: 'Operations', slug: 'operations', status: 'active' as const, sortOrder: 1, createdAt: '', updatedAt: '' }
+    ];
+
+    const mockDesignations = [
+      { id: 'des-1', name: 'Operations Lead', status: 'active' as const, createdAt: '', updatedAt: '' }
+    ];
+
+    const targetMember: TeamMemberRecord = {
+      id: 'usr-staff-2',
+      fullName: 'Jane Doe',
+      workEmail: 'jane@faseehlall.com',
+      role: 'team_member',
+      status: 'active',
+      startDate: '2026-01-01',
+      departments: mockDepts,
+      designationId: 'des-1',
+      designationName: 'Operations Lead',
+      clientAccessCount: 0,
+      clientIds: [],
+      createdAt: '',
+      updatedAt: ''
+    };
+
+    render(
+      <EditTeamMemberModal
+        isOpen={true}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+        member={targetMember}
+        currentUserProfile={managerProfile}
+        departments={mockDepts}
+        designations={mockDesignations}
+        eligibleManagers={[managerProfile]}
+      />
+    );
+
+    // Operational Manager cannot edit role - should show Read-Only badge
+    expect(screen.getByText('Read-Only')).toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: /Governed System Role/i })).not.toBeInTheDocument();
+  });
+
+  // 19. FETCH TEAM MEMBERS RESILIENCE ON AUXILIARY TABLE ERRORS
+  it('19. fetchTeamMembers returns profiles even if auxiliary tables throw errors', async () => {
+    const mockProfiles = [
+      {
+        id: 'user-1',
+        full_name: 'Resilient Member',
+        work_email: 'resilient@faseehlall.com',
+        phone: '+923001234567',
+        role: 'team_member',
+        status: 'active',
+        designation_id: null,
+        reporting_manager_id: null,
+        start_date: '2026-01-01',
+        suspended_at: null,
+        suspended_by: null,
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z'
+      }
+    ];
+
+    const viSupabase = await import('../src/lib/supabase');
+    vi.spyOn(viSupabase.supabase, 'from').mockImplementation((table: string) => {
+      if (table === 'profiles') {
+        return {
+          select: () => ({
+            in: () => ({
+              order: () => Promise.resolve({ data: mockProfiles, error: null })
+            })
+          })
+        } as any;
+      }
+      // Auxiliary tables reject or return error
+      return {
+        select: () => Promise.reject(new Error('Table or RLS error in auxiliary query'))
+      } as any;
+    });
+
+    const members = await teamManagementService.fetchTeamMembers('owner', 'owner-1');
+    expect(members.length).toBe(1);
+    expect(members[0].fullName).toBe('Resilient Member');
+    expect(members[0].workEmail).toBe('resilient@faseehlall.com');
   });
 });
 

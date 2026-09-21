@@ -5,7 +5,7 @@ import {
   AlertCircle, Loader2, Edit3, Clock, DollarSign,
   UserCog, Lock, Camera, Trash2, Shield
 } from 'lucide-react';
-import { Department, Designation, TeamMemberRecord, UserProfile, WorkShift, EmploymentType, EmploymentStatus, ROLE_DISPLAY_NAMES, CompanyWorkSchedule } from '../../types';
+import { Department, Designation, TeamMemberRecord, UserProfile, UserRole, WorkShift, EmploymentType, EmploymentStatus, ROLE_DISPLAY_NAMES, CompanyWorkSchedule } from '../../types';
 import { useOpsStore } from '../../store/opsStore';
 import { teamManagementService } from '../../lib/teamManagementService';
 import { archiveService } from '../../lib/archiveService';
@@ -39,6 +39,7 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
 
   // Form State
   const [fullName, setFullName] = useState('');
+  const [selectedRole, setSelectedRole] = useState<UserRole>(member?.role || 'team_member');
   const [phone, setPhone] = useState('');
   const [backupPhone, setBackupPhone] = useState('');
   const [contactEmail, setContactEmail] = useState('');
@@ -85,6 +86,7 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
     async function loadCompanionData() {
       if (!member) return;
       setFullName(member.fullName);
+      setSelectedRole(member.role as any);
       setPhone(member.phone || '');
       setStartDate(member.startDate || getPKTTodayDateString());
       setSelectedDeptIds(member.departments.map((d) => d.id));
@@ -293,9 +295,11 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
     setIsSubmitting(true);
 
     try {
+      const isOwner = currentUserProfile.role === 'owner';
       const result = await teamManagementService.updateTeamMember(
         {
           id: member.id,
+          role: isOwner && (selectedRole === 'operational_manager' || selectedRole === 'team_member') ? selectedRole : undefined,
           fullName: fullName.trim(),
           phone: phone.trim() || undefined,
           backupPhone: backupPhone.trim() || undefined,
@@ -490,16 +494,28 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
               </div>
 
               <div className="space-y-1">
-                <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300 flex items-center gap-1">
+                <label htmlFor="edit-governed-role" className="block text-xs font-semibold text-slate-700 dark:text-gray-300 flex items-center gap-1">
                   <span>Governed System Role</span>
                   <Shield className="w-3 h-3 text-slate-400" />
                 </label>
-                <div className="w-full px-3.5 py-2.5 text-xs bg-slate-100 dark:bg-dark-card border border-slate-200 dark:border-dark-border rounded-xl text-slate-700 dark:text-gray-300 font-medium flex items-center justify-between cursor-not-allowed">
-                  <span>{ROLE_DISPLAY_NAMES[member.role] || member.role}</span>
-                  <span className="text-[10px] text-slate-400 font-normal flex items-center gap-1">
-                    <Lock className="w-2.5 h-2.5" /> Read-Only
-                  </span>
-                </div>
+                {currentUserProfile?.role === 'owner' && member.role !== 'owner' ? (
+                  <select
+                    id="edit-governed-role"
+                    value={selectedRole}
+                    onChange={(e) => setSelectedRole(e.target.value as any)}
+                    className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 font-medium focus:outline-none focus:ring-2 focus:ring-brand-500"
+                  >
+                    <option value="team_member">Team Member (Staff)</option>
+                    <option value="operational_manager">Operational Manager (Manager)</option>
+                  </select>
+                ) : (
+                  <div className="w-full px-3.5 py-2.5 text-xs bg-slate-100 dark:bg-dark-card border border-slate-200 dark:border-dark-border rounded-xl text-slate-700 dark:text-gray-300 font-medium flex items-center justify-between cursor-not-allowed">
+                    <span>{ROLE_DISPLAY_NAMES[member.role] || member.role}</span>
+                    <span className="text-[10px] text-slate-400 font-normal flex items-center gap-1">
+                      <Lock className="w-2.5 h-2.5" /> Read-Only
+                    </span>
+                  </div>
+                )}
               </div>
 
               <div className="space-y-1">

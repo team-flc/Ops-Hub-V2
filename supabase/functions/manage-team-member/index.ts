@@ -425,6 +425,7 @@ serve(async (req: Request) => {
     if (action === 'update') {
       const {
         id: targetUserId,
+        role: requestedRole,
         fullName,
         phone,
         backupPhone,
@@ -462,11 +463,19 @@ serve(async (req: Request) => {
       }
 
       // Operational Manager scope check
-      if (callerProfile.role === 'operational_manager' && targetProfile.reporting_manager_id !== callerProfile.id) {
-        return new Response(
-          JSON.stringify({ error: 'Forbidden: You can only edit team members reporting directly to you.' }),
-          { status: 403, headers: corsHeaders }
-        );
+      if (callerProfile.role === 'operational_manager') {
+        if (targetProfile.reporting_manager_id !== callerProfile.id) {
+          return new Response(
+            JSON.stringify({ error: 'Forbidden: You can only edit team members reporting directly to you.' }),
+            { status: 403, headers: corsHeaders }
+          );
+        }
+        if (requestedRole && requestedRole !== targetProfile.role) {
+          return new Response(
+            JSON.stringify({ error: 'Forbidden: Operational Managers cannot change governed system roles.' }),
+            { status: 403, headers: corsHeaders }
+          );
+        }
       }
 
       // 2. Authoritative Client-Access Revocation Protection
@@ -516,10 +525,26 @@ serve(async (req: Request) => {
         );
       }
 
+      // Role change validation (Owner only)
+      let resolvedRole: string | undefined = undefined;
+      if (requestedRole && callerProfile.role === 'owner') {
+        if (requestedRole === 'operational_manager' || requestedRole === 'team_member') {
+          if (targetProfile.role !== 'owner') {
+            resolvedRole = requestedRole;
+          }
+        } else if (requestedRole !== targetProfile.role) {
+          return new Response(
+            JSON.stringify({ error: 'Invalid role assignment. Allowed roles: operational_manager, team_member.' }),
+            { status: 400, headers: corsHeaders }
+          );
+        }
+      }
+
       // 3. Update Profile
       const updateData: Record<string, any> = {
         updated_at: new Date().toISOString()
       };
+      if (resolvedRole) updateData.role = resolvedRole;
       if (fullName) updateData.full_name = fullName.trim();
       if (phone !== undefined) updateData.phone = phone?.trim() || null;
       if (backupPhone !== undefined) updateData.backup_phone = backupPhone?.trim() || null;
@@ -542,6 +567,13 @@ serve(async (req: Request) => {
           JSON.stringify({ error: updateProfErr.message || 'Failed to update profile.' }),
           { status: 400, headers: corsHeaders }
         );
+      }
+
+      // Sync auth metadata if role changed
+      if (resolvedRole) {
+        await supabaseAdmin.auth.admin.updateUserById(targetUserId, {
+          user_metadata: { role: resolvedRole }
+        });
       }
 
       // 4. Atomically sync departments

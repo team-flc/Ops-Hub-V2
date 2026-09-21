@@ -33,6 +33,7 @@ export interface CreateTeamMemberPayload {
 export interface UpdateTeamMemberPayload {
   id: string;
   fullName: string;
+  role?: 'operational_manager' | 'team_member';
   phone?: string;
   backupPhone?: string;
   contactEmail?: string;
@@ -81,7 +82,7 @@ export const teamManagementService = {
         `);
 
       // Scoped permissions: Owner views all internal staff, Operational Manager views direct reports + self
-      if (callerRole === 'owner') {
+      if (callerRole === 'owner' || !callerRole) {
         query = query.in('role', ['owner', 'operational_manager', 'team_member']);
       } else if (callerRole === 'operational_manager') {
         query = query
@@ -97,15 +98,15 @@ export const teamManagementService = {
         return [];
       }
 
-      // Fetch all departments, designations, profile-departments, client-access to join in-memory
+      // Resilient auxiliary joins: an error in any auxiliary table will never fail the entire profiles list
       const [
-        { data: allDepts },
-        { data: allDesignations },
-        { data: allProfDepts },
-        { data: allProfClients },
-        { data: allClientTeamAccess },
-        { data: allManagers }
-      ] = await Promise.all([
+        deptsRes,
+        designationsRes,
+        profDeptsRes,
+        profClientsRes,
+        clientTeamAccessRes,
+        managersRes
+      ] = await Promise.allSettled([
         supabase.from('departments').select('*'),
         supabase.from('designations').select('*'),
         supabase.from('profile_departments').select('*'),
@@ -114,12 +115,19 @@ export const teamManagementService = {
         supabase.from('profiles').select('id, full_name').in('role', ['owner', 'operational_manager'])
       ]);
 
-      const deptMap = new Map((allDepts || []).map((d) => [d.id, d]));
-      const designationMap = new Map((allDesignations || []).map((d) => [d.id, d.name]));
-      const managerMap = new Map((allManagers || []).map((m) => [m.id, m.full_name]));
+      const allDepts = deptsRes.status === 'fulfilled' && deptsRes.value?.data ? deptsRes.value.data : [];
+      const allDesignations = designationsRes.status === 'fulfilled' && designationsRes.value?.data ? designationsRes.value.data : [];
+      const allProfDepts = profDeptsRes.status === 'fulfilled' && profDeptsRes.value?.data ? profDeptsRes.value.data : [];
+      const allProfClients = profClientsRes.status === 'fulfilled' && profClientsRes.value?.data ? profClientsRes.value.data : [];
+      const allClientTeamAccess = clientTeamAccessRes.status === 'fulfilled' && clientTeamAccessRes.value?.data ? clientTeamAccessRes.value.data : [];
+      const allManagers = managersRes.status === 'fulfilled' && managersRes.value?.data ? managersRes.value.data : [];
+
+      const deptMap = new Map((allDepts || []).map((d: any) => [d.id, d]));
+      const designationMap = new Map((allDesignations || []).map((d: any) => [d.id, d.name]));
+      const managerMap = new Map((allManagers || []).map((m: any) => [m.id, m.full_name]));
 
       const profDeptsMap = new Map<string, Department[]>();
-      (allProfDepts || []).forEach((pd) => {
+      (allProfDepts || []).forEach((pd: any) => {
         const dept = deptMap.get(pd.department_id);
         if (dept) {
           const list = profDeptsMap.get(pd.profile_id) || [];
@@ -137,18 +145,18 @@ export const teamManagementService = {
       });
 
       const profClientsMap = new Map<string, Set<string>>();
-      (allProfClients || []).forEach((pc) => {
+      (allProfClients || []).forEach((pc: any) => {
         const set = profClientsMap.get(pc.profile_id) || new Set<string>();
         set.add(pc.client_id);
         profClientsMap.set(pc.profile_id, set);
       });
-      (allClientTeamAccess || []).forEach((cta) => {
+      (allClientTeamAccess || []).forEach((cta: any) => {
         const set = profClientsMap.get(cta.profile_id) || new Set<string>();
         set.add(cta.client_id);
         profClientsMap.set(cta.profile_id, set);
       });
 
-      return profiles.map((p) => {
+      return profiles.map((p: any) => {
         const userClientIds = Array.from(profClientsMap.get(p.id) || []);
         return {
           id: p.id,
@@ -163,7 +171,7 @@ export const teamManagementService = {
           designationName: p.designation_id ? designationMap.get(p.designation_id) || 'Unassigned' : 'Unassigned',
           reportingManagerId: p.reporting_manager_id,
           reportingManagerName: p.role === 'owner' ? '—' : (p.reporting_manager_id ? managerMap.get(p.reporting_manager_id) || 'Unassigned' : 'Unassigned'),
-          startDate: p.start_date || p.created_at.split('T')[0],
+          startDate: p.start_date || (p.created_at ? p.created_at.split('T')[0] : ''),
           suspendedAt: p.suspended_at,
           suspendedBy: p.suspended_by,
           departments: profDeptsMap.get(p.id) || [],
