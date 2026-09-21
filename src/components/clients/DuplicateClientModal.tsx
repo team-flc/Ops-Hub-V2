@@ -64,9 +64,11 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
   const [brandIdentityUrl, setBrandIdentityUrl] = useState('');
   const [driveUrl, setDriveUrl] = useState('');
   const [importantDocsUrl, setImportantDocsUrl] = useState('');
+  const [masterBusinessDocUrl, setMasterBusinessDocUrl] = useState('');
   const [staticCreativesUrl, setStaticCreativesUrl] = useState('');
   const [videosUrl, setVideosUrl] = useState('');
   const [vslUrl, setVslUrl] = useState('');
+  const [testimonialsUrl, setTestimonialsUrl] = useState('');
   const [gridUrl, setGridUrl] = useState('');
   const [socialMediaManagementUrl, setSocialMediaManagementUrl] = useState('');
   const [linkedinManagementUrl, setLinkedinManagementUrl] = useState('');
@@ -123,9 +125,11 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
       brand_identity: brandIdentityUrl,
       google_drive: driveUrl,
       important_docs: importantDocsUrl,
+      master_business_doc: masterBusinessDocUrl,
       static_creatives: staticCreativesUrl,
       videos: videosUrl,
       vsl: vslUrl,
+      testimonials: testimonialsUrl,
       grid: gridUrl,
       social_media_management: socialMediaManagementUrl,
       linkedin_management: linkedinManagementUrl,
@@ -447,6 +451,21 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
               </div>
 
               <div>
+                <label htmlFor="dup-master-business-doc" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Master Business Document URL
+                </label>
+                <input
+                  id="dup-master-business-doc"
+                  data-testid="dup-master-business-doc"
+                  type="url"
+                  value={masterBusinessDocUrl}
+                  onChange={(e) => setMasterBusinessDocUrl(e.target.value)}
+                  placeholder="https://... (Master Business Document Link)"
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                />
+              </div>
+
+              <div>
                 <label htmlFor="dup-static-creatives" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                   Static Creatives URL
                 </label>
@@ -484,6 +503,21 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
                   value={vslUrl}
                   onChange={(e) => setVslUrl(e.target.value)}
                   placeholder="https://... (VSL Link)"
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="dup-testimonials" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Testimonials URL
+                </label>
+                <input
+                  id="dup-testimonials"
+                  data-testid="dup-testimonials"
+                  type="url"
+                  value={testimonialsUrl}
+                  onChange={(e) => setTestimonialsUrl(e.target.value)}
+                  placeholder="https://... (Testimonials Link)"
                   className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
                 />
               </div>

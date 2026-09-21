@@ -89,9 +89,11 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
   const [brandIdentityUrl, setBrandIdentityUrl] = useState(client.links?.brand_identity || '');
   const [driveUrl, setDriveUrl] = useState(client.links?.google_drive || '');
   const [importantDocsUrl, setImportantDocsUrl] = useState(client.links?.important_docs || client.links?.important_documents || '');
+  const [masterBusinessDocUrl, setMasterBusinessDocUrl] = useState(client.links?.master_business_doc || client.links?.master_business_document || '');
   const [staticCreativesUrl, setStaticCreativesUrl] = useState(client.links?.static_creatives || '');
   const [videosUrl, setVideosUrl] = useState(client.links?.videos || '');
   const [vslUrl, setVslUrl] = useState(client.links?.vsl || '');
+  const [testimonialsUrl, setTestimonialsUrl] = useState(client.links?.testimonials || '');
   const [gridUrl, setGridUrl] = useState(client.links?.grid || '');
   const [socialMediaManagementUrl, setSocialMediaManagementUrl] = useState(client.links?.social_media_management || '');
   const [linkedinManagementUrl, setLinkedinManagementUrl] = useState(client.links?.linkedin_management || '');
@@ -141,9 +143,11 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     if (brandIdentityUrl !== (client.links?.brand_identity || '')) return true;
     if (driveUrl !== (client.links?.google_drive || '')) return true;
     if (importantDocsUrl !== (client.links?.important_docs || client.links?.important_documents || '')) return true;
+    if (masterBusinessDocUrl !== (client.links?.master_business_doc || client.links?.master_business_document || '')) return true;
     if (staticCreativesUrl !== (client.links?.static_creatives || '')) return true;
     if (videosUrl !== (client.links?.videos || '')) return true;
     if (vslUrl !== (client.links?.vsl || '')) return true;
+    if (testimonialsUrl !== (client.links?.testimonials || '')) return true;
     if (gridUrl !== (client.links?.grid || '')) return true;
     if (socialMediaManagementUrl !== (client.links?.social_media_management || '')) return true;
     if (linkedinManagementUrl !== (client.links?.linkedin_management || '')) return true;
@@ -160,8 +164,8 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
   }, [
     companyName, clientName, businessBio, industry, logoUrl, pkg, managerId,
     activationDate, status, pauseReason, requiredLinkedInCount,
-    websiteUrl, flcLandingPageUrl, brandIdentityUrl, driveUrl, importantDocsUrl, staticCreativesUrl,
-    videosUrl, vslUrl, gridUrl, socialMediaManagementUrl, linkedinManagementUrl, seoManagementUrl,
+    websiteUrl, flcLandingPageUrl, brandIdentityUrl, driveUrl, importantDocsUrl, masterBusinessDocUrl, staticCreativesUrl,
+    videosUrl, vslUrl, testimonialsUrl, gridUrl, socialMediaManagementUrl, linkedinManagementUrl, seoManagementUrl,
     emailMarketingManagementUrl, paidAdsManagementUrl, facebookUrl, instagramUrl, linkedinPageUrl,
     slackUrl, whatsappUrl, pocNumber, client
   ]);
@@ -188,9 +192,11 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
         setBrandIdentityUrl(parsed.brandIdentityUrl ?? (client.links?.brand_identity || ''));
         setDriveUrl(parsed.driveUrl ?? (client.links?.google_drive || ''));
         setImportantDocsUrl(parsed.importantDocsUrl ?? (client.links?.important_docs || client.links?.important_documents || ''));
+        setMasterBusinessDocUrl(parsed.masterBusinessDocUrl ?? (client.links?.master_business_doc || client.links?.master_business_document || ''));
         setStaticCreativesUrl(parsed.staticCreativesUrl ?? (client.links?.static_creatives || ''));
         setVideosUrl(parsed.videosUrl ?? (client.links?.videos || ''));
         setVslUrl(parsed.vslUrl ?? (client.links?.vsl || ''));
+        setTestimonialsUrl(parsed.testimonialsUrl ?? (client.links?.testimonials || ''));
         setGridUrl(parsed.gridUrl ?? (client.links?.grid || ''));
         setSocialMediaManagementUrl(parsed.socialMediaManagementUrl ?? (client.links?.social_media_management || ''));
         setLinkedinManagementUrl(parsed.linkedinManagementUrl ?? (client.links?.linkedin_management || ''));
@@ -226,9 +232,11 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     setBrandIdentityUrl(client.links?.brand_identity || '');
     setDriveUrl(client.links?.google_drive || '');
     setImportantDocsUrl(client.links?.important_docs || client.links?.important_documents || '');
+    setMasterBusinessDocUrl(client.links?.master_business_doc || client.links?.master_business_document || '');
     setStaticCreativesUrl(client.links?.static_creatives || '');
     setVideosUrl(client.links?.videos || '');
     setVslUrl(client.links?.vsl || '');
+    setTestimonialsUrl(client.links?.testimonials || '');
     setGridUrl(client.links?.grid || '');
     setSocialMediaManagementUrl(client.links?.social_media_management || '');
     setLinkedinManagementUrl(client.links?.linkedin_management || '');
@@ -268,9 +276,11 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
             brandIdentityUrl,
             driveUrl,
             importantDocsUrl,
+            masterBusinessDocUrl,
             staticCreativesUrl,
             videosUrl,
             vslUrl,
+            testimonialsUrl,
             gridUrl,
             socialMediaManagementUrl,
             linkedinManagementUrl,
@@ -296,8 +306,8 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
   }, [
     isDirty, client.id, companyName, clientName, businessBio, industry, logoUrl,
     pkg, managerId, activationDate, status, pauseReason, requiredLinkedInCount,
-    websiteUrl, flcLandingPageUrl, brandIdentityUrl, driveUrl, importantDocsUrl, staticCreativesUrl,
-    videosUrl, vslUrl, gridUrl, socialMediaManagementUrl, linkedinManagementUrl, seoManagementUrl,
+    websiteUrl, flcLandingPageUrl, brandIdentityUrl, driveUrl, importantDocsUrl, masterBusinessDocUrl, staticCreativesUrl,
+    videosUrl, vslUrl, testimonialsUrl, gridUrl, socialMediaManagementUrl, linkedinManagementUrl, seoManagementUrl,
     emailMarketingManagementUrl, paidAdsManagementUrl, facebookUrl, instagramUrl, linkedinPageUrl,
     slackUrl, whatsappUrl, pocNumber
   ]);
@@ -323,9 +333,11 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     setBrandIdentityUrl(client.links?.brand_identity || '');
     setDriveUrl(client.links?.google_drive || '');
     setImportantDocsUrl(client.links?.important_docs || client.links?.important_documents || '');
+    setMasterBusinessDocUrl(client.links?.master_business_doc || client.links?.master_business_document || '');
     setStaticCreativesUrl(client.links?.static_creatives || '');
     setVideosUrl(client.links?.videos || '');
     setVslUrl(client.links?.vsl || '');
+    setTestimonialsUrl(client.links?.testimonials || '');
     setGridUrl(client.links?.grid || '');
     setSocialMediaManagementUrl(client.links?.social_media_management || '');
     setLinkedinManagementUrl(client.links?.linkedin_management || '');
@@ -423,9 +435,11 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
       brand_identity: brandIdentityUrl,
       google_drive: driveUrl,
       important_docs: importantDocsUrl,
+      master_business_doc: masterBusinessDocUrl,
       static_creatives: staticCreativesUrl,
       videos: videosUrl,
       vsl: vslUrl,
+      testimonials: testimonialsUrl,
       grid: gridUrl,
       social_media_management: socialMediaManagementUrl,
       linkedin_management: linkedinManagementUrl,
@@ -1001,6 +1015,21 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
             </div>
 
             <div>
+              <label htmlFor="edit-master-business-doc" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Master Business Document URL
+              </label>
+              <input
+                id="edit-master-business-doc"
+                data-testid="edit-master-business-doc"
+                type="url"
+                value={masterBusinessDocUrl}
+                onChange={(e) => setMasterBusinessDocUrl(e.target.value)}
+                placeholder="https://... (Master Business Document Link)"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+              />
+            </div>
+
+            <div>
               <label htmlFor="edit-static-creatives" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                 Static Creatives URL
               </label>
@@ -1038,6 +1067,21 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 value={vslUrl}
                 onChange={(e) => setVslUrl(e.target.value)}
                 placeholder="https://... (VSL Link)"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+              />
+            </div>
+
+            <div>
+              <label htmlFor="edit-testimonials" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Testimonials URL
+              </label>
+              <input
+                id="edit-testimonials"
+                data-testid="edit-testimonials"
+                type="url"
+                value={testimonialsUrl}
+                onChange={(e) => setTestimonialsUrl(e.target.value)}
+                placeholder="https://... (Testimonials Link)"
                 className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
               />
             </div>

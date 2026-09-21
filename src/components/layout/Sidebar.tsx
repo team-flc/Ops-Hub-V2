@@ -5,7 +5,7 @@ import {
   Building2, ChevronsLeft, ChevronsRight, Briefcase, X,
   Globe, HardDrive, MessageCircle, ExternalLink, Clock, Users, UserCheck,
   Image, Video, PlaySquare, Sparkles, LayoutGrid, Palette, PhoneCall,
-  LayoutDashboard, FileText, Share2, Search, Mail, Target
+  LayoutDashboard, FileText, Share2, Search, Mail, Target, BookOpen, MessageSquareQuote
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { ClientRecord, UserProfile } from '../../types';
@@ -146,6 +146,13 @@ export const Sidebar: React.FC = () => {
       activeColorClass: 'text-indigo-500 dark:text-indigo-400'
     },
     {
+      key: 'master_business_doc',
+      label: 'Master Business Document',
+      url: clientLinks.master_business_doc || clientLinks.master_business_document,
+      icon: <BookOpen className="w-3.5 h-3.5" />,
+      activeColorClass: 'text-blue-600 dark:text-blue-400'
+    },
+    {
       key: 'static_creatives',
       label: 'Statics',
       url: clientLinks.static_creatives,
@@ -172,6 +179,13 @@ export const Sidebar: React.FC = () => {
       url: clientLinks.vsl,
       icon: <PlaySquare className="w-3.5 h-3.5" />,
       activeColorClass: 'text-orange-500 dark:text-orange-400'
+    },
+    {
+      key: 'testimonials',
+      label: 'Testimonials',
+      url: clientLinks.testimonials,
+      icon: <MessageSquareQuote className="w-3.5 h-3.5" />,
+      activeColorClass: 'text-amber-500 dark:text-amber-400'
     },
     {
       key: 'social_media_management',

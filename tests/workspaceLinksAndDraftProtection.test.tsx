@@ -36,10 +36,12 @@ const mockClientA: ClientRecord = {
     brand_identity: 'https://brand.apex.com/guidelines',
     google_drive: 'https://drive.google.com/drive/folders/apex-root',
     important_docs: 'https://docs.google.com/document/d/apex-sop',
+    master_business_doc: 'https://docs.google.com/document/d/apex-master-biz',
     static_creatives: 'https://drive.google.com/drive/folders/apex-statics',
     videos: 'https://drive.google.com/drive/folders/apex-videos',
     grid: 'https://grid.app/apex-dashboard',
     vsl: 'https://vimeo.com/apex-vsl-2026',
+    testimonials: 'https://drive.google.com/drive/folders/apex-testimonials',
     social_media_management: 'https://buffer.com/apex',
     linkedin_management: 'https://linkedin.com/campaignmanager/apex',
     seo_management: 'https://app.ahrefs.com/dashboard/apex',
@@ -136,8 +138,8 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
     sessionStorage.clear();
   });
 
-  // 1. EXACT 20-ITEM ORDER, LABELS, AND ICONS IN SIDEBAR
-  it('1. Sidebar renders all 20 workspace links in exact required order with correct labels and icons', async () => {
+  // 1. EXACT 22-ITEM ORDER, LABELS, AND ICONS IN SIDEBAR
+  it('1. Sidebar renders all 22 workspace links in exact required order with correct labels and icons', async () => {
     await act(async () => {
       render(
         <MemoryRouter>
@@ -149,7 +151,7 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('20 active')).toBeInTheDocument();
+      expect(screen.getByText('22 active')).toBeInTheDocument();
     });
 
     // Query all rendered links inside sidebar
@@ -162,10 +164,12 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
       'Brand Identity',
       'Google Drive',
       'Important Documents',
+      'Master Business Document',
       'Statics',
       'Videos',
       'Grid',
       'VSL',
+      'Testimonials',
       'Social Media Management',
       'LinkedIn Management',
       'SEO Management',
@@ -192,6 +196,18 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
     expect(importantDocsLink).toHaveAttribute('href', 'https://docs.google.com/document/d/apex-sop');
     expect(importantDocsLink).toHaveAttribute('target', '_blank');
     expect(importantDocsLink).toHaveAttribute('rel', 'noopener noreferrer');
+
+    // Verify Master Business Document link attributes
+    const masterBizDocLink = screen.getByRole('link', { name: /Master Business Document/i });
+    expect(masterBizDocLink).toHaveAttribute('href', 'https://docs.google.com/document/d/apex-master-biz');
+    expect(masterBizDocLink).toHaveAttribute('target', '_blank');
+    expect(masterBizDocLink).toHaveAttribute('rel', 'noopener noreferrer');
+
+    // Verify Testimonials link attributes
+    const testimonialsLink = screen.getByRole('link', { name: /Testimonials/i });
+    expect(testimonialsLink).toHaveAttribute('href', 'https://drive.google.com/drive/folders/apex-testimonials');
+    expect(testimonialsLink).toHaveAttribute('target', '_blank');
+    expect(testimonialsLink).toHaveAttribute('rel', 'noopener noreferrer');
 
     // Verify 5 new client links
     const socialMediaLink = screen.getByRole('link', { name: /Social Media Management/i });
@@ -229,7 +245,7 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
     });
 
     await waitFor(() => {
-      expect(screen.getByText('20 active')).toBeInTheDocument();
+      expect(screen.getByText('22 active')).toBeInTheDocument();
     });
 
     // Update client A in store to have only 3 links
@@ -254,6 +270,10 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
       // Missing links are still rendered in the sidebar, but disabled with "Link not added"
       expect(screen.getByText('Landing Page')).toBeInTheDocument();
       expect(screen.queryByRole('link', { name: /Landing Page/i })).not.toBeInTheDocument();
+      expect(screen.getByText('Master Business Document')).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /Master Business Document/i })).not.toBeInTheDocument();
+      expect(screen.getByText('Testimonials')).toBeInTheDocument();
+      expect(screen.queryByRole('link', { name: /Testimonials/i })).not.toBeInTheDocument();
       expect(screen.getByText('Social Media Management')).toBeInTheDocument();
       expect(screen.queryByRole('link', { name: /Social Media Management/i })).not.toBeInTheDocument();
       expect(screen.getByText('SEO Management')).toBeInTheDocument();
@@ -278,7 +298,7 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
   });
 
   // 3. ALL LINKS DISPLAYED WITH DISABLED STATE WHEN NO LINKS CONFIGURED
-  it('3. Sidebar displays all 20 workspace links as disabled with "Link not added" and "0 active" when client has no workspace links', async () => {
+  it('3. Sidebar displays all 22 workspace links as disabled with "Link not added" and "0 active" when client has no workspace links', async () => {
     const clientWithNoLinks: ClientRecord = {
       ...mockClientA,
       id: 'client-empty',
@@ -307,16 +327,18 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
 
     await waitFor(() => {
       expect(screen.getByText('0 active')).toBeInTheDocument();
-      // All 20 link labels are present in the sidebar
+      // All 22 link labels are present in the sidebar
       expect(screen.getByText('Website')).toBeInTheDocument();
       expect(screen.getByText('Landing Page')).toBeInTheDocument();
       expect(screen.getByText('Brand Identity')).toBeInTheDocument();
       expect(screen.getByText('Google Drive')).toBeInTheDocument();
       expect(screen.getByText('Important Documents')).toBeInTheDocument();
+      expect(screen.getByText('Master Business Document')).toBeInTheDocument();
       expect(screen.getByText('Statics')).toBeInTheDocument();
       expect(screen.getByText('Videos')).toBeInTheDocument();
       expect(screen.getByText('Grid')).toBeInTheDocument();
       expect(screen.getByText('VSL')).toBeInTheDocument();
+      expect(screen.getByText('Testimonials')).toBeInTheDocument();
       expect(screen.getByText('Social Media Management')).toBeInTheDocument();
       expect(screen.getByText('LinkedIn Management')).toBeInTheDocument();
       expect(screen.getByText('SEO Management')).toBeInTheDocument();
@@ -353,10 +375,13 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
     expect((screen.getByLabelText(/Website URL/i) as HTMLInputElement).value).toBe('https://apexgrowth.com');
     expect((screen.getByLabelText(/FLC Landing Page URL/i) as HTMLInputElement).value).toBe('https://flc-landing.com/apex');
     expect((screen.getByLabelText(/Google Drive Folder URL/i) as HTMLInputElement).value).toBe('https://drive.google.com/drive/folders/apex-root');
+    expect((screen.getByLabelText(/Important Documents URL/i) as HTMLInputElement).value).toBe('https://docs.google.com/document/d/apex-sop');
+    expect((screen.getByLabelText(/Master Business Document URL/i) as HTMLInputElement).value).toBe('https://docs.google.com/document/d/apex-master-biz');
     expect((screen.getByLabelText(/Static Creatives URL/i) as HTMLInputElement).value).toBe('https://drive.google.com/drive/folders/apex-statics');
     expect((screen.getByLabelText(/Videos URL/i) as HTMLInputElement).value).toBe('https://drive.google.com/drive/folders/apex-videos');
-    expect((screen.getByLabelText(/Grid URL/i) as HTMLInputElement).value).toBe('https://grid.app/apex-dashboard');
     expect((screen.getByLabelText(/VSL \(Video Sales Letter\) URL/i) as HTMLInputElement).value).toBe('https://vimeo.com/apex-vsl-2026');
+    expect((screen.getByLabelText(/Testimonials URL/i) as HTMLInputElement).value).toBe('https://drive.google.com/drive/folders/apex-testimonials');
+    expect((screen.getByLabelText(/Grid URL/i) as HTMLInputElement).value).toBe('https://grid.app/apex-dashboard');
     expect((screen.getByLabelText(/Social Media Management URL/i) as HTMLInputElement).value).toBe('https://buffer.com/apex');
     expect((screen.getByLabelText(/LinkedIn Management URL/i) as HTMLInputElement).value).toBe('https://linkedin.com/campaignmanager/apex');
     expect((screen.getByLabelText(/SEO Management URL/i) as HTMLInputElement).value).toBe('https://app.ahrefs.com/dashboard/apex');
@@ -892,7 +917,7 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
 
     // Missing links are rendered as non-clickable containers with title="Link not added" and aria-disabled="true"
     const missingElements = screen.getAllByTitle('Link not added');
-    expect(missingElements.length).toBe(19); // 20 total - 1 active = 19 missing
+    expect(missingElements.length).toBe(21); // 22 total - 1 active = 21 missing
 
     missingElements.forEach((el) => {
       expect(el).toHaveAttribute('aria-disabled', 'true');
@@ -901,5 +926,62 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
       expect(el.className).not.toContain('opacity-40');
       expect(el.className).not.toContain('opacity-50');
     });
+  });
+
+  // 16. MASTER BUSINESS DOCUMENT & TESTIMONIALS WORKSPACE LINKS CRUD & DRAFT PROTECTION
+  it('16. Master Business Document and Testimonials links are configurable in ClientDetailsTab, CreateClientModal, and DuplicateClientModal', async () => {
+    const updatedClient: ClientRecord = {
+      ...mockClientA,
+      links: {
+        ...mockClientA.links,
+        master_business_doc: 'https://notion.so/apex/mbd-doc',
+        testimonials: 'https://drive.google.com/drive/folders/apex-testimonials-2'
+      }
+    };
+
+    const updateClientSpy = vi.spyOn(clientManagementService, 'updateClient').mockResolvedValue({
+      data: updatedClient,
+      error: undefined
+    });
+
+    const onClientUpdatedMock = vi.fn();
+
+    render(
+      <ClientDetailsTab
+        client={mockClientA}
+        currentUserProfile={mockOwnerProfile}
+        eligibleManagers={[mockOwnerProfile]}
+        onClientUpdated={onClientUpdatedMock}
+      />
+    );
+
+    const mbdInput = screen.getByLabelText(/Master Business Document URL/i) as HTMLInputElement;
+    const testInput = screen.getByLabelText(/Testimonials URL/i) as HTMLInputElement;
+    expect(mbdInput).toBeInTheDocument();
+    expect(testInput).toBeInTheDocument();
+
+    fireEvent.change(mbdInput, { target: { value: 'https://notion.so/apex/mbd-doc' } });
+    fireEvent.change(testInput, { target: { value: 'https://drive.google.com/drive/folders/apex-testimonials-2' } });
+    expect(screen.getByTestId('unsaved-changes-indicator')).toBeInTheDocument();
+
+    const saveBtn = screen.getByRole('button', { name: /Save Changes/i });
+    await act(async () => {
+      fireEvent.click(saveBtn);
+    });
+
+    await waitFor(() => {
+      expect(updateClientSpy).toHaveBeenCalledWith(
+        mockClientA.id,
+        expect.objectContaining({
+          links: expect.objectContaining({
+            master_business_doc: 'https://notion.so/apex/mbd-doc',
+            testimonials: 'https://drive.google.com/drive/folders/apex-testimonials-2'
+          })
+        }),
+        'usr-owner-1'
+      );
+    });
+
+    expect(onClientUpdatedMock).toHaveBeenCalledWith(updatedClient);
   });
 });
