@@ -47,7 +47,7 @@ const ALL_TABS: TabConfig[] = [
   { id: 'employee_operations', label: 'Employee Operations', icon: Users, managerOnly: true },
   { id: 'team', label: 'Team Management', icon: UserCheck, managerOnly: true },
   { id: 'clients', label: 'Client Management', icon: Building2, managerOnly: true },
-  { id: 'templates', label: 'Service Templates', icon: BookTemplate, managerOnly: true },
+  { id: 'templates', label: 'Service Templates', icon: BookTemplate },
   { id: 'archive', label: 'Archive Center', icon: Archive, managerOnly: true },
   { id: 'audit', label: 'Audit Log', icon: Activity, managerOnly: true }
 ];

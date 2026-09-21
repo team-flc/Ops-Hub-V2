@@ -21,7 +21,8 @@ interface ServiceTemplatesViewProps {
 export const ServiceTemplatesView: React.FC<ServiceTemplatesViewProps> = ({ currentUserProfile }) => {
   const isOwner = currentUserProfile?.role === 'owner';
   const isManager = currentUserProfile?.role === 'operational_manager';
-  const hasAccess = isOwner || isManager;
+  const isTeamMember = currentUserProfile?.role === 'team_member';
+  const hasAccess = isOwner || isManager || isTeamMember;
 
   const [templates, setTemplates] = useState<ServiceTemplate[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -399,15 +400,28 @@ export const ServiceTemplatesView: React.FC<ServiceTemplatesViewProps> = ({ curr
 
                     {activeTab === 'active' && (
                       <>
-                        <button
-                          type="button"
-                          onClick={() => handleOpenEdit(template)}
-                          disabled={isUnavailable || isActionLoading}
-                          className="p-2 rounded-xl text-gray-500 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-dark-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
-                          title={isUnavailable ? 'Phase 3D backend is not enabled in this environment yet. Preview is read-only.' : 'Edit Service Template'}
-                        >
-                          <Edit3 className="w-4 h-4" />
-                        </button>
+                        {(() => {
+                          const isCreator = Boolean(template.createdBy && currentUserProfile?.id && template.createdBy === currentUserProfile.id);
+                          const canEdit = isOwner || isManager || isCreator;
+                          if (canEdit) {
+                            return (
+                              <button
+                                type="button"
+                                onClick={() => handleOpenEdit(template)}
+                                disabled={isUnavailable || isActionLoading}
+                                className="p-2 rounded-xl text-gray-500 hover:text-gray-900 dark:hover:text-gray-100 hover:bg-gray-100 dark:hover:bg-dark-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors cursor-pointer"
+                                title={isUnavailable ? 'Phase 3D backend is not enabled in this environment yet. Preview is read-only.' : 'Edit Service Template'}
+                              >
+                                <Edit3 className="w-4 h-4" />
+                              </button>
+                            );
+                          }
+                          return (
+                            <span className="text-[10px] px-2 py-0.5 rounded bg-gray-100 dark:bg-dark-100 text-gray-400 font-semibold select-none" title="View Only: Created by another staff member">
+                              View Only
+                            </span>
+                          );
+                        })()}
 
                         <button
                           type="button"

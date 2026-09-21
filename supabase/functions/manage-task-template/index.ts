@@ -89,8 +89,7 @@ serve(async (req: Request) => {
     );
   }
 
-  // Strict Role Checking:
-  // Client and Team Member are strictly denied template library access
+  // Strict Role Checking: Clients cannot access task templates
   if (callerProfile.role === 'client') {
     return new Response(
       JSON.stringify({ error: 'Forbidden: Client users cannot access task templates.' }),
@@ -98,15 +97,9 @@ serve(async (req: Request) => {
     );
   }
 
-  if (callerProfile.role === 'team_member') {
-    return new Response(
-      JSON.stringify({ error: 'Forbidden: Team Members cannot manage task templates.' }),
-      { status: 403, headers: corsHeaders }
-    );
-  }
-
   const isOwner = callerProfile.role === 'owner';
   const isManager = callerProfile.role === 'operational_manager';
+  const isTeamMember = callerProfile.role === 'team_member';
 
   let body: any;
   try {
@@ -158,8 +151,8 @@ serve(async (req: Request) => {
         .order('sort_order', { ascending: true })
         .order('name', { ascending: true });
 
-      // Operational Manager only sees Active templates
-      if (isManager || (body.include_archived !== true && !isOwner)) {
+      // Operational Manager and Team Member only see Active templates
+      if (isManager || isTeamMember || (body.include_archived !== true && !isOwner)) {
         query = query.eq('status', 'Active');
       }
 
@@ -195,7 +188,7 @@ serve(async (req: Request) => {
     }
 
     // --------------------------------------------------------------------------
-    // ACTION: get (Owner: Active + Archived; Operational Manager: Active only)
+    // ACTION: get (Owner: Active + Archived; Manager/Team Member: Active only)
     // --------------------------------------------------------------------------
     if (action === 'get') {
       const templateId = body.template_id;
@@ -217,8 +210,8 @@ serve(async (req: Request) => {
       if (getErr || !t) {
         return new Response(JSON.stringify({ error: 'Template not found.' }), { status: 404, headers: corsHeaders });
       }
-      if (isManager && t.status !== 'Active') {
-        return new Response(JSON.stringify({ error: 'Forbidden: Operational Manager cannot view archived templates.' }), { status: 403, headers: corsHeaders });
+      if ((isManager || isTeamMember) && t.status !== 'Active') {
+        return new Response(JSON.stringify({ error: 'Forbidden: Cannot view archived templates.' }), { status: 403, headers: corsHeaders });
       }
 
       const mapped = {
@@ -249,7 +242,7 @@ serve(async (req: Request) => {
 
     // --------------------------------------------------------------------------
     // MUTATIONS: create, update, duplicate, archive, restore
-    // Exclusively governed by Executive Owner through atomic transactional RPC
+    // Governed through atomic transactional RPC
     // --------------------------------------------------------------------------
     if (!['create', 'update', 'duplicate', 'archive', 'restore'].includes(action)) {
       return new Response(
@@ -258,9 +251,9 @@ serve(async (req: Request) => {
       );
     }
 
-    if (!isOwner) {
+    if (['archive', 'restore'].includes(action) && !isOwner) {
       return new Response(
-        JSON.stringify({ error: 'Forbidden: Only the Executive Owner can govern task templates.' }),
+        JSON.stringify({ error: 'Forbidden: Only the Executive Owner can archive or restore task templates.' }),
         { status: 403, headers: corsHeaders }
       );
     }

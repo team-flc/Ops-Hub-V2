@@ -605,14 +605,24 @@ describe('Phase 3C: Task Templates System Comprehensive Suite', () => {
       expect(screen.queryByText('+ Create Template')).not.toBeInTheDocument();
     });
 
-    it('5.2 Strict RBAC: Team Member role sees Access Restricted', () => {
+    it('5.2 Staff Permissions: Team Member role can view active templates and create templates', async () => {
+      mockFunctionsInvoke.mockResolvedValueOnce({
+        data: { templates: [mockMediaBuyingTemplate] },
+        error: null
+      });
+
       render(<TaskTemplatesView currentUserProfile={mockTeamMember} />);
 
-      expect(screen.getByText('Access Restricted')).toBeInTheDocument();
-      expect(screen.queryByText('+ Create Template')).not.toBeInTheDocument();
+      await waitFor(() => {
+        expect(screen.getByText('+ Create Template')).toBeInTheDocument();
+        expect(screen.getByText('Media Buying Campaign Setup & Launch')).toBeInTheDocument();
+      });
+
+      expect(screen.getByRole('button', { name: /preview/i })).toBeInTheDocument();
+      expect(screen.getByTitle(/duplicate template/i)).toBeInTheDocument();
     });
 
-    it('5.3 Owner role sees + Create Template button and action controls', async () => {
+    it('5.3 Owner role sees + Create Template button and action controls including archive', async () => {
       mockFunctionsInvoke.mockResolvedValueOnce({
         data: { templates: [mockMediaBuyingTemplate] },
         error: null
@@ -631,7 +641,7 @@ describe('Phase 3C: Task Templates System Comprehensive Suite', () => {
       expect(screen.getByTitle(/archive template/i)).toBeInTheDocument();
     });
 
-    it('5.4 Operational Manager role can view active templates but cannot edit or archive', async () => {
+    it('5.4 Operational Manager role can view active templates, create, and duplicate', async () => {
       mockFunctionsInvoke.mockResolvedValueOnce({
         data: { templates: [mockMediaBuyingTemplate] },
         error: null
@@ -643,9 +653,8 @@ describe('Phase 3C: Task Templates System Comprehensive Suite', () => {
         expect(screen.getByText('Media Buying Campaign Setup & Launch')).toBeInTheDocument();
       });
 
-      expect(screen.queryByText('+ Create Template')).not.toBeInTheDocument();
-      expect(screen.queryByTitle(/duplicate template/i)).not.toBeInTheDocument();
-      expect(screen.queryByTitle(/edit template/i)).not.toBeInTheDocument();
+      expect(screen.getByText('+ Create Template')).toBeInTheDocument();
+      expect(screen.getByTitle(/duplicate template/i)).toBeInTheDocument();
       expect(screen.queryByTitle(/archive template/i)).not.toBeInTheDocument();
       expect(screen.getByRole('button', { name: /preview/i })).toBeInTheDocument();
     });

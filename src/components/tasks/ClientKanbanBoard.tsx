@@ -156,12 +156,8 @@ export const ClientKanbanBoard: React.FC<ClientKanbanBoardProps> = ({
         }
       }
 
-      // If dragging Pending→In Progress, use startWork (starts timer automatically)
-      if (targetColumn === 'In Progress' && (droppedTask.status === 'Pending' || droppedTask.status === 'Draft' || droppedTask.status === 'Assigned')) {
-        if (!droppedTask.assigneeId) {
-          onShowToast('Assign a Team Member before starting this task.');
-          return;
-        }
+      // If dragging Pending→In Progress, use startWork (starts timer automatically and auto-assigns)
+      if (targetColumn === 'In Progress' && (droppedTask.status === 'Pending' || droppedTask.status === 'Draft' || droppedTask.status === 'Assigned' || droppedTask.status === 'Blocked')) {
         await onStartWork(droppedTask);
         return;
       }

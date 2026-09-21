@@ -95,6 +95,253 @@ const KANBAN_COLUMNS: KanbanColumnConfig[] = [
   }
 ];
 
+interface PersonalKanbanCardProps {
+  task: ClientTask;
+  currentUserProfile: UserProfile | null;
+  isOwnerOrManager: boolean;
+  actionLoadingTaskId: string | null;
+  onSelectTask?: (task: ClientTask) => void;
+  onStartWork: (task: ClientTask) => void;
+  onPauseTimer: (task: ClientTask) => void;
+  onResumeTimer: (task: ClientTask) => void;
+  onOpenDeliverableModal: (task: ClientTask) => void;
+  onApproveDeliverable: (task: ClientTask) => void;
+  onReopenTask: (task: ClientTask) => void;
+}
+
+export const PersonalKanbanCard: React.FC<PersonalKanbanCardProps> = ({
+  task,
+  currentUserProfile,
+  isOwnerOrManager,
+  actionLoadingTaskId,
+  onSelectTask,
+  onStartWork,
+  onPauseTimer,
+  onResumeTimer,
+  onOpenDeliverableModal,
+  onApproveDeliverable,
+  onReopenTask
+}) => {
+  const navigate = useSafeNavigate();
+  const isTimerRunning = Boolean(task.timerStartedAt);
+  const isAssignedToMe = task.assigneeId === currentUserProfile?.id;
+  const canControlTimer = isAssignedToMe || isOwnerOrManager || !task.assigneeId;
+
+  // Live seconds ticker when timer is running
+  const [liveSeconds, setLiveSeconds] = useState(task.timeSpentSeconds || 0);
+
+  React.useEffect(() => {
+    let interval: any = null;
+    if (isTimerRunning && task.timerStartedAt) {
+      const calculateSeconds = () => {
+        const startMs = new Date(task.timerStartedAt!).getTime();
+        if (!isNaN(startMs)) {
+          const additional = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+          setLiveSeconds((task.timeSpentSeconds || 0) + additional);
+        }
+      };
+      calculateSeconds();
+      interval = setInterval(calculateSeconds, 1000);
+    } else {
+      setLiveSeconds(task.timeSpentSeconds || 0);
+    }
+    return () => {
+      if (interval) clearInterval(interval);
+    };
+  }, [isTimerRunning, task.timerStartedAt, task.timeSpentSeconds]);
+
+  const isPending = ['Pending', 'Draft', 'Assigned', 'Blocked'].includes(task.status);
+
+  return (
+    <div
+      draggable
+      onDragStart={(e) => {
+        e.dataTransfer.setData('text/plain', JSON.stringify({ taskId: task.id, currentStatus: task.status }));
+        e.dataTransfer.effectAllowed = 'move';
+      }}
+      className={`p-3.5 rounded-2xl bg-white dark:bg-dark-card border transition-all duration-150 shadow-xs hover:shadow-md space-y-2.5 ${
+        isTimerRunning
+          ? 'border-blue-500 dark:border-blue-500 ring-2 ring-blue-500/20'
+          : task.isOverdue && task.status !== 'Completed'
+          ? 'border-rose-300 dark:border-rose-900 bg-rose-50/20'
+          : 'border-gray-200 dark:border-dark-border'
+      }`}
+    >
+      {/* Top: Client Badge + Priority */}
+      <div className="flex items-center justify-between gap-1 text-[10px]">
+        <span
+          onClick={() => {
+            navigate(`/clients/${task.clientId}`);
+          }}
+          className="font-extrabold text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1 cursor-pointer truncate max-w-[140px]"
+          title={`Open ${task.clientName || 'Client'}`}
+        >
+          <Briefcase className="w-3 h-3 flex-shrink-0" />
+          <span className="truncate">{task.clientName || 'Client'}</span>
+        </span>
+
+        <div className="flex items-center gap-1 shrink-0">
+          {task.weekNumber && (
+            <span className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-dark-100 text-gray-500 font-bold">
+              W{task.weekNumber}
+            </span>
+          )}
+          <span
+            className={`px-1.5 py-0.5 rounded font-black ${
+              task.priority === 'Urgent'
+                ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400'
+                : task.priority === 'High'
+                ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400'
+                : 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400'
+            }`}
+          >
+            {task.priority}
+          </span>
+        </div>
+      </div>
+
+      {/* Title */}
+      <h4
+        onClick={() => onSelectTask?.(task)}
+        className="text-xs font-bold text-gray-900 dark:text-gray-100 hover:text-brand-600 dark:hover:text-brand-400 cursor-pointer line-clamp-2 leading-snug"
+      >
+        {task.title}
+      </h4>
+
+      {/* Assignee & Due Date */}
+      <div className="flex items-center justify-between text-[11px] text-gray-500 pt-1 border-t border-gray-100 dark:border-dark-border/50">
+        <div className="flex items-center gap-1.5 truncate">
+          <AssigneeAvatar avatarPath={task.assigneeAvatar} name={task.assigneeName} />
+          <span className="truncate text-gray-700 dark:text-gray-300 font-medium">
+            {task.assigneeName || 'Unassigned'}
+          </span>
+        </div>
+
+        {task.dueDate && (
+          <span
+            className={`shrink-0 font-mono text-[10px] font-bold ${
+              task.isOverdue && task.status !== 'Completed'
+                ? 'text-rose-600 dark:text-rose-400 flex items-center gap-0.5'
+                : 'text-gray-400'
+            }`}
+          >
+            {task.isOverdue && task.status !== 'Completed' && <AlertTriangle className="w-2.5 h-2.5" />}
+            {task.dueDate}
+          </span>
+        )}
+      </div>
+
+      {/* Duration & Live Timer State Indicator */}
+      <div className="flex items-center justify-between text-[10px] text-gray-400 font-mono">
+        <span className={`flex items-center gap-1 ${isTimerRunning ? 'text-emerald-600 dark:text-emerald-400 font-bold animate-pulse' : ''}`}>
+          <Clock className="w-3 h-3" />
+          <span>{formatDuration(isTimerRunning ? liveSeconds : (task.timeSpentSeconds || 0))}</span>
+        </span>
+
+        {task.evidenceUrl && (
+          <a
+            href={task.evidenceUrl}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-brand-500 hover:underline flex items-center gap-0.5 font-sans font-bold"
+            title="View Deliverable Link"
+          >
+            <span>Deliverable</span>
+            <ExternalLink className="w-2.5 h-2.5" />
+          </a>
+        )}
+      </div>
+
+      {/* Card Operational Actions */}
+      <div className="flex items-center justify-between gap-1.5 pt-1.5 border-t border-gray-100 dark:border-dark-border/50">
+        {/* Timer Controls */}
+        {canControlTimer && task.status !== 'Completed' && (
+          <div className="flex items-center gap-1">
+            {isTimerRunning ? (
+              <button
+                type="button"
+                disabled={actionLoadingTaskId === task.id}
+                onClick={() => onPauseTimer(task)}
+                data-testid={`pause-timer-btn-${task.id}`}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-500 text-white font-bold text-[10px] hover:bg-amber-600 transition-colors shadow-xs cursor-pointer"
+                title="Pause Timer"
+              >
+                <Pause className="w-2.5 h-2.5" />
+                <span>Pause</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                disabled={actionLoadingTaskId === task.id}
+                onClick={() => {
+                  if (isPending || task.status !== 'In Progress') {
+                    onStartWork(task);
+                  } else {
+                    onResumeTimer(task);
+                  }
+                }}
+                data-testid={`start-work-btn-${task.id}`}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500 text-white font-bold text-[10px] hover:bg-emerald-600 transition-colors shadow-xs cursor-pointer"
+                title={isPending ? 'Start Work & Timer' : 'Resume Timer'}
+              >
+                <Play className="w-2.5 h-2.5 fill-current" />
+                <span>{isPending ? 'Start' : (task.timeSpentSeconds ? 'Resume' : 'Start')}</span>
+              </button>
+            )}
+
+            {/* Submit Deliverable */}
+            {task.status !== 'Team Review' && task.status !== 'Client Review' && (
+              <button
+                type="button"
+                onClick={() => onOpenDeliverableModal(task)}
+                className="p-1 rounded-lg text-gray-500 hover:text-brand-600 hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors cursor-pointer"
+                title="Submit for Approval"
+              >
+                <Send className="w-3 h-3" />
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Approval Actions for Managers & Owners */}
+        {isOwnerOrManager && (task.status === 'Team Review' || task.status === 'Client Review') && (
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              disabled={actionLoadingTaskId === task.id}
+              onClick={() => onApproveDeliverable(task)}
+              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500 text-white font-bold text-[10px] hover:bg-emerald-600 transition-colors cursor-pointer"
+              title="Approve Task"
+            >
+              <Check className="w-2.5 h-2.5" />
+              <span>Approve</span>
+            </button>
+            <button
+              type="button"
+              disabled={actionLoadingTaskId === task.id}
+              onClick={() => onReopenTask(task)}
+              className="p-1 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+              title="Request Changes / Reopen"
+            >
+              <RotateCcw className="w-3 h-3" />
+            </button>
+          </div>
+        )}
+
+        {/* Open Workspace Action */}
+        <button
+          type="button"
+          onClick={() => navigate(`/clients/${task.clientId}`)}
+          className="ml-auto p-1 rounded-lg text-gray-400 hover:text-brand-500 hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors cursor-pointer"
+          title="Open in Client Workspace"
+        >
+          <ArrowUpRight className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
 export const PersonalCrossClientKanban: React.FC<PersonalCrossClientKanbanProps> = ({
   tasks,
   clients,
@@ -285,6 +532,14 @@ export const PersonalCrossClientKanban: React.FC<PersonalCrossClientKanbanProps>
 
       if (currentStatus === newStatus) return;
 
+      const droppedTask = tasks.find((t) => t.id === taskId);
+
+      // Drag to In Progress starts work and timer automatically
+      if (targetColumn === 'in_progress' && droppedTask) {
+        await handleStartWork(droppedTask);
+        return;
+      }
+
       setActionLoadingTaskId(taskId);
       await taskManagementService.updateKanbanStatus(taskId, newStatus);
       setActionLoadingTaskId(null);
@@ -463,193 +718,22 @@ export const PersonalCrossClientKanban: React.FC<PersonalCrossClientKanbanProps>
                     <span>No tasks in {col.title}</span>
                   </div>
                 ) : (
-                  colTasks.map((task) => {
-                    const isTimerRunning = Boolean(task.timerStartedAt);
-                    const isAssignedToMe = task.assigneeId === currentUserProfile?.id;
-                    const canControlTimer = isAssignedToMe || isOwnerOrManager;
-
-                    return (
-                      <div
-                        key={task.id}
-                        draggable
-                        onDragStart={(e) => {
-                          e.dataTransfer.setData('text/plain', JSON.stringify({ taskId: task.id, currentStatus: task.status }));
-                          e.dataTransfer.effectAllowed = 'move';
-                        }}
-                        className={`p-3.5 rounded-2xl bg-white dark:bg-dark-card border transition-all duration-150 shadow-xs hover:shadow-md space-y-2.5 ${
-                          isTimerRunning
-                            ? 'border-blue-500 dark:border-blue-500 ring-2 ring-blue-500/20'
-                            : task.isOverdue && task.status !== 'Completed'
-                            ? 'border-rose-300 dark:border-rose-900 bg-rose-50/20'
-                            : 'border-gray-200 dark:border-dark-border'
-                        }`}
-                      >
-                        {/* Top: Client Badge + Priority */}
-                        <div className="flex items-center justify-between gap-1 text-[10px]">
-                          <span
-                            onClick={() => {
-                              navigate(`/clients/${task.clientId}`);
-                            }}
-                            className="font-extrabold text-brand-600 dark:text-brand-400 hover:underline flex items-center gap-1 cursor-pointer truncate max-w-[140px]"
-                            title={`Open ${task.clientName || 'Client'}`}
-                          >
-                            <Briefcase className="w-3 h-3 flex-shrink-0" />
-                            <span className="truncate">{task.clientName || 'Client'}</span>
-                          </span>
-
-                          <div className="flex items-center gap-1 shrink-0">
-                            {task.weekNumber && (
-                              <span className="px-1.5 py-0.5 rounded bg-gray-100 dark:bg-dark-100 text-gray-500 font-bold">
-                                W{task.weekNumber}
-                              </span>
-                            )}
-                            <span
-                              className={`px-1.5 py-0.5 rounded font-black ${
-                                task.priority === 'Urgent'
-                                  ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400'
-                                  : task.priority === 'High'
-                                  ? 'bg-amber-100 text-amber-700 dark:bg-amber-950/40 dark:text-amber-400'
-                                  : 'bg-blue-50 text-blue-600 dark:bg-blue-950/40 dark:text-blue-400'
-                              }`}
-                            >
-                              {task.priority}
-                            </span>
-                          </div>
-                        </div>
-
-                        {/* Title */}
-                        <h4
-                          onClick={() => onSelectTask?.(task)}
-                          className="text-xs font-bold text-gray-900 dark:text-gray-100 hover:text-brand-600 dark:hover:text-brand-400 cursor-pointer line-clamp-2 leading-snug"
-                        >
-                          {task.title}
-                        </h4>
-
-                        {/* Assignee & Due Date */}
-                        <div className="flex items-center justify-between text-[11px] text-gray-500 pt-1 border-t border-gray-100 dark:border-dark-border/50">
-                          <div className="flex items-center gap-1.5 truncate">
-                            <AssigneeAvatar avatarPath={task.assigneeAvatar} name={task.assigneeName} />
-                            <span className="truncate text-gray-700 dark:text-gray-300 font-medium">
-                              {task.assigneeName || 'Unassigned'}
-                            </span>
-                          </div>
-
-                          {task.dueDate && (
-                            <span
-                              className={`shrink-0 font-mono text-[10px] font-bold ${
-                                task.isOverdue && task.status !== 'Completed'
-                                  ? 'text-rose-600 dark:text-rose-400 flex items-center gap-0.5'
-                                  : 'text-gray-400'
-                              }`}
-                            >
-                              {task.isOverdue && task.status !== 'Completed' && <AlertTriangle className="w-2.5 h-2.5" />}
-                              {task.dueDate}
-                            </span>
-                          )}
-                        </div>
-
-                        {/* Duration & Timer State Indicator */}
-                        <div className="flex items-center justify-between text-[10px] text-gray-400 font-mono">
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3 h-3 text-gray-400" />
-                            <span>{formatDuration(task.timeSpentSeconds || 0)}</span>
-                          </span>
-
-                          {task.evidenceUrl && (
-                            <a
-                              href={task.evidenceUrl}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-brand-500 hover:underline flex items-center gap-0.5 font-sans font-bold"
-                              title="View Deliverable Link"
-                            >
-                              <span>Deliverable</span>
-                              <ExternalLink className="w-2.5 h-2.5" />
-                            </a>
-                          )}
-                        </div>
-
-                        {/* Card Operational Actions */}
-                        <div className="flex items-center justify-between gap-1.5 pt-1.5 border-t border-gray-100 dark:border-dark-border/50">
-                          {/* Timer Controls */}
-                          {canControlTimer && task.status !== 'Completed' && (
-                            <div className="flex items-center gap-1">
-                              {isTimerRunning ? (
-                                <button
-                                  type="button"
-                                  disabled={actionLoadingTaskId === task.id}
-                                  onClick={() => handlePauseTimer(task)}
-                                  className="flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-500 text-white font-bold text-[10px] hover:bg-amber-600 transition-colors shadow-xs cursor-pointer"
-                                  title="Pause Timer"
-                                >
-                                  <Pause className="w-2.5 h-2.5" />
-                                  <span>Pause</span>
-                                </button>
-                              ) : (
-                                <button
-                                  type="button"
-                                  disabled={actionLoadingTaskId === task.id}
-                                  onClick={() => (task.timeSpentSeconds ? handleResumeTimer(task) : handleStartWork(task))}
-                                  className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500 text-white font-bold text-[10px] hover:bg-emerald-600 transition-colors shadow-xs cursor-pointer"
-                                  title="Start Work Timer"
-                                >
-                                  <Play className="w-2.5 h-2.5 fill-current" />
-                                  <span>{task.timeSpentSeconds ? 'Resume' : 'Start'}</span>
-                                </button>
-                              )}
-
-                              {/* Submit Deliverable */}
-                              {task.status !== 'Team Review' && task.status !== 'Client Review' && (
-                                <button
-                                  type="button"
-                                  onClick={() => handleOpenDeliverableModal(task)}
-                                  className="p-1 rounded-lg text-gray-500 hover:text-brand-600 hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors cursor-pointer"
-                                  title="Submit for Approval"
-                                >
-                                  <Send className="w-3 h-3" />
-                                </button>
-                              )}
-                            </div>
-                          )}
-
-                          {/* Approval Actions for Managers & Owners */}
-                          {isOwnerOrManager && (task.status === 'Team Review' || task.status === 'Client Review') && (
-                            <div className="flex items-center gap-1">
-                              <button
-                                type="button"
-                                disabled={actionLoadingTaskId === task.id}
-                                onClick={() => handleApproveDeliverable(task)}
-                                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500 text-white font-bold text-[10px] hover:bg-emerald-600 transition-colors cursor-pointer"
-                                title="Approve Task"
-                              >
-                                <Check className="w-2.5 h-2.5" />
-                                <span>Approve</span>
-                              </button>
-                              <button
-                                type="button"
-                                disabled={actionLoadingTaskId === task.id}
-                                onClick={() => handleReopenTask(task)}
-                                className="p-1 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
-                                title="Request Changes / Reopen"
-                              >
-                                <RotateCcw className="w-3 h-3" />
-                              </button>
-                            </div>
-                          )}
-
-                          {/* Open Workspace Action */}
-                          <button
-                            type="button"
-                            onClick={() => navigate(`/clients/${task.clientId}`)}
-                            className="ml-auto p-1 rounded-lg text-gray-400 hover:text-brand-500 hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors cursor-pointer"
-                            title="Open in Client Workspace"
-                          >
-                            <ArrowUpRight className="w-3.5 h-3.5" />
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })
+                  colTasks.map((task) => (
+                    <PersonalKanbanCard
+                      key={task.id}
+                      task={task}
+                      currentUserProfile={currentUserProfile}
+                      isOwnerOrManager={isOwnerOrManager}
+                      actionLoadingTaskId={actionLoadingTaskId}
+                      onSelectTask={onSelectTask}
+                      onStartWork={handleStartWork}
+                      onPauseTimer={handlePauseTimer}
+                      onResumeTimer={handleResumeTimer}
+                      onOpenDeliverableModal={handleOpenDeliverableModal}
+                      onApproveDeliverable={handleApproveDeliverable}
+                      onReopenTask={handleReopenTask}
+                    />
+                  ))
                 )}
               </div>
             </div>

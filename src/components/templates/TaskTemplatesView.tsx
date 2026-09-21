@@ -23,7 +23,8 @@ interface TaskTemplatesViewProps {
 export const TaskTemplatesView: React.FC<TaskTemplatesViewProps> = ({ currentUserProfile }) => {
   const isOwner = currentUserProfile?.role === 'owner';
   const isManager = currentUserProfile?.role === 'operational_manager';
-  const hasAccess = isOwner || isManager;
+  const isTeamMember = currentUserProfile?.role === 'team_member';
+  const hasAccess = isOwner || isManager || isTeamMember;
 
   const [templates, setTemplates] = useState<TaskTemplate[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -222,7 +223,7 @@ export const TaskTemplatesView: React.FC<TaskTemplatesViewProps> = ({ currentUse
           </p>
         </div>
 
-        {isOwner && (
+        {hasAccess && (
           <button
             type="button"
             onClick={handleCreateNew}
@@ -444,49 +445,66 @@ export const TaskTemplatesView: React.FC<TaskTemplatesViewProps> = ({ currentUse
                   <span>Preview</span>
                 </button>
 
-                {isOwner && (
-                  <div className="flex items-center gap-1">
-                    {template.status === 'Active' ? (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => handleDuplicate(template)}
-                          disabled={isActionLoading}
-                          className="p-1.5 text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-dark-100 rounded-lg transition-colors"
-                          title="Duplicate template"
-                        >
-                          <Copy className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleEdit(template)}
-                          className="p-1.5 text-gray-500 hover:text-brand-600 hover:bg-brand-500/10 rounded-lg transition-colors"
-                          title="Edit template"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
+                <div className="flex items-center gap-1">
+                  {template.status === 'Active' && (
+                    <>
+                      {(() => {
+                        const isCreator = Boolean(template.createdBy && currentUserProfile?.id && template.createdBy === currentUserProfile.id);
+                        const canEdit = isOwner || isManager || isCreator;
+                        if (canEdit) {
+                          return (
+                            <button
+                              type="button"
+                              onClick={() => handleEdit(template)}
+                              className="p-1.5 text-gray-500 hover:text-brand-600 hover:bg-brand-500/10 rounded-lg transition-colors cursor-pointer"
+                              title="Edit template"
+                            >
+                              <Edit3 className="w-3.5 h-3.5" />
+                            </button>
+                          );
+                        }
+                        return (
+                          <span className="text-[10px] px-2 py-0.5 rounded bg-gray-100 dark:bg-dark-100 text-gray-400 font-semibold select-none" title="View Only: Created by another staff member">
+                            View Only
+                          </span>
+                        );
+                      })()}
+
+                      <button
+                        type="button"
+                        onClick={() => handleDuplicate(template)}
+                        disabled={isActionLoading}
+                        className="p-1.5 text-gray-500 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-dark-100 rounded-lg transition-colors cursor-pointer"
+                        title="Duplicate template"
+                      >
+                        <Copy className="w-3.5 h-3.5" />
+                      </button>
+
+                      {isOwner && (
                         <button
                           type="button"
                           onClick={() => setArchivingTemplate(template)}
-                          className="p-1.5 text-gray-500 hover:text-brand-600 hover:bg-brand-500/10 rounded-lg transition-colors"
+                          className="p-1.5 text-gray-500 hover:text-brand-600 hover:bg-brand-500/10 rounded-lg transition-colors cursor-pointer"
                           title="Archive template"
                         >
                           <Archive className="w-3.5 h-3.5" />
                         </button>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={() => handleRestore(template)}
-                        disabled={isActionLoading}
-                        className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-gray-800 flex items-center gap-1 transition-colors"
-                      >
-                        <RotateCcw className="w-3.5 h-3.5" />
-                        <span>Restore</span>
-                      </button>
-                    )}
-                  </div>
-                )}
+                      )}
+                    </>
+                  )}
+
+                  {template.status === 'Archived' && isOwner && (
+                    <button
+                      type="button"
+                      onClick={() => handleRestore(template)}
+                      disabled={isActionLoading}
+                      className="px-2.5 py-1.5 rounded-lg text-xs font-bold bg-gray-900 dark:bg-white text-white dark:text-gray-900 hover:bg-gray-800 flex items-center gap-1 transition-colors cursor-pointer"
+                    >
+                      <RotateCcw className="w-3.5 h-3.5" />
+                      <span>Restore</span>
+                    </button>
+                  )}
+                </div>
               </div>
             </div>
           ))}

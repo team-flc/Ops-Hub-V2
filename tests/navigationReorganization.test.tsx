@@ -160,16 +160,16 @@ describe('Navigation Reorganization Test Suite', () => {
 
       render(<SettingsLayout initialTab="dashboard" />);
 
-      // Permitted tabs visible
+      // Permitted tabs visible (Dashboard, Attendance, Templates)
       expect(screen.getByTestId('settings-tab-dashboard')).toBeInTheDocument();
       expect(screen.getByTestId('settings-tab-attendance')).toBeInTheDocument();
+      expect(screen.getByTestId('settings-tab-templates')).toBeInTheDocument();
 
       // Restricted tabs must NOT be in navigation
       expect(screen.queryByTestId('settings-tab-workspace')).not.toBeInTheDocument();
       expect(screen.queryByTestId('settings-tab-employee_operations')).not.toBeInTheDocument();
       expect(screen.queryByTestId('settings-tab-team')).not.toBeInTheDocument();
       expect(screen.queryByTestId('settings-tab-clients')).not.toBeInTheDocument();
-      expect(screen.queryByTestId('settings-tab-templates')).not.toBeInTheDocument();
       expect(screen.queryByTestId('settings-tab-archive')).not.toBeInTheDocument();
       expect(screen.queryByTestId('settings-tab-audit')).not.toBeInTheDocument();
     });
