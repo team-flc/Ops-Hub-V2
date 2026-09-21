@@ -649,6 +649,78 @@ describe('Phase 2A Team & User Management Tests', () => {
     expect(screen.getByPlaceholderText('e.g. 010203040506 or 03001234567')).toBeInTheDocument();
     expect(screen.getByPlaceholderText('e.g. PK36MEZN0000000102030405')).toBeInTheDocument();
   });
+
+  // 16. CNIC NUMBER FIELD INTEGRATION
+  it('16. CreateTeamMemberModal & EditTeamMemberModal render CNIC Number input field for past and future team members', async () => {
+    const ownerProfile: UserProfile = {
+      id: 'usr-owner-1',
+      fullName: 'Atif Khan',
+      role: 'owner',
+      status: 'active',
+      createdAt: '',
+      updatedAt: ''
+    };
+
+    const mockDepts = [
+      { id: 'd1', name: 'Operations', slug: 'operations', status: 'active' as const, sortOrder: 1, createdAt: '', updatedAt: '' }
+    ];
+
+    const mockDesignations = [
+      { id: 'des-1', name: 'Operations Associate', status: 'active' as const, createdAt: '', updatedAt: '' }
+    ];
+
+    const fakeMember: TeamMemberRecord = {
+      id: 'usr-tm-cnic',
+      fullName: 'Farhan Ali',
+      workEmail: 'farhan@faseehlall.com',
+      cnic: '42101-9876543-1',
+      role: 'team_member',
+      status: 'active',
+      startDate: '2026-01-01',
+      departments: mockDepts,
+      clientAccessCount: 0,
+      clientIds: [],
+      createdAt: '',
+      updatedAt: ''
+    };
+
+    // 1. Check CreateTeamMemberModal
+    const { unmount } = render(
+      <CreateTeamMemberModal
+        isOpen={true}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+        currentUserProfile={ownerProfile}
+        departments={mockDepts}
+        designations={mockDesignations}
+        eligibleManagers={[ownerProfile]}
+        clients={[]}
+        onOpenDesignationManager={vi.fn()}
+      />
+    );
+
+    const createCnicInput = screen.getByPlaceholderText('e.g. 42101-1234567-1');
+    expect(createCnicInput).toBeInTheDocument();
+    unmount();
+
+    // 2. Check EditTeamMemberModal
+    render(
+      <EditTeamMemberModal
+        isOpen={true}
+        onClose={vi.fn()}
+        onSuccess={vi.fn()}
+        member={fakeMember}
+        currentUserProfile={ownerProfile}
+        departments={mockDepts}
+        designations={mockDesignations}
+        eligibleManagers={[ownerProfile]}
+      />
+    );
+
+    const editCnicInput = screen.getByPlaceholderText('e.g. 42101-1234567-1');
+    expect(editCnicInput).toBeInTheDocument();
+    expect(screen.getByText('CNIC Number (Optional)')).toBeInTheDocument();
+  });
 });
 
 

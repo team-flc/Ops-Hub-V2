@@ -278,6 +278,10 @@ export const EmployeeDossierView: React.FC = () => {
                   <span className="font-semibold text-slate-800 dark:text-gray-200">{record?.dateOfBirth || 'N/A'}</span>
                 </div>
                 <div>
+                  <span className="text-slate-400 block">CNIC Number</span>
+                  <span className="font-semibold text-slate-800 dark:text-gray-200">{profile.cnic || record?.cnic || 'N/A'}</span>
+                </div>
+                <div>
                   <span className="text-slate-400 block">Base Monthly Salary</span>
                   <span className="font-bold text-slate-900 dark:text-gray-100 font-mono">
                     PKR {(record?.salary || 0).toLocaleString()}

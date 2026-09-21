@@ -156,6 +156,7 @@ serve(async (req: Request) => {
         linkedinUrl,
         bio,
         avatarUrl,
+        cnic,
         startDate,
         departmentIds,
         designationId,
@@ -214,6 +215,7 @@ serve(async (req: Request) => {
       const cleanBio = bio?.trim() || null;
       const cleanBackupPhone = backupPhone?.trim() || null;
       const cleanAvatarUrl = avatarUrl?.trim() || null;
+      const cleanCnic = cnic?.trim() || null;
 
       if (!password || !PASSWORD_REGEX.test(password)) {
         return new Response(
@@ -339,6 +341,7 @@ serve(async (req: Request) => {
           linkedin_url: cleanLinkedinUrl,
           bio: cleanBio,
           avatar_url: cleanAvatarUrl,
+          cnic: cleanCnic,
           role: targetRole,
           status: 'active',
           designation_id: designationId,
@@ -429,6 +432,7 @@ serve(async (req: Request) => {
         linkedinUrl,
         bio,
         avatarUrl,
+        cnic,
         startDate,
         departmentIds,
         designationId,
@@ -523,6 +527,7 @@ serve(async (req: Request) => {
       if (linkedinUrl !== undefined) updateData.linkedin_url = cleanLinkedinUrl;
       if (bio !== undefined) updateData.bio = bio?.trim() || null;
       if (avatarUrl !== undefined) updateData.avatar_url = avatarUrl?.trim() || null;
+      if (cnic !== undefined) updateData.cnic = cnic?.trim() || null;
       if (designationId) updateData.designation_id = designationId;
       if (reportingManagerId && callerProfile.role === 'owner') updateData.reporting_manager_id = reportingManagerId;
       if (startDate) updateData.start_date = startDate;

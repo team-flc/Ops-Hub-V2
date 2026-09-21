@@ -460,7 +460,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                   {isLoadingTasks && <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-500" />}
                 </div>
 
-                {isOwnerOrManager && (
+                {currentUserProfile?.role !== 'client' && (
                   client.status === 'Paused' ? (
                     <span 
                       className="px-3.5 py-2 min-h-[44px] rounded-xl bg-gray-100 dark:bg-dark-200 border border-gray-300 dark:border-dark-border text-gray-500 dark:text-gray-400 text-xs font-bold flex items-center gap-1.5 opacity-80 cursor-not-allowed"

@@ -191,6 +191,7 @@ export interface TeamMemberRecord {
   fullName: string;
   workEmail: string;
   phone?: string | null;
+  cnic?: string | null;
   avatarUrl?: string | null;
   role: UserRole;
   status: AccountStatus;
@@ -226,6 +227,7 @@ export interface UserProfile {
   fullName: string;
   phone?: string | null;
   backupPhone?: string | null;
+  cnic?: string | null;
   bio?: string | null;
   avatarUrl?: string | null;
   linkedinUrl?: string | null;
@@ -940,6 +942,7 @@ export interface EmployeeRecord {
   employeeId?: string | null;
   employmentType: EmploymentType;
   dateOfBirth?: string | null; // YYYY-MM-DD
+  cnic?: string | null;
   salary: number; // Gross monthly salary in PKR
   jobDescription?: string | null;
   shiftId?: string | null;

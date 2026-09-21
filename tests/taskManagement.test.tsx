@@ -607,4 +607,74 @@ describe('Phase 3A: Operational Task Management Core Unit & Security Tests', () 
     expect(import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY).toBeUndefined();
     expect(import.meta.env.SUPABASE_SERVICE_ROLE_KEY).toBeUndefined();
   });
+
+  // 15. TEAM MEMBER TASK CREATION PERMISSIONS
+  it('15. Team Member role has access to + Add Task button on ClientWorkspaceView', async () => {
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'departments') {
+        return {
+          select: () => ({
+            eq: () => ({
+              order: () => Promise.resolve({ data: mockDepartments, error: null })
+            })
+          })
+        };
+      }
+      if (table === 'client_team_access') {
+        return {
+          select: () => ({
+            eq: () => Promise.resolve({ data: [{ profile_id: 'tm-1' }], error: null })
+          })
+        };
+      }
+      if (table === 'profiles') {
+        return {
+          select: () => ({
+            eq: () => ({
+              order: () => Promise.resolve({ data: mockUsers, error: null })
+            })
+          })
+        };
+      }
+      if (table === 'client_tasks') {
+        return {
+          select: () => ({
+            eq: () => ({
+              is: () => ({
+                order: () => ({
+                  order: () => ({
+                    eq: () => Promise.resolve({ data: [], error: null })
+                  })
+                })
+              })
+            })
+          })
+        };
+      }
+      return {
+        select: () => ({ eq: () => Promise.resolve({ data: [], error: null }) })
+      };
+    });
+
+    const teamMemberProfile: UserProfile = {
+      id: 'tm-1',
+      fullName: 'Hamza Specialist',
+      role: 'team_member',
+      status: 'active',
+      createdAt: '',
+      updatedAt: ''
+    };
+
+    render(
+      <ClientWorkspaceView
+        client={mockClient}
+        currentUserProfile={teamMemberProfile}
+        eligibleManagers={mockUsers.slice(0, 2)}
+        onClientUpdated={vi.fn()}
+      />
+    );
+
+    const addBtns = screen.getAllByRole('button', { name: /\+ add task/i });
+    expect(addBtns.length).toBe(1);
+  });
 });

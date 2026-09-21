@@ -21,6 +21,7 @@ export interface CreateTeamMemberPayload {
   instagramUrl?: string;
   bio?: string;
   avatarUrl?: string | null;
+  cnic?: string;
   startDate: string;
   departmentIds: string[];
   designationId: string;
@@ -40,6 +41,7 @@ export interface UpdateTeamMemberPayload {
   instagramUrl?: string;
   bio?: string;
   avatarUrl?: string | null;
+  cnic?: string;
   startDate: string;
   departmentIds: string[];
   designationId: string;
@@ -73,7 +75,7 @@ export const teamManagementService = {
       let query = supabase
         .from('profiles')
         .select(`
-          id, full_name, work_email, phone, role, status, avatar_url,
+          id, full_name, work_email, phone, cnic, role, status, avatar_url,
           designation_id, reporting_manager_id, start_date,
           suspended_at, suspended_by, created_at, updated_at
         `);
@@ -153,6 +155,7 @@ export const teamManagementService = {
           fullName: p.full_name,
           workEmail: p.work_email || '',
           phone: p.phone,
+          cnic: p.cnic || null,
           avatarUrl: p.avatar_url || null,
           role: p.role,
           status: p.status,

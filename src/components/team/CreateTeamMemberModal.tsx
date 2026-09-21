@@ -47,6 +47,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
   const [instagramUrl, setInstagramUrl] = useState('');
   const [bio, setBio] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
+  const [cnic, setCnic] = useState('');
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const displayAvatarUrl = useSignedUrl('profile-avatars', avatarUrl);
   const [startDate, setStartDate] = useState(getPKTTodayDateString());
@@ -284,6 +285,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
         instagramUrl: instagramUrl.trim() || undefined,
         bio: bio.trim() || undefined,
         avatarUrl: avatarUrl || null,
+        cnic: cnic.trim() || undefined,
         startDate,
         departmentIds: selectedDeptIds,
         designationId: selectedDesignationId,
@@ -303,6 +305,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
             employeeId: empId.trim() || undefined,
             employmentType,
             dateOfBirth: dob || null,
+            cnic: cnic.trim() || undefined,
             salary: salary ? Number(salary) : 0,
             jobDescription: jobDescription.trim() || undefined,
             shiftId: selectedShiftId || undefined,
@@ -589,6 +592,19 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
                       value={contactEmail}
                       onChange={(e) => setContactEmail(e.target.value)}
                       placeholder="contact.gmail@gmail.com"
+                      className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                      CNIC Number (Optional)
+                    </label>
+                    <input
+                      type="text"
+                      value={cnic}
+                      onChange={(e) => setCnic(e.target.value)}
+                      placeholder="e.g. 42101-1234567-1"
                       className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500"
                     />
                   </div>
