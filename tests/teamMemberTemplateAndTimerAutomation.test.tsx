@@ -294,10 +294,18 @@ describe('Team Member Template Permissions & Dashboard Drag/Click Timer Automati
 
     it('2.3 PersonalKanbanCard ticks live seconds dynamically when timer is active', async () => {
       vi.useFakeTimers();
+      const baseTime = new Date('2026-09-22T10:00:00Z');
+      vi.setSystemTime(baseTime);
+
+      const activeTask: ClientTask = {
+        ...mockTasks[1],
+        timeSpentSeconds: 120,
+        timerStartedAt: new Date(baseTime.getTime() - 30000).toISOString() // exactly 30s elapsed + 120s = 150s (2m 30s)
+      };
 
       render(
         <PersonalKanbanCard
-          task={mockTasks[1]} // timer active with 30s elapsed + 120s prior = 150s (2m 30s)
+          task={activeTask}
           currentUserProfile={mockMemberUser}
           isOwnerOrManager={false}
           actionLoadingTaskId={null}

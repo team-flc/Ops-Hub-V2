@@ -202,7 +202,9 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
       onTaskUpdated({
         ...task,
         assigneeId: newAssigneeId || undefined,
-        assigneeName: updatedAssignee?.fullName,
+        assigneeName: updatedAssignee?.fullName || null,
+        assigneeAvatar: (updatedAssignee as any)?.avatarUrl || null,
+        assigneeRole: updatedAssignee?.role || null,
         status: newAssigneeId && task.status === 'Draft' ? 'Assigned' : task.status
       });
       refreshFeed();

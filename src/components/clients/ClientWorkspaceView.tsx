@@ -196,11 +196,11 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
       if (updatedTask.archivedAt) {
         return prev.filter((t) => t.id !== updatedTask.id);
       }
-      return prev.map((t) => (t.id === updatedTask.id ? updatedTask : t));
+      return prev.map((t) => (t.id === updatedTask.id ? { ...t, ...updatedTask } : t));
     });
 
     if (selectedTaskDetails?.id === updatedTask.id) {
-      setSelectedTaskDetails(updatedTask.archivedAt ? null : updatedTask);
+      setSelectedTaskDetails((prev) => (updatedTask.archivedAt ? null : (prev ? { ...prev, ...updatedTask } : updatedTask)));
     }
   };
 

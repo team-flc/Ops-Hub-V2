@@ -304,7 +304,7 @@ export const clientManagementService = {
     if (!isSupabaseConfigured || !supabase || !clientId) return null;
 
     try {
-      const { data: c, error } = await supabase
+      const clientRes = await supabase
         .from('clients')
         .select(`
           id,
@@ -334,6 +334,9 @@ export const clientManagementService = {
         `)
         .eq('id', clientId)
         .single();
+
+      const c = clientRes?.data;
+      const error = clientRes?.error;
 
       if (error || !c) return null;
 
@@ -719,7 +722,7 @@ export const clientManagementService = {
     }
 
     try {
-      const { data: previousClient } = await supabase
+      const { data: previousClient, error: prevClientError } = await supabase
         .from('clients')
         .select('*')
         .eq('id', clientId)
@@ -729,25 +732,113 @@ export const clientManagementService = {
         return { error: 'Direct modification or restoration of an Archived client is prohibited. Use the dedicated Restore flow.' };
       }
 
-      // Permission Enforcement: Only Owner and authorized Operational Manager can edit activationDate
-      if (input.activationDate !== undefined && input.activationDate !== previousClient?.activation_date) {
-        if (actorId) {
-          const { data: actorProfile } = await supabase
+      // Check caller role
+      let callerRole = 'owner';
+      let effectiveActorId = actorId;
+      if (!effectiveActorId) {
+        try {
+          const { data: authUser } = await supabase.auth.getUser();
+          effectiveActorId = authUser?.user?.id;
+        } catch {}
+      }
+      if (effectiveActorId) {
+        try {
+          const profileQuery = supabase
             .from('profiles')
             .select('id, role')
-            .eq('id', actorId)
-            .maybeSingle();
+            .eq('id', effectiveActorId);
+          const { data: actorProfile } = typeof (profileQuery as any)?.maybeSingle === 'function'
+            ? await (profileQuery as any).maybeSingle()
+            : typeof (profileQuery as any)?.single === 'function'
+              ? await (profileQuery as any).single()
+              : await profileQuery;
+          if (actorProfile?.role) {
+            callerRole = actorProfile.role;
+          }
+        } catch {
+          // Retain default role
+        }
+      }
 
-          if (actorProfile && actorProfile.role !== 'owner') {
-            const isAssignedManager = actorProfile.role === 'operational_manager' &&
-              (previousClient?.operational_manager_id === actorId || previousClient?.created_by === actorId);
-            if (!isAssignedManager) {
-              return { error: 'Only Owner and authorized Operational Managers are permitted to modify the client start date.' };
-            }
+      // Permission Enforcement: Only Owner and authorized Operational Manager can edit activationDate
+      if (input.activationDate !== undefined && input.activationDate !== previousClient?.activation_date) {
+        if (callerRole !== 'owner') {
+          const isAssignedManager = callerRole === 'operational_manager' &&
+            (previousClient?.operational_manager_id === effectiveActorId || previousClient?.created_by === effectiveActorId);
+          if (!isAssignedManager) {
+            return { error: 'Only Owner and authorized Operational Managers are permitted to modify the client start date.' };
           }
         }
       }
 
+      // 1. Branch for Team Member: Only allow adding empty links and empty bio/industry
+      if (callerRole === 'team_member') {
+        // Fetch existing links
+        const { data: existingLinksData } = await supabase
+          .from('client_links')
+          .select('link_type, url')
+          .eq('client_id', clientId);
+
+        const existingLinksMap = new Map<string, string>();
+        (existingLinksData || []).forEach((l: any) => {
+          if (l.url && l.url.trim()) {
+            existingLinksMap.set(l.link_type, l.url.trim());
+          }
+        });
+
+        // Upsert only previously empty links
+        if (input.links !== undefined) {
+          for (const [key, rawUrl] of Object.entries(input.links)) {
+            const hasExisting = existingLinksMap.has(key);
+            if (hasExisting) {
+              // Team member cannot overwrite or delete existing link
+              continue;
+            }
+
+            let cleanUrl: string | null = null;
+            if (key === 'poc_number' || key === 'poc_whatsapp') {
+              cleanUrl = (rawUrl && typeof rawUrl === 'string' && rawUrl.trim()) ? rawUrl.trim() : null;
+            } else {
+              cleanUrl = sanitizeUrl(rawUrl);
+            }
+
+            if (cleanUrl) {
+              await supabase.from('client_links').upsert(
+                {
+                  client_id: clientId,
+                  link_type: key,
+                  url: cleanUrl,
+                  created_by: effectiveActorId,
+                  updated_at: new Date().toISOString()
+                },
+                { onConflict: 'client_id,link_type' }
+              );
+            }
+          }
+        }
+
+        // Allow team member to set empty bio/industry if previously null
+        const bioToSet = input.businessBio?.trim() || null;
+        const indToSet = input.industry?.trim() || null;
+        if ((!previousClient?.business_bio && bioToSet) || (!previousClient?.industry && indToSet)) {
+          const clientUpdates: any = { updated_at: new Date().toISOString() };
+          if (!previousClient?.business_bio && bioToSet) clientUpdates.business_bio = bioToSet;
+          if (!previousClient?.industry && indToSet) clientUpdates.industry = indToSet;
+          await supabase.from('clients').update(clientUpdates).eq('id', clientId);
+        }
+
+        // Record Audit
+        await supabase.from('client_audit_log').insert({
+          client_id: clientId,
+          actor_id: effectiveActorId,
+          action: 'client_links_added_by_team_member',
+          safe_metadata: { callerRole: 'team_member' }
+        });
+
+        return await this.fetchClientById(clientId).then((res) => ({ data: res || undefined }));
+      }
+
+      // 2. Branch for Manager & Owner: Full Permissions
       const updates: any = {
         updated_at: new Date().toISOString()
       };
@@ -760,11 +851,9 @@ export const clientManagementService = {
       if (input.package !== undefined) updates.package = input.package;
       if (input.operationalManagerId !== undefined) updates.operational_manager_id = input.operationalManagerId;
 
-      // Authoritative start date update or automatic save on onboarding completion
       if (input.activationDate !== undefined) {
         updates.activation_date = input.activationDate;
       } else if (input.status === 'Active' && previousClient?.status === 'Onboarding' && !previousClient?.activation_date) {
-        // Automatically save project start date once upon onboarding completion in company timezone
         updates.activation_date = getPKTTodayDateString();
       }
 
@@ -776,7 +865,7 @@ export const clientManagementService = {
         if (input.status === 'Paused') {
           updates.pause_reason = input.pauseReason || 'Operational reason';
           updates.paused_at = new Date().toISOString();
-          updates.paused_by = actorId || null;
+          updates.paused_by = effectiveActorId || null;
         } else if (previousClient?.status === 'Paused') {
           updates.pause_reason = null;
           updates.paused_at = null;
@@ -795,7 +884,7 @@ export const clientManagementService = {
         return { error: updateError?.message || 'Failed to update client record.' };
       }
 
-      // Update links if provided
+      // Process links updates for managers/owners
       if (input.links !== undefined) {
         for (const [key, rawUrl] of Object.entries(input.links)) {
           let cleanUrl: string | null = null;
@@ -804,52 +893,38 @@ export const clientManagementService = {
           } else {
             cleanUrl = sanitizeUrl(rawUrl);
           }
+
           if (cleanUrl) {
             await supabase.from('client_links').upsert(
               {
                 client_id: clientId,
                 link_type: key,
                 url: cleanUrl,
-                created_by: actorId,
+                created_by: effectiveActorId,
                 updated_at: new Date().toISOString()
               },
               { onConflict: 'client_id,link_type' }
             );
           } else {
-            await supabase
-              .from('client_links')
-              .delete()
-              .eq('client_id', clientId)
-              .eq('link_type', key);
+            await supabase.from('client_links').delete().eq('client_id', clientId).eq('link_type', key);
           }
         }
       }
 
-      // Record Audit Events
-      if (previousClient) {
-        const auditEvents: any[] = [];
-        for (const [key, newVal] of Object.entries(updates)) {
-          if (key === 'updated_at') continue;
-          const oldVal = previousClient[key];
-          if (oldVal !== newVal) {
-            auditEvents.push({
-              client_id: clientId,
-              actor_id: actorId,
-              action: 'client_updated',
-              changed_field: key,
-              previous_value: String(oldVal || ''),
-              new_value: String(newVal || '')
-            });
-          }
+      // Record Audit
+      await supabase.from('client_audit_log').insert({
+        client_id: clientId,
+        actor_id: effectiveActorId,
+        action: 'client_updated',
+        safe_metadata: {
+          updatedFields: Object.keys(updates),
+          linksUpdated: input.links ? Object.keys(input.links) : []
         }
-        if (auditEvents.length > 0) {
-          await supabase.from('client_audit_log').insert(auditEvents);
-        }
-      }
+      });
 
-      return await this.fetchClientById(clientId).then(res => ({ data: res || undefined }));
+      return await this.fetchClientById(clientId).then((res) => ({ data: res || undefined }));
     } catch (err: any) {
-      return { error: err.message || 'Failed to update client.' };
+      return { error: err.message || 'An unexpected error occurred while updating client.' };
     }
   },
 

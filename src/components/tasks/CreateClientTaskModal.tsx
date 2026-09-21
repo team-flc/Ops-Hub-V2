@@ -177,7 +177,18 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
       if (res.error || !res.data) {
         setErrorMessage(res.error || 'Failed to create operational task.');
       } else {
-        onSuccess(res.data);
+        const assignedUser = eligibleAssignees.find((u) => u.id === (assigneeId || res.data?.assigneeId));
+        const dept = departments.find((d) => d.id === departmentId);
+        const fullTask: ClientTask = {
+          ...res.data,
+          assigneeName: assignedUser?.fullName || null,
+          assigneeAvatar: (assignedUser as any)?.avatarUrl || null,
+          assigneeRole: assignedUser?.role || null,
+          departmentName: dept?.name || 'Department',
+          clientName: client.companyName || client.clientName,
+          clientCompanyName: client.companyName || client.clientName
+        };
+        onSuccess(fullTask);
         onClose();
       }
     } catch (err: any) {

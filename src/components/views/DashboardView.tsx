@@ -15,6 +15,7 @@ import { taskManagementService } from '../../lib/taskManagementService';
 import { employeeOperationsService } from '../../lib/employeeOperationsService';
 import { teamManagementService } from '../../lib/teamManagementService';
 import { clientManagementService } from '../../lib/clientManagementService';
+import { isTaskDueToday } from '../../lib/pktDateUtils';
 
 // Dashboard Components
 import { PersonalCrossClientKanban } from '../dashboard/PersonalCrossClientKanban';
@@ -142,13 +143,11 @@ export const DashboardView: React.FC = () => {
 
   // Top Metrics Calculation
   const totalTasks = tasks.length;
-  const completedTasks = tasks.filter((t) => t.status === 'Completed').length;
+  const completedTasks = tasks.filter((t) => t.status === 'Completed' || t.status === 'Done').length;
   const inProgressTasks = tasks.filter((t) => t.status === 'In Progress').length;
-  const awaitingApprovalTasks = tasks.filter((t) => ['Team Review', 'Client Review'].includes(t.status)).length;
-  const overdueTasks = tasks.filter((t) => t.isOverdue && t.status !== 'Completed').length;
-
-  const todayStr = new Date().toISOString().split('T')[0];
-  const dueTodayTasks = tasks.filter((t) => t.dueDate === todayStr && t.status !== 'Completed').length;
+  const awaitingApprovalTasks = tasks.filter((t) => ['Team Review', 'Client Review', 'Approval'].includes(t.status)).length;
+  const overdueTasks = tasks.filter((t) => t.isOverdue && t.status !== 'Completed' && t.status !== 'Done').length;
+  const dueTodayTasks = tasks.filter((t) => isTaskDueToday(t.dueDate) && t.status !== 'Completed' && t.status !== 'Done').length;
 
   const resolutionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 100;
   const healthScore = Math.max(10, Math.min(100, Math.round(100 - (overdueTasks * 5) - (awaitingApprovalTasks * 2) + (resolutionRate * 0.1))));

@@ -512,3 +512,28 @@ export function useDaysSinceOnboarding(startDateStr: string | null | undefined):
     return calculateDaysSinceOnboarding(startDateStr, currentDate);
   }, [startDateStr, currentDate]);
 }
+
+/**
+ * Converts a task dueDate (ISO timestamp, UTC date, or YYYY-MM-DD string) into a PKT date string "YYYY-MM-DD".
+ */
+export function getTaskPKTDateString(dueDate?: string | null): string {
+  if (!dueDate || typeof dueDate !== 'string' || !dueDate.trim()) return '';
+  const trimmed = dueDate.trim();
+  if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) {
+    return trimmed;
+  }
+  const d = new Date(trimmed);
+  if (isNaN(d.getTime())) return '';
+  return getPKTTodayDateString(d);
+}
+
+/**
+ * Checks if a task dueDate falls on today's date in PKT (Asia/Karachi).
+ */
+export function isTaskDueToday(dueDate?: string | null, refDate: Date = new Date()): boolean {
+  if (!dueDate) return false;
+  const taskPktDate = getTaskPKTDateString(dueDate);
+  if (!taskPktDate) return false;
+  const todayPktDate = getPKTTodayDateString(refDate);
+  return taskPktDate === todayPktDate;
+}

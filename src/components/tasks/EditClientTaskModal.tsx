@@ -135,7 +135,19 @@ export const EditClientTaskModal: React.FC<EditClientTaskModalProps> = ({
       if (res.error || !res.data) {
         setErrorMessage(res.error || 'Failed to update task.');
       } else {
-        onSuccess(res.data);
+        const dept = departments.find((d) => d.id === departmentId);
+        const mergedTask: ClientTask = {
+          ...task,
+          ...res.data,
+          departmentName: dept?.name || task.departmentName,
+          assigneeId: task.assigneeId,
+          assigneeName: task.assigneeName,
+          assigneeAvatar: task.assigneeAvatar,
+          assigneeRole: task.assigneeRole,
+          clientName: task.clientName,
+          clientCompanyName: task.clientCompanyName
+        };
+        onSuccess(mergedTask);
         onClose();
       }
     } catch (err: any) {

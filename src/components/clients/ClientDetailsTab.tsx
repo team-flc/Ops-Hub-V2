@@ -3,7 +3,7 @@ import {
   Building2, 
   Link2, Check, AlertCircle, Save, Loader2, Plus, 
   Trash2, ExternalLink,
-  Camera, Archive, X, MessageCircle, Calendar
+  Camera, Archive, X, MessageCircle, Calendar, Lock
 } from 'lucide-react';
 import { useOpsStore } from '../../store/opsStore';
 import { useDaysSinceOnboarding, formatOnboardingDate } from '../../lib/pktDateUtils';
@@ -359,6 +359,22 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
   const readiness = calculateLinkedInReadiness(requiredLinkedInCount, profiles);
   const displayLogoUrl = useSignedUrl('client-logos', logoUrl);
 
+  const isBioLocked = isTeamMember && Boolean(client.businessBio?.trim());
+  const isIndustryLocked = isTeamMember && Boolean(client.industry?.trim());
+
+  const isLinkLocked = (linkKey: ClientLinkType | string) => {
+    if (!isTeamMember) return false;
+    let existing: string | undefined;
+    if (linkKey === 'important_docs') {
+      existing = client.links?.important_docs || client.links?.important_documents;
+    } else if (linkKey === 'master_business_doc') {
+      existing = client.links?.master_business_doc || client.links?.master_business_document;
+    } else {
+      existing = client.links?.[linkKey as ClientLinkType];
+    }
+    return Boolean(existing && existing.trim());
+  };
+
   // Handle Logo Upload
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -707,26 +723,28 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                   {companyName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'CL'}
                 </div>
               )}
-              <label
-                htmlFor="client-logo-upload"
-                className="absolute inset-0 bg-black/60 backdrop-blur-[1px] rounded-2xl opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white cursor-pointer transition-all duration-200 text-center p-1"
-              >
-                {isUploadingLogo ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <>
-                    <Camera className="w-4 h-4 mb-0.5" />
-                    <span className="text-[8px] font-bold leading-tight">Change</span>
-                  </>
-                )}
-              </label>
+              {!isTeamMember && (
+                <label
+                  htmlFor="client-logo-upload"
+                  className="absolute inset-0 bg-black/60 backdrop-blur-[1px] rounded-2xl opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white cursor-pointer transition-all duration-200 text-center p-1"
+                >
+                  {isUploadingLogo ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      <Camera className="w-4 h-4 mb-0.5" />
+                      <span className="text-[8px] font-bold leading-tight">Change</span>
+                    </>
+                  )}
+                </label>
+              )}
               <input
                 id="client-logo-upload"
                 type="file"
                 accept="image/jpeg,image/png,image/webp"
                 onChange={handleLogoUpload}
                 className="hidden"
-                disabled={isUploadingLogo || isSaving}
+                disabled={isTeamMember || isUploadingLogo || isSaving}
               />
             </div>
             <div className="flex-1 space-y-1 text-center sm:text-left">
@@ -736,7 +754,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
               <p className="text-[11px] text-gray-500 dark:text-gray-400 max-w-md">
                 Displayed in the Client Switcher, header breadcrumbs, and task workspaces. Allowed: JPG, PNG, WebP up to 5MB.
               </p>
-              {logoUrl && (
+              {logoUrl && !isTeamMember && (
                 <button
                   type="button"
                   onClick={() => setLogoUrl(null)}
@@ -759,9 +777,17 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label htmlFor="detail-company-name" className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
-                Company Name <span className="text-rose-500">*</span>
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label htmlFor="detail-company-name" className="block text-xs font-bold text-gray-700 dark:text-gray-300">
+                  Company Name <span className="text-rose-500">*</span>
+                </label>
+                {isTeamMember && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
               <input
                 id="detail-company-name"
                 type="text"
@@ -769,14 +795,22 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 onChange={(e) => setCompanyName(e.target.value)}
                 disabled={isTeamMember}
                 required
-                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
 
             <div>
-              <label htmlFor="detail-client-name" className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
-                Client / Owner Full Name <span className="text-rose-500">*</span>
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label htmlFor="detail-client-name" className="block text-xs font-bold text-gray-700 dark:text-gray-300">
+                  Client / Owner Full Name <span className="text-rose-500">*</span>
+                </label>
+                {isTeamMember && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
               <input
                 id="detail-client-name"
                 type="text"
@@ -784,36 +818,53 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 onChange={(e) => setClientName(e.target.value)}
                 disabled={isTeamMember}
                 required
-                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
 
             {/* Industry / Category */}
             <div>
-              <label htmlFor="detail-industry" className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
-                Industry / Category
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label htmlFor="detail-industry" className="block text-xs font-bold text-gray-700 dark:text-gray-300">
+                  Industry / Category
+                </label>
+                {isIndustryLocked && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
               <input
                 id="detail-industry"
                 type="text"
                 value={industry}
                 onChange={(e) => setIndustry(e.target.value)}
+                disabled={isIndustryLocked}
                 placeholder="e.g. B2B SaaS, E-Commerce, Logistics"
-                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
 
             {/* Service Package */}
             <div>
-              <label htmlFor="detail-package" className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
-                Service Package <span className="text-rose-500">*</span>
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label htmlFor="detail-package" className="block text-xs font-bold text-gray-700 dark:text-gray-300">
+                  Service Package <span className="text-rose-500">*</span>
+                </label>
+                {isTeamMember && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
               <select
                 id="detail-package"
                 value={pkg}
                 onChange={(e) => setPkg(e.target.value as ClientPackage)}
                 disabled={isTeamMember}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {PACKAGES.map((p) => (
                   <option key={p} value={p}>{p}</option>
@@ -822,15 +873,23 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
             </div>
 
             <div>
-              <label htmlFor="detail-manager" className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
-                Operational Manager <span className="text-rose-500">*</span>
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label htmlFor="detail-manager" className="block text-xs font-bold text-gray-700 dark:text-gray-300">
+                  Operational Manager <span className="text-rose-500">*</span>
+                </label>
+                {isTeamMember && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
               <select
                 id="detail-manager"
                 value={managerId}
                 onChange={(e) => setManagerId(e.target.value)}
                 disabled={isTeamMember}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {eligibleManagers.map((m) => (
                   <option key={m.id} value={m.id}>
@@ -845,11 +904,16 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 <label htmlFor="detail-activation-date" className="block text-xs font-bold text-gray-700 dark:text-gray-300">
                   Project Start Date <span className="text-rose-500">*</span>
                 </label>
-                {!onboardingInfo.isMissing && (
+                {isTeamMember ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                ) : !onboardingInfo.isMissing ? (
                   <span className="text-[11px] font-bold text-brand-600 dark:text-brand-400">
                     {onboardingInfo.badgeLabel}
                   </span>
-                )}
+                ) : null}
               </div>
               <input
                 id="detail-activation-date"
@@ -858,7 +922,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 onChange={(e) => setActivationDate(e.target.value)}
                 disabled={isTeamMember}
                 required
-                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
               <p className="text-[11px] text-gray-400 mt-1">
                 {onboardingInfo.formattedBadge}
@@ -866,15 +930,23 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
             </div>
 
             <div>
-              <label htmlFor="detail-status" className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
-                Lifecycle Status <span className="text-rose-500">*</span>
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label htmlFor="detail-status" className="block text-xs font-bold text-gray-700 dark:text-gray-300">
+                  Lifecycle Status <span className="text-rose-500">*</span>
+                </label>
+                {isTeamMember && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
               <select
                 id="detail-status"
                 value={status}
                 onChange={(e) => setStatus(e.target.value as ClientStatus)}
                 disabled={isTeamMember}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {STATUSES.map((s) => (
                   <option key={s} value={s}>{s}</option>
@@ -884,9 +956,17 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
 
             {/* Required LinkedIn Count */}
             <div>
-              <label htmlFor="detail-req-count" className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
-                Required LinkedIn Profiles Count <span className="text-rose-500">*</span>
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label htmlFor="detail-req-count" className="block text-xs font-bold text-gray-700 dark:text-gray-300">
+                  Required LinkedIn Profiles Count <span className="text-rose-500">*</span>
+                </label>
+                {isTeamMember && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
               <input
                 id="detail-req-count"
                 type="number"
@@ -895,22 +975,31 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 value={requiredLinkedInCount}
                 onChange={(e) => setRequiredLinkedInCount(Math.max(1, parseInt(e.target.value) || 1))}
                 disabled={isTeamMember}
-                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
 
             {/* Business Bio / Description */}
             <div className="sm:col-span-2">
-              <label htmlFor="detail-business-bio" className="block text-xs font-bold text-gray-700 dark:text-gray-300 mb-1.5">
-                Business Bio / "What the client does"
-              </label>
+              <div className="flex items-center justify-between mb-1.5">
+                <label htmlFor="detail-business-bio" className="block text-xs font-bold text-gray-700 dark:text-gray-300">
+                  Business Bio / "What the client does"
+                </label>
+                {isBioLocked && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
               <textarea
                 id="detail-business-bio"
                 rows={3}
                 value={businessBio}
                 onChange={(e) => setBusinessBio(e.target.value)}
+                disabled={isBioLocked}
                 placeholder="Brief description of the client's business model, target audience, and primary service offerings..."
-                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 resize-y"
+                className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 resize-y disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
           </div>
@@ -944,304 +1033,493 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label htmlFor="edit-website" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Website URL
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="edit-website" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  Website URL
+                </label>
+                {isLinkLocked('website') && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
               <input
                 id="edit-website"
                 type="url"
                 value={websiteUrl}
                 onChange={(e) => setWebsiteUrl(e.target.value)}
+                disabled={isLinkLocked('website')}
                 placeholder="https://clientwebsite.com"
-                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
 
             <div>
-              <label htmlFor="edit-flc-landing-page" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                FLC Landing Page URL
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="edit-flc-landing-page" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  FLC Landing Page URL
+                </label>
+                {isLinkLocked('flc_landing_page') && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
               <input
                 id="edit-flc-landing-page"
                 type="url"
                 value={flcLandingPageUrl}
                 onChange={(e) => setFlcLandingPageUrl(e.target.value)}
+                disabled={isLinkLocked('flc_landing_page')}
                 placeholder="https://flc-landing-page.com/..."
-                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
 
             <div>
-              <label htmlFor="edit-brand-identity" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Brand Identity URL
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="edit-brand-identity" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  Brand Identity URL
+                </label>
+                {isLinkLocked('brand_identity') && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
               <input
                 id="edit-brand-identity"
                 type="url"
                 value={brandIdentityUrl}
                 onChange={(e) => setBrandIdentityUrl(e.target.value)}
+                disabled={isLinkLocked('brand_identity')}
                 placeholder="https://... (Brand Identity Guidelines / Assets)"
-                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
 
             <div>
-              <label htmlFor="edit-drive" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Google Drive Folder URL
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="edit-drive" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  Google Drive Folder URL
+                </label>
+                {isLinkLocked('google_drive') && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
               <input
                 id="edit-drive"
                 type="url"
                 value={driveUrl}
                 onChange={(e) => setDriveUrl(e.target.value)}
+                disabled={isLinkLocked('google_drive')}
                 placeholder="https://drive.google.com/drive/folders/..."
-                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
 
             <div>
-              <label htmlFor="edit-important-docs" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Important Documents URL
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="edit-important-docs" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  Important Documents URL
+                </label>
+                {isLinkLocked('important_docs') && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
               <input
                 id="edit-important-docs"
                 data-testid="edit-important-docs"
                 type="url"
                 value={importantDocsUrl}
                 onChange={(e) => setImportantDocsUrl(e.target.value)}
+                disabled={isLinkLocked('important_docs')}
                 placeholder="https://... (Important Documents / Notion / Google Doc Link)"
-                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
 
             <div>
-              <label htmlFor="edit-master-business-doc" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Master Business Document URL
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="edit-master-business-doc" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  Master Business Document URL
+                </label>
+                {isLinkLocked('master_business_doc') && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
               <input
                 id="edit-master-business-doc"
                 data-testid="edit-master-business-doc"
                 type="url"
                 value={masterBusinessDocUrl}
                 onChange={(e) => setMasterBusinessDocUrl(e.target.value)}
+                disabled={isLinkLocked('master_business_doc')}
                 placeholder="https://... (Master Business Document Link)"
-                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
 
             <div>
-              <label htmlFor="edit-static-creatives" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Static Creatives URL
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="edit-static-creatives" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  Static Creatives URL
+                </label>
+                {isLinkLocked('static_creatives') && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
               <input
                 id="edit-static-creatives"
                 type="url"
                 value={staticCreativesUrl}
                 onChange={(e) => setStaticCreativesUrl(e.target.value)}
+                disabled={isLinkLocked('static_creatives')}
                 placeholder="https://... (Static Creatives / Ads Link)"
-                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
 
             <div>
-              <label htmlFor="edit-videos" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Videos URL
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="edit-videos" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  Videos URL
+                </label>
+                {isLinkLocked('videos') && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
               <input
                 id="edit-videos"
                 type="url"
                 value={videosUrl}
                 onChange={(e) => setVideosUrl(e.target.value)}
+                disabled={isLinkLocked('videos')}
                 placeholder="https://... (Video Ads / Creatives Link)"
-                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
 
             <div>
-              <label htmlFor="edit-vsl" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                VSL (Video Sales Letter) URL
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="edit-vsl" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  VSL (Video Sales Letter) URL
+                </label>
+                {isLinkLocked('vsl') && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
               <input
                 id="edit-vsl"
                 type="url"
                 value={vslUrl}
                 onChange={(e) => setVslUrl(e.target.value)}
+                disabled={isLinkLocked('vsl')}
                 placeholder="https://... (VSL Link)"
-                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
 
             <div>
-              <label htmlFor="edit-testimonials" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Testimonials URL
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="edit-testimonials" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  Testimonials URL
+                </label>
+                {isLinkLocked('testimonials') && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
               <input
                 id="edit-testimonials"
                 data-testid="edit-testimonials"
                 type="url"
                 value={testimonialsUrl}
                 onChange={(e) => setTestimonialsUrl(e.target.value)}
+                disabled={isLinkLocked('testimonials')}
                 placeholder="https://... (Testimonials Link)"
-                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
 
             <div>
-              <label htmlFor="edit-grid" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Grid URL
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="edit-grid" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  Grid URL
+                </label>
+                {isLinkLocked('grid') && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
               <input
                 id="edit-grid"
                 type="url"
                 value={gridUrl}
                 onChange={(e) => setGridUrl(e.target.value)}
+                disabled={isLinkLocked('grid')}
                 placeholder="https://... (Grid Link)"
-                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
 
             <div>
-              <label htmlFor="edit-social-media-management" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Social Media Management URL
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="edit-social-media-management" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  Social Media Management URL
+                </label>
+                {isLinkLocked('social_media_management') && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
               <input
                 id="edit-social-media-management"
                 data-testid="edit-social-media-management"
                 type="url"
                 value={socialMediaManagementUrl}
                 onChange={(e) => setSocialMediaManagementUrl(e.target.value)}
+                disabled={isLinkLocked('social_media_management')}
                 placeholder="https://... (Social Media Management / Buffer / Hootsuite Link)"
-                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
 
             <div>
-              <label htmlFor="edit-linkedin-management" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                LinkedIn Management URL
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="edit-linkedin-management" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  LinkedIn Management URL
+                </label>
+                {isLinkLocked('linkedin_management') && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
               <input
                 id="edit-linkedin-management"
                 data-testid="edit-linkedin-management"
                 type="url"
                 value={linkedinManagementUrl}
                 onChange={(e) => setLinkedinManagementUrl(e.target.value)}
+                disabled={isLinkLocked('linkedin_management')}
                 placeholder="https://... (LinkedIn Management / Campaign Link)"
-                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
 
             <div>
-              <label htmlFor="edit-seo-management" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                SEO Management URL
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="edit-seo-management" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  SEO Management URL
+                </label>
+                {isLinkLocked('seo_management') && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
               <input
                 id="edit-seo-management"
                 data-testid="edit-seo-management"
                 type="url"
                 value={seoManagementUrl}
                 onChange={(e) => setSeoManagementUrl(e.target.value)}
+                disabled={isLinkLocked('seo_management')}
                 placeholder="https://... (SEO Management / Ahrefs / SEMrush / Dashboard Link)"
-                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
 
             <div>
-              <label htmlFor="edit-email-marketing-management" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Email Marketing Management URL
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="edit-email-marketing-management" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  Email Marketing Management URL
+                </label>
+                {isLinkLocked('email_marketing_management') && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
               <input
                 id="edit-email-marketing-management"
                 data-testid="edit-email-marketing-management"
                 type="url"
                 value={emailMarketingManagementUrl}
                 onChange={(e) => setEmailMarketingManagementUrl(e.target.value)}
+                disabled={isLinkLocked('email_marketing_management')}
                 placeholder="https://... (Email Marketing / Klaviyo / Mailchimp Link)"
-                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
 
             <div>
-              <label htmlFor="edit-paid-ads-management" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Paid Ads Management URL
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="edit-paid-ads-management" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  Paid Ads Management URL
+                </label>
+                {isLinkLocked('paid_ads_management') && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
               <input
                 id="edit-paid-ads-management"
                 data-testid="edit-paid-ads-management"
                 type="url"
                 value={paidAdsManagementUrl}
                 onChange={(e) => setPaidAdsManagementUrl(e.target.value)}
+                disabled={isLinkLocked('paid_ads_management')}
                 placeholder="https://... (Paid Ads Management / Meta Ads / Google Ads Link)"
-                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
 
             <div>
-              <label htmlFor="edit-linkedin-page" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                LinkedIn Company Page URL
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="edit-linkedin-page" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  LinkedIn Company Page URL
+                </label>
+                {isLinkLocked('linkedin_company_page') && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
               <input
                 id="edit-linkedin-page"
                 type="url"
                 value={linkedinPageUrl}
                 onChange={(e) => setLinkedinPageUrl(e.target.value)}
+                disabled={isLinkLocked('linkedin_company_page')}
                 placeholder="https://linkedin.com/company/..."
-                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
 
             <div>
-              <label htmlFor="edit-facebook" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Facebook Page URL
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="edit-facebook" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  Facebook Page URL
+                </label>
+                {isLinkLocked('facebook') && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
               <input
                 id="edit-facebook"
                 type="url"
                 value={facebookUrl}
                 onChange={(e) => setFacebookUrl(e.target.value)}
+                disabled={isLinkLocked('facebook')}
                 placeholder="https://facebook.com/..."
-                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
 
             <div>
-              <label htmlFor="edit-instagram" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Instagram Page URL
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="edit-instagram" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  Instagram Page URL
+                </label>
+                {isLinkLocked('instagram') && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
               <input
                 id="edit-instagram"
                 type="url"
                 value={instagramUrl}
                 onChange={(e) => setInstagramUrl(e.target.value)}
+                disabled={isLinkLocked('instagram')}
                 placeholder="https://instagram.com/..."
-                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
 
             <div>
-              <label htmlFor="edit-slack" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                Slack Channel URL
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="edit-slack" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  Slack Channel URL
+                </label>
+                {isLinkLocked('slack_channel') && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
               <input
                 id="edit-slack"
                 type="url"
                 value={slackUrl}
                 onChange={(e) => setSlackUrl(e.target.value)}
+                disabled={isLinkLocked('slack_channel')}
                 placeholder="https://app.slack.com/client/..."
-                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
 
             <div>
-              <label htmlFor="edit-whatsapp" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                WhatsApp Group URL
-              </label>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="edit-whatsapp" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  WhatsApp Group URL
+                </label>
+                {isLinkLocked('whatsapp_group') && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
               <input
                 id="edit-whatsapp"
                 type="url"
                 value={whatsappUrl}
                 onChange={(e) => setWhatsappUrl(e.target.value)}
+                disabled={isLinkLocked('whatsapp_group')}
                 placeholder="https://chat.whatsapp.com/..."
-                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
 
@@ -1250,7 +1528,12 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 <label htmlFor="edit-poc-number" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
                   POC Number / WhatsApp
                 </label>
-                {pocNumber.trim() && formatWhatsAppUrl(pocNumber) ? (
+                {isLinkLocked('poc_number') ? (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                ) : pocNumber.trim() && formatWhatsAppUrl(pocNumber) ? (
                   <a
                     href={formatWhatsAppUrl(pocNumber)}
                     target="_blank"
@@ -1270,8 +1553,9 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 type="text"
                 value={pocNumber}
                 onChange={(e) => setPocNumber(e.target.value)}
+                disabled={isLinkLocked('poc_number')}
                 placeholder="+92 300 1234567 or https://wa.me/..."
-                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
           </div>

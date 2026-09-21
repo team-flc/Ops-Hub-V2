@@ -8,6 +8,7 @@ import {
 import { ClientTask, ClientTaskStatus, UserProfile, ClientRecord } from '../../types';
 import { taskManagementService } from '../../lib/taskManagementService';
 import { useSignedUrl } from '../../lib/storageService';
+import { isTaskDueToday } from '../../lib/pktDateUtils';
 
 interface PersonalCrossClientKanbanProps {
   tasks: ClientTask[];
@@ -390,10 +391,9 @@ export const PersonalCrossClientKanban: React.FC<PersonalCrossClientKanbanProps>
 
       // Timeline Filter
       if (selectedTimeFilter === 'overdue') {
-        if (!task.isOverdue || task.status === 'Completed') return false;
+        if (!task.isOverdue || task.status === 'Completed' || task.status === 'Done') return false;
       } else if (selectedTimeFilter === 'today') {
-        const todayStr = new Date().toISOString().split('T')[0];
-        if (task.dueDate !== todayStr) return false;
+        if (!isTaskDueToday(task.dueDate)) return false;
       }
 
       // Search Query

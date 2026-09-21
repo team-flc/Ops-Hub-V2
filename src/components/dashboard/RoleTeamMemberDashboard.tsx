@@ -38,10 +38,10 @@ export const RoleTeamMemberDashboard: React.FC<RoleTeamMemberDashboardProps> = (
 
   // My Tasks Metrics
   const myTasks = tasks.filter((t) => t.assigneeId === currentUserProfile?.id);
-  const myCompleted = myTasks.filter((t) => t.status === 'Completed').length;
+  const myCompleted = myTasks.filter((t) => t.status === 'Completed' || t.status === 'Done').length;
   const myInProgress = myTasks.filter((t) => t.status === 'In Progress').length;
-  const myApproval = myTasks.filter((t) => ['Team Review', 'Client Review'].includes(t.status)).length;
-  const myOverdue = myTasks.filter((t) => t.isOverdue && t.status !== 'Completed').length;
+  const myApproval = myTasks.filter((t) => ['Team Review', 'Client Review', 'Approval'].includes(t.status)).length;
+  const myOverdue = myTasks.filter((t) => t.isOverdue && t.status !== 'Completed' && t.status !== 'Done').length;
 
   const totalLoggedSeconds = myTasks.reduce((acc, t) => acc + (t.timeSpentSeconds || 0), 0);
   const completionRate = myTasks.length > 0 ? Math.round((myCompleted / myTasks.length) * 100) : 100;
