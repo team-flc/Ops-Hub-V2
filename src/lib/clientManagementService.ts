@@ -124,6 +124,7 @@ export interface LinkedInProfileInput {
   profileUrl: string;
   salesNavigatorActive: boolean;
   salesNavigatorActivatedOn?: string | null;
+  linkedinVerified?: boolean;
   sortOrder?: number;
 }
 
@@ -403,6 +404,7 @@ export const clientManagementService = {
             profileUrl: p.profile_url,
             salesNavigatorActive: Boolean(p.sales_navigator_active),
             salesNavigatorActivatedOn: p.sales_navigator_activated_on,
+            linkedinVerified: Boolean(p.linkedin_verified),
             sortOrder: p.sort_order || 0,
             status: p.status || 'active',
             createdBy: p.created_by,
@@ -522,6 +524,7 @@ export const clientManagementService = {
         profileUrl: p.profile_url,
         salesNavigatorActive: Boolean(p.sales_navigator_active),
         salesNavigatorActivatedOn: p.sales_navigator_activated_on,
+        linkedinVerified: Boolean(p.linkedin_verified),
         sortOrder: p.sort_order || 0,
         status: p.status || 'active',
         createdBy: p.created_by,
@@ -639,6 +642,7 @@ export const clientManagementService = {
           profileUrl: cleanUrl,
           salesNavigatorActive: Boolean(p.salesNavigatorActive),
           salesNavigatorActivatedOn: p.salesNavigatorActive ? p.salesNavigatorActivatedOn : null,
+          linkedinVerified: Boolean(p.linkedinVerified),
           sortOrder: i
         });
       }
@@ -703,6 +707,7 @@ export const clientManagementService = {
           profile_url: p.profileUrl,
           sales_navigator_active: p.salesNavigatorActive,
           sales_navigator_activated_on: p.salesNavigatorActivatedOn || null,
+          linkedin_verified: Boolean(p.linkedinVerified),
           sort_order: idx,
           status: 'active',
           created_by: actorId,
@@ -724,6 +729,7 @@ export const clientManagementService = {
               profileUrl: ip.profile_url,
               salesNavigatorActive: Boolean(ip.sales_navigator_active),
               salesNavigatorActivatedOn: ip.sales_navigator_activated_on,
+              linkedinVerified: Boolean(ip.linkedin_verified),
               sortOrder: ip.sort_order,
               status: ip.status,
               createdBy: ip.created_by,
@@ -1137,6 +1143,7 @@ export const clientManagementService = {
           profile_url: cleanUrl,
           sales_navigator_active: Boolean(profileInput.salesNavigatorActive),
           sales_navigator_activated_on: profileInput.salesNavigatorActive ? profileInput.salesNavigatorActivatedOn : null,
+          linkedin_verified: Boolean(profileInput.linkedinVerified),
           sort_order: profileInput.sortOrder || 0,
           status: 'active',
           created_by: actorId,
@@ -1160,7 +1167,8 @@ export const clientManagementService = {
         new_value: cleanUrl,
         safe_metadata: {
           profileLabel: newProfile.profile_label,
-          salesNavigatorActive: newProfile.sales_navigator_active
+          salesNavigatorActive: newProfile.sales_navigator_active,
+          linkedinVerified: Boolean(newProfile.linkedin_verified)
         }
       });
 
@@ -1172,6 +1180,7 @@ export const clientManagementService = {
           profileUrl: newProfile.profile_url,
           salesNavigatorActive: Boolean(newProfile.sales_navigator_active),
           salesNavigatorActivatedOn: newProfile.sales_navigator_activated_on,
+          linkedinVerified: Boolean(newProfile.linkedin_verified),
           sortOrder: newProfile.sort_order,
           status: newProfile.status,
           createdBy: newProfile.created_by,
@@ -1233,6 +1242,10 @@ export const clientManagementService = {
         }
       }
 
+      if (profileInput.linkedinVerified !== undefined) {
+        updates.linkedin_verified = Boolean(profileInput.linkedinVerified);
+      }
+
       if (profileInput.sortOrder !== undefined) {
         updates.sort_order = profileInput.sortOrder;
       }
@@ -1268,6 +1281,7 @@ export const clientManagementService = {
           profileUrl: updated.profile_url,
           salesNavigatorActive: Boolean(updated.sales_navigator_active),
           salesNavigatorActivatedOn: updated.sales_navigator_activated_on,
+          linkedinVerified: Boolean(updated.linkedin_verified),
           sortOrder: updated.sort_order,
           status: updated.status,
           createdBy: updated.created_by,

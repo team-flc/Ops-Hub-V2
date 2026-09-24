@@ -49,6 +49,7 @@ interface ProfileRowState {
   profileUrl: string;
   salesNavigatorActive: boolean;
   salesNavigatorActivatedOn: string;
+  linkedinVerified: boolean;
 }
 
 export const CreateClientModal: React.FC<CreateClientModalProps> = ({
@@ -95,9 +96,9 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
   // LinkedIn Lead Generation Profiles
   const [requiredCount, setRequiredCount] = useState(3);
   const [profileRows, setProfileRows] = useState<ProfileRowState[]>([
-    { id: '1', profileLabel: 'LinkedIn ID 1', profileUrl: '', salesNavigatorActive: false, salesNavigatorActivatedOn: '' },
-    { id: '2', profileLabel: 'LinkedIn ID 2', profileUrl: '', salesNavigatorActive: false, salesNavigatorActivatedOn: '' },
-    { id: '3', profileLabel: 'LinkedIn ID 3', profileUrl: '', salesNavigatorActive: false, salesNavigatorActivatedOn: '' }
+    { id: '1', profileLabel: 'LinkedIn ID 1', profileUrl: '', salesNavigatorActive: false, salesNavigatorActivatedOn: '', linkedinVerified: false },
+    { id: '2', profileLabel: 'LinkedIn ID 2', profileUrl: '', salesNavigatorActive: false, salesNavigatorActivatedOn: '', linkedinVerified: false },
+    { id: '3', profileLabel: 'LinkedIn ID 3', profileUrl: '', salesNavigatorActive: false, salesNavigatorActivatedOn: '', linkedinVerified: false }
   ]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -135,7 +136,8 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
         profileLabel: `LinkedIn ID ${nextNum}`,
         profileUrl: '',
         salesNavigatorActive: false,
-        salesNavigatorActivatedOn: ''
+        salesNavigatorActivatedOn: '',
+        linkedinVerified: false
       }
     ]);
   };
@@ -242,6 +244,7 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
           profileUrl: cleanUrl,
           salesNavigatorActive: row.salesNavigatorActive,
           salesNavigatorActivatedOn: row.salesNavigatorActive ? row.salesNavigatorActivatedOn : null,
+          linkedinVerified: row.linkedinVerified,
           sortOrder: i
         });
       }
@@ -880,6 +883,21 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
                         />
                       </div>
                     )}
+                  </div>
+
+                  {/* LinkedIn Verified Checkbox */}
+                  <div className="pt-2 flex items-center gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={row.linkedinVerified || false}
+                        onChange={(e) => handleProfileChange(row.id, 'linkedinVerified', e.target.checked)}
+                        className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
+                      />
+                      <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                        LinkedIn Verified
+                      </span>
+                    </label>
                   </div>
                 </div>
               ))}

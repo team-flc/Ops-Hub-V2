@@ -117,6 +117,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
   const [newProfileUrl, setNewProfileUrl] = useState('');
   const [newSalesNavActive, setNewSalesNavActive] = useState(false);
   const [newSalesNavDate, setNewSalesNavDate] = useState('');
+  const [newLinkedinVerified, setNewLinkedinVerified] = useState(false);
   const [isAddingProfile, setIsAddingProfile] = useState(false);
 
   const [isSaving, setIsSaving] = useState(false);
@@ -562,6 +563,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
           profileUrl: cleanUrl,
           salesNavigatorActive: newSalesNavActive,
           salesNavigatorActivatedOn: newSalesNavActive ? newSalesNavDate : null,
+          linkedinVerified: newLinkedinVerified,
           sortOrder: profiles.length
         },
         currentUserProfile?.id
@@ -584,6 +586,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
       setNewProfileUrl('');
       setNewSalesNavActive(false);
       setNewSalesNavDate('');
+      setNewLinkedinVerified(false);
       setIsAddingProfile(false);
       setSuccessMsg('LinkedIn profile added successfully.');
       setTimeout(() => setSuccessMsg(null), 3000);
@@ -1684,6 +1687,21 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                     </div>
                   )}
                 </div>
+
+                {/* LinkedIn Verified */}
+                <div className="pt-2 flex items-center gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={p.linkedinVerified || false}
+                      onChange={(e) => handleUpdateProfile(p.id, { linkedinVerified: e.target.checked })}
+                      className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
+                    />
+                    <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                      LinkedIn Verified
+                    </span>
+                  </label>
+                </div>
               </div>
             ))
           )}
@@ -1724,37 +1742,51 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
-            <div className="flex items-center gap-4">
-              <label className="flex items-center gap-2 cursor-pointer select-none">
-                <input
-                  type="checkbox"
-                  checked={newSalesNavActive}
-                  onChange={(e) => {
-                    setNewSalesNavActive(e.target.checked);
-                    if (e.target.checked && !newSalesNavDate) {
-                      setNewSalesNavDate(new Date().toISOString().split('T')[0]);
-                    }
-                  }}
-                  className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
-                />
-                <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
-                  Sales Navigator Active
-                </span>
-              </label>
+          {/* Sales Navigator Active & Date */}
+          <div className="flex flex-wrap items-center gap-4 pt-2">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={newSalesNavActive}
+                onChange={(e) => {
+                  setNewSalesNavActive(e.target.checked);
+                  if (e.target.checked && !newSalesNavDate) {
+                    setNewSalesNavDate(new Date().toISOString().split('T')[0]);
+                  }
+                }}
+                className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
+              />
+              <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                Sales Navigator Active
+              </span>
+            </label>
 
-              {newSalesNavActive && (
-                <div className="flex items-center gap-2">
-                  <span className="text-[11px] font-medium text-gray-500">Activated On:</span>
-                  <input
-                    type="date"
-                    value={newSalesNavDate}
-                    onChange={(e) => setNewSalesNavDate(e.target.value)}
-                    className="px-2.5 py-1 text-xs rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-gray-900 dark:text-gray-100 focus:outline-none"
-                  />
-                </div>
-              )}
-            </div>
+            {newSalesNavActive && (
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-medium text-gray-500">Activated On:</span>
+                <input
+                  type="date"
+                  value={newSalesNavDate}
+                  onChange={(e) => setNewSalesNavDate(e.target.value)}
+                  className="px-2.5 py-1 text-xs rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-gray-900 dark:text-gray-100 focus:outline-none"
+                />
+              </div>
+            )}
+          </div>
+
+          {/* LinkedIn Verified & Add Button */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+            <label className="flex items-center gap-2 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={newLinkedinVerified}
+                onChange={(e) => setNewLinkedinVerified(e.target.checked)}
+                className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
+              />
+              <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                LinkedIn Verified
+              </span>
+            </label>
 
             <button
               type="button"

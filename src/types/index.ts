@@ -396,6 +396,7 @@ export interface ClientLinkedInProfile {
   profileUrl: string;
   salesNavigatorActive: boolean;
   salesNavigatorActivatedOn?: string | null;
+  linkedinVerified?: boolean;
   sortOrder: number;
   status: 'active' | 'archived';
   createdBy?: string;
