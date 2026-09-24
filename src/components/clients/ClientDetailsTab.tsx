@@ -3,10 +3,10 @@ import {
   Building2, 
   Link2, Check, AlertCircle, Save, Loader2, Plus, 
   Trash2, ExternalLink,
-  Camera, Archive, X, MessageCircle, Calendar, Lock
+  Camera, Archive, X, MessageCircle, Lock
 } from 'lucide-react';
 import { useOpsStore } from '../../store/opsStore';
-import { useDaysSinceOnboarding, formatOnboardingDate } from '../../lib/pktDateUtils';
+import { useDaysSinceOnboarding } from '../../lib/pktDateUtils';
 
 const LinkedInIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" }) => (
   <svg className={className} viewBox="0 0 24 24" fill="currentColor">
@@ -159,7 +159,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     if (linkedinPageUrl !== (client.links?.linkedin_company_page || '')) return true;
     if (slackUrl !== (client.links?.slack_channel || '')) return true;
     if (whatsappUrl !== (client.links?.whatsapp_group || '')) return true;
-    if (pocNumber !== (client.links?.poc_number || '')) return true;
+    if (pocNumber !== (client.links?.poc_number || client.links?.poc_whatsapp || '')) return true;
     return false;
   }, [
     companyName, clientName, businessBio, industry, logoUrl, pkg, managerId,
@@ -208,7 +208,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
         setLinkedinPageUrl(parsed.linkedinPageUrl ?? (client.links?.linkedin_company_page || ''));
         setSlackUrl(parsed.slackUrl ?? (client.links?.slack_channel || ''));
         setWhatsappUrl(parsed.whatsappUrl ?? (client.links?.whatsapp_group || ''));
-        setPocNumber(parsed.pocNumber ?? (client.links?.poc_number || ''));
+        setPocNumber(parsed.pocNumber ?? (client.links?.poc_number || client.links?.poc_whatsapp || ''));
         setProfiles(client.linkedinProfiles || []);
         return;
       }
@@ -248,7 +248,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     setLinkedinPageUrl(client.links?.linkedin_company_page || '');
     setSlackUrl(client.links?.slack_channel || '');
     setWhatsappUrl(client.links?.whatsapp_group || '');
-    setPocNumber(client.links?.poc_number || '');
+    setPocNumber(client.links?.poc_number || client.links?.poc_whatsapp || '');
     setProfiles(client.linkedinProfiles || []);
   }, [client]);
 
@@ -349,7 +349,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     setLinkedinPageUrl(client.links?.linkedin_company_page || '');
     setSlackUrl(client.links?.slack_channel || '');
     setWhatsappUrl(client.links?.whatsapp_group || '');
-    setPocNumber(client.links?.poc_number || '');
+    setPocNumber(client.links?.poc_number || client.links?.poc_whatsapp || '');
     setErrorMsg(null);
     setShowDiscardModal(false);
   };
@@ -365,10 +365,12 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
   const isLinkLocked = (linkKey: ClientLinkType | string) => {
     if (!isTeamMember) return false;
     let existing: string | undefined;
-    if (linkKey === 'important_docs') {
+    if (linkKey === 'important_docs' || linkKey === 'important_documents') {
       existing = client.links?.important_docs || client.links?.important_documents;
-    } else if (linkKey === 'master_business_doc') {
+    } else if (linkKey === 'master_business_doc' || linkKey === 'master_business_document') {
       existing = client.links?.master_business_doc || client.links?.master_business_document;
+    } else if (linkKey === 'poc_number' || linkKey === 'poc_whatsapp') {
+      existing = client.links?.poc_number || client.links?.poc_whatsapp;
     } else {
       existing = client.links?.[linkKey as ClientLinkType];
     }
@@ -451,7 +453,9 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
       brand_identity: brandIdentityUrl,
       google_drive: driveUrl,
       important_docs: importantDocsUrl,
+      important_documents: importantDocsUrl,
       master_business_doc: masterBusinessDocUrl,
+      master_business_document: masterBusinessDocUrl,
       static_creatives: staticCreativesUrl,
       videos: videosUrl,
       vsl: vslUrl,
@@ -467,7 +471,8 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
       linkedin_company_page: linkedinPageUrl,
       slack_channel: slackUrl,
       whatsapp_group: whatsappUrl,
-      poc_number: pocNumber
+      poc_number: pocNumber,
+      poc_whatsapp: pocNumber
     };
 
     for (const [key, raw] of Object.entries(rawLinks)) {

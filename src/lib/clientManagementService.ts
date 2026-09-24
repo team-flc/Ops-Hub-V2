@@ -167,6 +167,153 @@ export interface UpdateClientInput {
   links?: Partial<Record<ClientLinkType, string>>;
 }
 
+/**
+ * Bi-directional link type alias mappings for backwards compatibility.
+ */
+export const LINK_ALIASES: Record<string, string> = {
+  important_docs: 'important_documents',
+  important_documents: 'important_docs',
+  master_business_doc: 'master_business_document',
+  master_business_document: 'master_business_doc',
+  poc_number: 'poc_whatsapp',
+  poc_whatsapp: 'poc_number'
+};
+
+/**
+ * Validate whether a string is a standard UUID format.
+ */
+export function isValidUuid(val?: string | null): boolean {
+  if (!val || typeof val !== 'string') return false;
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val.trim());
+}
+
+/**
+ * Normalize client links so both primary and alias keys are populated and consistent.
+ */
+export function normalizeClientLinks(
+  links?: Partial<Record<ClientLinkType, string>> | null
+): Partial<Record<ClientLinkType, string>> {
+  if (!links) return {};
+  const normalized: Partial<Record<ClientLinkType, string>> = { ...links };
+
+  const imp = normalized.important_docs || normalized.important_documents;
+  if (imp) {
+    normalized.important_docs = imp;
+    normalized.important_documents = imp;
+  }
+
+  const biz = normalized.master_business_doc || normalized.master_business_document;
+  if (biz) {
+    normalized.master_business_doc = biz;
+    normalized.master_business_document = biz;
+  }
+
+  const poc = normalized.poc_number || normalized.poc_whatsapp;
+  if (poc) {
+    normalized.poc_number = poc;
+    normalized.poc_whatsapp = poc;
+  }
+
+  return normalized;
+}
+
+/**
+ * Persist or delete an individual workspace link in client_links with alias resilience.
+ */
+async function saveClientLinkRecord(
+  clientId: string,
+  key: string,
+  rawUrl: string | null | undefined,
+  actorId?: string | null
+): Promise<{ error?: string }> {
+  if (rawUrl === undefined) {
+    // Untouched field: leave database untouched
+    return {};
+  }
+
+  let cleanUrl: string | null = null;
+  if (key === 'poc_number' || key === 'poc_whatsapp') {
+    cleanUrl = (rawUrl && typeof rawUrl === 'string' && rawUrl.trim()) ? rawUrl.trim() : null;
+  } else {
+    cleanUrl = sanitizeUrl(rawUrl);
+  }
+
+  const aliasKey = LINK_ALIASES[key];
+  const keysToClean = aliasKey ? [key, aliasKey] : [key];
+
+  if (!cleanUrl) {
+    // User explicitly cleared the field: delete both primary and alias rows
+    for (const k of keysToClean) {
+      const { error: delErr } = await supabase!
+        .from('client_links')
+        .delete()
+        .eq('client_id', clientId)
+        .eq('link_type', k);
+      if (delErr) {
+        return { error: `Failed to remove ${key.replace(/_/g, ' ')}: ${delErr.message}` };
+      }
+    }
+    return {};
+  }
+
+  // Check if primary key or alias already exists for this client
+  const { data: existingRows, error: checkErr } = await supabase!
+    .from('client_links')
+    .select('id, link_type')
+    .eq('client_id', clientId)
+    .in('link_type', keysToClean);
+
+  if (checkErr) {
+    return { error: `Failed to check existing links: ${checkErr.message}` };
+  }
+
+  // Use the existing row's link_type if present to preserve current database schema representation
+  const existingRow = existingRows?.find((r) => r.link_type === key) || existingRows?.[0];
+  const targetKey = existingRow ? existingRow.link_type : key;
+  const safeActorId = isValidUuid(actorId) ? actorId : null;
+
+  let { error: upsertErr } = await supabase!.from('client_links').upsert(
+    {
+      client_id: clientId,
+      link_type: targetKey,
+      url: cleanUrl,
+      created_by: safeActorId,
+      updated_at: new Date().toISOString()
+    },
+    { onConflict: 'client_id,link_type' }
+  );
+
+  // If upsert failed and an alternate alias exists, attempt fallback (e.g. check constraint compatibility)
+  if (upsertErr && aliasKey && targetKey !== aliasKey) {
+    const fallbackKey = aliasKey;
+    const { error: fallbackErr } = await supabase!.from('client_links').upsert(
+      {
+        client_id: clientId,
+        link_type: fallbackKey,
+        url: cleanUrl,
+        created_by: safeActorId,
+        updated_at: new Date().toISOString()
+      },
+      { onConflict: 'client_id,link_type' }
+    );
+    if (!fallbackErr) {
+      upsertErr = null;
+      // Delete the other key if it existed to prevent conflicting duplicates
+      await supabase!.from('client_links').delete().eq('client_id', clientId).eq('link_type', targetKey);
+    }
+  } else if (!upsertErr && aliasKey) {
+    // Upsert succeeded; ensure no duplicate row exists under the other alias key
+    const otherKey = targetKey === key ? aliasKey : key;
+    await supabase!.from('client_links').delete().eq('client_id', clientId).eq('link_type', otherKey);
+  }
+
+  if (upsertErr) {
+    return { error: `Failed to save ${key.replace(/_/g, ' ')}: ${upsertErr.message}` };
+  }
+
+  return {};
+}
+
 export const clientManagementService = {
   /**
    * Fetch all accessible clients with their links and LinkedIn profiles.
@@ -229,7 +376,12 @@ export const clientManagementService = {
       if (linksData) {
         for (const l of linksData) {
           if (!linksMap[l.client_id]) linksMap[l.client_id] = {};
-          linksMap[l.client_id][l.link_type as ClientLinkType] = l.url;
+          if (l.url && typeof l.url === 'string' && l.url.trim()) {
+            linksMap[l.client_id][l.link_type as ClientLinkType] = l.url.trim();
+          }
+        }
+        for (const cid of Object.keys(linksMap)) {
+          linksMap[cid] = normalizeClientLinks(linksMap[cid]);
         }
       }
 
@@ -346,12 +498,15 @@ export const clientManagementService = {
         .select('link_type, url')
         .eq('client_id', clientId);
 
-      const links: Partial<Record<ClientLinkType, string>> = {};
+      const rawLinks: Partial<Record<ClientLinkType, string>> = {};
       if (linksData) {
         for (const l of linksData) {
-          links[l.link_type as ClientLinkType] = l.url;
+          if (l.url && typeof l.url === 'string' && l.url.trim()) {
+            rawLinks[l.link_type as ClientLinkType] = l.url.trim();
+          }
         }
       }
+      const links = normalizeClientLinks(rawLinks);
 
       // Fetch LinkedIn profiles
       const { data: profilesData } = await supabase
@@ -771,17 +926,23 @@ export const clientManagementService = {
         }
       }
 
+      const safeActorId = isValidUuid(effectiveActorId) ? effectiveActorId : null;
+
       // 1. Branch for Team Member: Only allow adding empty links and empty bio/industry
       if (callerRole === 'team_member') {
         // Fetch existing links
-        const { data: existingLinksData } = await supabase
+        const { data: existingLinksData, error: fetchErr } = await supabase
           .from('client_links')
           .select('link_type, url')
           .eq('client_id', clientId);
 
+        if (fetchErr) {
+          return { error: `Failed to verify existing client links: ${fetchErr.message}` };
+        }
+
         const existingLinksMap = new Map<string, string>();
         (existingLinksData || []).forEach((l: any) => {
-          if (l.url && l.url.trim()) {
+          if (l.url && typeof l.url === 'string' && l.url.trim()) {
             existingLinksMap.set(l.link_type, l.url.trim());
           }
         });
@@ -789,30 +950,21 @@ export const clientManagementService = {
         // Upsert only previously empty links
         if (input.links !== undefined) {
           for (const [key, rawUrl] of Object.entries(input.links)) {
-            const hasExisting = existingLinksMap.has(key);
-            if (hasExisting) {
-              // Team member cannot overwrite or delete existing link
+            if (rawUrl === undefined || rawUrl === null || !rawUrl.trim()) {
+              // Team member cannot clear or delete existing links
               continue;
             }
 
-            let cleanUrl: string | null = null;
-            if (key === 'poc_number' || key === 'poc_whatsapp') {
-              cleanUrl = (rawUrl && typeof rawUrl === 'string' && rawUrl.trim()) ? rawUrl.trim() : null;
-            } else {
-              cleanUrl = sanitizeUrl(rawUrl);
+            const aliasKey = LINK_ALIASES[key];
+            const hasExisting = existingLinksMap.has(key) || (aliasKey ? existingLinksMap.has(aliasKey) : false);
+            if (hasExisting) {
+              // Team member cannot overwrite existing link
+              continue;
             }
 
-            if (cleanUrl) {
-              await supabase.from('client_links').upsert(
-                {
-                  client_id: clientId,
-                  link_type: key,
-                  url: cleanUrl,
-                  created_by: effectiveActorId,
-                  updated_at: new Date().toISOString()
-                },
-                { onConflict: 'client_id,link_type' }
-              );
+            const saveRes = await saveClientLinkRecord(clientId, key, rawUrl, effectiveActorId);
+            if (saveRes.error) {
+              return { error: saveRes.error };
             }
           }
         }
@@ -824,18 +976,25 @@ export const clientManagementService = {
           const clientUpdates: any = { updated_at: new Date().toISOString() };
           if (!previousClient?.business_bio && bioToSet) clientUpdates.business_bio = bioToSet;
           if (!previousClient?.industry && indToSet) clientUpdates.industry = indToSet;
-          await supabase.from('clients').update(clientUpdates).eq('id', clientId);
+          const { error: bioErr } = await supabase.from('clients').update(clientUpdates).eq('id', clientId);
+          if (bioErr) {
+            return { error: `Failed to update client details: ${bioErr.message}` };
+          }
         }
 
         // Record Audit
         await supabase.from('client_audit_log').insert({
           client_id: clientId,
-          actor_id: effectiveActorId,
+          actor_id: safeActorId,
           action: 'client_links_added_by_team_member',
           safe_metadata: { callerRole: 'team_member' }
         });
 
-        return await this.fetchClientById(clientId).then((res) => ({ data: res || undefined }));
+        const freshClient = await this.fetchClientById(clientId);
+        if (!freshClient) {
+          return { error: 'Failed to retrieve updated client after saving.' };
+        }
+        return { data: freshClient };
       }
 
       // 2. Branch for Manager & Owner: Full Permissions
@@ -865,7 +1024,7 @@ export const clientManagementService = {
         if (input.status === 'Paused') {
           updates.pause_reason = input.pauseReason || 'Operational reason';
           updates.paused_at = new Date().toISOString();
-          updates.paused_by = effectiveActorId || null;
+          updates.paused_by = safeActorId;
         } else if (previousClient?.status === 'Paused') {
           updates.pause_reason = null;
           updates.paused_at = null;
@@ -884,29 +1043,16 @@ export const clientManagementService = {
         return { error: updateError?.message || 'Failed to update client record.' };
       }
 
-      // Process links updates for managers/owners
+      // Process links updates for managers/owners with alias resilience and verified error reporting
       if (input.links !== undefined) {
         for (const [key, rawUrl] of Object.entries(input.links)) {
-          let cleanUrl: string | null = null;
-          if (key === 'poc_number' || key === 'poc_whatsapp') {
-            cleanUrl = (rawUrl && typeof rawUrl === 'string' && rawUrl.trim()) ? rawUrl.trim() : null;
-          } else {
-            cleanUrl = sanitizeUrl(rawUrl);
+          if (rawUrl === undefined) {
+            // Untouched field: do nothing
+            continue;
           }
-
-          if (cleanUrl) {
-            await supabase.from('client_links').upsert(
-              {
-                client_id: clientId,
-                link_type: key,
-                url: cleanUrl,
-                created_by: effectiveActorId,
-                updated_at: new Date().toISOString()
-              },
-              { onConflict: 'client_id,link_type' }
-            );
-          } else {
-            await supabase.from('client_links').delete().eq('client_id', clientId).eq('link_type', key);
+          const saveRes = await saveClientLinkRecord(clientId, key, rawUrl, effectiveActorId);
+          if (saveRes.error) {
+            return { error: saveRes.error };
           }
         }
       }
@@ -914,7 +1060,7 @@ export const clientManagementService = {
       // Record Audit
       await supabase.from('client_audit_log').insert({
         client_id: clientId,
-        actor_id: effectiveActorId,
+        actor_id: safeActorId,
         action: 'client_updated',
         safe_metadata: {
           updatedFields: Object.keys(updates),
@@ -922,7 +1068,27 @@ export const clientManagementService = {
         }
       });
 
-      return await this.fetchClientById(clientId).then((res) => ({ data: res || undefined }));
+      const freshClient = await this.fetchClientById(clientId);
+      if (!freshClient) {
+        return { error: 'Failed to retrieve updated client after saving.' };
+      }
+
+      // Confirmation check: ensure each non-empty link in input.links is confirmed in freshClient.links
+      if (input.links) {
+        for (const [k, v] of Object.entries(input.links)) {
+          if (v && typeof v === 'string' && v.trim()) {
+            const aliasK = LINK_ALIASES[k];
+            const isConfirmed = Boolean(
+              freshClient.links[k as ClientLinkType] || (aliasK ? freshClient.links[aliasK as ClientLinkType] : undefined)
+            );
+            if (!isConfirmed) {
+              return { error: `Database failed to confirm saved URL for ${k.replace(/_/g, ' ')}.` };
+            }
+          }
+        }
+      }
+
+      return { data: freshClient };
     } catch (err: any) {
       return { error: err.message || 'An unexpected error occurred while updating client.' };
     }
