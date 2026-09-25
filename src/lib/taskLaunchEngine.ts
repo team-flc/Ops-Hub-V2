@@ -66,6 +66,35 @@ export function generateRequestId(): string {
   return 'req_' + Math.random().toString(36).substring(2) + Date.now().toString(36);
 }
 
+export async function assignSequentialSortOrder(clientId: string, taskIds: string[]): Promise<void> {
+  if (!supabase || !taskIds || taskIds.length === 0) return;
+  try {
+    const table = supabase.from('client_tasks');
+    if (!table || typeof table.select !== 'function') return;
+
+    const { data: maxOrderData } = await table
+      .select('sort_order')
+      .eq('client_id', clientId)
+      .order('sort_order', { ascending: false })
+      .limit(1);
+
+    const baseOrder = (maxOrderData && maxOrderData[0] && typeof maxOrderData[0].sort_order === 'number')
+      ? maxOrderData[0].sort_order + 1
+      : 1;
+
+    await Promise.all(
+      taskIds.map((id, idx) =>
+        supabase!
+          .from('client_tasks')
+          .update({ sort_order: baseOrder + idx })
+          .eq('id', id)
+      )
+    );
+  } catch (err) {
+    console.warn('Could not assign sequential sort_order to launched tasks:', err);
+  }
+}
+
 export const taskLaunchEngine = {
   /**
    * Check if a template has already been applied to a specific client and week
@@ -134,6 +163,11 @@ export const taskLaunchEngine = {
         if (rpcRes.error) {
           return { success: false, error: rpcRes.error };
         }
+        if (rpcRes.taskIds?.length || rpcRes.task_ids?.length) {
+          const idsToOrder = rpcRes.task_ids || rpcRes.taskIds;
+          await assignSequentialSortOrder(params.clientId, idsToOrder);
+        }
+
         return {
           success: true,
           batchId: rpcRes.batch_id,
@@ -196,6 +230,11 @@ export const taskLaunchEngine = {
         if (rpcRes.error) {
           return { success: false, error: rpcRes.error };
         }
+        if (rpcRes.taskIds?.length || rpcRes.task_ids?.length) {
+          const idsToOrder = rpcRes.task_ids || rpcRes.taskIds;
+          await assignSequentialSortOrder(params.clientId, idsToOrder);
+        }
+
         return {
           success: true,
           batchId: rpcRes.batch_id,

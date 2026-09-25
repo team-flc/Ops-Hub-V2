@@ -12,6 +12,14 @@ import {
   TaskApprovalMode 
 } from '../../types';
 import { serviceTemplateService } from '../../lib/serviceTemplateService';
+import { 
+  saveFormDraft, 
+  loadFormDraft, 
+  clearFormDraft, 
+  DraftRestoredBanner, 
+  AutosaveBadge, 
+  AutosaveStatus 
+} from '../../lib/autosaveUtils';
 
 interface CreateEditServiceTemplateModalProps {
   isOpen: boolean;
@@ -36,35 +44,60 @@ export const CreateEditServiceTemplateModal: React.FC<CreateEditServiceTemplateM
   const [tasks, setTasks] = useState<ServiceTemplateTask[]>([]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [autosaveStatus, setAutosaveStatus] = useState<AutosaveStatus>('idle');
+  const [autosaveError, setAutosaveError] = useState<string | null>(null);
+  const [draftRestored, setDraftRestored] = useState(false);
+  const saveSeqRef = React.useRef(0);
+  const latestCompletedSeqRef = React.useRef(0);
+  const isLoadedRef = React.useRef(false);
+  const SERVICE_TPL_DRAFT_KEY = 'opshub_draft_new_service_template';
 
   // Initialize or reset form
   useEffect(() => {
-    if (template) {
-      setName(template.name);
-      setServiceLabel(template.serviceLabel || 'General Service');
-      setDescription(template.description || '');
-      setTasks(template.tasks.map((t, idx) => ({ ...t, displayOrder: idx })));
-    } else {
-      setName('');
-      setServiceLabel('Social Media');
-      setDescription('');
-      // Default 1 initial task
-      setTasks([
-        {
-          definitionId: crypto.randomUUID(),
-          title: '',
-          description: '',
-          departmentId: departments[0]?.id || '',
-          priority: 'Normal',
-          approvalMode: 'Internal Only',
-          plannedOffsetDays: 0,
-          durationBusinessDays: 1,
-          displayOrder: 0
+    if (isOpen) {
+      if (template) {
+        setName(template.name);
+        setServiceLabel(template.serviceLabel || 'General Service');
+        setDescription(template.description || '');
+        setTasks(template.tasks.map((t, idx) => ({ ...t, displayOrder: idx })));
+        setDraftRestored(false);
+      } else {
+        const draft = loadFormDraft<any>(SERVICE_TPL_DRAFT_KEY);
+        if (draft) {
+          if (draft.name !== undefined) setName(draft.name);
+          if (draft.serviceLabel !== undefined) setServiceLabel(draft.serviceLabel);
+          if (draft.description !== undefined) setDescription(draft.description);
+          if (draft.tasks !== undefined && Array.isArray(draft.tasks)) setTasks(draft.tasks);
+          setDraftRestored(true);
+        } else {
+          setName('');
+          setServiceLabel('Social Media');
+          setDescription('');
+          // Default 1 initial task
+          setTasks([
+            {
+              definitionId: crypto.randomUUID(),
+              title: '',
+              description: '',
+              departmentId: departments[0]?.id || '',
+              priority: 'Normal',
+              approvalMode: 'Internal Only',
+              plannedOffsetDays: 0,
+              durationBusinessDays: 1,
+              displayOrder: 0
+            }
+          ]);
+          setDraftRestored(false);
         }
-      ]);
+      }
+      setErrorMessage(null);
+      setAutosaveStatus('idle');
+      setAutosaveError(null);
+      isLoadedRef.current = true;
+    } else {
+      isLoadedRef.current = false;
     }
-    setErrorMessage(null);
-  }, [template, isOpen, departments]);
+  }, [isOpen, template, departments]);
 
   // Lock body scroll when modal is open
   useEffect(() => {
@@ -88,6 +121,146 @@ export const CreateEditServiceTemplateModal: React.FC<CreateEditServiceTemplateM
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen, onClose]);
+
+  const isDirty = React.useMemo(() => {
+    if (!isEditing || !template) return false;
+    if (name !== template.name) return true;
+    if (serviceLabel !== (template.serviceLabel || 'General Service')) return true;
+    if (description !== (template.description || '')) return true;
+    if (tasks.length !== template.tasks.length) return true;
+    for (let i = 0; i < tasks.length; i++) {
+      const cur = tasks[i];
+      const orig = template.tasks[i];
+      if (!orig) return true;
+      if (
+        cur.title !== orig.title ||
+        cur.departmentId !== orig.departmentId ||
+        cur.priority !== orig.priority ||
+        cur.approvalMode !== orig.approvalMode ||
+        cur.plannedOffsetDays !== orig.plannedOffsetDays ||
+        cur.durationBusinessDays !== orig.durationBusinessDays ||
+        (cur.description || '') !== (orig.description || '')
+      ) {
+        return true;
+      }
+    }
+    return false;
+  }, [isEditing, template, name, serviceLabel, description, tasks]);
+
+  const validateForm = React.useCallback((): { valid: boolean; error?: string } => {
+    if (!name.trim()) return { valid: false, error: 'Template name is required.' };
+    if (!serviceLabel.trim()) return { valid: false, error: 'Service category label is required.' };
+    if (tasks.length === 0) return { valid: false, error: 'At least one task definition is required.' };
+    if (tasks.length > 100) return { valid: false, error: 'A Service Template cannot exceed 100 tasks.' };
+    for (let i = 0; i < tasks.length; i++) {
+      if (!tasks[i].title.trim()) {
+        return { valid: false, error: `Task #${i + 1} must have a title.` };
+      }
+      if (!tasks[i].departmentId) {
+        return { valid: false, error: `Task #${i + 1} must have an assigned department.` };
+      }
+    }
+    return { valid: true };
+  }, [name, serviceLabel, tasks]);
+
+  const performAutosave = React.useCallback(async (isManual = false): Promise<boolean> => {
+    if (!isEditing || !template) return false;
+    const val = validateForm();
+    if (!val.valid) {
+      if (isManual) setErrorMessage(val.error || 'Please fix errors.');
+      return false;
+    }
+
+    const currentSeq = ++saveSeqRef.current;
+    if (isManual) {
+      setIsSubmitting(true);
+      setErrorMessage(null);
+    }
+    setAutosaveStatus('saving');
+    setAutosaveError(null);
+
+    try {
+      const res = await serviceTemplateService.updateTemplate(template.id, {
+        name: name.trim(),
+        serviceLabel: serviceLabel.trim(),
+        description: description.trim() || undefined,
+        tasks,
+        expectedVersion: template.version
+      });
+
+      if (currentSeq < latestCompletedSeqRef.current) return false;
+      latestCompletedSeqRef.current = currentSeq;
+
+      if (res.error || !res.data) {
+        setAutosaveStatus('failed');
+        setAutosaveError(res.error || 'Failed to auto-save template.');
+        if (isManual) setErrorMessage(res.error || 'Failed to update service template.');
+        return false;
+      }
+
+      setAutosaveStatus('saved');
+      setAutosaveError(null);
+      onSuccess(res.data);
+      if (isManual) onClose();
+      return true;
+    } catch (err: any) {
+      if (currentSeq >= latestCompletedSeqRef.current) {
+        latestCompletedSeqRef.current = currentSeq;
+        setAutosaveStatus('failed');
+        setAutosaveError(err?.message || 'Failed to auto-save template.');
+        if (isManual) setErrorMessage(err?.message || 'Failed to update service template.');
+      }
+      return false;
+    } finally {
+      if (isManual) setIsSubmitting(false);
+    }
+  }, [isEditing, template, name, serviceLabel, description, tasks, onSuccess, onClose, validateForm]);
+
+  // Debounced autosave effect for editing
+  useEffect(() => {
+    if (!isOpen || !isLoadedRef.current || !isEditing || !isDirty) return;
+    const val = validateForm();
+    if (!val.valid) return;
+
+    const timer = setTimeout(() => {
+      performAutosave(false);
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [isOpen, isEditing, isDirty, performAutosave, validateForm]);
+
+  // Draft auto-save for new templates
+  useEffect(() => {
+    if (!isOpen || !isLoadedRef.current || isEditing) return;
+    if (name.trim() || description.trim() || tasks.some(t => t.title.trim())) {
+      saveFormDraft(SERVICE_TPL_DRAFT_KEY, {
+        name,
+        serviceLabel,
+        description,
+        tasks
+      });
+    }
+  }, [isOpen, isEditing, name, serviceLabel, description, tasks]);
+
+  const handleClearDraft = () => {
+    clearFormDraft(SERVICE_TPL_DRAFT_KEY);
+    setDraftRestored(false);
+    setName('');
+    setServiceLabel('Social Media');
+    setDescription('');
+    setTasks([
+      {
+        definitionId: crypto.randomUUID(),
+        title: '',
+        description: '',
+        departmentId: departments[0]?.id || '',
+        priority: 'Normal',
+        approvalMode: 'Internal Only',
+        plannedOffsetDays: 0,
+        durationBusinessDays: 1,
+        displayOrder: 0
+      }
+    ]);
+  };
 
   if (!isOpen) return null;
 
@@ -145,65 +318,33 @@ export const CreateEditServiceTemplateModal: React.FC<CreateEditServiceTemplateM
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!name.trim()) {
-      setErrorMessage('Template name is required.');
-      return;
-    }
-    if (!serviceLabel.trim()) {
-      setErrorMessage('Service category label is required.');
-      return;
-    }
-    if (tasks.length === 0) {
-      setErrorMessage('At least one task definition is required.');
-      return;
-    }
-    if (tasks.length > 100) {
-      setErrorMessage('A Service Template cannot exceed 100 tasks.');
+    setErrorMessage(null);
+
+    const val = validateForm();
+    if (!val.valid) {
+      setErrorMessage(val.error || 'Please fix errors.');
       return;
     }
 
-    for (let i = 0; i < tasks.length; i++) {
-      if (!tasks[i].title.trim()) {
-        setErrorMessage(`Task #${i + 1} must have a title.`);
-        return;
-      }
-      if (!tasks[i].departmentId) {
-        setErrorMessage(`Task #${i + 1} must have an assigned department.`);
-        return;
-      }
+    if (isEditing && template) {
+      await performAutosave(true);
+      return;
     }
 
     setIsSubmitting(true);
-    setErrorMessage(null);
-
     try {
-      if (isEditing && template) {
-        const res = await serviceTemplateService.updateTemplate(template.id, {
-          name: name.trim(),
-          serviceLabel: serviceLabel.trim(),
-          description: description.trim() || undefined,
-          tasks,
-          expectedVersion: template.version
-        });
-        if (res.error || !res.data) {
-          setErrorMessage(res.error || 'Failed to update service template.');
-        } else {
-          onSuccess(res.data);
-          onClose();
-        }
+      const res = await serviceTemplateService.createTemplate({
+        name: name.trim(),
+        serviceLabel: serviceLabel.trim(),
+        description: description.trim() || undefined,
+        tasks
+      });
+      if (res.error || !res.data) {
+        setErrorMessage(res.error || 'Failed to create service template.');
       } else {
-        const res = await serviceTemplateService.createTemplate({
-          name: name.trim(),
-          serviceLabel: serviceLabel.trim(),
-          description: description.trim() || undefined,
-          tasks
-        });
-        if (res.error || !res.data) {
-          setErrorMessage(res.error || 'Failed to create service template.');
-        } else {
-          onSuccess(res.data);
-          onClose();
-        }
+        clearFormDraft(SERVICE_TPL_DRAFT_KEY);
+        onSuccess(res.data);
+        onClose();
       }
     } catch (err: any) {
       setErrorMessage(err?.message || 'An unexpected error occurred.');
@@ -247,6 +388,10 @@ export const CreateEditServiceTemplateModal: React.FC<CreateEditServiceTemplateM
 
         {/* Body */}
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto flex-1 space-y-6">
+          {!isEditing && draftRestored && (
+            <DraftRestoredBanner onClear={handleClearDraft} />
+          )}
+
           {errorMessage && (
             <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium animate-shake">
               <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0 mt-0.5" />
@@ -476,27 +621,34 @@ export const CreateEditServiceTemplateModal: React.FC<CreateEditServiceTemplateM
           </div>
 
           {/* Actions */}
-          <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-dark-border">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-gray-400 hover:bg-slate-100 dark:hover:bg-dark-100 rounded-xl transition-colors cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white bg-brand-500 hover:bg-brand-600 rounded-xl shadow-md shadow-brand-500/20 transition-colors disabled:opacity-50 cursor-pointer"
-            >
-              {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
-              <span>{isEditing ? 'Save Template Version' : 'Create Service Template'}</span>
-            </button>
+          <div className="flex items-center justify-between pt-4 border-t border-slate-100 dark:border-dark-border">
+            <div className="flex items-center">
+              {isEditing && (
+                <AutosaveBadge status={autosaveStatus} error={autosaveError} />
+              )}
+            </div>
+            <div className="flex items-center gap-3">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-gray-400 hover:bg-slate-100 dark:hover:bg-dark-100 rounded-xl transition-colors cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="flex items-center gap-1.5 px-5 py-2 text-xs font-bold text-white bg-brand-500 hover:bg-brand-600 rounded-xl shadow-md shadow-brand-500/20 transition-colors disabled:opacity-50 cursor-pointer"
+              >
+                {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
+                <span>{isEditing ? 'Save Template Version' : 'Create Service Template'}</span>
+              </button>
+            </div>
           </div>
         </form>
       </div>
     </div>
   );
 
-  return createPortal(modalContent, document.body);
+  return typeof document !== 'undefined' ? createPortal(modalContent, document.body) : modalContent;
 };

@@ -8,6 +8,7 @@ import {
   TaskApprovalMode
 } from '../../types';
 import { taskManagementService, isSunday, isSaturday } from '../../lib/taskManagementService';
+import { AutosaveBadge, AutosaveStatus } from '../../lib/autosaveUtils';
 
 interface EditClientTaskModalProps {
   isOpen: boolean;
@@ -37,6 +38,11 @@ export const EditClientTaskModal: React.FC<EditClientTaskModalProps> = ({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [autosaveStatus, setAutosaveStatus] = useState<AutosaveStatus>('idle');
+  const [autosaveError, setAutosaveError] = useState<string | null>(null);
+  const saveSeqRef = React.useRef(0);
+  const latestCompletedSeqRef = React.useRef(0);
+  const isLoadedRef = React.useRef(false);
 
   useEffect(() => {
     if (isOpen && task) {
@@ -46,6 +52,8 @@ export const EditClientTaskModal: React.FC<EditClientTaskModalProps> = ({
       setPriority(task.priority);
       setApprovalMode(task.approvalMode || 'Internal Only');
       setErrorMessage(null);
+      setAutosaveStatus('idle');
+      setAutosaveError(null);
 
       if (task.plannedStart) {
         const start = new Date(task.plannedStart);
@@ -68,58 +76,77 @@ export const EditClientTaskModal: React.FC<EditClientTaskModalProps> = ({
         setDueDate(`${yyyy}-${mm}-${dd}`);
         setDueDateTime(`${hh}:${min}`);
       }
+      isLoadedRef.current = true;
+    } else {
+      isLoadedRef.current = false;
     }
   }, [isOpen, task]);
 
-  if (!isOpen) return null;
+  const isDirty = React.useMemo(() => {
+    if (!task) return false;
+    if (title !== task.title) return true;
+    if (details !== (task.details || '')) return true;
+    if (departmentId !== task.departmentId) return true;
+    if (priority !== task.priority) return true;
+    if (approvalMode !== (task.approvalMode || 'Internal Only')) return true;
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMessage(null);
+    if (task.plannedStart) {
+      const start = new Date(task.plannedStart);
+      const yyyy = start.getFullYear();
+      const mm = String(start.getMonth() + 1).padStart(2, '0');
+      const dd = String(start.getDate()).padStart(2, '0');
+      const hh = String(start.getHours()).padStart(2, '0');
+      const min = String(start.getMinutes()).padStart(2, '0');
+      if (plannedStartDate !== `${yyyy}-${mm}-${dd}` || plannedStartTime !== `${hh}:${min}`) return true;
+    }
+    if (task.dueDate) {
+      const due = new Date(task.dueDate);
+      const yyyy = due.getFullYear();
+      const mm = String(due.getMonth() + 1).padStart(2, '0');
+      const dd = String(due.getDate()).padStart(2, '0');
+      const hh = String(due.getHours()).padStart(2, '0');
+      const min = String(due.getMinutes()).padStart(2, '0');
+      if (dueDate !== `${yyyy}-${mm}-${dd}` || dueDateTime !== `${hh}:${min}`) return true;
+    }
+    return false;
+  }, [task, title, details, departmentId, priority, approvalMode, plannedStartDate, plannedStartTime, dueDate, dueDateTime]);
 
-    if (!title.trim()) {
-      setErrorMessage('Task title is required.');
-      return;
+  const validateForm = React.useCallback((): { valid: boolean; error?: string } => {
+    if (!title.trim()) return { valid: false, error: 'Task title is required.' };
+    if (!departmentId) return { valid: false, error: 'Responsible department is required.' };
+    if (!plannedStartDate) return { valid: false, error: 'Planned start date is required.' };
+    if (!dueDate) return { valid: false, error: 'Due date is required.' };
+    if (isSunday(plannedStartDate)) return { valid: false, error: 'Planned start date cannot fall on a Sunday.' };
+    if (isSaturday(plannedStartDate)) return { valid: false, error: 'Planned start date cannot fall on a Saturday.' };
+    if (isSunday(dueDate)) return { valid: false, error: 'Due date cannot fall on a Sunday.' };
+    if (isSaturday(dueDate)) return { valid: false, error: 'Due date cannot fall on a Saturday.' };
+
+    const startIso = new Date(`${plannedStartDate}T${plannedStartTime || '09:00'}:00.000Z`).toISOString();
+    const dueIso = new Date(`${dueDate}T${dueDateTime || '18:00'}:00.000Z`).toISOString();
+    if (new Date(dueIso).getTime() <= new Date(startIso).getTime()) {
+      return { valid: false, error: 'Due date/time must be strictly later than planned start date/time.' };
     }
-    if (!departmentId) {
-      setErrorMessage('Responsible department is required.');
-      return;
-    }
-    if (!plannedStartDate) {
-      setErrorMessage('Planned start date is required.');
-      return;
-    }
-    if (!dueDate) {
-      setErrorMessage('Due date is required.');
-      return;
+    return { valid: true };
+  }, [title, departmentId, plannedStartDate, plannedStartTime, dueDate, dueDateTime]);
+
+  const performSave = React.useCallback(async (isManual = false): Promise<boolean> => {
+    const val = validateForm();
+    if (!val.valid) {
+      if (isManual) setErrorMessage(val.error || 'Please fix validation errors.');
+      return false;
     }
 
-    if (isSunday(plannedStartDate)) {
-      setErrorMessage('Planned start date cannot fall on a Sunday.');
-      return;
+    const currentSeq = ++saveSeqRef.current;
+    if (isManual) {
+      setIsSubmitting(true);
+      setErrorMessage(null);
     }
-    if (isSaturday(plannedStartDate)) {
-      setErrorMessage('Planned start date cannot fall on a Saturday.');
-      return;
-    }
-    if (isSunday(dueDate)) {
-      setErrorMessage('Due date cannot fall on a Sunday.');
-      return;
-    }
-    if (isSaturday(dueDate)) {
-      setErrorMessage('Due date cannot fall on a Saturday.');
-      return;
-    }
+    setAutosaveStatus('saving');
+    setAutosaveError(null);
 
     const startIso = new Date(`${plannedStartDate}T${plannedStartTime || '09:00'}:00.000Z`).toISOString();
     const dueIso = new Date(`${dueDate}T${dueDateTime || '18:00'}:00.000Z`).toISOString();
 
-    if (new Date(dueIso).getTime() <= new Date(startIso).getTime()) {
-      setErrorMessage('Due date/time must be strictly later than planned start date/time.');
-      return;
-    }
-
-    setIsSubmitting(true);
     try {
       const res = await taskManagementService.updateTask({
         taskId: task.id,
@@ -132,29 +159,67 @@ export const EditClientTaskModal: React.FC<EditClientTaskModalProps> = ({
         dueDate: dueIso
       });
 
+      if (currentSeq < latestCompletedSeqRef.current) return false;
+      latestCompletedSeqRef.current = currentSeq;
+
       if (res.error || !res.data) {
-        setErrorMessage(res.error || 'Failed to update task.');
-      } else {
-        const dept = departments.find((d) => d.id === departmentId);
-        const mergedTask: ClientTask = {
-          ...task,
-          ...res.data,
-          departmentName: dept?.name || task.departmentName,
-          assigneeId: task.assigneeId,
-          assigneeName: task.assigneeName,
-          assigneeAvatar: task.assigneeAvatar,
-          assigneeRole: task.assigneeRole,
-          clientName: task.clientName,
-          clientCompanyName: task.clientCompanyName
-        };
-        onSuccess(mergedTask);
-        onClose();
+        setAutosaveStatus('failed');
+        setAutosaveError(res.error || 'Failed to save task.');
+        if (isManual) setErrorMessage(res.error || 'Failed to update task.');
+        return false;
       }
+
+      const dept = departments.find((d) => d.id === departmentId);
+      const mergedTask: ClientTask = {
+        ...task,
+        ...res.data,
+        departmentName: dept?.name || task.departmentName,
+        assigneeId: task.assigneeId,
+        assigneeName: task.assigneeName,
+        assigneeAvatar: task.assigneeAvatar,
+        assigneeRole: task.assigneeRole,
+        clientName: task.clientName,
+        clientCompanyName: task.clientCompanyName
+      };
+
+      setAutosaveStatus('saved');
+      setAutosaveError(null);
+      onSuccess(mergedTask);
+      if (isManual) onClose();
+      return true;
     } catch (err: any) {
-      setErrorMessage(err?.message || 'Failed to update task.');
+      if (currentSeq >= latestCompletedSeqRef.current) {
+        latestCompletedSeqRef.current = currentSeq;
+        setAutosaveStatus('failed');
+        setAutosaveError(err?.message || 'Failed to auto-save task.');
+        if (isManual) setErrorMessage(err?.message || 'Failed to update task.');
+      }
+      return false;
     } finally {
-      setIsSubmitting(false);
+      if (isManual) setIsSubmitting(false);
     }
+  }, [
+    task, title, details, departmentId, priority, approvalMode,
+    plannedStartDate, plannedStartTime, dueDate, dueDateTime, departments, onSuccess, onClose, validateForm
+  ]);
+
+  // Debounced autosave effect for valid edits
+  useEffect(() => {
+    if (!isOpen || !isLoadedRef.current || !isDirty) return;
+    const val = validateForm();
+    if (!val.valid) return;
+
+    const timer = setTimeout(() => {
+      performSave(false);
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [isDirty, performSave, isOpen, validateForm]);
+
+  if (!isOpen) return null;
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await performSave(true);
   };
 
   const modalContent = (
@@ -330,29 +395,34 @@ export const EditClientTaskModal: React.FC<EditClientTaskModalProps> = ({
             />
           </div>
 
-          <div className="pt-3 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2 border-t border-gray-100 dark:border-dark-border">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={isSubmitting}
-              className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors min-h-[44px] sm:min-h-[38px] flex items-center justify-center cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-bold shadow-md shadow-brand-500/25 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 min-h-[44px] sm:min-h-[38px] cursor-pointer"
-            >
-              {isSubmitting ? (
-                <>
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                  <span>Saving...</span>
-                </>
-              ) : (
-                <span>Save Changes</span>
-              )}
-            </button>
+          <div className="pt-3 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2 border-t border-gray-100 dark:border-dark-border">
+            <div className="flex items-center">
+              <AutosaveBadge status={autosaveStatus} error={autosaveError} />
+            </div>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                disabled={isSubmitting}
+                className="px-4 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border text-gray-700 dark:text-gray-300 font-semibold hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors min-h-[44px] sm:min-h-[38px] flex items-center justify-center cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-bold shadow-md shadow-brand-500/25 transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 min-h-[44px] sm:min-h-[38px] cursor-pointer"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>Saving...</span>
+                  </>
+                ) : (
+                  <span>Save Changes</span>
+                )}
+              </button>
+            </div>
           </div>
         </form>
       </div>

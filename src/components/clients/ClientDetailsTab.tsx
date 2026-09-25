@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { 
   Building2, 
   Link2, Check, AlertCircle, Save, Loader2, Plus, 
@@ -33,6 +33,7 @@ import {
 import { storageService, useSignedUrl } from '../../lib/storageService';
 import { archiveService } from '../../lib/archiveService';
 import { useSafeParams } from '../../lib/safeRouterHooks';
+import { AutosaveBadge, AutosaveStatus } from '../../lib/autosaveUtils';
 
 interface ClientDetailsTabProps {
   client: ClientRecord;
@@ -107,6 +108,15 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
   const [slackUrl, setSlackUrl] = useState(client.links?.slack_channel || '');
   const [whatsappUrl, setWhatsappUrl] = useState(client.links?.whatsapp_group || '');
   const [pocNumber, setPocNumber] = useState(client.links?.poc_number || '');
+  const [caseStudiesText, setCaseStudiesText] = useState(client.links?.case_studies || '');
+  const [requirementDocsUrl, setRequirementDocsUrl] = useState(client.links?.requirement_docs || client.links?.requirement_documents || '');
+  const [ghlAccountUrl, setGhlAccountUrl] = useState(client.links?.gohighlevel || client.links?.ghl_account || '');
+
+  // Autosave State & Race-Condition Sequencer
+  const [autosaveStatus, setAutosaveStatus] = useState<AutosaveStatus>('idle');
+  const [autosaveError, setAutosaveError] = useState<string | null>(null);
+  const saveSeqRef = React.useRef(0);
+  const latestCompletedSeqRef = React.useRef(0);
 
   // Dynamic LinkedIn Profiles State
   const [profiles, setProfiles] = useState<ClientLinkedInProfile[]>(
@@ -131,7 +141,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
   const routeParams = useSafeParams<{ clientId?: string }>();
 
   // Ensure on-screen client matches URL parameter to prevent cross-client saves
-  const verifyClientUrlMatch = (): boolean => {
+  const verifyClientUrlMatch = useCallback((): boolean => {
     let pathClientId: string | undefined;
     if (typeof window !== 'undefined') {
       const pathnameMatches = window.location?.pathname?.match(/\/clients\/([a-zA-Z0-9_-]+)/);
@@ -143,7 +153,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
       return false;
     }
     return true;
-  };
+  }, [client.id, client.companyName, routeParams.clientId]);
 
   // Check if form is modified from saved client prop
   const isDirty = useMemo(() => {
@@ -180,6 +190,9 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     if (slackUrl !== (client.links?.slack_channel || '')) return true;
     if (whatsappUrl !== (client.links?.whatsapp_group || '')) return true;
     if (pocNumber !== (client.links?.poc_number || client.links?.poc_whatsapp || '')) return true;
+    if (caseStudiesText !== (client.links?.case_studies || '')) return true;
+    if (requirementDocsUrl !== (client.links?.requirement_docs || client.links?.requirement_documents || '')) return true;
+    if (ghlAccountUrl !== (client.links?.gohighlevel || client.links?.ghl_account || '')) return true;
     return false;
   }, [
     companyName, clientName, businessBio, industry, logoUrl, pkg, managerId,
@@ -187,7 +200,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     websiteUrl, flcLandingPageUrl, brandIdentityUrl, driveUrl, importantDocsUrl, masterBusinessDocUrl, staticCreativesUrl,
     videosUrl, vslUrl, testimonialsUrl, gridUrl, socialMediaManagementUrl, linkedinManagementUrl, seoManagementUrl,
     emailMarketingManagementUrl, paidAdsManagementUrl, facebookUrl, instagramUrl, linkedinPageUrl,
-    slackUrl, whatsappUrl, pocNumber, client
+    slackUrl, whatsappUrl, pocNumber, caseStudiesText, requirementDocsUrl, ghlAccountUrl, client
   ]);
 
   // Load draft if present in sessionStorage, else initialize from client prop
@@ -229,6 +242,9 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
         setSlackUrl(parsed.slackUrl ?? (client.links?.slack_channel || ''));
         setWhatsappUrl(parsed.whatsappUrl ?? (client.links?.whatsapp_group || ''));
         setPocNumber(parsed.pocNumber ?? (client.links?.poc_number || client.links?.poc_whatsapp || ''));
+        setCaseStudiesText(parsed.caseStudiesText ?? (client.links?.case_studies || ''));
+        setRequirementDocsUrl(parsed.requirementDocsUrl ?? (client.links?.requirement_docs || client.links?.requirement_documents || ''));
+        setGhlAccountUrl(parsed.ghlAccountUrl ?? (client.links?.gohighlevel || client.links?.ghl_account || ''));
         setProfiles(client.linkedinProfiles || []);
         return;
       }
@@ -269,6 +285,9 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     setSlackUrl(client.links?.slack_channel || '');
     setWhatsappUrl(client.links?.whatsapp_group || '');
     setPocNumber(client.links?.poc_number || client.links?.poc_whatsapp || '');
+    setCaseStudiesText(client.links?.case_studies || '');
+    setRequirementDocsUrl(client.links?.requirement_docs || client.links?.requirement_documents || '');
+    setGhlAccountUrl(client.links?.gohighlevel || client.links?.ghl_account || '');
     setProfiles(client.linkedinProfiles || []);
   }, [client]);
 
@@ -329,7 +348,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     websiteUrl, flcLandingPageUrl, brandIdentityUrl, driveUrl, importantDocsUrl, masterBusinessDocUrl, staticCreativesUrl,
     videosUrl, vslUrl, testimonialsUrl, gridUrl, socialMediaManagementUrl, linkedinManagementUrl, seoManagementUrl,
     emailMarketingManagementUrl, paidAdsManagementUrl, facebookUrl, instagramUrl, linkedinPageUrl,
-    slackUrl, whatsappUrl, pocNumber
+    slackUrl, whatsappUrl, pocNumber, caseStudiesText, requirementDocsUrl, ghlAccountUrl
   ]);
 
   const handleConfirmDiscard = () => {
@@ -370,7 +389,12 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     setSlackUrl(client.links?.slack_channel || '');
     setWhatsappUrl(client.links?.whatsapp_group || '');
     setPocNumber(client.links?.poc_number || client.links?.poc_whatsapp || '');
+    setCaseStudiesText(client.links?.case_studies || '');
+    setRequirementDocsUrl(client.links?.requirement_docs || client.links?.requirement_documents || '');
+    setGhlAccountUrl(client.links?.gohighlevel || client.links?.ghl_account || '');
     setErrorMsg(null);
+    setAutosaveStatus('idle');
+    setAutosaveError(null);
     setShowDiscardModal(false);
   };
 
@@ -452,108 +476,176 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     }
   };
 
-  // Save Core Client Details and Workspace Links
-  const handleSaveDetails = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setErrorMsg(null);
-    setSuccessMsg(null);
+  // Core save routine with race-condition guards
+  const performSave = useCallback(
+    async (isManualClick = false): Promise<boolean> => {
+      if (!verifyClientUrlMatch()) {
+        return false;
+      }
 
-    if (!verifyClientUrlMatch()) {
-      return;
-    }
+      if (!companyName.trim()) {
+        if (isManualClick) setErrorMsg('Company Name is required.');
+        return false;
+      }
+      if (!clientName.trim()) {
+        if (isManualClick) setErrorMsg('Client/Owner Name is required.');
+        return false;
+      }
 
-    if (!companyName.trim()) {
-      setErrorMsg('Company Name is required.');
-      return;
-    }
-    if (!clientName.trim()) {
-      setErrorMsg('Client/Owner Name is required.');
-      return;
-    }
+      const rawLinks: Partial<Record<ClientLinkType, string>> = {
+        website: websiteUrl,
+        flc_landing_page: flcLandingPageUrl,
+        brand_identity: brandIdentityUrl,
+        google_drive: driveUrl,
+        important_docs: importantDocsUrl,
+        important_documents: importantDocsUrl,
+        master_business_doc: masterBusinessDocUrl,
+        master_business_document: masterBusinessDocUrl,
+        static_creatives: staticCreativesUrl,
+        videos: videosUrl,
+        vsl: vslUrl,
+        testimonials: testimonialsUrl,
+        grid: gridUrl,
+        social_media_management: socialMediaManagementUrl,
+        linkedin_management: linkedinManagementUrl,
+        seo_management: seoManagementUrl,
+        email_marketing_management: emailMarketingManagementUrl,
+        paid_ads_management: paidAdsManagementUrl,
+        facebook: facebookUrl,
+        instagram: instagramUrl,
+        linkedin_company_page: linkedinPageUrl,
+        slack_channel: slackUrl,
+        whatsapp_group: whatsappUrl,
+        poc_number: pocNumber,
+        poc_whatsapp: pocNumber,
+        case_studies: caseStudiesText,
+        requirement_docs: requirementDocsUrl,
+        requirement_documents: requirementDocsUrl,
+        gohighlevel: ghlAccountUrl,
+        ghl_account: ghlAccountUrl
+      };
 
-    const rawLinks: Partial<Record<ClientLinkType, string>> = {
-      website: websiteUrl,
-      flc_landing_page: flcLandingPageUrl,
-      brand_identity: brandIdentityUrl,
-      google_drive: driveUrl,
-      important_docs: importantDocsUrl,
-      important_documents: importantDocsUrl,
-      master_business_doc: masterBusinessDocUrl,
-      master_business_document: masterBusinessDocUrl,
-      static_creatives: staticCreativesUrl,
-      videos: videosUrl,
-      vsl: vslUrl,
-      testimonials: testimonialsUrl,
-      grid: gridUrl,
-      social_media_management: socialMediaManagementUrl,
-      linkedin_management: linkedinManagementUrl,
-      seo_management: seoManagementUrl,
-      email_marketing_management: emailMarketingManagementUrl,
-      paid_ads_management: paidAdsManagementUrl,
-      facebook: facebookUrl,
-      instagram: instagramUrl,
-      linkedin_company_page: linkedinPageUrl,
-      slack_channel: slackUrl,
-      whatsapp_group: whatsappUrl,
-      poc_number: pocNumber,
-      poc_whatsapp: pocNumber
-    };
-
-    for (const [key, raw] of Object.entries(rawLinks)) {
-      if (raw && raw.trim()) {
-        if (key === 'poc_number' || key === 'poc_whatsapp') {
-          continue;
-        }
-        const sanitized = sanitizeUrl(raw);
-        if (!sanitized) {
-          setErrorMsg(`Invalid URL for ${key.replace(/_/g, ' ')}. Only http:// and https:// URLs are allowed.`);
-          return;
+      for (const [key, raw] of Object.entries(rawLinks)) {
+        if (raw && raw.trim()) {
+          // Exempt poc_number, poc_whatsapp, and case_studies from URL check
+          if (key === 'poc_number' || key === 'poc_whatsapp' || key === 'case_studies') {
+            continue;
+          }
+          const sanitized = sanitizeUrl(raw);
+          if (!sanitized) {
+            if (isManualClick) {
+              setErrorMsg(`Invalid URL for ${key.replace(/_/g, ' ')}. Only http:// and https:// URLs are allowed.`);
+            }
+            return false;
+          }
         }
       }
-    }
 
-    setIsSaving(true);
-
-    try {
-      const result = await clientManagementService.updateClient(
-        client.id,
-        {
-          companyName: companyName.trim(),
-          clientName: clientName.trim(),
-          businessBio: businessBio.trim() || null,
-          industry: industry.trim() || null,
-          logoUrl: logoUrl || null,
-          package: pkg,
-          operationalManagerId: managerId,
-          activationDate,
-          status,
-          pauseReason: status === 'Paused' ? pauseReason : null,
-          requiredLinkedinProfileCount: Math.max(1, requiredLinkedInCount),
-          links: rawLinks
-        },
-        currentUserProfile?.id
-      );
-
-      if (result.error || !result.data) {
-        setErrorMsg(result.error || 'Failed to update client details.');
-        setIsSaving(false);
-        return;
+      const currentSeq = ++saveSeqRef.current;
+      if (isManualClick) {
+        setIsSaving(true);
+        setErrorMsg(null);
+        setSuccessMsg(null);
       }
+      setAutosaveStatus('saving');
+      setAutosaveError(null);
 
       try {
-        sessionStorage.removeItem(`ops_hub_client_links_draft_${client.id}`);
-      } catch {}
+        const result = await clientManagementService.updateClient(
+          client.id,
+          {
+            companyName: companyName.trim(),
+            clientName: clientName.trim(),
+            businessBio: businessBio.trim() || null,
+            industry: industry.trim() || null,
+            logoUrl: logoUrl || null,
+            package: pkg,
+            operationalManagerId: managerId,
+            activationDate,
+            status,
+            pauseReason: status === 'Paused' ? pauseReason : null,
+            requiredLinkedinProfileCount: Math.max(1, requiredLinkedInCount),
+            links: rawLinks
+          },
+          currentUserProfile?.id
+        );
 
-      setSuccessMsg('Client configuration updated successfully.');
-      useOpsStore.getState().updateClientRecord(result.data);
-      onClientUpdated(result.data);
-      setIsSaving(false);
+        // Sequence guard: if an earlier request arrives after a newer save has finished, ignore
+        if (currentSeq < latestCompletedSeqRef.current) {
+          return false;
+        }
+        latestCompletedSeqRef.current = currentSeq;
 
-      setTimeout(() => setSuccessMsg(null), 3000);
-    } catch (err: any) {
-      setErrorMsg(err.message || 'An unexpected error occurred.');
-      setIsSaving(false);
+        if (result.error || !result.data) {
+          setAutosaveStatus('failed');
+          setAutosaveError(result.error || 'Failed to save changes.');
+          if (isManualClick) {
+            setErrorMsg(result.error || 'Failed to update client details.');
+          }
+          return false;
+        }
+
+        try {
+          sessionStorage.removeItem(`ops_hub_client_links_draft_${client.id}`);
+        } catch {}
+
+        setAutosaveStatus('saved');
+        setAutosaveError(null);
+        if (isManualClick) {
+          setSuccessMsg('Client configuration updated successfully.');
+          setTimeout(() => setSuccessMsg(null), 3000);
+        }
+        useOpsStore.getState().updateClientRecord(result.data);
+        onClientUpdated(result.data);
+        return true;
+      } catch (err: any) {
+        if (currentSeq >= latestCompletedSeqRef.current) {
+          latestCompletedSeqRef.current = currentSeq;
+          setAutosaveStatus('failed');
+          setAutosaveError(err?.message || 'Failed to auto-save.');
+          if (isManualClick) {
+            setErrorMsg(err?.message || 'An unexpected error occurred.');
+          }
+        }
+        return false;
+      } finally {
+        if (isManualClick) {
+          setIsSaving(false);
+        }
+      }
+    },
+    [
+      client.id, companyName, clientName, businessBio, industry, logoUrl, pkg, managerId,
+      activationDate, status, pauseReason, requiredLinkedInCount,
+      websiteUrl, flcLandingPageUrl, brandIdentityUrl, driveUrl, importantDocsUrl, masterBusinessDocUrl,
+      staticCreativesUrl, videosUrl, vslUrl, testimonialsUrl, gridUrl, socialMediaManagementUrl,
+      linkedinManagementUrl, seoManagementUrl, emailMarketingManagementUrl, paidAdsManagementUrl,
+      facebookUrl, instagramUrl, linkedinPageUrl, slackUrl, whatsappUrl, pocNumber,
+      caseStudiesText, requirementDocsUrl, ghlAccountUrl, currentUserProfile?.id, onClientUpdated,
+      verifyClientUrlMatch
+    ]
+  );
+
+  // Debounced Autosave Effect for valid changes
+  useEffect(() => {
+    if (!isDirty) {
+      return;
     }
+    if (!companyName.trim() || !clientName.trim()) {
+      return;
+    }
+
+    const timer = setTimeout(() => {
+      performSave(false);
+    }, 1200);
+
+    return () => clearTimeout(timer);
+  }, [isDirty, performSave, companyName, clientName]);
+
+  // Save Core Client Details and Workspace Links via manual click
+  const handleSaveDetails = async (e: React.FormEvent) => {
+    e.preventDefault();
+    await performSave(true);
   };
 
   // Add a new LinkedIn Profile
@@ -721,6 +813,8 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
           </div>
 
           <div className="flex items-center gap-2.5 shrink-0">
+            <AutosaveBadge status={autosaveStatus} error={autosaveError} />
+
             {isDirty && (
               <button
                 type="button"
@@ -1292,7 +1386,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
             <div>
               <div className="flex items-center justify-between mb-1">
                 <label htmlFor="edit-testimonials" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
-                  Testimonials URL
+                  Testimonials (Videos) URL
                 </label>
                 {isLinkLocked('testimonials') && (
                   <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
@@ -1308,7 +1402,79 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 value={testimonialsUrl}
                 onChange={(e) => setTestimonialsUrl(e.target.value)}
                 disabled={isLinkLocked('testimonials')}
-                placeholder="https://... (Testimonials Link)"
+                placeholder="https://... (Testimonials Video Link)"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="edit-case-studies" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  Case Studies (Text)
+                </label>
+                {isLinkLocked('case_studies') && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
+              <textarea
+                id="edit-case-studies"
+                data-testid="edit-case-studies"
+                rows={3}
+                value={caseStudiesText}
+                onChange={(e) => setCaseStudiesText(e.target.value)}
+                disabled={isLinkLocked('case_studies')}
+                placeholder="Enter client case studies text / overview..."
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed resize-y"
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="edit-requirement-docs" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  Requirement Documents URL
+                </label>
+                {isLinkLocked('requirement_docs') && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
+              <input
+                id="edit-requirement-docs"
+                data-testid="edit-requirement-docs"
+                type="url"
+                value={requirementDocsUrl}
+                onChange={(e) => setRequirementDocsUrl(e.target.value)}
+                disabled={isLinkLocked('requirement_docs')}
+                placeholder="https://... (Requirement Documents Link)"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="edit-gohighlevel" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  GoHighLevel Account URL
+                </label>
+                {isLinkLocked('gohighlevel') && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
+              <input
+                id="edit-gohighlevel"
+                data-testid="edit-gohighlevel"
+                type="url"
+                value={ghlAccountUrl}
+                onChange={(e) => setGhlAccountUrl(e.target.value)}
+                disabled={isLinkLocked('gohighlevel')}
+                placeholder="https://app.gohighlevel.com/... (GHL Account Link - No credentials stored)"
                 className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>

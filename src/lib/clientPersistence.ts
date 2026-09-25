@@ -98,3 +98,26 @@ export function resolveSelectedClientId({
   const firstActive = clients.find((c) => c.status !== 'Archived');
   return firstActive ? firstActive.id : clients[0].id;
 }
+
+/**
+ * Returns any locally cached link fallbacks for a client (e.g. for unmigrated preview resilience).
+ */
+export function getStoredClientLinksFallback(clientId: string): Record<string, string> {
+  if (!clientId || typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(`ops_hub_client_ext_links_${clientId}`);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Persists locally cached link fallbacks for a client.
+ */
+export function setStoredClientLinksFallback(clientId: string, links: Record<string, string>): void {
+  if (!clientId || typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(`ops_hub_client_ext_links_${clientId}`, JSON.stringify(links));
+  } catch {}
+}

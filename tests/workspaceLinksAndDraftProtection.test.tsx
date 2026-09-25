@@ -169,7 +169,7 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
       'Videos',
       'Grid',
       'VSL',
-      'Testimonials',
+      'Testimonials (Videos)',
       'Social Media Management',
       'LinkedIn Management',
       'SEO Management',
@@ -272,7 +272,7 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
       expect(screen.queryByRole('link', { name: /Landing Page/i })).not.toBeInTheDocument();
       expect(screen.getByText('Master Business Document')).toBeInTheDocument();
       expect(screen.queryByRole('link', { name: /Master Business Document/i })).not.toBeInTheDocument();
-      expect(screen.getByText('Testimonials')).toBeInTheDocument();
+      expect(screen.getByText('Testimonials (Videos)')).toBeInTheDocument();
       expect(screen.queryByRole('link', { name: /Testimonials/i })).not.toBeInTheDocument();
       expect(screen.getByText('Social Media Management')).toBeInTheDocument();
       expect(screen.queryByRole('link', { name: /Social Media Management/i })).not.toBeInTheDocument();
@@ -338,7 +338,7 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
       expect(screen.getByText('Videos')).toBeInTheDocument();
       expect(screen.getByText('Grid')).toBeInTheDocument();
       expect(screen.getByText('VSL')).toBeInTheDocument();
-      expect(screen.getByText('Testimonials')).toBeInTheDocument();
+      expect(screen.getByText('Testimonials (Videos)')).toBeInTheDocument();
       expect(screen.getByText('Social Media Management')).toBeInTheDocument();
       expect(screen.getByText('LinkedIn Management')).toBeInTheDocument();
       expect(screen.getByText('SEO Management')).toBeInTheDocument();
@@ -380,7 +380,7 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
     expect((screen.getByLabelText(/Static Creatives URL/i) as HTMLInputElement).value).toBe('https://drive.google.com/drive/folders/apex-statics');
     expect((screen.getByLabelText(/Videos URL/i) as HTMLInputElement).value).toBe('https://drive.google.com/drive/folders/apex-videos');
     expect((screen.getByLabelText(/VSL \(Video Sales Letter\) URL/i) as HTMLInputElement).value).toBe('https://vimeo.com/apex-vsl-2026');
-    expect((screen.getByLabelText(/Testimonials URL/i) as HTMLInputElement).value).toBe('https://drive.google.com/drive/folders/apex-testimonials');
+    expect((screen.getByLabelText(/Testimonials( \(Videos\))? URL/i) as HTMLInputElement).value).toBe('https://drive.google.com/drive/folders/apex-testimonials');
     expect((screen.getByLabelText(/Grid URL/i) as HTMLInputElement).value).toBe('https://grid.app/apex-dashboard');
     expect((screen.getByLabelText(/Social Media Management URL/i) as HTMLInputElement).value).toBe('https://buffer.com/apex');
     expect((screen.getByLabelText(/LinkedIn Management URL/i) as HTMLInputElement).value).toBe('https://linkedin.com/campaignmanager/apex');
@@ -917,7 +917,7 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
 
     // Missing links are rendered as non-clickable containers with title="Link not added" and aria-disabled="true"
     const missingElements = screen.getAllByTitle('Link not added');
-    expect(missingElements.length).toBe(21); // 22 total - 1 active = 21 missing
+    expect(missingElements.length).toBe(24); // 25 total - 1 active = 24 missing
 
     missingElements.forEach((el) => {
       expect(el).toHaveAttribute('aria-disabled', 'true');
@@ -956,7 +956,7 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
     );
 
     const mbdInput = screen.getByLabelText(/Master Business Document URL/i) as HTMLInputElement;
-    const testInput = screen.getByLabelText(/Testimonials URL/i) as HTMLInputElement;
+    const testInput = screen.getByLabelText(/Testimonials( \(Videos\))? URL/i) as HTMLInputElement;
     expect(mbdInput).toBeInTheDocument();
     expect(testInput).toBeInTheDocument();
 

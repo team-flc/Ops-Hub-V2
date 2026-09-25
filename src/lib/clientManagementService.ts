@@ -15,6 +15,7 @@ import {
   ClientLinkedInProfile,
   LinkedInReadiness
 } from '../types';
+import { getStoredClientLinksFallback, setStoredClientLinksFallback } from './clientPersistence';
 
 /**
  * Validate and sanitize workspace/communication URLs.
@@ -179,7 +180,11 @@ export const LINK_ALIASES: Record<string, string> = {
   master_business_doc: 'master_business_document',
   master_business_document: 'master_business_doc',
   poc_number: 'poc_whatsapp',
-  poc_whatsapp: 'poc_number'
+  poc_whatsapp: 'poc_number',
+  requirement_docs: 'requirement_documents',
+  requirement_documents: 'requirement_docs',
+  gohighlevel: 'ghl_account',
+  ghl_account: 'gohighlevel'
 };
 
 /**
@@ -217,6 +222,18 @@ export function normalizeClientLinks(
     normalized.poc_whatsapp = poc;
   }
 
+  const req = normalized.requirement_docs || normalized.requirement_documents;
+  if (req) {
+    normalized.requirement_docs = req;
+    normalized.requirement_documents = req;
+  }
+
+  const ghl = normalized.gohighlevel || normalized.ghl_account;
+  if (ghl) {
+    normalized.gohighlevel = ghl;
+    normalized.ghl_account = ghl;
+  }
+
   return normalized;
 }
 
@@ -235,7 +252,7 @@ async function saveClientLinkRecord(
   }
 
   let cleanUrl: string | null = null;
-  if (key === 'poc_number' || key === 'poc_whatsapp') {
+  if (key === 'poc_number' || key === 'poc_whatsapp' || key === 'case_studies') {
     cleanUrl = (rawUrl && typeof rawUrl === 'string' && rawUrl.trim()) ? rawUrl.trim() : null;
   } else {
     cleanUrl = sanitizeUrl(rawUrl);
@@ -245,6 +262,12 @@ async function saveClientLinkRecord(
   const keysToClean = aliasKey ? [key, aliasKey] : [key];
 
   if (!cleanUrl) {
+    // Clean local fallback storage
+    const fallback = getStoredClientLinksFallback(clientId);
+    delete fallback[key];
+    if (aliasKey) delete fallback[aliasKey];
+    setStoredClientLinksFallback(clientId, fallback);
+
     // User explicitly cleared the field: delete both primary and alias rows
     for (const k of keysToClean) {
       const { error: delErr } = await supabase!
@@ -311,8 +334,22 @@ async function saveClientLinkRecord(
   }
 
   if (upsertErr) {
+    // If database check constraint on unmigrated preview rejects new link type, safely cache locally
+    if (upsertErr.message?.includes('check constraint') || (upsertErr as any).code === '23514') {
+      const fallback = getStoredClientLinksFallback(clientId);
+      fallback[key] = cleanUrl;
+      if (aliasKey) fallback[aliasKey] = cleanUrl;
+      setStoredClientLinksFallback(clientId, fallback);
+      return {};
+    }
     return { error: `Failed to save ${key.replace(/_/g, ' ')}: ${upsertErr.message}` };
   }
+
+  // Also sync cleanUrl into persistent client fallback cache
+  const fallback = getStoredClientLinksFallback(clientId);
+  fallback[key] = cleanUrl;
+  if (aliasKey) fallback[aliasKey] = cleanUrl;
+  setStoredClientLinksFallback(clientId, fallback);
 
   return {};
 }
@@ -383,9 +420,14 @@ export const clientManagementService = {
             linksMap[l.client_id][l.link_type as ClientLinkType] = l.url.trim();
           }
         }
-        for (const cid of Object.keys(linksMap)) {
-          linksMap[cid] = normalizeClientLinks(linksMap[cid]);
-        }
+      }
+
+      for (const cid of clientIds) {
+        const localFallback = getStoredClientLinksFallback(cid);
+        linksMap[cid] = normalizeClientLinks({
+          ...(localFallback as Partial<Record<ClientLinkType, string>>),
+          ...(linksMap[cid] || {})
+        });
       }
 
       // 2. Fetch Active LinkedIn Profiles
@@ -893,7 +935,7 @@ export const clientManagementService = {
     }
 
     try {
-      const { data: previousClient, error: prevClientError } = await supabase
+      const { data: previousClient, error: _prevClientError } = await supabase
         .from('clients')
         .select('*')
         .eq('id', clientId)

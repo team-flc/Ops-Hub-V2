@@ -8,6 +8,14 @@ import {
   TaskApprovalMode
 } from '../../types';
 import { taskTemplateService } from '../../lib/taskTemplateService';
+import { 
+  saveFormDraft, 
+  loadFormDraft, 
+  clearFormDraft, 
+  DraftRestoredBanner, 
+  AutosaveBadge, 
+  AutosaveStatus 
+} from '../../lib/autosaveUtils';
 
 interface CreateEditTemplateModalProps {
   isOpen: boolean;
@@ -37,10 +45,20 @@ export const CreateEditTemplateModal: React.FC<CreateEditTemplateModalProps> = (
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [autosaveStatus, setAutosaveStatus] = useState<AutosaveStatus>('idle');
+  const [autosaveError, setAutosaveError] = useState<string | null>(null);
+  const [draftRestored, setDraftRestored] = useState(false);
+  const saveSeqRef = React.useRef(0);
+  const latestCompletedSeqRef = React.useRef(0);
+  const isLoadedRef = React.useRef(false);
+  const DRAFT_KEY = 'opshub_draft_new_task_template';
 
   useEffect(() => {
     if (isOpen) {
       setErrorMessage(null);
+      setAutosaveStatus('idle');
+      setAutosaveError(null);
+
       if (template) {
         setName(template.name);
         setDescription(template.description || '');
@@ -50,18 +68,157 @@ export const CreateEditTemplateModal: React.FC<CreateEditTemplateModalProps> = (
         setDefaultApprovalMode(template.defaultApprovalMode || 'Internal Only');
         setSuggestedDurationDays(template.suggestedDurationDays || 3);
         setTaskDetails(template.taskDetails || '');
+        setDraftRestored(false);
       } else {
-        setName('');
-        setDescription('');
-        setDepartmentId(departments.length > 0 ? departments[0].id : '');
-        setDefaultTaskTitle('');
-        setDefaultPriority('Normal');
-        setDefaultApprovalMode('Internal Only');
-        setSuggestedDurationDays(3);
-        setTaskDetails('');
+        const draft = loadFormDraft<any>(DRAFT_KEY);
+        if (draft) {
+          if (draft.name !== undefined) setName(draft.name);
+          if (draft.description !== undefined) setDescription(draft.description);
+          if (draft.departmentId !== undefined) setDepartmentId(draft.departmentId);
+          if (draft.defaultTaskTitle !== undefined) setDefaultTaskTitle(draft.defaultTaskTitle);
+          if (draft.defaultPriority !== undefined) setDefaultPriority(draft.defaultPriority);
+          if (draft.defaultApprovalMode !== undefined) setDefaultApprovalMode(draft.defaultApprovalMode);
+          if (draft.suggestedDurationDays !== undefined) setSuggestedDurationDays(draft.suggestedDurationDays);
+          if (draft.taskDetails !== undefined) setTaskDetails(draft.taskDetails);
+          setDraftRestored(true);
+        } else {
+          setName('');
+          setDescription('');
+          setDepartmentId(departments.length > 0 ? departments[0].id : '');
+          setDefaultTaskTitle('');
+          setDefaultPriority('Normal');
+          setDefaultApprovalMode('Internal Only');
+          setSuggestedDurationDays(3);
+          setTaskDetails('');
+          setDraftRestored(false);
+        }
       }
+      isLoadedRef.current = true;
+    } else {
+      isLoadedRef.current = false;
     }
   }, [isOpen, template, departments]);
+
+  const isDirty = React.useMemo(() => {
+    if (!isEditing || !template) return false;
+    if (name !== template.name) return true;
+    if (description !== (template.description || '')) return true;
+    if (departmentId !== template.departmentId) return true;
+    if (defaultTaskTitle !== template.defaultTaskTitle) return true;
+    if (defaultPriority !== (template.defaultPriority || 'Normal')) return true;
+    if (defaultApprovalMode !== (template.defaultApprovalMode || 'Internal Only')) return true;
+    if (suggestedDurationDays !== (template.suggestedDurationDays || 3)) return true;
+    if (taskDetails !== (template.taskDetails || '')) return true;
+    return false;
+  }, [isEditing, template, name, description, departmentId, defaultTaskTitle, defaultPriority, defaultApprovalMode, suggestedDurationDays, taskDetails]);
+
+  const validateForm = React.useCallback((): { valid: boolean; error?: string } => {
+    if (!name.trim()) return { valid: false, error: 'Template name is required.' };
+    if (!departmentId) return { valid: false, error: 'Responsible department is required.' };
+    if (!defaultTaskTitle.trim()) return { valid: false, error: 'Default task title is required.' };
+    if (suggestedDurationDays < 1 || suggestedDurationDays > 30) {
+      return { valid: false, error: 'Suggested duration must be between 1 and 30 business days.' };
+    }
+    return { valid: true };
+  }, [name, departmentId, defaultTaskTitle, suggestedDurationDays]);
+
+  const performAutosave = React.useCallback(async (isManual = false): Promise<boolean> => {
+    if (!isEditing || !template) return false;
+    const val = validateForm();
+    if (!val.valid) {
+      if (isManual) setErrorMessage(val.error || 'Please fix errors.');
+      return false;
+    }
+
+    const currentSeq = ++saveSeqRef.current;
+    if (isManual) {
+      setIsSubmitting(true);
+      setErrorMessage(null);
+    }
+    setAutosaveStatus('saving');
+    setAutosaveError(null);
+
+    try {
+      const res = await taskTemplateService.updateTemplate(template.id, {
+        name: name.trim(),
+        description: description.trim() || undefined,
+        departmentId,
+        defaultTaskTitle: defaultTaskTitle.trim(),
+        taskDetails: taskDetails.trim() || undefined,
+        defaultPriority,
+        defaultApprovalMode,
+        suggestedDurationDays,
+        expectedVersion: template.version
+      });
+
+      if (currentSeq < latestCompletedSeqRef.current) return false;
+      latestCompletedSeqRef.current = currentSeq;
+
+      if (res.error || !res.data) {
+        setAutosaveStatus('failed');
+        setAutosaveError(res.error || 'Failed to auto-save template.');
+        if (isManual) setErrorMessage(res.error || 'Failed to update template.');
+        return false;
+      }
+
+      setAutosaveStatus('saved');
+      setAutosaveError(null);
+      onSuccess(res.data);
+      if (isManual) onClose();
+      return true;
+    } catch (err: any) {
+      if (currentSeq >= latestCompletedSeqRef.current) {
+        latestCompletedSeqRef.current = currentSeq;
+        setAutosaveStatus('failed');
+        setAutosaveError(err?.message || 'Failed to auto-save template.');
+        if (isManual) setErrorMessage(err?.message || 'Failed to update template.');
+      }
+      return false;
+    } finally {
+      if (isManual) setIsSubmitting(false);
+    }
+  }, [isEditing, template, name, description, departmentId, defaultTaskTitle, taskDetails, defaultPriority, defaultApprovalMode, suggestedDurationDays, onSuccess, onClose, validateForm]);
+
+  // Debounced autosave effect for editing
+  useEffect(() => {
+    if (!isOpen || !isLoadedRef.current || !isEditing || !isDirty) return;
+    const val = validateForm();
+    if (!val.valid) return;
+
+    const timer = setTimeout(() => {
+      performAutosave(false);
+    }, 1200);
+    return () => clearTimeout(timer);
+  }, [isOpen, isEditing, isDirty, performAutosave, validateForm]);
+
+  // Draft auto-save for new templates
+  useEffect(() => {
+    if (!isOpen || !isLoadedRef.current || isEditing) return;
+    if (name.trim() || defaultTaskTitle.trim() || taskDetails.trim() || description.trim()) {
+      saveFormDraft(DRAFT_KEY, {
+        name,
+        description,
+        departmentId,
+        defaultTaskTitle,
+        defaultPriority,
+        defaultApprovalMode,
+        suggestedDurationDays,
+        taskDetails
+      });
+    }
+  }, [isOpen, isEditing, name, description, departmentId, defaultTaskTitle, defaultPriority, defaultApprovalMode, suggestedDurationDays, taskDetails]);
+
+  const handleClearDraft = () => {
+    clearFormDraft(DRAFT_KEY);
+    setDraftRestored(false);
+    setName('');
+    setDescription('');
+    setDefaultTaskTitle('');
+    setDefaultPriority('Normal');
+    setDefaultApprovalMode('Internal Only');
+    setSuggestedDurationDays(3);
+    setTaskDetails('');
+  };
 
   if (!isOpen) return null;
 
@@ -69,62 +226,37 @@ export const CreateEditTemplateModal: React.FC<CreateEditTemplateModalProps> = (
     e.preventDefault();
     setErrorMessage(null);
 
-    if (!name.trim()) {
-      setErrorMessage('Template name is required.');
+    const val = validateForm();
+    if (!val.valid) {
+      setErrorMessage(val.error || 'Please fix errors.');
       return;
     }
-    if (!departmentId) {
-      setErrorMessage('Responsible department is required.');
-      return;
-    }
-    if (!defaultTaskTitle.trim()) {
-      setErrorMessage('Default task title is required.');
-      return;
-    }
-    if (suggestedDurationDays < 1 || suggestedDurationDays > 30) {
-      setErrorMessage('Suggested duration must be between 1 and 30 business days.');
+
+    if (isEditing && template) {
+      await performAutosave(true);
       return;
     }
 
     setIsSubmitting(true);
     try {
-      if (isEditing && template) {
-        const res = await taskTemplateService.updateTemplate(template.id, {
-          name: name.trim(),
-          description: description.trim() || undefined,
-          departmentId,
-          defaultTaskTitle: defaultTaskTitle.trim(),
-          taskDetails: taskDetails.trim() || undefined,
-          defaultPriority,
-          defaultApprovalMode,
-          suggestedDurationDays,
-          expectedVersion: template.version
-        });
+      const res = await taskTemplateService.createTemplate({
+        name: name.trim(),
+        description: description.trim() || undefined,
+        departmentId,
+        defaultTaskTitle: defaultTaskTitle.trim(),
+        taskDetails: taskDetails.trim() || undefined,
+        defaultPriority,
+        defaultApprovalMode,
+        suggestedDurationDays
+      });
 
-        if (res.error || !res.data) {
-          setErrorMessage(res.error || 'Failed to update template.');
-        } else {
-          onSuccess(res.data);
-          onClose();
-        }
+      if (res.error || !res.data) {
+        setErrorMessage(res.error || 'Failed to create template.');
       } else {
-        const res = await taskTemplateService.createTemplate({
-          name: name.trim(),
-          description: description.trim() || undefined,
-          departmentId,
-          defaultTaskTitle: defaultTaskTitle.trim(),
-          taskDetails: taskDetails.trim() || undefined,
-          defaultPriority,
-          defaultApprovalMode,
-          suggestedDurationDays
-        });
-
-        if (res.error || !res.data) {
-          setErrorMessage(res.error || 'Failed to create template.');
-        } else {
-          onSuccess(res.data);
-          onClose();
-        }
+        clearFormDraft(DRAFT_KEY);
+        setDraftRestored(false);
+        onSuccess(res.data);
+        onClose();
       }
     } catch (err: any) {
       setErrorMessage(err?.message || 'Failed to save template.');
@@ -172,6 +304,10 @@ export const CreateEditTemplateModal: React.FC<CreateEditTemplateModalProps> = (
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto flex-1 text-xs">
+          {!isEditing && draftRestored && (
+            <DraftRestoredBanner onClear={handleClearDraft} />
+          )}
+
           {errorMessage && (
             <div className="p-3 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 rounded-xl flex items-center gap-2.5 text-rose-600 dark:text-rose-400 font-semibold">
               <AlertCircle className="w-4 h-4 shrink-0" />
@@ -320,22 +456,29 @@ export const CreateEditTemplateModal: React.FC<CreateEditTemplateModalProps> = (
           </div>
 
           {/* Actions */}
-          <div className="pt-3 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-end gap-2.5 border-t border-gray-100 dark:border-dark-border">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2.5 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors min-h-[44px] flex items-center justify-center cursor-pointer"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={isSubmitting}
-              className="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-md shadow-brand-500/25 flex items-center justify-center gap-1.5 transition-all min-h-[44px] cursor-pointer"
-            >
-              {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
-              <span>{isEditing ? 'Save Changes' : 'Create Template'}</span>
-            </button>
+          <div className="pt-3 flex flex-col-reverse sm:flex-row items-stretch sm:items-center justify-between gap-2.5 border-t border-gray-100 dark:border-dark-border">
+            <div className="flex items-center">
+              {isEditing && (
+                <AutosaveBadge status={autosaveStatus} error={autosaveError} />
+              )}
+            </div>
+            <div className="flex items-center gap-2.5">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2.5 rounded-xl text-xs font-bold text-gray-700 dark:text-gray-300 hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors min-h-[44px] flex items-center justify-center cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="px-5 py-2.5 bg-brand-500 hover:bg-brand-600 disabled:opacity-50 text-white rounded-xl text-xs font-bold shadow-md shadow-brand-500/25 flex items-center justify-center gap-1.5 transition-all min-h-[44px] cursor-pointer"
+              >
+                {isSubmitting && <Loader2 className="w-3.5 h-3.5 animate-spin" />}
+                <span>{isEditing ? 'Save Changes' : 'Create Template'}</span>
+              </button>
+            </div>
           </div>
         </form>
       </div>
