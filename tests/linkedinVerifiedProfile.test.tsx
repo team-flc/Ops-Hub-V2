@@ -420,4 +420,181 @@ describe('LinkedIn Verified Checkbox Feature Verification Suite', () => {
     expect(client?.linkedinProfiles[1].linkedinVerified).toBe(false);
     expect(client?.linkedinProfiles[2].linkedinVerified).toBe(false); // null mapped to false
   });
+
+  it('9. Gmail Account: Renders checkbox below LinkedIn Verified and conditionally reveals Gmail address field', async () => {
+    const clientWithGmail: ClientRecord = {
+      ...mockClient,
+      linkedinProfiles: [
+        {
+          id: 'li-gmail-1',
+          clientId: 'client-1',
+          profileLabel: 'Lead ID 1',
+          profileUrl: 'https://linkedin.com/in/lead1',
+          salesNavigatorActive: true,
+          salesNavigatorActivatedOn: '2026-02-01',
+          linkedinVerified: true,
+          hasGmailAccount: true,
+          gmailAddress: 'lead1.outreach@gmail.com',
+          sortOrder: 0,
+          status: 'active',
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z'
+        },
+        {
+          id: 'li-gmail-2',
+          clientId: 'client-1',
+          profileLabel: 'Lead ID 2',
+          profileUrl: 'https://linkedin.com/in/lead2',
+          salesNavigatorActive: false,
+          salesNavigatorActivatedOn: null,
+          linkedinVerified: false,
+          hasGmailAccount: false,
+          gmailAddress: null,
+          sortOrder: 1,
+          status: 'active',
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z'
+        }
+      ]
+    };
+
+    render(
+      <MemoryRouter>
+        <ClientDetailsTab
+          client={clientWithGmail}
+          currentUserProfile={mockOwner}
+          eligibleManagers={[mockOwner]}
+          onClientUpdated={vi.fn()}
+        />
+      </MemoryRouter>
+    );
+
+    // Should find Gmail Account checkboxes (2 existing + 1 in drawer)
+    const gmailCheckboxes = screen.getAllByRole('checkbox', { name: /Gmail Account/i });
+    expect(gmailCheckboxes.length).toBe(3);
+
+    // Profile 1: hasGmailAccount is true -> checkbox is checked and email input is visible with value
+    expect(gmailCheckboxes[0]).toBeChecked();
+    const emailInput = screen.getByDisplayValue('lead1.outreach@gmail.com');
+    expect(emailInput).toBeInTheDocument();
+
+    // Profile 2: hasGmailAccount is false -> checkbox is unchecked
+    expect(gmailCheckboxes[1]).not.toBeChecked();
+
+    // Drawer: hasGmailAccount is false -> unchecked
+    expect(gmailCheckboxes[2]).not.toBeChecked();
+  });
+
+  it('10. Gmail Account: toggles checkbox and saves independently with email address', async () => {
+    const updateSpy = vi.spyOn(clientManagementService, 'updateLinkedInProfile').mockResolvedValue({
+      data: {
+        ...mockProfiles[0],
+        hasGmailAccount: true,
+        gmailAddress: 'new.lead@gmail.com'
+      }
+    });
+
+    render(
+      <MemoryRouter>
+        <ClientDetailsTab
+          client={mockClient}
+          currentUserProfile={mockOwner}
+          eligibleManagers={[mockOwner]}
+          onClientUpdated={vi.fn()}
+        />
+      </MemoryRouter>
+    );
+
+    const gmailCheckboxes = screen.getAllByRole('checkbox', { name: /Gmail Account/i });
+    expect(gmailCheckboxes[0]).not.toBeChecked();
+
+    // Toggle profile 1 Gmail Account checkbox
+    fireEvent.click(gmailCheckboxes[0]);
+
+    await waitFor(() => {
+      expect(updateSpy).toHaveBeenCalledWith(
+        'li-1',
+        expect.objectContaining({
+          hasGmailAccount: true
+        }),
+        'user-owner'
+      );
+    });
+  });
+
+  it('11. Gmail Account: clientManagementService maps has_gmail_account and gmail_address from DB correctly', async () => {
+    const mockClientData = {
+      id: 'client-1',
+      companyName: 'Acme Test Corp',
+      client_name: 'Acme Contact',
+      package: 'Enterprise',
+      operational_manager_id: 'user-owner',
+      activation_date: '2026-01-01',
+      status: 'Active',
+      required_linkedin_profile_count: 2,
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z'
+    };
+
+    const mockProfilesDb = [
+      {
+        id: 'p-1',
+        client_id: 'client-1',
+        profile_label: 'ID 1',
+        profile_url: 'https://linkedin.com/in/p1',
+        sales_navigator_active: true,
+        sales_navigator_activated_on: '2026-01-01',
+        linkedin_verified: true,
+        has_gmail_account: true,
+        gmail_address: 'p1@gmail.com',
+        sort_order: 0,
+        status: 'active'
+      },
+      {
+        id: 'p-2',
+        client_id: 'client-1',
+        profile_label: 'ID 2',
+        profile_url: 'https://linkedin.com/in/p2',
+        sales_navigator_active: false,
+        sales_navigator_activated_on: null,
+        linkedin_verified: false,
+        has_gmail_account: false,
+        gmail_address: null,
+        sort_order: 1,
+        status: 'active'
+      }
+    ];
+
+    mockFrom.mockImplementation((table: string) => {
+      if (table === 'clients') {
+        return {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          single: vi.fn().mockResolvedValue({ data: mockClientData, error: null })
+        };
+      }
+      if (table === 'client_links') {
+        return {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockResolvedValue({ data: [], error: null })
+        };
+      }
+      if (table === 'client_linkedin_profiles') {
+        return {
+          select: vi.fn().mockReturnThis(),
+          eq: vi.fn().mockReturnThis(),
+          order: vi.fn().mockResolvedValue({ data: mockProfilesDb, error: null })
+        };
+      }
+      return { select: vi.fn().mockReturnThis(), eq: vi.fn().mockResolvedValue({ data: [], error: null }) };
+    });
+
+    const client = await clientManagementService.fetchClientById('client-1');
+    expect(client).not.toBeNull();
+    expect(client?.linkedinProfiles).toHaveLength(2);
+    expect(client?.linkedinProfiles[0].hasGmailAccount).toBe(true);
+    expect(client?.linkedinProfiles[0].gmailAddress).toBe('p1@gmail.com');
+    expect(client?.linkedinProfiles[1].hasGmailAccount).toBe(false);
+    expect(client?.linkedinProfiles[1].gmailAddress).toBeNull();
+  });
 });

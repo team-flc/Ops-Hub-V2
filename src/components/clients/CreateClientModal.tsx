@@ -50,6 +50,8 @@ interface ProfileRowState {
   salesNavigatorActive: boolean;
   salesNavigatorActivatedOn: string;
   linkedinVerified: boolean;
+  hasGmailAccount: boolean;
+  gmailAddress: string;
 }
 
 export const CreateClientModal: React.FC<CreateClientModalProps> = ({
@@ -96,9 +98,9 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
   // LinkedIn Lead Generation Profiles
   const [requiredCount, setRequiredCount] = useState(3);
   const [profileRows, setProfileRows] = useState<ProfileRowState[]>([
-    { id: '1', profileLabel: 'LinkedIn ID 1', profileUrl: '', salesNavigatorActive: false, salesNavigatorActivatedOn: '', linkedinVerified: false },
-    { id: '2', profileLabel: 'LinkedIn ID 2', profileUrl: '', salesNavigatorActive: false, salesNavigatorActivatedOn: '', linkedinVerified: false },
-    { id: '3', profileLabel: 'LinkedIn ID 3', profileUrl: '', salesNavigatorActive: false, salesNavigatorActivatedOn: '', linkedinVerified: false }
+    { id: '1', profileLabel: 'LinkedIn ID 1', profileUrl: '', salesNavigatorActive: false, salesNavigatorActivatedOn: '', linkedinVerified: false, hasGmailAccount: false, gmailAddress: '' },
+    { id: '2', profileLabel: 'LinkedIn ID 2', profileUrl: '', salesNavigatorActive: false, salesNavigatorActivatedOn: '', linkedinVerified: false, hasGmailAccount: false, gmailAddress: '' },
+    { id: '3', profileLabel: 'LinkedIn ID 3', profileUrl: '', salesNavigatorActive: false, salesNavigatorActivatedOn: '', linkedinVerified: false, hasGmailAccount: false, gmailAddress: '' }
   ]);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -137,7 +139,9 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
         profileUrl: '',
         salesNavigatorActive: false,
         salesNavigatorActivatedOn: '',
-        linkedinVerified: false
+        linkedinVerified: false,
+        hasGmailAccount: false,
+        gmailAddress: ''
       }
     ]);
   };
@@ -245,6 +249,8 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
           salesNavigatorActive: row.salesNavigatorActive,
           salesNavigatorActivatedOn: row.salesNavigatorActive ? row.salesNavigatorActivatedOn : null,
           linkedinVerified: row.linkedinVerified,
+          hasGmailAccount: row.hasGmailAccount,
+          gmailAddress: row.hasGmailAccount ? (row.gmailAddress?.trim() || null) : null,
           sortOrder: i
         });
       }
@@ -898,6 +904,34 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
                         LinkedIn Verified
                       </span>
                     </label>
+                  </div>
+
+                  {/* Gmail Account Checkbox & Email Field */}
+                  <div className="pt-2 border-t border-gray-100 dark:border-dark-border/60 flex flex-wrap items-center gap-4">
+                    <label className="flex items-center gap-2 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={row.hasGmailAccount || false}
+                        onChange={(e) => handleProfileChange(row.id, 'hasGmailAccount', e.target.checked)}
+                        className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
+                      />
+                      <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                        Gmail Account
+                      </span>
+                    </label>
+
+                    {row.hasGmailAccount && (
+                      <div className="flex items-center gap-2 flex-1 min-w-[200px] animate-fade-in">
+                        <span className="text-[11px] font-medium text-gray-500">Gmail Address:</span>
+                        <input
+                          type="email"
+                          value={row.gmailAddress}
+                          onChange={(e) => handleProfileChange(row.id, 'gmailAddress', e.target.value)}
+                          placeholder="e.g. client.leadgen@gmail.com"
+                          className="flex-1 px-2.5 py-1 text-xs rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-gray-900 dark:text-gray-100 focus:outline-none"
+                        />
+                      </div>
+                    )}
                   </div>
                 </div>
               ))}

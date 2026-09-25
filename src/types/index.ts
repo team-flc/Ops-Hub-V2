@@ -397,6 +397,8 @@ export interface ClientLinkedInProfile {
   salesNavigatorActive: boolean;
   salesNavigatorActivatedOn?: string | null;
   linkedinVerified?: boolean;
+  hasGmailAccount?: boolean;
+  gmailAddress?: string | null;
   sortOrder: number;
   status: 'active' | 'archived';
   createdBy?: string;

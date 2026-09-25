@@ -1117,9 +1117,14 @@ describe('Phase 3B: Task Conversation Feed, Review & Approval Comprehensive Test
       expect(screen.getByRole('button', { name: /Request Changes/i })).toBeInTheDocument();
 
       // Attempting to invoke approve via service as manager returns 403 Forbidden
-      mockFunctionsInvoke.mockResolvedValueOnce({
-        data: { error: 'Forbidden: Operational Managers cannot approve Client Approval Required tasks on behalf of the client.' },
-        error: null
+      mockFunctionsInvoke.mockImplementation(async (_fn: string, opts?: any) => {
+        if (opts?.body?.action === 'update_status') {
+          return {
+            data: { error: 'Forbidden: Operational Managers cannot approve Client Approval Required tasks on behalf of the client.' },
+            error: null
+          };
+        }
+        return { data: { success: true, messages: [], events: [], combinedFeed: [] }, error: null };
       });
 
       const res = await taskManagementService.updateStatus(taskInClientReview.id, 'Completed', undefined, 'Client Review');
@@ -1220,9 +1225,14 @@ describe('Phase 3B: Task Conversation Feed, Review & Approval Comprehensive Test
       unmount();
 
       // Direct edge function call for unassigned member returns 403
-      mockFunctionsInvoke.mockResolvedValueOnce({
-        data: { error: 'Forbidden: Team members may only update their own assigned tasks.' },
-        error: null
+      mockFunctionsInvoke.mockImplementation(async (_fn: string, opts?: any) => {
+        if (opts?.body?.action === 'update_status') {
+          return {
+            data: { error: 'Forbidden: Team members may only update their own assigned tasks.' },
+            error: null
+          };
+        }
+        return { data: { success: true, messages: [], events: [], combinedFeed: [] }, error: null };
       });
 
       const res = await taskManagementService.updateStatus(otherMemberTask.id, 'Team Review', undefined, 'In Progress');

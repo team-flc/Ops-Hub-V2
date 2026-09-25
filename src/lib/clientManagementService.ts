@@ -125,6 +125,8 @@ export interface LinkedInProfileInput {
   salesNavigatorActive: boolean;
   salesNavigatorActivatedOn?: string | null;
   linkedinVerified?: boolean;
+  hasGmailAccount?: boolean;
+  gmailAddress?: string | null;
   sortOrder?: number;
 }
 
@@ -405,6 +407,8 @@ export const clientManagementService = {
             salesNavigatorActive: Boolean(p.sales_navigator_active),
             salesNavigatorActivatedOn: p.sales_navigator_activated_on,
             linkedinVerified: Boolean(p.linkedin_verified),
+            hasGmailAccount: Boolean(p.has_gmail_account),
+            gmailAddress: p.gmail_address || null,
             sortOrder: p.sort_order || 0,
             status: p.status || 'active',
             createdBy: p.created_by,
@@ -525,6 +529,8 @@ export const clientManagementService = {
         salesNavigatorActive: Boolean(p.sales_navigator_active),
         salesNavigatorActivatedOn: p.sales_navigator_activated_on,
         linkedinVerified: Boolean(p.linkedin_verified),
+        hasGmailAccount: Boolean(p.has_gmail_account),
+        gmailAddress: p.gmail_address || null,
         sortOrder: p.sort_order || 0,
         status: p.status || 'active',
         createdBy: p.created_by,
@@ -706,8 +712,10 @@ export const clientManagementService = {
           profile_label: p.profileLabel,
           profile_url: p.profileUrl,
           sales_navigator_active: p.salesNavigatorActive,
-          sales_navigator_activated_on: p.salesNavigatorActivatedOn || null,
+          sales_navigator_activated_on: p.salesNavigatorActive ? p.salesNavigatorActivatedOn : null,
           linkedin_verified: Boolean(p.linkedinVerified),
+          has_gmail_account: Boolean(p.hasGmailAccount),
+          gmail_address: p.hasGmailAccount ? (p.gmailAddress?.trim() || null) : null,
           sort_order: idx,
           status: 'active',
           created_by: actorId,
@@ -730,6 +738,8 @@ export const clientManagementService = {
               salesNavigatorActive: Boolean(ip.sales_navigator_active),
               salesNavigatorActivatedOn: ip.sales_navigator_activated_on,
               linkedinVerified: Boolean(ip.linkedin_verified),
+              hasGmailAccount: Boolean(ip.has_gmail_account),
+              gmailAddress: ip.gmail_address || null,
               sortOrder: ip.sort_order,
               status: ip.status,
               createdBy: ip.created_by,
@@ -1144,6 +1154,8 @@ export const clientManagementService = {
           sales_navigator_active: Boolean(profileInput.salesNavigatorActive),
           sales_navigator_activated_on: profileInput.salesNavigatorActive ? profileInput.salesNavigatorActivatedOn : null,
           linkedin_verified: Boolean(profileInput.linkedinVerified),
+          has_gmail_account: Boolean(profileInput.hasGmailAccount),
+          gmail_address: profileInput.hasGmailAccount ? (profileInput.gmailAddress?.trim() || null) : null,
           sort_order: profileInput.sortOrder || 0,
           status: 'active',
           created_by: actorId,
@@ -1168,7 +1180,9 @@ export const clientManagementService = {
         safe_metadata: {
           profileLabel: newProfile.profile_label,
           salesNavigatorActive: newProfile.sales_navigator_active,
-          linkedinVerified: Boolean(newProfile.linkedin_verified)
+          linkedinVerified: Boolean(newProfile.linkedin_verified),
+          hasGmailAccount: Boolean(newProfile.has_gmail_account),
+          gmailAddress: newProfile.gmail_address || null
         }
       });
 
@@ -1181,6 +1195,8 @@ export const clientManagementService = {
           salesNavigatorActive: Boolean(newProfile.sales_navigator_active),
           salesNavigatorActivatedOn: newProfile.sales_navigator_activated_on,
           linkedinVerified: Boolean(newProfile.linkedin_verified),
+          hasGmailAccount: Boolean(newProfile.has_gmail_account),
+          gmailAddress: newProfile.gmail_address || null,
           sortOrder: newProfile.sort_order,
           status: newProfile.status,
           createdBy: newProfile.created_by,
@@ -1246,6 +1262,19 @@ export const clientManagementService = {
         updates.linkedin_verified = Boolean(profileInput.linkedinVerified);
       }
 
+      if (profileInput.hasGmailAccount !== undefined) {
+        updates.has_gmail_account = Boolean(profileInput.hasGmailAccount);
+        if (profileInput.hasGmailAccount) {
+          if (profileInput.gmailAddress !== undefined) {
+            updates.gmail_address = profileInput.gmailAddress?.trim() || null;
+          }
+        } else {
+          updates.gmail_address = null;
+        }
+      } else if (profileInput.gmailAddress !== undefined) {
+        updates.gmail_address = profileInput.gmailAddress?.trim() || null;
+      }
+
       if (profileInput.sortOrder !== undefined) {
         updates.sort_order = profileInput.sortOrder;
       }
@@ -1282,6 +1311,8 @@ export const clientManagementService = {
           salesNavigatorActive: Boolean(updated.sales_navigator_active),
           salesNavigatorActivatedOn: updated.sales_navigator_activated_on,
           linkedinVerified: Boolean(updated.linkedin_verified),
+          hasGmailAccount: Boolean(updated.has_gmail_account),
+          gmailAddress: updated.gmail_address || null,
           sortOrder: updated.sort_order,
           status: updated.status,
           createdBy: updated.created_by,

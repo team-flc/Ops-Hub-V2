@@ -905,12 +905,31 @@ export const taskManagementService = {
   async invokeEdgeFunction(action: string, payload: Record<string, any>): Promise<{ data?: any; error?: string }> {
     if (!supabase) return { error: 'Supabase client not initialized' };
     try {
-      const { data, error } = await supabase.functions.invoke('manage-client-task', {
-        body: { action, ...payload }
+      let token: string | undefined;
+      try {
+        const sessionRes = await supabase.auth?.getSession?.();
+        token = sessionRes?.data?.session?.access_token;
+      } catch {
+        // Ignored if auth is mocked or unavailable
+      }
+      const headers = token ? { Authorization: `Bearer ${token}` } : undefined;
+
+      const res = await supabase.functions.invoke('manage-client-task', {
+        body: { action, ...payload },
+        ...(headers ? { headers } : {})
       });
+      const data = res?.data;
+      const error = res?.error;
 
       if (error) {
-        return { error: error.message || 'Edge function execution error' };
+        let errorMsg = error.message;
+        try {
+          if ('context' in error && (error as any).context && typeof (error as any).context.json === 'function') {
+            const body = await (error as any).context.json();
+            if (body?.error) errorMsg = body.error;
+          }
+        } catch {}
+        return { error: errorMsg || 'Edge function execution error' };
       }
       if (data?.error) {
         return { error: data.error };

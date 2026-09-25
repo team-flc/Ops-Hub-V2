@@ -119,6 +119,8 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
   const [newSalesNavActive, setNewSalesNavActive] = useState(false);
   const [newSalesNavDate, setNewSalesNavDate] = useState('');
   const [newLinkedinVerified, setNewLinkedinVerified] = useState(false);
+  const [newHasGmailAccount, setNewHasGmailAccount] = useState(false);
+  const [newGmailAddress, setNewGmailAddress] = useState('');
   const [isAddingProfile, setIsAddingProfile] = useState(false);
 
   const [isSaving, setIsSaving] = useState(false);
@@ -589,6 +591,8 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
           salesNavigatorActive: newSalesNavActive,
           salesNavigatorActivatedOn: newSalesNavActive ? newSalesNavDate : null,
           linkedinVerified: newLinkedinVerified,
+          hasGmailAccount: newHasGmailAccount,
+          gmailAddress: newHasGmailAccount ? (newGmailAddress.trim() || null) : null,
           sortOrder: profiles.length
         },
         currentUserProfile?.id
@@ -612,6 +616,8 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
       setNewSalesNavActive(false);
       setNewSalesNavDate('');
       setNewLinkedinVerified(false);
+      setNewHasGmailAccount(false);
+      setNewGmailAddress('');
       setIsAddingProfile(false);
       setSuccessMsg('LinkedIn profile added successfully.');
       setTimeout(() => setSuccessMsg(null), 3000);
@@ -633,6 +639,11 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
         updates,
         currentUserProfile?.id
       );
+
+      if (res.error) {
+        setErrorMsg(res.error);
+        return;
+      }
 
       if (res.data) {
         const updatedProfiles = profiles.map((p) => (p.id === profileId ? res.data! : p));
@@ -1731,6 +1742,44 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                     </span>
                   </label>
                 </div>
+
+                {/* Gmail Account */}
+                <div className="pt-2 border-t border-gray-100 dark:border-dark-border/60 flex flex-wrap items-center gap-4">
+                  <label className="flex items-center gap-2 cursor-pointer select-none">
+                    <input
+                      type="checkbox"
+                      checked={p.hasGmailAccount || false}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        handleUpdateProfile(p.id, {
+                          hasGmailAccount: checked,
+                          gmailAddress: checked ? (p.gmailAddress || '') : null
+                        });
+                      }}
+                      className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
+                    />
+                    <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                      Gmail Account
+                    </span>
+                  </label>
+
+                  {p.hasGmailAccount && (
+                    <div className="flex items-center gap-2 flex-1 min-w-[200px] animate-fade-in">
+                      <span className="text-[11px] font-medium text-gray-500">Gmail Address:</span>
+                      <input
+                        type="email"
+                        value={p.gmailAddress || ''}
+                        onChange={(e) => {
+                          const val = e.target.value;
+                          setProfiles(profiles.map(pr => pr.id === p.id ? { ...pr, gmailAddress: val } : pr));
+                        }}
+                        onBlur={(e) => handleUpdateProfile(p.id, { gmailAddress: e.target.value })}
+                        placeholder="e.g. client.leadgen@gmail.com"
+                        className="flex-1 px-2.5 py-1 text-xs rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-gray-900 dark:text-gray-100 focus:outline-none"
+                      />
+                    </div>
+                  )}
+                </div>
               </div>
             ))
           )}
@@ -1803,8 +1852,8 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
             )}
           </div>
 
-          {/* LinkedIn Verified & Add Button */}
-          <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+          {/* LinkedIn Verified */}
+          <div className="pt-1 flex items-center gap-4">
             <label className="flex items-center gap-2 cursor-pointer select-none">
               <input
                 type="checkbox"
@@ -1816,6 +1865,36 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 LinkedIn Verified
               </span>
             </label>
+          </div>
+
+          {/* Gmail Account & Add Button */}
+          <div className="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-blue-500/20">
+            <div className="flex flex-wrap items-center gap-4 flex-1">
+              <label className="flex items-center gap-2 cursor-pointer select-none">
+                <input
+                  type="checkbox"
+                  checked={newHasGmailAccount}
+                  onChange={(e) => setNewHasGmailAccount(e.target.checked)}
+                  className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
+                />
+                <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
+                  Gmail Account
+                </span>
+              </label>
+
+              {newHasGmailAccount && (
+                <div className="flex items-center gap-2 flex-1 min-w-[200px] animate-fade-in">
+                  <span className="text-[11px] font-medium text-gray-500">Gmail Address:</span>
+                  <input
+                    type="email"
+                    value={newGmailAddress}
+                    onChange={(e) => setNewGmailAddress(e.target.value)}
+                    placeholder="e.g. client.leadgen@gmail.com"
+                    className="flex-1 px-2.5 py-1 text-xs rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-gray-900 dark:text-gray-100 focus:outline-none"
+                  />
+                </div>
+              )}
+            </div>
 
             <button
               type="button"

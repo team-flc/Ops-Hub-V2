@@ -9,13 +9,13 @@ import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.21.0';
 
 const ALLOWED_ORIGIN_PATTERNS = [
-  /^https:\/\/obshub2\.pages\.dev$/,
-  /^https:\/\/[a-z0-9-]+\.obshub2\.pages\.dev$/,
+  /^https:\/\/(?:[a-z0-9-]+\.)?faseehlall\.com$/,
+  /^https:\/\/(?:[a-z0-9-]+\.)?obshub2\.pages\.dev$/,
   /^http:\/\/localhost:(5173|3000|4173)$/
 ];
 
 const getCorsHeaders = (origin: string | null) => {
-  let matchedOrigin = 'https://obshub2.pages.dev';
+  let matchedOrigin = 'https://ops.faseehlall.com';
   if (origin && ALLOWED_ORIGIN_PATTERNS.some((pattern) => pattern.test(origin))) {
     matchedOrigin = origin;
   }
