@@ -130,13 +130,14 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
 
   // Ensure on-screen client matches URL parameter to prevent cross-client saves
   const verifyClientUrlMatch = (): boolean => {
-    let urlClientId = routeParams.clientId;
-    if (!urlClientId && typeof window !== 'undefined') {
+    let pathClientId: string | undefined;
+    if (typeof window !== 'undefined') {
       const pathnameMatches = window.location?.pathname?.match(/\/clients\/([a-zA-Z0-9_-]+)/);
-      if (pathnameMatches) urlClientId = pathnameMatches[1];
+      if (pathnameMatches) pathClientId = pathnameMatches[1];
     }
-    if (urlClientId && urlClientId !== client.id) {
-      setErrorMsg(`Client workspace mismatch blocker: On-screen client (${client.companyName}) does not match URL client ID (${urlClientId}). Operation halted to protect client integrity.`);
+    const targetUrlId = pathClientId || routeParams.clientId;
+    if (targetUrlId && targetUrlId !== client.id) {
+      setErrorMsg(`Client workspace mismatch blocker: On-screen client (${client.companyName}) does not match URL client ID (${targetUrlId}). Operation halted to protect client integrity.`);
       return false;
     }
     return true;
