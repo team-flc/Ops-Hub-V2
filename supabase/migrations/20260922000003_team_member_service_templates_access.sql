@@ -1,5 +1,5 @@
 -- ==============================================================================
--- MIGRATION: 20260922000001_team_member_service_templates_access.sql
+-- MIGRATION: 20260922000003_team_member_service_templates_access.sql
 -- Description: Allow Team Members to view active templates, create new templates,
 --              and edit their own templates while preserving Owner/Manager governance.
 -- ==============================================================================

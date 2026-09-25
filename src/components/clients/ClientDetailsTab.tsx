@@ -32,6 +32,7 @@ import {
 } from '../../lib/clientManagementService';
 import { storageService, useSignedUrl } from '../../lib/storageService';
 import { archiveService } from '../../lib/archiveService';
+import { useSafeParams } from '../../lib/safeRouterHooks';
 
 interface ClientDetailsTabProps {
   client: ClientRecord;
@@ -125,6 +126,21 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
   const onboardingInfo = useDaysSinceOnboarding(activationDate);
+  const routeParams = useSafeParams<{ clientId?: string }>();
+
+  // Ensure on-screen client matches URL parameter to prevent cross-client saves
+  const verifyClientUrlMatch = (): boolean => {
+    let urlClientId = routeParams.clientId;
+    if (!urlClientId && typeof window !== 'undefined') {
+      const pathnameMatches = window.location?.pathname?.match(/\/clients\/([a-zA-Z0-9_-]+)/);
+      if (pathnameMatches) urlClientId = pathnameMatches[1];
+    }
+    if (urlClientId && urlClientId !== client.id) {
+      setErrorMsg(`Client workspace mismatch blocker: On-screen client (${client.companyName}) does not match URL client ID (${urlClientId}). Operation halted to protect client integrity.`);
+      return false;
+    }
+    return true;
+  };
 
   // Check if form is modified from saved client prop
   const isDirty = useMemo(() => {
@@ -439,6 +455,10 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     setErrorMsg(null);
     setSuccessMsg(null);
 
+    if (!verifyClientUrlMatch()) {
+      return;
+    }
+
     if (!companyName.trim()) {
       setErrorMsg('Company Name is required.');
       return;
@@ -537,6 +557,10 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
   const handleAddNewProfile = async () => {
     setErrorMsg(null);
 
+    if (!verifyClientUrlMatch()) {
+      return;
+    }
+
     if (!newProfileUrl.trim()) {
       setErrorMsg('LinkedIn Profile URL is required.');
       return;
@@ -598,6 +622,10 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
 
   // Toggle or update existing LinkedIn profile
   const handleUpdateProfile = async (profileId: string, updates: Partial<LinkedInProfileInput>) => {
+    if (!verifyClientUrlMatch()) {
+      return;
+    }
+
     try {
       const res = await clientManagementService.updateLinkedInProfile(
         profileId,
