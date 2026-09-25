@@ -1194,7 +1194,9 @@ export const clientManagementService = {
           profile_label: profileInput.profileLabel.trim() || 'LinkedIn ID',
           profile_url: cleanUrl,
           sales_navigator_active: Boolean(profileInput.salesNavigatorActive),
-          sales_navigator_activated_on: profileInput.salesNavigatorActive ? profileInput.salesNavigatorActivatedOn : null,
+          sales_navigator_activated_on: profileInput.salesNavigatorActive
+            ? (profileInput.salesNavigatorActivatedOn || new Date().toISOString().split('T')[0])
+            : null,
           linkedin_verified: Boolean(profileInput.linkedinVerified),
           has_gmail_account: Boolean(profileInput.hasGmailAccount),
           gmail_address: profileInput.hasGmailAccount ? (profileInput.gmailAddress?.trim() || null) : null,
@@ -1291,10 +1293,10 @@ export const clientManagementService = {
       if (profileInput.salesNavigatorActive !== undefined) {
         updates.sales_navigator_active = profileInput.salesNavigatorActive;
         if (profileInput.salesNavigatorActive) {
-          if (!profileInput.salesNavigatorActivatedOn && !previous.sales_navigator_activated_on) {
-            return { error: 'Sales Navigator Activation Date is required.' };
-          }
-          updates.sales_navigator_activated_on = profileInput.salesNavigatorActivatedOn || previous.sales_navigator_activated_on;
+          updates.sales_navigator_activated_on =
+            profileInput.salesNavigatorActivatedOn ||
+            previous.sales_navigator_activated_on ||
+            new Date().toISOString().split('T')[0];
         } else {
           updates.sales_navigator_activated_on = null;
         }

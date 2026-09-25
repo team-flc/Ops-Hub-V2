@@ -667,10 +667,9 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
       return;
     }
 
-    if (newSalesNavActive && !newSalesNavDate) {
-      setErrorMsg('Sales Navigator Activation Date is required when Sales Navigator is active.');
-      return;
-    }
+    const resolvedSalesNavDate = newSalesNavActive
+      ? (newSalesNavDate || new Date().toISOString().split('T')[0])
+      : null;
 
     setIsAddingProfile(true);
 
@@ -681,7 +680,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
           profileLabel: newProfileLabel.trim() || `LinkedIn ID ${profiles.length + 1}`,
           profileUrl: cleanUrl,
           salesNavigatorActive: newSalesNavActive,
-          salesNavigatorActivatedOn: newSalesNavActive ? newSalesNavDate : null,
+          salesNavigatorActivatedOn: resolvedSalesNavDate,
           linkedinVerified: newLinkedinVerified,
           hasGmailAccount: newHasGmailAccount,
           gmailAddress: newHasGmailAccount ? (newGmailAddress.trim() || null) : null,
@@ -725,6 +724,42 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
       return;
     }
 
+    // Capture previous state for rollback on error
+    const previousProfiles = profiles;
+
+    // Apply optimistic update immediately so checkbox stays checked and child inputs reveal with zero lag
+    const optimisticProfiles = profiles.map((p) => {
+      if (p.id !== profileId) return p;
+      const nextSalesNav = updates.salesNavigatorActive !== undefined ? updates.salesNavigatorActive : p.salesNavigatorActive;
+      const nextSalesNavDate = updates.salesNavigatorActivatedOn !== undefined ? updates.salesNavigatorActivatedOn : (
+        nextSalesNav ? (p.salesNavigatorActivatedOn || new Date().toISOString().split('T')[0]) : null
+      );
+      const nextHasGmail = updates.hasGmailAccount !== undefined ? updates.hasGmailAccount : p.hasGmailAccount;
+      const nextGmailAddress = updates.gmailAddress !== undefined ? updates.gmailAddress : (
+        nextHasGmail === false ? null : p.gmailAddress
+      );
+
+      return {
+        ...p,
+        profileLabel: updates.profileLabel !== undefined ? updates.profileLabel : p.profileLabel,
+        profileUrl: updates.profileUrl !== undefined ? updates.profileUrl : p.profileUrl,
+        salesNavigatorActive: nextSalesNav,
+        salesNavigatorActivatedOn: nextSalesNavDate,
+        linkedinVerified: updates.linkedinVerified !== undefined ? updates.linkedinVerified : p.linkedinVerified,
+        hasGmailAccount: nextHasGmail,
+        gmailAddress: nextGmailAddress
+      };
+    });
+
+    setProfiles(optimisticProfiles);
+    setErrorMsg(null);
+
+    // Sync optimistic state to parent record to prevent [client] useEffect revert
+    onClientUpdated({
+      ...client,
+      linkedinProfiles: optimisticProfiles
+    });
+
     try {
       const res = await clientManagementService.updateLinkedInProfile(
         profileId,
@@ -733,19 +768,29 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
       );
 
       if (res.error) {
+        setProfiles(previousProfiles);
+        onClientUpdated({
+          ...client,
+          linkedinProfiles: previousProfiles
+        });
         setErrorMsg(res.error);
         return;
       }
 
       if (res.data) {
-        const updatedProfiles = profiles.map((p) => (p.id === profileId ? res.data! : p));
-        setProfiles(updatedProfiles);
+        const confirmedProfiles = profiles.map((p) => (p.id === profileId ? res.data! : p));
+        setProfiles(confirmedProfiles);
         onClientUpdated({
           ...client,
-          linkedinProfiles: updatedProfiles
+          linkedinProfiles: confirmedProfiles
         });
       }
     } catch (err: any) {
+      setProfiles(previousProfiles);
+      onClientUpdated({
+        ...client,
+        linkedinProfiles: previousProfiles
+      });
       setErrorMsg(err?.message || 'Failed to update LinkedIn profile.');
     }
   };
@@ -1873,7 +1918,13 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                     <input
                       type="checkbox"
                       checked={p.salesNavigatorActive}
-                      onChange={(e) => handleUpdateProfile(p.id, { salesNavigatorActive: e.target.checked })}
+                      onChange={(e) => {
+                        const checked = e.target.checked;
+                        handleUpdateProfile(p.id, {
+                          salesNavigatorActive: checked,
+                          salesNavigatorActivatedOn: checked ? (p.salesNavigatorActivatedOn || new Date().toISOString().split('T')[0]) : null
+                        });
+                      }}
                       className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
                     />
                     <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
