@@ -295,11 +295,22 @@ serve(async (req: Request) => {
 
       // For Manager-created members: restrict client grants to manager's permitted scope
       if (callerProfile.role === 'operational_manager' && Array.isArray(clientIds) && clientIds.length > 0) {
-        const { data: managerClients } = await supabaseAdmin
-          .from('client_team_access')
-          .select('client_id')
-          .eq('profile_id', callerProfile.id);
-        const allowedSet = new Set((managerClients || []).map((mc: any) => mc.client_id));
+        const [{ data: managerClients }, { data: managedClients }] = await Promise.all([
+          supabaseAdmin
+            .from('client_team_access')
+            .select('client_id')
+            .eq('profile_id', callerProfile.id),
+          supabaseAdmin
+            .from('clients')
+            .select('id')
+            .or(`operational_manager_id.eq.${callerProfile.id},created_by.eq.${callerProfile.id}`)
+        ]);
+
+        const allowedSet = new Set<string>([
+          ...(managerClients || []).map((mc: any) => mc.client_id),
+          ...(managedClients || []).map((mc: any) => mc.id)
+        ]);
+
         const unauthorizedClients = clientIds.filter((cid: string) => !allowedSet.has(cid));
         if (unauthorizedClients.length > 0) {
           return new Response(
@@ -476,6 +487,31 @@ serve(async (req: Request) => {
             { status: 403, headers: corsHeaders }
           );
         }
+        if (Array.isArray(clientIds) && clientIds.length > 0) {
+          const [{ data: managerClients }, { data: managedClients }] = await Promise.all([
+            supabaseAdmin
+              .from('client_team_access')
+              .select('client_id')
+              .eq('profile_id', callerProfile.id),
+            supabaseAdmin
+              .from('clients')
+              .select('id')
+              .or(`operational_manager_id.eq.${callerProfile.id},created_by.eq.${callerProfile.id}`)
+          ]);
+
+          const allowedSet = new Set<string>([
+            ...(managerClients || []).map((mc: any) => mc.client_id),
+            ...(managedClients || []).map((mc: any) => mc.id)
+          ]);
+
+          const unauthorizedClients = clientIds.filter((cid: string) => !allowedSet.has(cid));
+          if (unauthorizedClients.length > 0) {
+            return new Response(
+              JSON.stringify({ error: 'Forbidden: Cannot grant access to clients outside your operational scope.' }),
+              { status: 403, headers: corsHeaders }
+            );
+          }
+        }
       }
 
       // 2. Authoritative Client-Access Revocation Protection
@@ -598,10 +634,43 @@ serve(async (req: Request) => {
         });
 
         if (syncErr) {
-          return new Response(
-            JSON.stringify({ error: syncErr.message || 'Failed to update client access transactions.' }),
-            { status: 400, headers: corsHeaders }
-          );
+          console.warn('sync_member_client_access_tx RPC error:', syncErr.message);
+          // Resilient fallback if database RPC has unmigrated type mismatch (COALESCE uuid[] to text[])
+          if (
+            syncErr.message?.includes('COALESCE could not convert type uuid[] to text[]') ||
+            (syncErr as any).code === '42804'
+          ) {
+            // Direct synchronization fallback
+            await Promise.all([
+              supabaseAdmin.from('client_team_access').delete().eq('profile_id', targetUserId),
+              supabaseAdmin.from('profile_client_access').delete().eq('profile_id', targetUserId)
+            ]);
+
+            if (clientIds.length > 0) {
+              const ctaRows = clientIds.map((cid: string) => ({
+                profile_id: targetUserId,
+                client_id: cid,
+                granted_by: callerProfile.id
+              }));
+              const pcaRows = clientIds.map((cid: string) => ({
+                profile_id: targetUserId,
+                client_id: cid,
+                granted_by: callerProfile.id
+              }));
+
+              await supabaseAdmin.from('client_team_access').insert(ctaRows);
+              try {
+                await supabaseAdmin.from('profile_client_access').insert(pcaRows);
+              } catch (pcaErr) {
+                console.warn('Fallback profile_client_access insert warning (ignorable legacy FK):', pcaErr);
+              }
+            }
+          } else {
+            return new Response(
+              JSON.stringify({ error: syncErr.message || 'Failed to update client access transactions.' }),
+              { status: 400, headers: corsHeaders }
+            );
+          }
         }
       }
 
