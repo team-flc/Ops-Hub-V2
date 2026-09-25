@@ -638,7 +638,8 @@ serve(async (req: Request) => {
           // Resilient fallback if database RPC has unmigrated type mismatch (COALESCE uuid[] to text[])
           if (
             syncErr.message?.includes('COALESCE could not convert type uuid[] to text[]') ||
-            (syncErr as any).code === '42804'
+            (syncErr as any).code === '42804' ||
+            (syncErr as any).code === '42846'
           ) {
             // Direct synchronization fallback
             await Promise.all([

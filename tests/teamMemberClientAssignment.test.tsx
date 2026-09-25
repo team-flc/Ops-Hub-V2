@@ -381,6 +381,7 @@ describe('Team Member Client Assignment & Scope Authorization Suite', () => {
 
       // Check fallback code exists
       expect(edgeFuncContent).toContain('COALESCE could not convert type uuid[] to text[]');
+      expect(edgeFuncContent).toContain('42846');
       expect(edgeFuncContent).toContain('sync_member_client_access_tx');
       expect(edgeFuncContent).toContain('client_team_access');
       expect(edgeFuncContent).toContain('profile_client_access');
