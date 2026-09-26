@@ -441,6 +441,35 @@ describe('Team Member Client Assignment & Scope Authorization Suite', () => {
       expect(currentMemberAssignments).toEqual(['client-alpha', 'client-beta']);
       expect(currentMemberAssignments).not.toContain('client-gamma');
     });
+
+    it('5.3 If Save fails, existing profile details and client assignments remain intact without partial commits', async () => {
+      // Setup member original state
+      const initialProfile = { ...baseMember, clientIds: ['client-uuid-alpha'] };
+
+      // Mock manage-team-member failure on update
+      mockInvoke.mockResolvedValueOnce({
+        data: null,
+        error: new Error('Failed to update client access transactions.')
+      });
+
+      // Attempt update that alters both profile details (e.g. name, designation) and client assignments
+      const res = await teamManagementService.updateTeamMember({
+        id: initialProfile.id,
+        fullName: 'Attempted Name Change',
+        departmentIds: ['dept-ops'],
+        designationId: 'desig-different',
+        clientIds: ['client-uuid-beta', 'client-uuid-gamma']
+      });
+
+      // Operation must report error
+      expect(res.error).toBeDefined();
+      expect(res.error).toContain('Failed to update client access transactions.');
+
+      // Verify that initial profile details and client assignments are not mutated
+      expect(initialProfile.fullName).toBe('Sara Ahmed');
+      expect(initialProfile.designationId).toBe('desig-spec');
+      expect(initialProfile.clientIds).toEqual(['client-uuid-alpha']);
+    });
   });
 
   describe('6. Persistence & Client Access Isolation Across Reload', () => {

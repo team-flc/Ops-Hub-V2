@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useSafeNavigate } from '../../lib/safeRouterHooks';
+import { useSafeNavigate, useSafeLocation } from '../../lib/safeRouterHooks';
 import { useOpsStore } from '../../store/opsStore';
 import { 
   Building2, ChevronsLeft, ChevronsRight, Briefcase, X,
@@ -65,6 +65,8 @@ export const Sidebar: React.FC = () => {
   const [isClientsLoading, setIsClientsLoading] = useState(false);
   const [clientsError, setClientsError] = useState<string | null>(null);
   const [eligibleManagers, setEligibleManagers] = useState<UserProfile[]>([]);
+  const location = useSafeLocation();
+  const routeClientId = location.pathname.match(/\/clients\/([a-zA-Z0-9_-]+)/)?.[1];
 
   const loadClientData = useCallback(async () => {
     setIsClientsLoading(true);
@@ -81,12 +83,14 @@ export const Sidebar: React.FC = () => {
         const fetchedClients = clientsRes.data || [];
         setClients(fetchedClients);
         if (fetchedClients.length > 0) {
+          const currentStoreId = useOpsStore.getState().selectedClientId;
           const resolvedId = resolveSelectedClientId({
             clients: fetchedClients,
             userId: profile?.id,
-            currentSelectedId: selectedClientId
+            routeClientId,
+            currentSelectedId: currentStoreId
           });
-          if (resolvedId) {
+          if (resolvedId && resolvedId !== currentStoreId) {
             setSelectedClientId(resolvedId);
             if (profile?.id) {
               setStoredSelectedClientId(profile.id, resolvedId);
@@ -100,14 +104,19 @@ export const Sidebar: React.FC = () => {
     } finally {
       setIsClientsLoading(false);
     }
-  }, [profile?.id, selectedClientId, setClients, setSelectedClientId]);
+  }, [profile?.id, routeClientId, setClients, setSelectedClientId]);
 
   // Fetch Clients & Managers on mount
   useEffect(() => {
     loadClientData();
   }, [loadClientData]);
 
-  const selectedClient = clients.find((c) => c.id === selectedClientId) || clients.find((c) => c.status !== 'Archived') || clients[0] || null;
+  const selectedClient =
+    clients.find((c) => c.id === selectedClientId) ||
+    (routeClientId ? clients.find((c) => c.id === routeClientId) : undefined) ||
+    clients.find((c) => c.status !== 'Archived') ||
+    clients[0] ||
+    null;
 
   // Reactive Workspace Links derived from selected client
   const clientLinks = selectedClient?.links || {};

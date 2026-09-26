@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Routes, Route, useParams, useLocation, Navigate } from 'react-router-dom';
+import { Routes, Route, useParams, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import { useOpsStore } from './store/opsStore';
 import { clientManagementService } from './lib/clientManagementService';
 import { resolveSelectedClientId, setStoredSelectedClientId } from './lib/clientPersistence';
@@ -180,8 +180,24 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
     loadData();
   }, [user?.id, params.clientId, setClients, setSelectedClientId]);
 
+  const navigate = useNavigate();
   const isManagerOrOwner = profile?.role === 'owner' || profile?.role === 'operational_manager';
-  const selectedClient = clients.find((c) => c.id === selectedClientId) || clients.find((c) => c.status !== 'Archived') || clients[0] || null;
+  const selectedClient =
+    clients.find((c) => c.id === selectedClientId) ||
+    (params.clientId ? clients.find((c) => c.id === params.clientId) : undefined) ||
+    clients.find((c) => c.status !== 'Archived') ||
+    clients[0] ||
+    null;
+
+  // Guarantee URL and displayed client ALWAYS match in client workspace
+  useEffect(() => {
+    if (location.pathname.startsWith('/clients') && selectedClient && clients.length > 0) {
+      const currentUrlId = params.clientId;
+      if (currentUrlId !== selectedClient.id) {
+        navigate(`/clients/${selectedClient.id}`, { replace: true });
+      }
+    }
+  }, [location.pathname, params.clientId, selectedClient?.id, clients.length, navigate]);
 
   const renderActiveView = () => {
     if (location.pathname.startsWith('/settings') || viewMode === 'settings') {

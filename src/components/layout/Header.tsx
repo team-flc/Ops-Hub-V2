@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useSafeNavigate } from '../../lib/safeRouterHooks';
+import { useSafeNavigate, useSafeLocation } from '../../lib/safeRouterHooks';
 import { useOpsStore } from '../../store/opsStore';
 import { Moon, Sun, Menu } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -7,6 +7,7 @@ import { ProfileDropdown } from '../profile/ProfileDropdown';
 
 export const Header: React.FC = () => {
   const navigate = useSafeNavigate();
+  const location = useSafeLocation();
   const viewMode = useOpsStore((state) => state.viewMode);
   const clients = useOpsStore((state) => state.clients);
   const selectedClientId = useOpsStore((state) => state.selectedClientId);
@@ -32,7 +33,13 @@ export const Header: React.FC = () => {
     }
   };
 
-  const selectedClient = clients.find((c) => c.id === selectedClientId) || null;
+  const routeClientId = location.pathname.match(/\/clients\/([a-zA-Z0-9_-]+)/)?.[1];
+  const selectedClient =
+    clients.find((c) => c.id === selectedClientId) ||
+    (routeClientId ? clients.find((c) => c.id === routeClientId) : undefined) ||
+    clients.find((c) => c.status !== 'Archived') ||
+    clients[0] ||
+    null;
   const isSettings = viewMode === 'settings';
   const isProfile = viewMode === 'profile';
   const isTeamManagement = viewMode === 'directory';
