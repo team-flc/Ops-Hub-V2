@@ -659,11 +659,24 @@ serve(async (req: Request) => {
                 granted_by: callerProfile.id
               }));
 
-              await supabaseAdmin.from('client_team_access').insert(ctaRows);
-              try {
-                await supabaseAdmin.from('profile_client_access').insert(pcaRows);
-              } catch (pcaErr) {
-                console.warn('Fallback profile_client_access insert warning (ignorable legacy FK):', pcaErr);
+              const { error: ctaInsertErr } = await supabaseAdmin.from('client_team_access').insert(ctaRows);
+              if (ctaInsertErr) {
+                console.error('Fallback client_team_access insert failed:', ctaInsertErr);
+                return new Response(
+                  JSON.stringify({ error: `Failed to update client_team_access: ${ctaInsertErr.message}` }),
+                  { status: 400, headers: corsHeaders }
+                );
+              }
+
+              const { error: pcaInsertErr } = await supabaseAdmin.from('profile_client_access').insert(pcaRows);
+              if (pcaInsertErr) {
+                console.error('Fallback profile_client_access insert failed:', pcaInsertErr);
+                // Atomically roll back client_team_access to prevent divergent state
+                await supabaseAdmin.from('client_team_access').delete().eq('profile_id', targetUserId);
+                return new Response(
+                  JSON.stringify({ error: `Failed to update profile_client_access: ${pcaInsertErr.message}` }),
+                  { status: 400, headers: corsHeaders }
+                );
               }
             }
           } else {

@@ -117,7 +117,19 @@ describe('Team Member Client Assignment & Scope Authorization Suite', () => {
       expect(content).toContain('FROM public.profile_client_access');
       expect(content).toContain('client_id::UUID AS cid');
 
-      // Check grants
+      // Check removal of silent EXCEPTION WHEN OTHERS THEN NULL
+      expect(content).not.toContain('EXCEPTION WHEN');
+      expect(content).not.toContain('WHEN OTHERS THEN');
+
+      // Check drop of obsolete legacy foreign key
+      expect(content).toContain('ALTER TABLE public.profile_client_access DROP CONSTRAINT IF EXISTS profile_client_access_client_id_fkey');
+
+      // Check parity verification checks across both tables
+      expect(content).toContain('IF v_cta_count <> v_expected_count OR v_pca_count <> v_expected_count THEN');
+      expect(content).toContain('IF v_cta_count <> 0 OR v_pca_count <> 0 THEN');
+
+      // Check strict grants: revoke from anon & authenticated, grant only to service_role
+      expect(content).toContain('REVOKE EXECUTE ON FUNCTION public.sync_member_client_access_tx(UUID, UUID[], UUID) FROM anon, authenticated');
       expect(content).toContain('GRANT EXECUTE ON FUNCTION public.sync_member_client_access_tx(UUID, UUID[], UUID) TO service_role');
     });
   });
@@ -389,6 +401,12 @@ describe('Team Member Client Assignment & Scope Authorization Suite', () => {
       // Check manager scope enforcement in update action
       expect(edgeFuncContent).toContain('callerProfile.role === \'operational_manager\'');
       expect(edgeFuncContent).toContain('Forbidden: Cannot grant access to clients outside your operational scope.');
+
+      // Check strict error checking on both tables (no silent catch)
+      expect(edgeFuncContent).not.toContain('catch (pcaErr)');
+      expect(edgeFuncContent).toContain('ctaInsertErr');
+      expect(edgeFuncContent).toContain('pcaInsertErr');
+      expect(edgeFuncContent).toContain('await supabaseAdmin.from(\'client_team_access\').delete().eq(\'profile_id\', targetUserId)');
     });
   });
 
