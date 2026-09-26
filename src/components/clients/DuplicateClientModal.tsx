@@ -13,6 +13,12 @@ import {
   ClientRecord 
 } from '../../types';
 import { clientManagementService, sanitizeUrl } from '../../lib/clientManagementService';
+import { 
+  saveFormDraft, 
+  loadFormDraft, 
+  clearFormDraft, 
+  DraftRestoredBanner 
+} from '../../lib/autosaveUtils';
 
 interface DuplicateClientModalProps {
   isOpen: boolean;
@@ -81,9 +87,147 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
   const [slackUrl, setSlackUrl] = useState('');
   const [whatsappUrl, setWhatsappUrl] = useState('');
   const [pocNumber, setPocNumber] = useState('');
+  const [caseStudiesText, setCaseStudiesText] = useState('');
+  const [requirementDocsUrl, setRequirementDocsUrl] = useState('');
+  const [ghlAccountUrl, setGhlAccountUrl] = useState('');
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [draftRestored, setDraftRestored] = useState(false);
+  const isLoadedRef = React.useRef(false);
+
+  const draftKey = `opshub_draft_duplicate_client_${sourceClient?.id || 'default'}`;
+
+  // Draft recovery on open
+  useEffect(() => {
+    if (!isOpen) {
+      isLoadedRef.current = false;
+      return;
+    }
+    const draft = loadFormDraft<any>(draftKey);
+    if (draft) {
+      if (draft.companyName !== undefined) setCompanyName(draft.companyName);
+      if (draft.clientName !== undefined) setClientName(draft.clientName);
+      if (draft.pkg !== undefined) setPkg(draft.pkg);
+      if (draft.managerId !== undefined) setManagerId(draft.managerId);
+      if (draft.activationDate !== undefined) setActivationDate(draft.activationDate);
+      if (draft.status !== undefined) setStatus(draft.status);
+      if (draft.pauseReason !== undefined) setPauseReason(draft.pauseReason);
+      if (draft.websiteUrl !== undefined) setWebsiteUrl(draft.websiteUrl);
+      if (draft.flcLandingPageUrl !== undefined) setFlcLandingPageUrl(draft.flcLandingPageUrl);
+      if (draft.brandIdentityUrl !== undefined) setBrandIdentityUrl(draft.brandIdentityUrl);
+      if (draft.driveUrl !== undefined) setDriveUrl(draft.driveUrl);
+      if (draft.importantDocsUrl !== undefined) setImportantDocsUrl(draft.importantDocsUrl);
+      if (draft.masterBusinessDocUrl !== undefined) setMasterBusinessDocUrl(draft.masterBusinessDocUrl);
+      if (draft.staticCreativesUrl !== undefined) setStaticCreativesUrl(draft.staticCreativesUrl);
+      if (draft.videosUrl !== undefined) setVideosUrl(draft.videosUrl);
+      if (draft.vslUrl !== undefined) setVslUrl(draft.vslUrl);
+      if (draft.testimonialsUrl !== undefined) setTestimonialsUrl(draft.testimonialsUrl);
+      if (draft.gridUrl !== undefined) setGridUrl(draft.gridUrl);
+      if (draft.socialMediaManagementUrl !== undefined) setSocialMediaManagementUrl(draft.socialMediaManagementUrl);
+      if (draft.linkedinManagementUrl !== undefined) setLinkedinManagementUrl(draft.linkedinManagementUrl);
+      if (draft.seoManagementUrl !== undefined) setSeoManagementUrl(draft.seoManagementUrl);
+      if (draft.emailMarketingManagementUrl !== undefined) setEmailMarketingManagementUrl(draft.emailMarketingManagementUrl);
+      if (draft.paidAdsManagementUrl !== undefined) setPaidAdsManagementUrl(draft.paidAdsManagementUrl);
+      if (draft.facebookUrl !== undefined) setFacebookUrl(draft.facebookUrl);
+      if (draft.instagramUrl !== undefined) setInstagramUrl(draft.instagramUrl);
+      if (draft.linkedinPageUrl !== undefined) setLinkedinPageUrl(draft.linkedinPageUrl);
+      if (draft.slackUrl !== undefined) setSlackUrl(draft.slackUrl);
+      if (draft.whatsappUrl !== undefined) setWhatsappUrl(draft.whatsappUrl);
+      if (draft.pocNumber !== undefined) setPocNumber(draft.pocNumber);
+      if (draft.caseStudiesText !== undefined) setCaseStudiesText(draft.caseStudiesText);
+      if (draft.requirementDocsUrl !== undefined) setRequirementDocsUrl(draft.requirementDocsUrl);
+      if (draft.ghlAccountUrl !== undefined) setGhlAccountUrl(draft.ghlAccountUrl);
+      if (draft.requiredCount !== undefined) setRequiredCount(draft.requiredCount);
+      setDraftRestored(true);
+    }
+    isLoadedRef.current = true;
+  }, [isOpen, draftKey]);
+
+  // Draft auto-save on change
+  useEffect(() => {
+    if (!isOpen || !isLoadedRef.current) return;
+    const hasAnyContent = Boolean(
+      companyName || clientName || websiteUrl || driveUrl || importantDocsUrl ||
+      caseStudiesText || requirementDocsUrl || ghlAccountUrl
+    );
+    if (hasAnyContent) {
+      saveFormDraft(draftKey, {
+        companyName,
+        clientName,
+        pkg,
+        managerId,
+        activationDate,
+        status,
+        pauseReason,
+        websiteUrl,
+        flcLandingPageUrl,
+        brandIdentityUrl,
+        driveUrl,
+        importantDocsUrl,
+        masterBusinessDocUrl,
+        staticCreativesUrl,
+        videosUrl,
+        vslUrl,
+        testimonialsUrl,
+        gridUrl,
+        socialMediaManagementUrl,
+        linkedinManagementUrl,
+        seoManagementUrl,
+        emailMarketingManagementUrl,
+        paidAdsManagementUrl,
+        facebookUrl,
+        instagramUrl,
+        linkedinPageUrl,
+        slackUrl,
+        whatsappUrl,
+        pocNumber,
+        caseStudiesText,
+        requirementDocsUrl,
+        ghlAccountUrl,
+        requiredCount
+      });
+    }
+  }, [
+    isOpen, draftKey, companyName, clientName, pkg, managerId, activationDate, status, pauseReason,
+    websiteUrl, flcLandingPageUrl, brandIdentityUrl, driveUrl, importantDocsUrl, masterBusinessDocUrl,
+    staticCreativesUrl, videosUrl, vslUrl, testimonialsUrl, gridUrl, socialMediaManagementUrl,
+    linkedinManagementUrl, seoManagementUrl, emailMarketingManagementUrl, paidAdsManagementUrl,
+    facebookUrl, instagramUrl, linkedinPageUrl, slackUrl, whatsappUrl, pocNumber,
+    caseStudiesText, requirementDocsUrl, ghlAccountUrl, requiredCount
+  ]);
+
+  const handleClearDraft = () => {
+    clearFormDraft(draftKey);
+    setDraftRestored(false);
+    setCompanyName('');
+    setClientName('');
+    setWebsiteUrl('');
+    setFlcLandingPageUrl('');
+    setBrandIdentityUrl('');
+    setDriveUrl('');
+    setImportantDocsUrl('');
+    setMasterBusinessDocUrl('');
+    setStaticCreativesUrl('');
+    setVideosUrl('');
+    setVslUrl('');
+    setTestimonialsUrl('');
+    setGridUrl('');
+    setSocialMediaManagementUrl('');
+    setLinkedinManagementUrl('');
+    setSeoManagementUrl('');
+    setEmailMarketingManagementUrl('');
+    setPaidAdsManagementUrl('');
+    setFacebookUrl('');
+    setInstagramUrl('');
+    setLinkedinPageUrl('');
+    setSlackUrl('');
+    setWhatsappUrl('');
+    setPocNumber('');
+    setCaseStudiesText('');
+    setRequirementDocsUrl('');
+    setGhlAccountUrl('');
+  };
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -141,12 +285,15 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
       linkedin_company_page: linkedinPageUrl,
       slack_channel: slackUrl,
       whatsapp_group: whatsappUrl,
-      poc_number: pocNumber
+      poc_number: pocNumber,
+      case_studies: caseStudiesText,
+      requirement_docs: requirementDocsUrl,
+      gohighlevel: ghlAccountUrl
     };
 
     for (const [key, raw] of Object.entries(rawLinks)) {
       if (raw && raw.trim()) {
-        if (key === 'poc_number' || key === 'poc_whatsapp') {
+        if (key === 'poc_number' || key === 'poc_whatsapp' || key === 'case_studies') {
           continue;
         }
         const sanitized = sanitizeUrl(raw);
@@ -182,6 +329,8 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
         return;
       }
 
+      clearFormDraft(draftKey);
+      setDraftRestored(false);
       setIsSubmitting(false);
       onSuccess(result.data);
       onClose();
@@ -226,6 +375,10 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-6 flex-1">
+          {draftRestored && (
+            <DraftRestoredBanner onClear={handleClearDraft} />
+          )}
+
           {errorMsg && (
             <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-center gap-2">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -509,7 +662,7 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
 
               <div>
                 <label htmlFor="dup-testimonials" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Testimonials URL
+                  Testimonials (Videos) URL
                 </label>
                 <input
                   id="dup-testimonials"
@@ -517,7 +670,52 @@ export const DuplicateClientModal: React.FC<DuplicateClientModalProps> = ({
                   type="url"
                   value={testimonialsUrl}
                   onChange={(e) => setTestimonialsUrl(e.target.value)}
-                  placeholder="https://... (Testimonials Link)"
+                  placeholder="https://... (Testimonials Video Link)"
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="dup-requirement-docs" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Requirement Documents URL
+                </label>
+                <input
+                  id="dup-requirement-docs"
+                  data-testid="dup-requirement-docs"
+                  type="url"
+                  value={requirementDocsUrl}
+                  onChange={(e) => setRequirementDocsUrl(e.target.value)}
+                  placeholder="https://... (Requirement Documents Link)"
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="dup-gohighlevel" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  GoHighLevel Account URL
+                </label>
+                <input
+                  id="dup-gohighlevel"
+                  data-testid="dup-gohighlevel"
+                  type="url"
+                  value={ghlAccountUrl}
+                  onChange={(e) => setGhlAccountUrl(e.target.value)}
+                  placeholder="https://app.gohighlevel.com/..."
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label htmlFor="dup-case-studies" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Case Studies (Text)
+                </label>
+                <textarea
+                  id="dup-case-studies"
+                  data-testid="dup-case-studies"
+                  rows={4}
+                  value={caseStudiesText}
+                  onChange={(e) => setCaseStudiesText(e.target.value)}
+                  placeholder="Paste client case studies, success stories, or highlights here..."
                   className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
                 />
               </div>

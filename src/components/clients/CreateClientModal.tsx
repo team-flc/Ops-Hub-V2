@@ -25,6 +25,12 @@ import {
   isValidLinkedInUrl,
   LinkedInProfileInput 
 } from '../../lib/clientManagementService';
+import { 
+  saveFormDraft, 
+  loadFormDraft, 
+  clearFormDraft, 
+  DraftRestoredBanner 
+} from '../../lib/autosaveUtils';
 
 interface CreateClientModalProps {
   isOpen: boolean;
@@ -94,6 +100,9 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
   const [slackUrl, setSlackUrl] = useState('');
   const [whatsappUrl, setWhatsappUrl] = useState('');
   const [pocNumber, setPocNumber] = useState('');
+  const [caseStudiesText, setCaseStudiesText] = useState('');
+  const [requirementDocsUrl, setRequirementDocsUrl] = useState('');
+  const [ghlAccountUrl, setGhlAccountUrl] = useState('');
 
   // LinkedIn Lead Generation Profiles
   const [requiredCount, setRequiredCount] = useState(3);
@@ -105,6 +114,148 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [draftRestored, setDraftRestored] = useState(false);
+  const isLoadedRef = React.useRef(false);
+
+  // Draft recovery on open
+  useEffect(() => {
+    if (!isOpen) {
+      isLoadedRef.current = false;
+      return;
+    }
+    const draft = loadFormDraft<any>('opshub_draft_new_client');
+    if (draft) {
+      if (draft.companyName !== undefined) setCompanyName(draft.companyName);
+      if (draft.clientName !== undefined) setClientName(draft.clientName);
+      if (draft.pkg !== undefined) setPkg(draft.pkg);
+      if (draft.managerId !== undefined) setManagerId(draft.managerId);
+      if (draft.activationDate !== undefined) setActivationDate(draft.activationDate);
+      if (draft.status !== undefined) setStatus(draft.status);
+      if (draft.pauseReason !== undefined) setPauseReason(draft.pauseReason);
+      if (draft.websiteUrl !== undefined) setWebsiteUrl(draft.websiteUrl);
+      if (draft.flcLandingPageUrl !== undefined) setFlcLandingPageUrl(draft.flcLandingPageUrl);
+      if (draft.brandIdentityUrl !== undefined) setBrandIdentityUrl(draft.brandIdentityUrl);
+      if (draft.driveUrl !== undefined) setDriveUrl(draft.driveUrl);
+      if (draft.importantDocsUrl !== undefined) setImportantDocsUrl(draft.importantDocsUrl);
+      if (draft.masterBusinessDocUrl !== undefined) setMasterBusinessDocUrl(draft.masterBusinessDocUrl);
+      if (draft.staticCreativesUrl !== undefined) setStaticCreativesUrl(draft.staticCreativesUrl);
+      if (draft.videosUrl !== undefined) setVideosUrl(draft.videosUrl);
+      if (draft.vslUrl !== undefined) setVslUrl(draft.vslUrl);
+      if (draft.testimonialsUrl !== undefined) setTestimonialsUrl(draft.testimonialsUrl);
+      if (draft.gridUrl !== undefined) setGridUrl(draft.gridUrl);
+      if (draft.socialMediaManagementUrl !== undefined) setSocialMediaManagementUrl(draft.socialMediaManagementUrl);
+      if (draft.linkedinManagementUrl !== undefined) setLinkedinManagementUrl(draft.linkedinManagementUrl);
+      if (draft.seoManagementUrl !== undefined) setSeoManagementUrl(draft.seoManagementUrl);
+      if (draft.emailMarketingManagementUrl !== undefined) setEmailMarketingManagementUrl(draft.emailMarketingManagementUrl);
+      if (draft.paidAdsManagementUrl !== undefined) setPaidAdsManagementUrl(draft.paidAdsManagementUrl);
+      if (draft.facebookUrl !== undefined) setFacebookUrl(draft.facebookUrl);
+      if (draft.instagramUrl !== undefined) setInstagramUrl(draft.instagramUrl);
+      if (draft.linkedinPageUrl !== undefined) setLinkedinPageUrl(draft.linkedinPageUrl);
+      if (draft.slackUrl !== undefined) setSlackUrl(draft.slackUrl);
+      if (draft.whatsappUrl !== undefined) setWhatsappUrl(draft.whatsappUrl);
+      if (draft.pocNumber !== undefined) setPocNumber(draft.pocNumber);
+      if (draft.caseStudiesText !== undefined) setCaseStudiesText(draft.caseStudiesText);
+      if (draft.requirementDocsUrl !== undefined) setRequirementDocsUrl(draft.requirementDocsUrl);
+      if (draft.ghlAccountUrl !== undefined) setGhlAccountUrl(draft.ghlAccountUrl);
+      if (draft.requiredCount !== undefined) setRequiredCount(draft.requiredCount);
+      if (draft.profileRows !== undefined && Array.isArray(draft.profileRows)) setProfileRows(draft.profileRows);
+      setDraftRestored(true);
+    }
+    isLoadedRef.current = true;
+  }, [isOpen]);
+
+  // Draft auto-save on change
+  useEffect(() => {
+    if (!isOpen || !isLoadedRef.current) return;
+    const hasAnyContent = Boolean(
+      companyName || clientName || websiteUrl || driveUrl || importantDocsUrl ||
+      caseStudiesText || requirementDocsUrl || ghlAccountUrl ||
+      profileRows.some(p => p.profileUrl || p.gmailAddress)
+    );
+    if (hasAnyContent) {
+      saveFormDraft('opshub_draft_new_client', {
+        companyName,
+        clientName,
+        pkg,
+        managerId,
+        activationDate,
+        status,
+        pauseReason,
+        websiteUrl,
+        flcLandingPageUrl,
+        brandIdentityUrl,
+        driveUrl,
+        importantDocsUrl,
+        masterBusinessDocUrl,
+        staticCreativesUrl,
+        videosUrl,
+        vslUrl,
+        testimonialsUrl,
+        gridUrl,
+        socialMediaManagementUrl,
+        linkedinManagementUrl,
+        seoManagementUrl,
+        emailMarketingManagementUrl,
+        paidAdsManagementUrl,
+        facebookUrl,
+        instagramUrl,
+        linkedinPageUrl,
+        slackUrl,
+        whatsappUrl,
+        pocNumber,
+        caseStudiesText,
+        requirementDocsUrl,
+        ghlAccountUrl,
+        requiredCount,
+        profileRows
+      });
+    }
+  }, [
+    isOpen, companyName, clientName, pkg, managerId, activationDate, status, pauseReason,
+    websiteUrl, flcLandingPageUrl, brandIdentityUrl, driveUrl, importantDocsUrl, masterBusinessDocUrl,
+    staticCreativesUrl, videosUrl, vslUrl, testimonialsUrl, gridUrl, socialMediaManagementUrl,
+    linkedinManagementUrl, seoManagementUrl, emailMarketingManagementUrl, paidAdsManagementUrl,
+    facebookUrl, instagramUrl, linkedinPageUrl, slackUrl, whatsappUrl, pocNumber,
+    caseStudiesText, requirementDocsUrl, ghlAccountUrl, requiredCount, profileRows
+  ]);
+
+  const handleClearDraft = () => {
+    clearFormDraft('opshub_draft_new_client');
+    setDraftRestored(false);
+    setCompanyName('');
+    setClientName('');
+    setPkg('Basic');
+    setWebsiteUrl('');
+    setFlcLandingPageUrl('');
+    setBrandIdentityUrl('');
+    setDriveUrl('');
+    setImportantDocsUrl('');
+    setMasterBusinessDocUrl('');
+    setStaticCreativesUrl('');
+    setVideosUrl('');
+    setVslUrl('');
+    setTestimonialsUrl('');
+    setGridUrl('');
+    setSocialMediaManagementUrl('');
+    setLinkedinManagementUrl('');
+    setSeoManagementUrl('');
+    setEmailMarketingManagementUrl('');
+    setPaidAdsManagementUrl('');
+    setFacebookUrl('');
+    setInstagramUrl('');
+    setLinkedinPageUrl('');
+    setSlackUrl('');
+    setWhatsappUrl('');
+    setPocNumber('');
+    setCaseStudiesText('');
+    setRequirementDocsUrl('');
+    setGhlAccountUrl('');
+    setProfileRows([
+      { id: '1', profileLabel: 'LinkedIn ID 1', profileUrl: '', salesNavigatorActive: false, salesNavigatorActivatedOn: '', linkedinVerified: false, hasGmailAccount: false, gmailAddress: '' },
+      { id: '2', profileLabel: 'LinkedIn ID 2', profileUrl: '', salesNavigatorActive: false, salesNavigatorActivatedOn: '', linkedinVerified: false, hasGmailAccount: false, gmailAddress: '' },
+      { id: '3', profileLabel: 'LinkedIn ID 3', profileUrl: '', salesNavigatorActive: false, salesNavigatorActivatedOn: '', linkedinVerified: false, hasGmailAccount: false, gmailAddress: '' }
+    ]);
+  };
 
   // Default manager selection
   useEffect(() => {
@@ -203,12 +354,15 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
       linkedin_company_page: linkedinPageUrl,
       slack_channel: slackUrl,
       whatsapp_group: whatsappUrl,
-      poc_number: pocNumber
+      poc_number: pocNumber,
+      case_studies: caseStudiesText,
+      requirement_docs: requirementDocsUrl,
+      gohighlevel: ghlAccountUrl
     };
 
     for (const [key, raw] of Object.entries(rawLinks)) {
       if (raw && raw.trim()) {
-        if (key === 'poc_number' || key === 'poc_whatsapp') {
+        if (key === 'poc_number' || key === 'poc_whatsapp' || key === 'case_studies') {
           continue;
         }
         const sanitized = sanitizeUrl(raw);
@@ -281,6 +435,8 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
         return;
       }
 
+      clearFormDraft('opshub_draft_new_client');
+      setDraftRestored(false);
       setIsSubmitting(false);
       onSuccess(result.data);
       onClose();
@@ -327,6 +483,10 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
 
         {/* Form Body */}
         <form onSubmit={handleSubmit} className="p-6 overflow-y-auto space-y-6 flex-1">
+          {draftRestored && (
+            <DraftRestoredBanner onClear={handleClearDraft} />
+          )}
+
           {errorMsg && (
             <div className="p-3.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-600 dark:text-rose-400 text-xs font-semibold flex items-center gap-2">
               <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -594,7 +754,7 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
 
               <div>
                 <label htmlFor="link-testimonials" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
-                  Testimonials URL
+                  Testimonials (Videos) URL
                 </label>
                 <input
                   id="link-testimonials"
@@ -602,7 +762,52 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
                   type="url"
                   value={testimonialsUrl}
                   onChange={(e) => setTestimonialsUrl(e.target.value)}
-                  placeholder="https://... (Testimonials Link)"
+                  placeholder="https://... (Testimonials Video Link)"
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="link-requirement-docs" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Requirement Documents URL
+                </label>
+                <input
+                  id="link-requirement-docs"
+                  data-testid="create-requirement-docs"
+                  type="url"
+                  value={requirementDocsUrl}
+                  onChange={(e) => setRequirementDocsUrl(e.target.value)}
+                  placeholder="https://... (Requirement Documents Link)"
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="link-gohighlevel" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  GoHighLevel Account URL
+                </label>
+                <input
+                  id="link-gohighlevel"
+                  data-testid="create-gohighlevel"
+                  type="url"
+                  value={ghlAccountUrl}
+                  onChange={(e) => setGhlAccountUrl(e.target.value)}
+                  placeholder="https://app.gohighlevel.com/..."
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                />
+              </div>
+
+              <div className="sm:col-span-2">
+                <label htmlFor="link-case-studies" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Case Studies (Text)
+                </label>
+                <textarea
+                  id="link-case-studies"
+                  data-testid="create-case-studies"
+                  rows={4}
+                  value={caseStudiesText}
+                  onChange={(e) => setCaseStudiesText(e.target.value)}
+                  placeholder="Paste client case studies, success stories, or highlights here..."
                   className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
                 />
               </div>

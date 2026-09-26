@@ -54,9 +54,9 @@ export interface ResolveSelectedClientOptions {
 
 /**
  * Resolves the selected client according to strict priority:
- * 1. Valid `/clients/:clientId` route param that exists in the accessible `clients` array.
- * 2. User's remembered accessible client (scoped to user.id in localStorage) if present in `clients` and not archived.
- * 3. Currently selected client in memory if present in `clients` and not archived.
+ * 1. Valid `/clients/:clientId` route param that exists in the accessible `clients` array (active or archived).
+ * 2. Currently selected client in memory if present in `clients` (active or archived).
+ * 3. User's remembered accessible client (scoped to user.id in localStorage) if present in `clients` and not archived.
  * 4. First accessible active client (`status !== 'Archived'`) or first accessible client as safe fallback.
  */
 export function resolveSelectedClientId({
@@ -67,7 +67,7 @@ export function resolveSelectedClientId({
 }: ResolveSelectedClientOptions): string | null {
   if (!clients || clients.length === 0) return null;
 
-  // Priority 1: Route param clientId (if valid and accessible)
+  // Priority 1: Route param clientId (if valid and accessible in clients, including archived)
   if (routeClientId) {
     const routeClient = clients.find((c) => c.id === routeClientId);
     if (routeClient) {
@@ -75,7 +75,15 @@ export function resolveSelectedClientId({
     }
   }
 
-  // Priority 2: User's remembered accessible client (from user-scoped localStorage)
+  // Priority 2: Current in-memory selected client (if valid in clients, including archived)
+  if (currentSelectedId) {
+    const currentClient = clients.find((c) => c.id === currentSelectedId);
+    if (currentClient) {
+      return currentClient.id;
+    }
+  }
+
+  // Priority 3: User's remembered accessible client (from user-scoped localStorage) if active
   if (userId) {
     const rememberedId = getStoredSelectedClientId(userId);
     if (rememberedId) {
@@ -86,15 +94,30 @@ export function resolveSelectedClientId({
     }
   }
 
-  // Priority 3: Current in-memory selected client (if valid and active)
-  if (currentSelectedId) {
-    const currentClient = clients.find((c) => c.id === currentSelectedId);
-    if (currentClient && currentClient.status !== 'Archived') {
-      return currentClient.id;
-    }
-  }
-
   // Priority 4: First active accessible client fallback (or first client if all archived)
   const firstActive = clients.find((c) => c.status !== 'Archived');
   return firstActive ? firstActive.id : clients[0].id;
+}
+
+/**
+ * Returns any locally cached link fallbacks for a client (e.g. for unmigrated preview resilience).
+ */
+export function getStoredClientLinksFallback(clientId: string): Record<string, string> {
+  if (!clientId || typeof window === 'undefined') return {};
+  try {
+    const raw = localStorage.getItem(`ops_hub_client_ext_links_${clientId}`);
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * Persists locally cached link fallbacks for a client.
+ */
+export function setStoredClientLinksFallback(clientId: string, links: Record<string, string>): void {
+  if (!clientId || typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(`ops_hub_client_ext_links_${clientId}`, JSON.stringify(links));
+  } catch {}
 }

@@ -1,17 +1,19 @@
 import React, { useState, useEffect, useCallback } from 'react';
-import { useSafeNavigate } from '../../lib/safeRouterHooks';
+import { useSafeNavigate, useSafeLocation } from '../../lib/safeRouterHooks';
 import { useOpsStore } from '../../store/opsStore';
 import { 
   Building2, ChevronsLeft, ChevronsRight, Briefcase, X,
   Globe, HardDrive, MessageCircle, ExternalLink, Clock, Users, UserCheck,
   Image, Video, PlaySquare, Sparkles, LayoutGrid, Palette, PhoneCall,
-  LayoutDashboard, FileText, Share2, Search, Mail, Target, BookOpen, MessageSquareQuote
+  LayoutDashboard, FileText, Share2, Search, Mail, Target, BookOpen, MessageSquareQuote,
+  ClipboardList, Zap
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { ClientRecord, UserProfile } from '../../types';
 import { ClientSwitcher } from '../clients/ClientSwitcher';
 import { CreateClientModal } from '../clients/CreateClientModal';
 import { DuplicateClientModal } from '../clients/DuplicateClientModal';
+import { CaseStudiesModal } from '../clients/CaseStudiesModal';
 import { clientManagementService, formatWhatsAppUrl } from '../../lib/clientManagementService';
 import { resolveSelectedClientId, setStoredSelectedClientId } from '../../lib/clientPersistence';
 
@@ -56,13 +58,15 @@ export const Sidebar: React.FC = () => {
 
   const { profile } = useAuth();
 
-  // Client Modals & Loading State
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
+  const [isCaseStudiesModalOpen, setIsCaseStudiesModalOpen] = useState(false);
   const [sourceClientForDuplicate, setSourceClientForDuplicate] = useState<ClientRecord | null>(null);
   const [isClientsLoading, setIsClientsLoading] = useState(false);
   const [clientsError, setClientsError] = useState<string | null>(null);
   const [eligibleManagers, setEligibleManagers] = useState<UserProfile[]>([]);
+  const location = useSafeLocation();
+  const routeClientId = location.pathname.match(/\/clients\/([a-zA-Z0-9_-]+)/)?.[1];
 
   const loadClientData = useCallback(async () => {
     setIsClientsLoading(true);
@@ -79,12 +83,14 @@ export const Sidebar: React.FC = () => {
         const fetchedClients = clientsRes.data || [];
         setClients(fetchedClients);
         if (fetchedClients.length > 0) {
+          const currentStoreId = useOpsStore.getState().selectedClientId;
           const resolvedId = resolveSelectedClientId({
             clients: fetchedClients,
             userId: profile?.id,
-            currentSelectedId: selectedClientId
+            routeClientId,
+            currentSelectedId: currentStoreId
           });
-          if (resolvedId) {
+          if (resolvedId && resolvedId !== currentStoreId) {
             setSelectedClientId(resolvedId);
             if (profile?.id) {
               setStoredSelectedClientId(profile.id, resolvedId);
@@ -98,14 +104,19 @@ export const Sidebar: React.FC = () => {
     } finally {
       setIsClientsLoading(false);
     }
-  }, [profile?.id, selectedClientId, setClients, setSelectedClientId]);
+  }, [profile?.id, routeClientId, setClients, setSelectedClientId]);
 
   // Fetch Clients & Managers on mount
   useEffect(() => {
     loadClientData();
   }, [loadClientData]);
 
-  const selectedClient = clients.find((c) => c.id === selectedClientId) || clients.find((c) => c.status !== 'Archived') || clients[0] || null;
+  const selectedClient =
+    clients.find((c) => c.id === selectedClientId) ||
+    (routeClientId ? clients.find((c) => c.id === routeClientId) : undefined) ||
+    clients.find((c) => c.status !== 'Archived') ||
+    clients[0] ||
+    null;
 
   // Reactive Workspace Links derived from selected client
   const clientLinks = selectedClient?.links || {};
@@ -182,10 +193,32 @@ export const Sidebar: React.FC = () => {
     },
     {
       key: 'testimonials',
-      label: 'Testimonials',
+      label: 'Testimonials (Videos)',
       url: clientLinks.testimonials,
       icon: <MessageSquareQuote className="w-3.5 h-3.5" />,
       activeColorClass: 'text-amber-500 dark:text-amber-400'
+    },
+    {
+      key: 'case_studies',
+      label: 'Case Studies (Text)',
+      url: clientLinks.case_studies,
+      isTextAction: true,
+      icon: <BookOpen className="w-3.5 h-3.5" />,
+      activeColorClass: 'text-indigo-500 dark:text-indigo-400'
+    },
+    {
+      key: 'requirement_docs',
+      label: 'Requirement Documents',
+      url: clientLinks.requirement_docs || clientLinks.requirement_documents,
+      icon: <ClipboardList className="w-3.5 h-3.5" />,
+      activeColorClass: 'text-sky-500 dark:text-sky-400'
+    },
+    {
+      key: 'gohighlevel',
+      label: 'GoHighLevel Account',
+      url: clientLinks.gohighlevel || clientLinks.ghl_account,
+      icon: <Zap className="w-3.5 h-3.5" />,
+      activeColorClass: 'text-amber-600 dark:text-amber-400'
     },
     {
       key: 'social_media_management',
@@ -463,8 +496,29 @@ export const Sidebar: React.FC = () => {
               </div>
               <div className="space-y-0.5 pr-1 scrollbar-thin scrollbar-thumb-gray-200 dark:scrollbar-thumb-dark-100">
                 {workspaceLinks.map((link) => {
-                  const hasUrl = Boolean(link.url && link.url.trim());
-                  if (hasUrl) {
+                  const hasContent = Boolean(link.url && link.url.trim());
+                  if (hasContent) {
+                    if ((link as any).isTextAction) {
+                      return (
+                        <button
+                          key={link.key}
+                          type="button"
+                          onClick={() => setIsCaseStudiesModalOpen(true)}
+                          data-testid="sidebar-link-case-studies"
+                          className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:white hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors group cursor-pointer text-left"
+                          title={`Open ${link.label}`}
+                          aria-label={link.label}
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <span className={`shrink-0 transition-colors ${link.activeColorClass}`}>
+                              {link.icon}
+                            </span>
+                            <span className="truncate">{link.label}</span>
+                          </div>
+                          <BookOpen className="w-3 h-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                        </button>
+                      );
+                    }
                     return (
                       <a
                         key={link.key}
@@ -548,6 +602,13 @@ export const Sidebar: React.FC = () => {
           eligibleManagers={eligibleManagers}
         />
       )}
+
+      <CaseStudiesModal
+        isOpen={isCaseStudiesModalOpen}
+        onClose={() => setIsCaseStudiesModalOpen(false)}
+        companyName={selectedClient?.companyName || ''}
+        caseStudiesText={clientLinks.case_studies || ''}
+      />
     </>
   );
 };

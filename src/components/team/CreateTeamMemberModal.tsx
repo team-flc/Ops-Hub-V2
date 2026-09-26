@@ -12,6 +12,12 @@ import { teamManagementService } from '../../lib/teamManagementService';
 import { employeeOperationsService } from '../../lib/employeeOperationsService';
 import { storageService, useSignedUrl } from '../../lib/storageService';
 import { getPKTTodayDateString, formatWorkingScheduleDescription } from '../../lib/pktDateUtils';
+import { 
+  saveFormDraft, 
+  loadFormDraft, 
+  clearFormDraft, 
+  DraftRestoredBanner 
+} from '../../lib/autosaveUtils';
 
 interface CreateTeamMemberModalProps {
   isOpen: boolean;
@@ -90,6 +96,114 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
     password: string;
   } | null>(null);
   const [copied, setCopied] = useState(false);
+  const [draftRestored, setDraftRestored] = useState(false);
+  const isLoadedRef = React.useRef(false);
+  const TEAM_MEMBER_DRAFT_KEY = 'opshub_draft_new_team_member';
+
+  // Draft recovery on open
+  useEffect(() => {
+    if (!isOpen) {
+      isLoadedRef.current = false;
+      return;
+    }
+    const draft = loadFormDraft<any>(TEAM_MEMBER_DRAFT_KEY);
+    if (draft) {
+      if (draft.fullName !== undefined) setFullName(draft.fullName);
+      if (draft.workEmail !== undefined) setWorkEmail(draft.workEmail);
+      if (draft.phone !== undefined) setPhone(draft.phone);
+      if (draft.backupPhone !== undefined) setBackupPhone(draft.backupPhone);
+      if (draft.contactEmail !== undefined) setContactEmail(draft.contactEmail);
+      if (draft.linkedinUrl !== undefined) setLinkedinUrl(draft.linkedinUrl);
+      if (draft.facebookUrl !== undefined) setFacebookUrl(draft.facebookUrl);
+      if (draft.instagramUrl !== undefined) setInstagramUrl(draft.instagramUrl);
+      if (draft.bio !== undefined) setBio(draft.bio);
+      if (draft.startDate !== undefined) setStartDate(draft.startDate);
+      if (draft.selectedDeptIds !== undefined && Array.isArray(draft.selectedDeptIds)) setSelectedDeptIds(draft.selectedDeptIds);
+      if (draft.selectedDesignationId !== undefined) setSelectedDesignationId(draft.selectedDesignationId);
+      if (draft.selectedManagerId !== undefined) setSelectedManagerId(draft.selectedManagerId);
+      if (draft.selectedClientIds !== undefined && Array.isArray(draft.selectedClientIds)) setSelectedClientIds(draft.selectedClientIds);
+      if (draft.selectedRole !== undefined) setSelectedRole(draft.selectedRole);
+      if (draft.empId !== undefined) setEmpId(draft.empId);
+      if (draft.employmentType !== undefined) setEmploymentType(draft.employmentType);
+      if (draft.selectedShiftId !== undefined) setSelectedShiftId(draft.selectedShiftId);
+      if (draft.customCheckInTime !== undefined) setCustomCheckInTime(draft.customCheckInTime);
+      if (draft.customCheckOutTime !== undefined) setCustomCheckOutTime(draft.customCheckOutTime);
+      if (draft.jobDescription !== undefined) setJobDescription(draft.jobDescription);
+      if (draft.employmentStatus !== undefined) setEmploymentStatus(draft.employmentStatus);
+      if (draft.setupCompleted !== undefined) setSetupCompleted(draft.setupCompleted);
+      setDraftRestored(true);
+    }
+    isLoadedRef.current = true;
+  }, [isOpen]);
+
+  // Draft auto-save on change (STRICT SECURITY: NEVER store password, bank details, cnic, salary, dob)
+  useEffect(() => {
+    if (!isOpen || !isLoadedRef.current) return;
+    const hasAnyContent = Boolean(
+      fullName || workEmail || phone || contactEmail || linkedinUrl || bio ||
+      selectedDeptIds.length > 0 || selectedDesignationId || selectedClientIds.length > 0 ||
+      empId || jobDescription
+    );
+    if (hasAnyContent) {
+      saveFormDraft(TEAM_MEMBER_DRAFT_KEY, {
+        fullName,
+        workEmail,
+        phone,
+        backupPhone,
+        contactEmail,
+        linkedinUrl,
+        facebookUrl,
+        instagramUrl,
+        bio,
+        startDate,
+        selectedDeptIds,
+        selectedDesignationId,
+        selectedManagerId,
+        selectedClientIds,
+        selectedRole,
+        empId,
+        employmentType,
+        selectedShiftId,
+        customCheckInTime,
+        customCheckOutTime,
+        jobDescription,
+        employmentStatus,
+        setupCompleted
+      });
+    }
+  }, [
+    isOpen, fullName, workEmail, phone, backupPhone, contactEmail, linkedinUrl, facebookUrl, instagramUrl,
+    bio, startDate, selectedDeptIds, selectedDesignationId, selectedManagerId, selectedClientIds,
+    selectedRole, empId, employmentType, selectedShiftId, customCheckInTime, customCheckOutTime,
+    jobDescription, employmentStatus, setupCompleted
+  ]);
+
+  const handleClearDraft = () => {
+    clearFormDraft(TEAM_MEMBER_DRAFT_KEY);
+    setDraftRestored(false);
+    setFullName('');
+    setWorkEmail('');
+    setPhone('');
+    setBackupPhone('');
+    setContactEmail('');
+    setLinkedinUrl('');
+    setFacebookUrl('');
+    setInstagramUrl('');
+    setBio('');
+    setStartDate(getPKTTodayDateString());
+    setSelectedDeptIds([]);
+    setSelectedDesignationId('');
+    setSelectedManagerId('');
+    setSelectedClientIds([]);
+    setSelectedRole('team_member');
+    setEmpId('');
+    setEmploymentType('full_time');
+    setCustomCheckInTime('');
+    setCustomCheckOutTime('');
+    setJobDescription('');
+    setEmploymentStatus('active');
+    setSetupCompleted(false);
+  };
 
   // Load Work Shifts & Schedules
   useEffect(() => {
@@ -348,6 +462,8 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
           role: selectedRole === 'operational_manager' ? 'Operational Manager' : 'Team Member',
           password
         });
+        clearFormDraft(TEAM_MEMBER_DRAFT_KEY);
+        setDraftRestored(false);
         setIsSubmitting(false);
         onSuccess();
       }
@@ -472,6 +588,10 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
             </div>
           ) : (
             <form onSubmit={handleSubmit} className="space-y-6">
+              {draftRestored && (
+                <DraftRestoredBanner onClear={handleClearDraft} />
+              )}
+
               {errorMessage && (
                 <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium">
                   <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />

@@ -3,6 +3,12 @@ import { Modal } from '../common/Modal';
 import { useOpsStore } from '../../store/opsStore';
 import { Priority } from '../../types';
 import { Calendar, User as UserIcon, Tag, Clock, ShieldAlert } from 'lucide-react';
+import { 
+  saveFormDraft, 
+  loadFormDraft, 
+  clearFormDraft, 
+  DraftRestoredBanner 
+} from '../../lib/autosaveUtils';
 
 export const CreateTaskModal: React.FC = () => {
   const isCreateTaskModalOpen = useOpsStore((state) => state.isCreateTaskModalOpen);
@@ -28,6 +34,66 @@ export const CreateTaskModal: React.FC = () => {
   const [tags, setTags] = useState<string[]>(['Operations']);
   const [clientName, setClientName] = useState('');
   const [riskLevel, setRiskLevel] = useState<'Low' | 'Medium' | 'High' | 'Critical'>('Low');
+  const [draftRestored, setDraftRestored] = useState(false);
+  const isLoadedRef = React.useRef(false);
+  const DRAFT_KEY = 'opshub_draft_new_legacy_task';
+
+  React.useEffect(() => {
+    if (isCreateTaskModalOpen) {
+      const draft = loadFormDraft<any>(DRAFT_KEY);
+      if (draft) {
+        if (draft.title !== undefined) setTitle(draft.title);
+        if (draft.description !== undefined) setDescription(draft.description);
+        if (draft.spaceId !== undefined) setSpaceId(draft.spaceId);
+        if (draft.listId !== undefined) setListId(draft.listId);
+        if (draft.priority !== undefined) setPriority(draft.priority);
+        if (draft.dueDate !== undefined) setDueDate(draft.dueDate);
+        if (draft.estimatedHours !== undefined) setEstimatedHours(draft.estimatedHours);
+        if (draft.assigneeIds !== undefined && Array.isArray(draft.assigneeIds)) setAssigneeIds(draft.assigneeIds);
+        if (draft.tags !== undefined && Array.isArray(draft.tags)) setTags(draft.tags);
+        if (draft.clientName !== undefined) setClientName(draft.clientName);
+        if (draft.riskLevel !== undefined) setRiskLevel(draft.riskLevel);
+        setDraftRestored(true);
+      } else {
+        setDraftRestored(false);
+      }
+      isLoadedRef.current = true;
+    } else {
+      isLoadedRef.current = false;
+    }
+  }, [isCreateTaskModalOpen]);
+
+  React.useEffect(() => {
+    if (!isCreateTaskModalOpen || !isLoadedRef.current) return;
+    if (title.trim() || description.trim()) {
+      saveFormDraft(DRAFT_KEY, {
+        title,
+        description,
+        spaceId,
+        listId,
+        priority,
+        dueDate,
+        estimatedHours,
+        assigneeIds,
+        tags,
+        clientName,
+        riskLevel
+      });
+    }
+  }, [
+    isCreateTaskModalOpen, title, description, spaceId, listId, priority,
+    dueDate, estimatedHours, assigneeIds, tags, clientName, riskLevel
+  ]);
+
+  const handleClearDraft = () => {
+    clearFormDraft(DRAFT_KEY);
+    setDraftRestored(false);
+    setTitle('');
+    setDescription('');
+    setTags(['Operations']);
+    setClientName('');
+    setRiskLevel('Low');
+  };
 
   // Derive available lists for selected space
   const currentSpace = spaces.find((s) => s.id === spaceId);
@@ -86,6 +152,8 @@ export const CreateTaskModal: React.FC = () => {
     });
 
     // Reset & close
+    clearFormDraft(DRAFT_KEY);
+    setDraftRestored(false);
     setTitle('');
     setDescription('');
     setCreateTaskModalOpen(false);
@@ -100,6 +168,10 @@ export const CreateTaskModal: React.FC = () => {
       maxWidth="2xl"
     >
       <form onSubmit={handleSubmit} className="space-y-4">
+        {draftRestored && (
+          <DraftRestoredBanner onClear={handleClearDraft} />
+        )}
+
         {/* Title */}
         <div>
           <label className="block text-xs font-semibold uppercase tracking-wider text-gray-500 dark:text-gray-400 mb-1.5">

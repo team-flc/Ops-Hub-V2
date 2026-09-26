@@ -196,6 +196,27 @@ describe('Selected Client Persistence & Assignee Selection Suite', () => {
       });
       expect(resolved).toBe('client-ppc-001');
     });
+
+    it('1.6 Priority 1 for Archived: selects valid route clientId even if client is archived', () => {
+      setStoredSelectedClientId('user-1', 'client-ppc-001');
+      const resolved = resolveSelectedClientId({
+        clients: mockClients,
+        userId: 'user-1',
+        routeClientId: 'client-archived-003',
+        currentSelectedId: 'client-ppc-001'
+      });
+      expect(resolved).toBe('client-archived-003');
+    });
+
+    it('1.7 Priority 2 for Archived: selects current in-memory selected client even if client is archived', () => {
+      const resolved = resolveSelectedClientId({
+        clients: mockClients,
+        userId: 'user-1',
+        routeClientId: undefined,
+        currentSelectedId: 'client-archived-003'
+      });
+      expect(resolved).toBe('client-archived-003');
+    });
   });
 
   describe('2. Refresh / Settings Persistence Reproduction', () => {
@@ -243,6 +264,24 @@ describe('Selected Client Persistence & Assignee Selection Suite', () => {
       await waitFor(() => {
         expect(useOpsStore.getState().selectedClientId).toBe('client-flc-002');
         expect(getStoredSelectedClientId('user-owner-1')).toBe('client-flc-002');
+      });
+    });
+
+    it('2.3 navigating to or refreshing an archived client preserves the archived client and matches URL', async () => {
+      render(
+        <MemoryRouter initialEntries={['/clients/client-archived-003']}>
+          <Routes>
+            <Route path="/clients/:clientId" element={<OpsHubWorkspace initialView="client_workspace" />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      await waitFor(() => {
+        expect(useOpsStore.getState().selectedClientId).toBe('client-archived-003');
+      });
+
+      await waitFor(() => {
+        expect(screen.getAllByText('Old Archived Corp').length).toBeGreaterThan(0);
       });
     });
   });

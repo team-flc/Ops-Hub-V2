@@ -295,11 +295,22 @@ serve(async (req: Request) => {
 
       // For Manager-created members: restrict client grants to manager's permitted scope
       if (callerProfile.role === 'operational_manager' && Array.isArray(clientIds) && clientIds.length > 0) {
-        const { data: managerClients } = await supabaseAdmin
-          .from('client_team_access')
-          .select('client_id')
-          .eq('profile_id', callerProfile.id);
-        const allowedSet = new Set((managerClients || []).map((mc: any) => mc.client_id));
+        const [{ data: managerClients }, { data: managedClients }] = await Promise.all([
+          supabaseAdmin
+            .from('client_team_access')
+            .select('client_id')
+            .eq('profile_id', callerProfile.id),
+          supabaseAdmin
+            .from('clients')
+            .select('id')
+            .or(`operational_manager_id.eq.${callerProfile.id},created_by.eq.${callerProfile.id}`)
+        ]);
+
+        const allowedSet = new Set<string>([
+          ...(managerClients || []).map((mc: any) => mc.client_id),
+          ...(managedClients || []).map((mc: any) => mc.id)
+        ]);
+
         const unauthorizedClients = clientIds.filter((cid: string) => !allowedSet.has(cid));
         if (unauthorizedClients.length > 0) {
           return new Response(
@@ -476,6 +487,31 @@ serve(async (req: Request) => {
             { status: 403, headers: corsHeaders }
           );
         }
+        if (Array.isArray(clientIds) && clientIds.length > 0) {
+          const [{ data: managerClients }, { data: managedClients }] = await Promise.all([
+            supabaseAdmin
+              .from('client_team_access')
+              .select('client_id')
+              .eq('profile_id', callerProfile.id),
+            supabaseAdmin
+              .from('clients')
+              .select('id')
+              .or(`operational_manager_id.eq.${callerProfile.id},created_by.eq.${callerProfile.id}`)
+          ]);
+
+          const allowedSet = new Set<string>([
+            ...(managerClients || []).map((mc: any) => mc.client_id),
+            ...(managedClients || []).map((mc: any) => mc.id)
+          ]);
+
+          const unauthorizedClients = clientIds.filter((cid: string) => !allowedSet.has(cid));
+          if (unauthorizedClients.length > 0) {
+            return new Response(
+              JSON.stringify({ error: 'Forbidden: Cannot grant access to clients outside your operational scope.' }),
+              { status: 403, headers: corsHeaders }
+            );
+          }
+        }
       }
 
       // 2. Authoritative Client-Access Revocation Protection
@@ -540,31 +576,35 @@ serve(async (req: Request) => {
         }
       }
 
-      // 3. Update Profile
-      const updateData: Record<string, any> = {
-        updated_at: new Date().toISOString()
-      };
-      if (resolvedRole) updateData.role = resolvedRole;
-      if (fullName) updateData.full_name = fullName.trim();
-      if (phone !== undefined) updateData.phone = phone?.trim() || null;
-      if (backupPhone !== undefined) updateData.backup_phone = backupPhone?.trim() || null;
-      if (contactEmail !== undefined) updateData.contact_email = cleanContactEmail;
-      if (linkedinUrl !== undefined) updateData.linkedin_url = cleanLinkedinUrl;
-      if (bio !== undefined) updateData.bio = bio?.trim() || null;
-      if (avatarUrl !== undefined) updateData.avatar_url = avatarUrl?.trim() || null;
-      if (cnic !== undefined) updateData.cnic = cnic?.trim() || null;
-      if (designationId) updateData.designation_id = designationId;
-      if (reportingManagerId && callerProfile.role === 'owner') updateData.reporting_manager_id = reportingManagerId;
-      if (startDate) updateData.start_date = startDate;
+      // 3. Atomically execute profile details, departments, and client access updates
+      // in a single ACID database transaction via update_team_member_tx.
+      // This eliminates any partial-write risk without relying on compensating network rollbacks.
+      const profileData: Record<string, any> = {};
+      if (resolvedRole) profileData.role = resolvedRole;
+      if (fullName) profileData.full_name = fullName.trim();
+      if (phone !== undefined) profileData.phone = phone?.trim() || null;
+      if (backupPhone !== undefined) profileData.backup_phone = backupPhone?.trim() || null;
+      if (contactEmail !== undefined) profileData.contact_email = cleanContactEmail;
+      if (linkedinUrl !== undefined) profileData.linkedin_url = cleanLinkedinUrl;
+      if (bio !== undefined) profileData.bio = bio?.trim() || null;
+      if (avatarUrl !== undefined) profileData.avatar_url = avatarUrl?.trim() || null;
+      if (cnic !== undefined) profileData.cnic = cnic?.trim() || null;
+      if (designationId) profileData.designation_id = designationId;
+      if (reportingManagerId && callerProfile.role === 'owner') profileData.reporting_manager_id = reportingManagerId;
+      if (startDate) profileData.start_date = startDate;
 
-      const { error: updateProfErr } = await supabaseAdmin
-        .from('profiles')
-        .update(updateData)
-        .eq('id', targetUserId);
+      const { error: syncErr } = await supabaseAdmin.rpc('update_team_member_tx', {
+        p_profile_id: targetUserId,
+        p_actor_id: callerProfile.id,
+        p_profile_data: profileData,
+        p_department_ids: departmentIds && Array.isArray(departmentIds) ? departmentIds : null,
+        p_client_ids: clientIds && Array.isArray(clientIds) ? clientIds : null
+      });
 
-      if (updateProfErr) {
+      if (syncErr) {
+        console.error('sync_member_client_access_tx RPC error: update_team_member_tx error:', syncErr.message);
         return new Response(
-          JSON.stringify({ error: updateProfErr.message || 'Failed to update profile.' }),
+          JSON.stringify({ error: syncErr.message || 'Failed to update client access transactions.' }),
           { status: 400, headers: corsHeaders }
         );
       }
@@ -576,36 +616,7 @@ serve(async (req: Request) => {
         });
       }
 
-      // 4. Atomically sync departments
-      if (departmentIds && Array.isArray(departmentIds)) {
-        await supabaseAdmin.from('profile_departments').delete().eq('profile_id', targetUserId);
-        if (departmentIds.length > 0) {
-          const deptInserts = departmentIds.map((deptId: string) => ({
-            profile_id: targetUserId,
-            department_id: deptId,
-            created_by: callerProfile.id
-          }));
-          await supabaseAdmin.from('profile_departments').insert(deptInserts);
-        }
-      }
-
-      // 5. Transactional synchronization of client access tables via database RPC
-      if (clientIds && Array.isArray(clientIds)) {
-        const { error: syncErr } = await supabaseAdmin.rpc('sync_member_client_access_tx', {
-          p_profile_id: targetUserId,
-          p_new_client_ids: clientIds,
-          p_actor_id: callerProfile.id
-        });
-
-        if (syncErr) {
-          return new Response(
-            JSON.stringify({ error: syncErr.message || 'Failed to update client access transactions.' }),
-            { status: 400, headers: corsHeaders }
-          );
-        }
-      }
-
-      // 6. Authoritative Audit Event
+      // 4. Authoritative Audit Event
       await supabaseAdmin.from('system_audit_events').insert({
         actor_id: callerUser.id,
         actor_name: callerProfile.full_name,
@@ -620,7 +631,7 @@ serve(async (req: Request) => {
           client_ids: currentClientIds
         }),
         new_state: redactAuditPayload({
-          ...updateData,
+          ...profileData,
           client_ids: clientIds
         }),
         reason: 'Administrative team member update'

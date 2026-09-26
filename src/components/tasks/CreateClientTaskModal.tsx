@@ -12,6 +12,12 @@ import {
 } from '../../types';
 import { taskManagementService, isSunday, isSaturday, isWeekend } from '../../lib/taskManagementService';
 import { calculateDueDateFromDuration } from '../../lib/taskTemplateService';
+import { 
+  saveFormDraft, 
+  loadFormDraft, 
+  clearFormDraft, 
+  DraftRestoredBanner 
+} from '../../lib/autosaveUtils';
 
 interface CreateClientTaskModalProps {
   isOpen: boolean;
@@ -48,8 +54,11 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [draftRestored, setDraftRestored] = useState(false);
+  const isLoadedRef = React.useRef(false);
+  const taskDraftKey = `opshub_draft_new_task_${client?.id || 'client'}_${weekNumber}`;
 
-  // Sync week on modal open
+  // Sync week on modal open & restore draft if not from template
   useEffect(() => {
     if (isOpen) {
       setSelectedWeek(weekNumber);
@@ -79,34 +88,89 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
         setApprovalMode(initialTemplate.defaultApprovalMode || 'Internal Only');
         const calculatedDue = calculateDueDateFromDuration(todayStr, initialTemplate.suggestedDurationDays || 3);
         setDueDate(calculatedDue);
+        setDraftRestored(false);
       } else {
-        setTitle('');
-        setDetails('');
-        setPriority('Normal');
-        setApprovalMode('Internal Only');
+        // Check for existing draft
+        const draft = loadFormDraft<any>(taskDraftKey);
+        if (draft) {
+          if (draft.title !== undefined) setTitle(draft.title);
+          if (draft.details !== undefined) setDetails(draft.details);
+          if (draft.selectedWeek !== undefined) setSelectedWeek(draft.selectedWeek);
+          if (draft.departmentId !== undefined) setDepartmentId(draft.departmentId);
+          if (draft.assigneeId !== undefined) setAssigneeId(draft.assigneeId);
+          if (draft.priority !== undefined) setPriority(draft.priority);
+          if (draft.approvalMode !== undefined) setApprovalMode(draft.approvalMode);
+          if (draft.plannedStartDate !== undefined) setPlannedStartDate(draft.plannedStartDate);
+          if (draft.plannedStartTime !== undefined) setPlannedStartTime(draft.plannedStartTime);
+          if (draft.dueDate !== undefined) setDueDate(draft.dueDate);
+          if (draft.dueDateTime !== undefined) setDueDateTime(draft.dueDateTime);
+          setDraftRestored(true);
+        } else {
+          setTitle('');
+          setDetails('');
+          setPriority('Normal');
+          setApprovalMode('Internal Only');
+          setDraftRestored(false);
 
-        if (departments.length > 0) {
-          setDepartmentId((prev) => prev || departments[0].id);
-        }
+          if (departments.length > 0) {
+            setDepartmentId((prev) => prev || departments[0].id);
+          }
 
-        // Default due date = 3 days later (skip weekend)
-        const due = new Date(now);
-        due.setDate(due.getDate() + 3);
-        let dYyyy = due.getFullYear();
-        let dMm = String(due.getMonth() + 1).padStart(2, '0');
-        let dDd = String(due.getDate()).padStart(2, '0');
-        let dueStr = `${dYyyy}-${dMm}-${dDd}`;
-        while (isWeekend(dueStr)) {
-          due.setDate(due.getDate() + 1);
-          dYyyy = due.getFullYear();
-          dMm = String(due.getMonth() + 1).padStart(2, '0');
-          dDd = String(due.getDate()).padStart(2, '0');
-          dueStr = `${dYyyy}-${dMm}-${dDd}`;
+          // Default due date = 3 days later (skip weekend)
+          const due = new Date(now);
+          due.setDate(due.getDate() + 3);
+          let dYyyy = due.getFullYear();
+          let dMm = String(due.getMonth() + 1).padStart(2, '0');
+          let dDd = String(due.getDate()).padStart(2, '0');
+          let dueStr = `${dYyyy}-${dMm}-${dDd}`;
+          while (isWeekend(dueStr)) {
+            due.setDate(due.getDate() + 1);
+            dYyyy = due.getFullYear();
+            dMm = String(due.getMonth() + 1).padStart(2, '0');
+            dDd = String(due.getDate()).padStart(2, '0');
+            dueStr = `${dYyyy}-${dMm}-${dDd}`;
+          }
+          setDueDate(dueStr);
         }
-        setDueDate(dueStr);
       }
+      isLoadedRef.current = true;
+    } else {
+      isLoadedRef.current = false;
     }
-  }, [isOpen, weekNumber, departments, initialTemplate]);
+  }, [isOpen, weekNumber, departments, initialTemplate, taskDraftKey]);
+
+  // Auto-save draft on change when user enters data
+  useEffect(() => {
+    if (!isOpen || !isLoadedRef.current || initialTemplate) return;
+    if (title.trim() || details.trim()) {
+      saveFormDraft(taskDraftKey, {
+        title,
+        details,
+        selectedWeek,
+        departmentId,
+        assigneeId,
+        priority,
+        approvalMode,
+        plannedStartDate,
+        plannedStartTime,
+        dueDate,
+        dueDateTime
+      });
+    }
+  }, [
+    isOpen, taskDraftKey, title, details, selectedWeek, departmentId,
+    assigneeId, priority, approvalMode, plannedStartDate, plannedStartTime, dueDate, dueDateTime, initialTemplate
+  ]);
+
+  const handleClearDraft = () => {
+    clearFormDraft(taskDraftKey);
+    setDraftRestored(false);
+    setTitle('');
+    setDetails('');
+    setPriority('Normal');
+    setApprovalMode('Internal Only');
+    setAssigneeId('');
+  };
 
   if (!isOpen) return null;
 
@@ -188,6 +252,8 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
           clientName: client.companyName || client.clientName,
           clientCompanyName: client.companyName || client.clientName
         };
+        clearFormDraft(taskDraftKey);
+        setDraftRestored(false);
         onSuccess(fullTask);
         onClose();
       }
@@ -242,6 +308,10 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
                 </p>
               </div>
             </div>
+          )}
+
+          {draftRestored && (
+            <DraftRestoredBanner onClear={handleClearDraft} />
           )}
 
           {errorMessage && (

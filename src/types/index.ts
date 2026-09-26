@@ -377,7 +377,12 @@ export type ClientLinkType =
   | 'slack_channel'
   | 'whatsapp_group'
   | 'poc_number'
-  | 'poc_whatsapp';
+  | 'poc_whatsapp'
+  | 'case_studies'
+  | 'requirement_docs'
+  | 'requirement_documents'
+  | 'gohighlevel'
+  | 'ghl_account';
 
 export interface ClientLink {
   id?: string;

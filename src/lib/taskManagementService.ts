@@ -338,7 +338,8 @@ export const taskManagementService = {
         .eq('client_id', clientId)
         .is('archived_at', null)
         .order('sort_order', { ascending: true })
-        .order('created_at', { ascending: true });
+        .order('created_at', { ascending: true })
+        .order('id', { ascending: true });
 
       if (weekNumber) {
         query = query.eq('week_number', weekNumber);
@@ -368,7 +369,8 @@ export const taskManagementService = {
           .eq('client_id', clientId)
           .is('archived_at', null)
           .order('sort_order', { ascending: true })
-          .order('created_at', { ascending: true });
+          .order('created_at', { ascending: true })
+          .order('id', { ascending: true });
 
         if (weekNumber) {
           fallbackQuery = fallbackQuery.eq('week_number', weekNumber);
