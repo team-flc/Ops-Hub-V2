@@ -634,57 +634,11 @@ serve(async (req: Request) => {
         });
 
         if (syncErr) {
-          console.warn('sync_member_client_access_tx RPC error:', syncErr.message);
-          // Resilient fallback if database RPC has unmigrated type mismatch (COALESCE uuid[] to text[])
-          if (
-            syncErr.message?.includes('COALESCE could not convert type uuid[] to text[]') ||
-            (syncErr as any).code === '42804' ||
-            (syncErr as any).code === '42846'
-          ) {
-            // Direct synchronization fallback
-            await Promise.all([
-              supabaseAdmin.from('client_team_access').delete().eq('profile_id', targetUserId),
-              supabaseAdmin.from('profile_client_access').delete().eq('profile_id', targetUserId)
-            ]);
-
-            if (clientIds.length > 0) {
-              const ctaRows = clientIds.map((cid: string) => ({
-                profile_id: targetUserId,
-                client_id: cid,
-                granted_by: callerProfile.id
-              }));
-              const pcaRows = clientIds.map((cid: string) => ({
-                profile_id: targetUserId,
-                client_id: cid,
-                granted_by: callerProfile.id
-              }));
-
-              const { error: ctaInsertErr } = await supabaseAdmin.from('client_team_access').insert(ctaRows);
-              if (ctaInsertErr) {
-                console.error('Fallback client_team_access insert failed:', ctaInsertErr);
-                return new Response(
-                  JSON.stringify({ error: `Failed to update client_team_access: ${ctaInsertErr.message}` }),
-                  { status: 400, headers: corsHeaders }
-                );
-              }
-
-              const { error: pcaInsertErr } = await supabaseAdmin.from('profile_client_access').insert(pcaRows);
-              if (pcaInsertErr) {
-                console.error('Fallback profile_client_access insert failed:', pcaInsertErr);
-                // Atomically roll back client_team_access to prevent divergent state
-                await supabaseAdmin.from('client_team_access').delete().eq('profile_id', targetUserId);
-                return new Response(
-                  JSON.stringify({ error: `Failed to update profile_client_access: ${pcaInsertErr.message}` }),
-                  { status: 400, headers: corsHeaders }
-                );
-              }
-            }
-          } else {
-            return new Response(
-              JSON.stringify({ error: syncErr.message || 'Failed to update client access transactions.' }),
-              { status: 400, headers: corsHeaders }
-            );
-          }
+          console.error('sync_member_client_access_tx RPC error:', syncErr.message);
+          return new Response(
+            JSON.stringify({ error: syncErr.message || 'Failed to update client access transactions.' }),
+            { status: 400, headers: corsHeaders }
+          );
         }
       }
 

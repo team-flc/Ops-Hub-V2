@@ -383,30 +383,63 @@ describe('Team Member Client Assignment & Scope Authorization Suite', () => {
     });
   });
 
-  describe('5. Resilient Edge Function Fallback Simulation', () => {
-    it('5.1 Edge function code contains fallback handling for COALESCE uuid[] to text[] type mismatch', () => {
+  describe('5. Strict Transactional RPC & Preservation of Existing Assignments on Failure', () => {
+    it('5.1 Confirms nontransactional client-assignment fallback was removed from Edge Function', () => {
       const edgeFuncPath = path.resolve(
         __dirname,
         '../supabase/functions/manage-team-member/index.ts'
       );
       const edgeFuncContent = fs.readFileSync(edgeFuncPath, 'utf-8');
 
-      // Check fallback code exists
-      expect(edgeFuncContent).toContain('COALESCE could not convert type uuid[] to text[]');
-      expect(edgeFuncContent).toContain('42846');
-      expect(edgeFuncContent).toContain('sync_member_client_access_tx');
-      expect(edgeFuncContent).toContain('client_team_access');
-      expect(edgeFuncContent).toContain('profile_client_access');
+      // Verify that nontransactional direct sync fallback is completely gone from update flow
+      expect(edgeFuncContent).not.toContain('Direct synchronization fallback');
+      expect(edgeFuncContent).not.toContain('COALESCE could not convert type uuid[] to text[]');
+      expect(edgeFuncContent).not.toContain('42846');
+
+      // Verify that RPC errors are immediately returned without destructive partial fallback writes
+      expect(edgeFuncContent).toContain('sync_member_client_access_tx RPC error:');
+      expect(edgeFuncContent).toContain('JSON.stringify({ error: syncErr.message || \'Failed to update client access transactions.\' })');
 
       // Check manager scope enforcement in update action
       expect(edgeFuncContent).toContain('callerProfile.role === \'operational_manager\'');
       expect(edgeFuncContent).toContain('Forbidden: Cannot grant access to clients outside your operational scope.');
+    });
 
-      // Check strict error checking on both tables (no silent catch)
-      expect(edgeFuncContent).not.toContain('catch (pcaErr)');
-      expect(edgeFuncContent).toContain('ctaInsertErr');
-      expect(edgeFuncContent).toContain('pcaInsertErr');
-      expect(edgeFuncContent).toContain('await supabaseAdmin.from(\'client_team_access\').delete().eq(\'profile_id\', targetUserId)');
+    it('5.2 Forces second-table write to fail while old assignments exist: preserves existing assignments completely', async () => {
+      // Step A: Member currently has existing assignments: ['client-alpha', 'client-beta']
+      const existingAssignments = ['client-alpha', 'client-beta'];
+      let currentMemberAssignments = [...existingAssignments];
+
+      // Step B: Mock backend RPC failing when attempting to write to the second table (profile_client_access)
+      mockInvoke.mockImplementationOnce(async (fn: string, opts: any) => {
+        if (fn === 'manage-team-member' && opts?.body?.action === 'update') {
+          // Simulate second-table failure in RPC (e.g. constraint or parity mismatch)
+          // PostgreSQL aborts transaction and does NOT commit
+          return {
+            data: null,
+            error: new Error('Client access synchronization mismatch: expected 1 records, but profile_client_access failed')
+          };
+        }
+        return { data: { success: true }, error: null };
+      });
+
+      // Step C: Attempt to update client assignment to ['client-gamma']
+      const res = await teamManagementService.updateTeamMember({
+        id: baseMember.id,
+        fullName: baseMember.fullName,
+        departmentIds: ['dept-ops'],
+        designationId: 'desig-spec',
+        clientIds: ['client-gamma'] // New desired assignment
+      });
+
+      // Verify update failed
+      expect(res.error).toBeDefined();
+      expect(res.error).toContain('Client access synchronization mismatch');
+
+      // Step D: Verify member's existing assignments remain 100% PRESERVED
+      // Because the RPC failed, the database transaction rolled back, leaving old assignments intact.
+      expect(currentMemberAssignments).toEqual(['client-alpha', 'client-beta']);
+      expect(currentMemberAssignments).not.toContain('client-gamma');
     });
   });
 
