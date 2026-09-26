@@ -132,6 +132,36 @@ describe('Team Member Client Assignment & Scope Authorization Suite', () => {
       expect(content).toContain('REVOKE EXECUTE ON FUNCTION public.sync_member_client_access_tx(UUID, UUID[], UUID) FROM anon, authenticated');
       expect(content).toContain('GRANT EXECUTE ON FUNCTION public.sync_member_client_access_tx(UUID, UUID[], UUID) TO service_role');
     });
+
+    it('1.2 Verifies update_team_member_tx provides all-in-one ACID transaction and service_role execute grants', () => {
+      const migrationPath = path.resolve(
+        __dirname,
+        '../supabase/migrations/20260925000004_fix_sync_member_client_access_type_coercion.sql'
+      );
+      const content = fs.readFileSync(migrationPath, 'utf-8');
+
+      // Function signature
+      expect(content).toContain('CREATE OR REPLACE FUNCTION public.update_team_member_tx(');
+      expect(content).toContain('p_profile_id UUID');
+      expect(content).toContain('p_actor_id UUID');
+      expect(content).toContain('p_profile_data JSONB');
+      expect(content).toContain('p_department_ids UUID[]');
+      expect(content).toContain('p_client_ids UUID[]');
+
+      // Row-level lock
+      expect(content).toContain('PERFORM 1 FROM public.profiles WHERE id = p_profile_id FOR UPDATE;');
+
+      // Atomic department synchronization
+      expect(content).toContain('DELETE FROM public.profile_departments WHERE profile_id = p_profile_id;');
+      expect(content).toContain('INSERT INTO public.profile_departments');
+
+      // Client access delegation to sync_member_client_access_tx
+      expect(content).toContain('v_res := public.sync_member_client_access_tx(p_profile_id, p_client_ids, p_actor_id);');
+
+      // Security Definer & Grants
+      expect(content).toContain('REVOKE EXECUTE ON FUNCTION public.update_team_member_tx(UUID, UUID, JSONB, UUID[], UUID[]) FROM anon, authenticated');
+      expect(content).toContain('GRANT EXECUTE ON FUNCTION public.update_team_member_tx(UUID, UUID, JSONB, UUID[], UUID[]) TO service_role');
+    });
   });
 
   describe('2. Client Access Assignment: Zero, One, and Multiple Clients', () => {

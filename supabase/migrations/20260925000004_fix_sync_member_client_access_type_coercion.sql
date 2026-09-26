@@ -134,3 +134,88 @@ $$;
 REVOKE ALL ON FUNCTION public.sync_member_client_access_tx(UUID, UUID[], UUID) FROM PUBLIC;
 REVOKE EXECUTE ON FUNCTION public.sync_member_client_access_tx(UUID, UUID[], UUID) FROM anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.sync_member_client_access_tx(UUID, UUID[], UUID) TO service_role;
+
+-- =============================================================================
+-- Comprehensive Transactional RPC: update_team_member_tx
+-- Executes profile details update, department sync, and client access sync in a
+-- single ACID database transaction. Eliminates any partial-write risk without
+-- relying on compensating network rollbacks.
+-- =============================================================================
+CREATE OR REPLACE FUNCTION public.update_team_member_tx(
+  p_profile_id UUID,
+  p_actor_id UUID,
+  p_profile_data JSONB DEFAULT '{}'::jsonb,
+  p_department_ids UUID[] DEFAULT NULL,
+  p_client_ids UUID[] DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public, pg_temp
+AS $$
+DECLARE
+  v_res JSONB;
+BEGIN
+  -- 1. Row-level lock on target profile
+  PERFORM 1 FROM public.profiles WHERE id = p_profile_id FOR UPDATE;
+
+  -- 2. Atomically update profile details
+  IF p_profile_data IS NOT NULL AND p_profile_data <> '{}'::jsonb THEN
+    UPDATE public.profiles
+    SET
+      full_name = CASE WHEN p_profile_data ? 'full_name' THEN p_profile_data->>'full_name' ELSE full_name END,
+      phone = CASE WHEN p_profile_data ? 'phone' THEN p_profile_data->>'phone' ELSE phone END,
+      backup_phone = CASE WHEN p_profile_data ? 'backup_phone' THEN p_profile_data->>'backup_phone' ELSE backup_phone END,
+      contact_email = CASE WHEN p_profile_data ? 'contact_email' THEN p_profile_data->>'contact_email' ELSE contact_email END,
+      linkedin_url = CASE WHEN p_profile_data ? 'linkedin_url' THEN p_profile_data->>'linkedin_url' ELSE linkedin_url END,
+      bio = CASE WHEN p_profile_data ? 'bio' THEN p_profile_data->>'bio' ELSE bio END,
+      avatar_url = CASE WHEN p_profile_data ? 'avatar_url' THEN p_profile_data->>'avatar_url' ELSE avatar_url END,
+      cnic = CASE WHEN p_profile_data ? 'cnic' THEN p_profile_data->>'cnic' ELSE cnic END,
+      designation_id = CASE
+        WHEN p_profile_data ? 'designation_id' AND p_profile_data->>'designation_id' IS NOT NULL
+        THEN (p_profile_data->>'designation_id')::UUID
+        ELSE designation_id
+      END,
+      reporting_manager_id = CASE
+        WHEN p_profile_data ? 'reporting_manager_id' AND p_profile_data->>'reporting_manager_id' IS NOT NULL
+        THEN (p_profile_data->>'reporting_manager_id')::UUID
+        ELSE reporting_manager_id
+      END,
+      start_date = CASE
+        WHEN p_profile_data ? 'start_date' AND p_profile_data->>'start_date' IS NOT NULL
+        THEN (p_profile_data->>'start_date')::DATE
+        ELSE start_date
+      END,
+      role = CASE WHEN p_profile_data ? 'role' THEN p_profile_data->>'role' ELSE role END,
+      updated_at = NOW()
+    WHERE id = p_profile_id;
+  END IF;
+
+  -- 3. Atomically synchronize departments
+  IF p_department_ids IS NOT NULL THEN
+    DELETE FROM public.profile_departments WHERE profile_id = p_profile_id;
+    IF cardinality(p_department_ids) > 0 THEN
+      INSERT INTO public.profile_departments (profile_id, department_id, created_by)
+      SELECT p_profile_id, dept_id, p_actor_id
+      FROM unnest(p_department_ids) AS dept_id;
+    END IF;
+  END IF;
+
+  -- 4. Atomically synchronize client access tables via sync_member_client_access_tx
+  -- If client access update fails (open tasks block, parity error), entire transaction rolls back automatically
+  IF p_client_ids IS NOT NULL THEN
+    v_res := public.sync_member_client_access_tx(p_profile_id, p_client_ids, p_actor_id);
+  END IF;
+
+  RETURN jsonb_build_object(
+    'success', true,
+    'profile_id', p_profile_id,
+    'client_sync', v_res
+  );
+END;
+$$;
+
+-- Restrict update_team_member_tx strictly to service_role
+REVOKE ALL ON FUNCTION public.update_team_member_tx(UUID, UUID, JSONB, UUID[], UUID[]) FROM PUBLIC;
+REVOKE EXECUTE ON FUNCTION public.update_team_member_tx(UUID, UUID, JSONB, UUID[], UUID[]) FROM anon, authenticated;
+GRANT EXECUTE ON FUNCTION public.update_team_member_tx(UUID, UUID, JSONB, UUID[], UUID[]) TO service_role;

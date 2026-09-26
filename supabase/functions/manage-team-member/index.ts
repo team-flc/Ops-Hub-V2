@@ -576,112 +576,47 @@ serve(async (req: Request) => {
         }
       }
 
-      // 3. Snapshot current departments for rollback integrity if any subsequent write fails
-      const { data: currentDepts } = await supabaseAdmin
-        .from('profile_departments')
-        .select('department_id')
-        .eq('profile_id', targetUserId);
-      const currentDepartmentIds = (currentDepts || []).map((d: any) => d.department_id);
+      // 3. Atomically execute profile details, departments, and client access updates
+      // in a single ACID database transaction via update_team_member_tx.
+      // This eliminates any partial-write risk without relying on compensating network rollbacks.
+      const profileData: Record<string, any> = {};
+      if (resolvedRole) profileData.role = resolvedRole;
+      if (fullName) profileData.full_name = fullName.trim();
+      if (phone !== undefined) profileData.phone = phone?.trim() || null;
+      if (backupPhone !== undefined) profileData.backup_phone = backupPhone?.trim() || null;
+      if (contactEmail !== undefined) profileData.contact_email = cleanContactEmail;
+      if (linkedinUrl !== undefined) profileData.linkedin_url = cleanLinkedinUrl;
+      if (bio !== undefined) profileData.bio = bio?.trim() || null;
+      if (avatarUrl !== undefined) profileData.avatar_url = avatarUrl?.trim() || null;
+      if (cnic !== undefined) profileData.cnic = cnic?.trim() || null;
+      if (designationId) profileData.designation_id = designationId;
+      if (reportingManagerId && callerProfile.role === 'owner') profileData.reporting_manager_id = reportingManagerId;
+      if (startDate) profileData.start_date = startDate;
 
-      // 4. Transactional synchronization of client access tables via database RPC
-      // Executed FIRST so that any client-access failure (e.g., open task block, parity error)
-      // halts immediately before profile details or departments are touched.
-      let clientAccessSynced = false;
-      if (clientIds && Array.isArray(clientIds)) {
-        const { error: syncErr } = await supabaseAdmin.rpc('sync_member_client_access_tx', {
-          p_profile_id: targetUserId,
-          p_new_client_ids: clientIds,
-          p_actor_id: callerProfile.id
-        });
+      const { error: syncErr } = await supabaseAdmin.rpc('update_team_member_tx', {
+        p_profile_id: targetUserId,
+        p_actor_id: callerProfile.id,
+        p_profile_data: profileData,
+        p_department_ids: departmentIds && Array.isArray(departmentIds) ? departmentIds : null,
+        p_client_ids: clientIds && Array.isArray(clientIds) ? clientIds : null
+      });
 
-        if (syncErr) {
-          console.error('sync_member_client_access_tx RPC error:', syncErr.message);
-          return new Response(
-            JSON.stringify({ error: syncErr.message || 'Failed to update client access transactions.' }),
-            { status: 400, headers: corsHeaders }
-          );
-        }
-        clientAccessSynced = true;
-      }
-
-      // 5. Update Profile and Departments with compensating rollback on failure
-      const updateData: Record<string, any> = {
-        updated_at: new Date().toISOString()
-      };
-      if (resolvedRole) updateData.role = resolvedRole;
-      if (fullName) updateData.full_name = fullName.trim();
-      if (phone !== undefined) updateData.phone = phone?.trim() || null;
-      if (backupPhone !== undefined) updateData.backup_phone = backupPhone?.trim() || null;
-      if (contactEmail !== undefined) updateData.contact_email = cleanContactEmail;
-      if (linkedinUrl !== undefined) updateData.linkedin_url = cleanLinkedinUrl;
-      if (bio !== undefined) updateData.bio = bio?.trim() || null;
-      if (avatarUrl !== undefined) updateData.avatar_url = avatarUrl?.trim() || null;
-      if (cnic !== undefined) updateData.cnic = cnic?.trim() || null;
-      if (designationId) updateData.designation_id = designationId;
-      if (reportingManagerId && callerProfile.role === 'owner') updateData.reporting_manager_id = reportingManagerId;
-      if (startDate) updateData.start_date = startDate;
-
-      try {
-        const { error: updateProfErr } = await supabaseAdmin
-          .from('profiles')
-          .update(updateData)
-          .eq('id', targetUserId);
-
-        if (updateProfErr) {
-          throw new Error(updateProfErr.message || 'Failed to update profile.');
-        }
-
-        // Sync auth metadata if role changed
-        if (resolvedRole) {
-          await supabaseAdmin.auth.admin.updateUserById(targetUserId, {
-            user_metadata: { role: resolvedRole }
-          });
-        }
-
-        // Atomically sync departments
-        if (departmentIds && Array.isArray(departmentIds)) {
-          await supabaseAdmin.from('profile_departments').delete().eq('profile_id', targetUserId);
-          if (departmentIds.length > 0) {
-            const deptInserts = departmentIds.map((deptId: string) => ({
-              profile_id: targetUserId,
-              department_id: deptId,
-              created_by: callerProfile.id
-            }));
-            const { error: deptErr } = await supabaseAdmin.from('profile_departments').insert(deptInserts);
-            if (deptErr) {
-              throw new Error(deptErr.message || 'Failed to update departments.');
-            }
-          }
-        }
-      } catch (err: any) {
-        // Compensating rollback: restore client access to original assignments if changed
-        if (clientAccessSynced) {
-          console.error('Compensating rollback: restoring client access to', currentClientIds);
-          await supabaseAdmin.rpc('sync_member_client_access_tx', {
-            p_profile_id: targetUserId,
-            p_new_client_ids: currentClientIds,
-            p_actor_id: callerProfile.id
-          });
-        }
-        // Restore departments if needed
-        if (departmentIds && Array.isArray(departmentIds)) {
-          await supabaseAdmin.from('profile_departments').delete().eq('profile_id', targetUserId);
-          if (currentDepartmentIds.length > 0) {
-            const deptRestore = currentDepartmentIds.map((deptId: string) => ({
-              profile_id: targetUserId,
-              department_id: deptId,
-              created_by: callerProfile.id
-            }));
-            await supabaseAdmin.from('profile_departments').insert(deptRestore);
-          }
-        }
+      if (syncErr) {
+        console.error('sync_member_client_access_tx RPC error: update_team_member_tx error:', syncErr.message);
         return new Response(
-          JSON.stringify({ error: err.message || 'Failed to update profile details.' }),
+          JSON.stringify({ error: syncErr.message || 'Failed to update client access transactions.' }),
           { status: 400, headers: corsHeaders }
         );
       }
 
-      // 6. Authoritative Audit Event
+      // Sync auth metadata if role changed
+      if (resolvedRole) {
+        await supabaseAdmin.auth.admin.updateUserById(targetUserId, {
+          user_metadata: { role: resolvedRole }
+        });
+      }
+
+      // 4. Authoritative Audit Event
       await supabaseAdmin.from('system_audit_events').insert({
         actor_id: callerUser.id,
         actor_name: callerProfile.full_name,
@@ -696,7 +631,7 @@ serve(async (req: Request) => {
           client_ids: currentClientIds
         }),
         new_state: redactAuditPayload({
-          ...updateData,
+          ...profileData,
           client_ids: clientIds
         }),
         reason: 'Administrative team member update'
