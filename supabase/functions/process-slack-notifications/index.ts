@@ -3,6 +3,14 @@
 // Location: supabase/functions/process-slack-notifications/index.ts
 // Environment: Deno Runtime / Supabase Functions
 // Phase 1: Ops Hub -> Slack Task Notifications Dispatcher
+//
+// Practical Delivery Guarantee:
+// At-least-once delivery with deterministic occurrence-based deduplication (occ_${seq}).
+// Under network partitions, server restarts, or database write failures occurring between
+// Slack accepting chat.postMessage and the database recording status = 'delivered',
+// redelivery may occur upon lease expiry.
+// Deduplication is guaranteed at the event level by sequence-based idempotency keys,
+// and worker isolation is enforced atomically by claim_slack_outbox_batch (FOR UPDATE SKIP LOCKED).
 // ==============================================================================
 
 import { serve } from 'https://deno.land/std@0.177.0/http/server.ts';
@@ -27,7 +35,7 @@ const getCorsHeaders = (origin: string | null) => {
   };
 };
 
-function sanitizeErrorMessage(msg: string): string {
+export function sanitizeErrorMessage(msg: string): string {
   if (!msg) return 'Unknown error';
   return msg
     .replace(/Bearer\s+[^\s]+/gi, 'Bearer [REDACTED]')
@@ -36,7 +44,7 @@ function sanitizeErrorMessage(msg: string): string {
     .slice(0, 500);
 }
 
-function calculateBackoffSeconds(retryCount: number): number {
+export function calculateBackoffSeconds(retryCount: number): number {
   return Math.min(3600, Math.pow(2, retryCount) * 30);
 }
 
@@ -67,12 +75,12 @@ serve(async (req: Request) => {
     );
   }
 
-  // Admin client with service_role to access slack_notification_outbox
+  // Admin client with service_role to access outbox and RPC
   const supabaseAdmin = createClient(supabaseUrl, supabaseServiceKey, {
     auth: { persistSession: false, autoRefreshToken: false }
   });
 
-  // Authorization: Validate JWT caller or service call
+  // 1. Authorization: Only service_role or management (owner, operational_manager) can trigger processing
   const authHeader = req.headers.get('Authorization');
   if (!authHeader || !authHeader.startsWith('Bearer ')) {
     return new Response(
@@ -82,52 +90,116 @@ serve(async (req: Request) => {
   }
 
   const token = authHeader.replace('Bearer ', '');
-  const { data: { user: callerUser }, error: userAuthError } = await supabaseAdmin.auth.getUser(token);
+  let isAuthorizedServiceOrManagement = false;
 
-  if (userAuthError || !callerUser) {
+  if (token === supabaseServiceKey) {
+    // Authorized directly as server-side service_role (e.g., cron or internal webhook)
+    isAuthorizedServiceOrManagement = true;
+  } else {
+    // Validate caller JWT session
+    const { data: { user: callerUser }, error: userAuthError } = await supabaseAdmin.auth.getUser(token);
+
+    if (userAuthError || !callerUser) {
+      return new Response(
+        JSON.stringify({ error: 'Unauthorized: Invalid authentication session.' }),
+        { status: 401, headers: corsHeaders }
+      );
+    }
+
+    // Check caller's role in public.profiles
+    const { data: profile, error: profileErr } = await supabaseAdmin
+      .from('profiles')
+      .select('role')
+      .eq('id', callerUser.id)
+      .single();
+
+    if (profileErr || !profile) {
+      return new Response(
+        JSON.stringify({ error: 'Forbidden: Caller profile could not be verified.' }),
+        { status: 403, headers: corsHeaders }
+      );
+    }
+
+    if (profile.role === 'owner' || profile.role === 'operational_manager') {
+      isAuthorizedServiceOrManagement = true;
+    } else {
+      return new Response(
+        JSON.stringify({ error: 'Forbidden: Only owners and operational managers can process Slack notifications.' }),
+        { status: 403, headers: corsHeaders }
+      );
+    }
+  }
+
+  if (!isAuthorizedServiceOrManagement) {
     return new Response(
-      JSON.stringify({ error: 'Unauthorized: Invalid authentication session.' }),
-      { status: 401, headers: corsHeaders }
+      JSON.stringify({ error: 'Forbidden: Access denied.' }),
+      { status: 403, headers: corsHeaders }
     );
   }
 
   try {
     let batchSize = 25;
-    let isLiveDisabled = false;
-
     try {
       const body = await req.json();
       if (body?.batchSize && typeof body.batchSize === 'number') {
         batchSize = Math.min(50, Math.max(1, body.batchSize));
       }
-      if (body?.isLiveDisabled === true) {
-        isLiveDisabled = true;
-      }
+      // Note: Client-controlled isLiveDisabled switch is strictly ignored/removed.
     } catch {
       // Empty or non-JSON body is valid, defaults apply
     }
 
-    const nowIso = new Date().toISOString();
+    // 2. Atomically claim outbox records via FOR UPDATE SKIP LOCKED
+    const workerId = `edge_worker_${crypto.randomUUID()}`;
+    const { data: rows, error: claimErr } = await supabaseAdmin.rpc('claim_slack_outbox_batch', {
+      p_batch_size: batchSize,
+      p_worker_id: workerId,
+      p_timeout_seconds: 300
+    });
 
-    // 1. Fetch eligible outbox records
-    const { data: rows, error: fetchErr } = await supabaseAdmin
-      .from('slack_notification_outbox')
-      .select('*')
-      .in('status', ['pending', 'failed'])
-      .lte('next_retry_at', nowIso)
-      .order('created_at', { ascending: true })
-      .limit(batchSize);
-
-    if (fetchErr) {
+    if (claimErr) {
       return new Response(
-        JSON.stringify({ error: `Failed to query outbox: ${fetchErr.message}` }),
+        JSON.stringify({ error: `Failed to claim outbox batch: ${sanitizeErrorMessage(claimErr.message)}` }),
         { status: 500, headers: corsHeaders }
       );
     }
 
     if (!rows || rows.length === 0) {
       return new Response(
-        JSON.stringify({ success: true, processed: 0, delivered: 0, failed: 0, skipped: 0 }),
+        JSON.stringify({ success: true, processed: 0, delivered: 0, failed: 0, skipped: 0, held: 0 }),
+        { status: 200, headers: corsHeaders }
+      );
+    }
+
+    // 3. Handle missing bot token: HOLD messages for recovery, NEVER permanently skip them!
+    if (!slackBotToken) {
+      const rowIds = rows.map((r: any) => r.id);
+      const { error: holdErr } = await supabaseAdmin
+        .from('slack_notification_outbox')
+        .update({
+          status: 'pending',
+          claimed_at: null,
+          claimed_by: null,
+          last_error: 'Held for recovery: SLACK_BOT_TOKEN environment secret is not configured',
+          skip_reason: 'holding_for_slack_bot_token',
+          updated_at: new Date().toISOString()
+        })
+        .in('id', rowIds);
+
+      if (holdErr) {
+        console.error(`[Slack Dispatch] Failed to hold rows for recovery: ${holdErr.message}`);
+      }
+
+      return new Response(
+        JSON.stringify({
+          success: true,
+          processed: rows.length,
+          delivered: 0,
+          failed: 0,
+          skipped: 0,
+          held: rows.length,
+          message: 'Notifications held for recovery: SLACK_BOT_TOKEN is not configured.'
+        }),
         { status: 200, headers: corsHeaders }
       );
     }
@@ -136,50 +208,103 @@ serve(async (req: Request) => {
     let failedCount = 0;
     let skippedCount = 0;
 
+    // 4. Process each claimed row sequentially
     for (const row of rows) {
-      if (row.retry_count >= row.max_retries) {
-        continue;
+      let targetChannel: string | null = null;
+
+      if (row.event_type === 'approval_submitted') {
+        // Event 2: Posts to public #ops-approvals channel
+        targetChannel = row.channel_id || slackApprovalsChannel;
+      } else {
+        // Event 1 & 3: Direct Message to recipient
+        if (!row.recipient_slack_id) {
+          // Permanently skip row if recipient has no Slack mapping
+          const { error: skipErr } = await supabaseAdmin
+            .from('slack_notification_outbox')
+            .update({
+              status: 'skipped',
+              skip_reason: 'missing_slack_member_id',
+              claimed_at: null,
+              claimed_by: null,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', row.id);
+
+          if (skipErr) {
+            console.error(`[Slack Dispatch] DB error marking skipped row ${row.id}: ${skipErr.message}`);
+          }
+          skippedCount++;
+          continue;
+        }
+
+        // Open/retrieve DM channel (D...) via conversations.open
+        try {
+          const openRes = await fetch('https://slack.com/api/conversations.open', {
+            method: 'POST',
+            headers: {
+              'Authorization': `Bearer ${slackBotToken}`,
+              'Content-Type': 'application/json; charset=utf-8'
+            },
+            body: JSON.stringify({ users: row.recipient_slack_id })
+          });
+
+          const openData = await openRes.json().catch(() => ({ ok: false, error: 'invalid_json_response' }));
+
+          if (openRes.ok && openData.ok && openData.channel?.id) {
+            targetChannel = openData.channel.id;
+          } else {
+            const nextRetry = row.retry_count + 1;
+            const backoff = calculateBackoffSeconds(nextRetry);
+            const nextRetryAt = new Date(Date.now() + backoff * 1000).toISOString();
+            const safeError = sanitizeErrorMessage(openData.error || `conversations.open failed HTTP ${openRes.status}`);
+
+            const { error: failErr } = await supabaseAdmin
+              .from('slack_notification_outbox')
+              .update({
+                status: 'failed',
+                retry_count: nextRetry,
+                next_retry_at: nextRetryAt,
+                last_error: safeError,
+                claimed_at: null,
+                claimed_by: null,
+                updated_at: new Date().toISOString()
+              })
+              .eq('id', row.id);
+
+            if (failErr) {
+              console.error(`[Slack Dispatch] DB error recording open failure for row ${row.id}: ${failErr.message}`);
+            }
+            failedCount++;
+            continue;
+          }
+        } catch (openErr: any) {
+          const nextRetry = row.retry_count + 1;
+          const backoff = calculateBackoffSeconds(nextRetry);
+          const nextRetryAt = new Date(Date.now() + backoff * 1000).toISOString();
+          const safeError = sanitizeErrorMessage(openErr?.message || 'conversations.open network failure');
+
+          const { error: failErr } = await supabaseAdmin
+            .from('slack_notification_outbox')
+            .update({
+              status: 'failed',
+              retry_count: nextRetry,
+              next_retry_at: nextRetryAt,
+              last_error: safeError,
+              claimed_at: null,
+              claimed_by: null,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', row.id);
+
+          if (failErr) {
+            console.error(`[Slack Dispatch] DB error recording network failure for row ${row.id}: ${failErr.message}`);
+          }
+          failedCount++;
+          continue;
+        }
       }
 
-      let targetChannel = row.channel_id;
-      if (row.event_type === 'approval_submitted' && !targetChannel) {
-        targetChannel = slackApprovalsChannel;
-      } else if (!targetChannel && row.recipient_slack_id) {
-        targetChannel = row.recipient_slack_id;
-      }
-
-      // Check missing recipient
-      if (!targetChannel) {
-        await supabaseAdmin
-          .from('slack_notification_outbox')
-          .update({
-            status: 'skipped',
-            skip_reason: 'missing_slack_member_id',
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', row.id);
-
-        skippedCount++;
-        continue;
-      }
-
-      // If token missing or live delivery disabled
-      if (!slackBotToken || isLiveDisabled) {
-        const reason = !slackBotToken ? 'missing_slack_bot_token' : 'live_delivery_blocked_review_mode';
-        await supabaseAdmin
-          .from('slack_notification_outbox')
-          .update({
-            status: 'skipped',
-            skip_reason: reason,
-            updated_at: new Date().toISOString()
-          })
-          .eq('id', row.id);
-
-        skippedCount++;
-        continue;
-      }
-
-      // Send to Slack API
+      // 5. Send message via chat.postMessage
       try {
         const slackPayload: Record<string, any> = {
           channel: targetChannel,
@@ -189,7 +314,7 @@ serve(async (req: Request) => {
           slackPayload.blocks = row.blocks;
         }
 
-        const slackRes = await fetch('https://slack.com/api/chat.postMessage', {
+        const postRes = await fetch('https://slack.com/api/chat.postMessage', {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${slackBotToken}`,
@@ -198,57 +323,73 @@ serve(async (req: Request) => {
           body: JSON.stringify(slackPayload)
         });
 
-        const slackData = await slackRes.json().catch(() => ({ ok: false, error: 'invalid_json_response' }));
+        const postData = await postRes.json().catch(() => ({ ok: false, error: 'invalid_json_response' }));
 
-        if (slackRes.ok && slackData.ok) {
-          await supabaseAdmin
+        if (postRes.ok && postData.ok) {
+          const { error: deliverErr } = await supabaseAdmin
             .from('slack_notification_outbox')
             .update({
               status: 'delivered',
-              slack_message_ts: slackData.ts || null,
+              channel_id: targetChannel,
+              slack_message_ts: postData.ts || null,
               delivered_at: new Date().toISOString(),
               last_error: null,
+              claimed_at: null,
+              claimed_by: null,
               updated_at: new Date().toISOString()
             })
             .eq('id', row.id);
 
+          if (deliverErr) {
+            console.error(`[Slack Dispatch] DB update error after successful Slack post for row ${row.id}: ${deliverErr.message}`);
+          }
           deliveredCount++;
         } else {
           const nextRetry = row.retry_count + 1;
           const backoff = calculateBackoffSeconds(nextRetry);
           const nextRetryAt = new Date(Date.now() + backoff * 1000).toISOString();
-          const safeError = sanitizeErrorMessage(slackData.error || `HTTP ${slackRes.status}`);
+          const safeError = sanitizeErrorMessage(postData.error || `chat.postMessage failed HTTP ${postRes.status}`);
 
-          await supabaseAdmin
+          const { error: failErr } = await supabaseAdmin
             .from('slack_notification_outbox')
             .update({
               status: 'failed',
               retry_count: nextRetry,
               next_retry_at: nextRetryAt,
               last_error: safeError,
+              claimed_at: null,
+              claimed_by: null,
               updated_at: new Date().toISOString()
             })
             .eq('id', row.id);
 
+          if (failErr) {
+            console.error(`[Slack Dispatch] DB error recording post failure for row ${row.id}: ${failErr.message}`);
+          }
           failedCount++;
         }
       } catch (postErr: any) {
         const nextRetry = row.retry_count + 1;
         const backoff = calculateBackoffSeconds(nextRetry);
         const nextRetryAt = new Date(Date.now() + backoff * 1000).toISOString();
-        const safeError = sanitizeErrorMessage(postErr?.message || 'Network exception');
+        const safeError = sanitizeErrorMessage(postErr?.message || 'chat.postMessage network failure');
 
-        await supabaseAdmin
+        const { error: failErr } = await supabaseAdmin
           .from('slack_notification_outbox')
           .update({
             status: 'failed',
             retry_count: nextRetry,
             next_retry_at: nextRetryAt,
             last_error: safeError,
+            claimed_at: null,
+            claimed_by: null,
             updated_at: new Date().toISOString()
           })
           .eq('id', row.id);
 
+        if (failErr) {
+          console.error(`[Slack Dispatch] DB error recording network exception for row ${row.id}: ${failErr.message}`);
+        }
         failedCount++;
       }
     }
@@ -259,7 +400,8 @@ serve(async (req: Request) => {
         processed: rows.length,
         delivered: deliveredCount,
         failed: failedCount,
-        skipped: skippedCount
+        skipped: skippedCount,
+        held: 0
       }),
       { status: 200, headers: corsHeaders }
     );
