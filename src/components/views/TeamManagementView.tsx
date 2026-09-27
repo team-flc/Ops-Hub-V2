@@ -325,6 +325,7 @@ export const TeamManagementView: React.FC = () => {
               <thead className="bg-slate-50/75 dark:bg-dark-sidebar border-b border-slate-100 dark:border-dark-border text-[10px] uppercase tracking-wider font-bold text-slate-500 dark:text-gray-400">
                 <tr>
                   <th className="px-5 py-3.5">Team Member</th>
+                  <th className="px-4 py-3.5">Slack ID</th>
                   <th className="px-4 py-3.5">Designation</th>
                   <th className="px-4 py-3.5">Departments</th>
                   <th className="px-4 py-3.5">Reporting Manager</th>
@@ -371,6 +372,22 @@ export const TeamManagementView: React.FC = () => {
                             <div className="text-[11px] text-slate-400 font-mono">{member.workEmail}</div>
                           </div>
                         </div>
+                      </td>
+
+                      {/* Slack ID */}
+                      <td className="px-4 py-4">
+                        {member.slackMemberId ? (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[11px] font-mono font-medium bg-emerald-50 text-emerald-700 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                            {member.slackMemberId}
+                          </span>
+                        ) : (
+                          <span
+                            className="inline-flex items-center gap-1 px-2 py-0.5 rounded-md text-[10px] font-semibold bg-amber-50 text-amber-700 dark:bg-amber-950/50 dark:text-amber-300 border border-amber-200 dark:border-amber-800"
+                            title="Missing Slack Member ID: task notifications for this team member will be skipped safely."
+                          >
+                            Missing Slack ID
+                          </span>
+                        )}
                       </td>
 
                       {/* Designation */}

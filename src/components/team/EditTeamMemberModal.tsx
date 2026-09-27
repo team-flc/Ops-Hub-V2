@@ -49,6 +49,7 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
   const [bio, setBio] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [cnic, setCnic] = useState('');
+  const [slackMemberId, setSlackMemberId] = useState('');
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const displayAvatarUrl = useSignedUrl('profile-avatars', avatarUrl);
   const [startDate, setStartDate] = useState('');
@@ -112,11 +113,14 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
             setInstagramUrl(prof.instagram_url || '');
             setBio(prof.bio || '');
             setCnic(prof.cnic || member.cnic || '');
+            setSlackMemberId(prof.slack_member_id || member.slackMemberId || '');
           } else {
             setCnic(member.cnic || '');
+            setSlackMemberId(member.slackMemberId || '');
           }
         } else {
           setCnic(member.cnic || '');
+          setSlackMemberId(member.slackMemberId || '');
         }
 
         const [fetchedShifts, employeeRec, fetchedBank, fetchedSchedules] = await Promise.all([
@@ -261,6 +265,14 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
       return;
     }
 
+    if (slackMemberId.trim()) {
+      const upperSlackId = slackMemberId.trim().toUpperCase();
+      if (!/^[UW][A-Z0-9]{8,14}$/.test(upperSlackId)) {
+        setErrorMessage('Invalid Slack Member ID format. It must start with U or W followed by 8-14 alphanumeric characters (e.g. U0123456789).');
+        return;
+      }
+    }
+
     if (selectedDeptIds.length === 0) {
       setErrorMessage('Please assign at least one department.');
       return;
@@ -314,7 +326,8 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
           departmentIds: selectedDeptIds,
           designationId: selectedDesignationId,
           reportingManagerId: selectedManagerId || undefined,
-          clientIds: selectedClientIds
+          clientIds: selectedClientIds,
+          slackMemberId: slackMemberId.trim().toUpperCase() || null
         },
         currentUserProfile.id
       );
@@ -620,6 +633,24 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
                   placeholder="Brief summary of member's professional background and skills..."
                   className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
                 />
+              </div>
+
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300 flex items-center justify-between">
+                  <span>Slack Member ID (Optional)</span>
+                  <span className="text-[10px] text-slate-400 font-normal">e.g. U0123456789</span>
+                </label>
+                <input
+                  type="text"
+                  value={slackMemberId}
+                  onChange={(e) => setSlackMemberId(e.target.value.toUpperCase().trim())}
+                  placeholder="U0123456789"
+                  maxLength={15}
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 font-mono focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+                <span className="text-[10px] text-slate-400 block">
+                  Starts with U or W (9–15 chars). Required for automated Slack direct messages.
+                </span>
               </div>
 
               <div className="space-y-1">

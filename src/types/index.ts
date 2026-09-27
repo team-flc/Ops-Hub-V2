@@ -205,6 +205,33 @@ export interface TeamMemberRecord {
   departments: Department[];
   clientAccessCount: number;
   clientIds: string[];
+  slackMemberId?: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export type SlackNotificationEventType = 'task_assigned' | 'approval_submitted' | 'approval_decision';
+export type SlackNotificationStatus = 'pending' | 'delivered' | 'failed' | 'skipped';
+
+export interface SlackNotificationOutboxRecord {
+  id: string;
+  taskId: string;
+  clientId: string;
+  eventType: SlackNotificationEventType;
+  idempotencyKey: string;
+  recipientProfileId?: string | null;
+  recipientSlackId?: string | null;
+  channelId?: string | null;
+  messageText: string;
+  blocks?: any[];
+  status: SlackNotificationStatus;
+  skipReason?: string | null;
+  retryCount: number;
+  maxRetries: number;
+  nextRetryAt: string;
+  lastError?: string | null;
+  slackMessageTs?: string | null;
+  deliveredAt?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -234,6 +261,7 @@ export interface UserProfile {
   facebookUrl?: string | null;
   instagramUrl?: string | null;
   contactEmail?: string | null;
+  slackMemberId?: string | null;
   role: UserRole;
   status: AccountStatus;
   designationId?: string | null;

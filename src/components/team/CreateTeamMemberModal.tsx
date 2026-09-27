@@ -54,6 +54,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
   const [bio, setBio] = useState('');
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
   const [cnic, setCnic] = useState('');
+  const [slackMemberId, setSlackMemberId] = useState('');
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
   const displayAvatarUrl = useSignedUrl('profile-avatars', avatarUrl);
   const [startDate, setStartDate] = useState(getPKTTodayDateString());
@@ -117,6 +118,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
       if (draft.facebookUrl !== undefined) setFacebookUrl(draft.facebookUrl);
       if (draft.instagramUrl !== undefined) setInstagramUrl(draft.instagramUrl);
       if (draft.bio !== undefined) setBio(draft.bio);
+      if (draft.slackMemberId !== undefined) setSlackMemberId(draft.slackMemberId);
       if (draft.startDate !== undefined) setStartDate(draft.startDate);
       if (draft.selectedDeptIds !== undefined && Array.isArray(draft.selectedDeptIds)) setSelectedDeptIds(draft.selectedDeptIds);
       if (draft.selectedDesignationId !== undefined) setSelectedDesignationId(draft.selectedDesignationId);
@@ -155,6 +157,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
         facebookUrl,
         instagramUrl,
         bio,
+        slackMemberId,
         startDate,
         selectedDeptIds,
         selectedDesignationId,
@@ -173,7 +176,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
     }
   }, [
     isOpen, fullName, workEmail, phone, backupPhone, contactEmail, linkedinUrl, facebookUrl, instagramUrl,
-    bio, startDate, selectedDeptIds, selectedDesignationId, selectedManagerId, selectedClientIds,
+    bio, slackMemberId, startDate, selectedDeptIds, selectedDesignationId, selectedManagerId, selectedClientIds,
     selectedRole, empId, employmentType, selectedShiftId, customCheckInTime, customCheckOutTime,
     jobDescription, employmentStatus, setupCompleted
   ]);
@@ -190,6 +193,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
     setFacebookUrl('');
     setInstagramUrl('');
     setBio('');
+    setSlackMemberId('');
     setStartDate(getPKTTodayDateString());
     setSelectedDeptIds([]);
     setSelectedDesignationId('');
@@ -351,6 +355,14 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
       return;
     }
 
+    if (slackMemberId.trim()) {
+      const upperSlackId = slackMemberId.trim().toUpperCase();
+      if (!/^[UW][A-Z0-9]{8,14}$/.test(upperSlackId)) {
+        setErrorMessage('Invalid Slack Member ID format. It must start with U or W followed by 8-14 alphanumeric characters (e.g. U0123456789).');
+        return;
+      }
+    }
+
     if (selectedDeptIds.length === 0) {
       setErrorMessage('Please assign at least one department.');
       return;
@@ -405,6 +417,7 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
         designationId: selectedDesignationId,
         reportingManagerId: selectedManagerId,
         clientIds: selectedClientIds,
+        slackMemberId: slackMemberId.trim().toUpperCase() || undefined,
         password
       });
 
@@ -779,6 +792,24 @@ export const CreateTeamMemberModal: React.FC<CreateTeamMemberModalProps> = ({
                       placeholder="Brief summary of member's professional background and skills..."
                       className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500 resize-none"
                     />
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300 flex items-center justify-between">
+                      <span>Slack Member ID (Optional)</span>
+                      <span className="text-[10px] text-slate-400 font-normal">e.g. U0123456789</span>
+                    </label>
+                    <input
+                      type="text"
+                      value={slackMemberId}
+                      onChange={(e) => setSlackMemberId(e.target.value.toUpperCase().trim())}
+                      placeholder="U0123456789"
+                      maxLength={15}
+                      className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 font-mono focus:outline-none focus:ring-2 focus:ring-brand-500"
+                    />
+                    <span className="text-[10px] text-slate-400 block">
+                      Starts with U or W (9–15 chars). Required for automated Slack direct messages.
+                    </span>
                   </div>
 
                   <div className="space-y-1">

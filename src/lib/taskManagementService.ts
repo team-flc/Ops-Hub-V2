@@ -5,6 +5,7 @@
 // ==============================================================================
 
 import { supabase, isSupabaseConfigured } from './supabase';
+import { slackNotificationService } from './slackNotificationService';
 import {
   ClientTask,
   ClientTaskEvent,
@@ -989,6 +990,7 @@ export const taskManagementService = {
     }
 
     const t = edgeRes.data.task;
+    void slackNotificationService.triggerDispatch();
     return {
       data: {
         id: t.id,
@@ -1087,6 +1089,7 @@ export const taskManagementService = {
       return { error: edgeRes.error };
     }
 
+    void slackNotificationService.triggerDispatch();
     return { error: null };
   },
 
@@ -1125,6 +1128,7 @@ export const taskManagementService = {
       return { error: edgeRes.error };
     }
 
+    void slackNotificationService.triggerDispatch();
     return { error: null, task: edgeRes.data?.task };
   },
 
@@ -1395,6 +1399,7 @@ export const taskManagementService = {
         return edgeRes;
       }
 
+      void slackNotificationService.triggerDispatch();
       return { error: null, task: data ? (data as any) : undefined };
     } catch (err: any) {
       return { error: err?.message || 'Failed to update Kanban status.' };
@@ -1496,6 +1501,7 @@ export const taskManagementService = {
         // Announcement upsert failure is non-fatal
       }
 
+      void slackNotificationService.triggerDispatch();
       return { error: null, task: data ? (data as any) : undefined };
     } catch (err: any) {
       return { error: err?.message || 'Failed to start work.' };
@@ -1681,6 +1687,7 @@ export const taskManagementService = {
         // Non-fatal
       }
 
+      void slackNotificationService.triggerDispatch();
       return { error: null, task: data ? (data as any) : undefined, finalActiveSeconds: finalActive };
     } catch (err: any) {
       return { error: err?.message || 'Failed to submit for approval.' };

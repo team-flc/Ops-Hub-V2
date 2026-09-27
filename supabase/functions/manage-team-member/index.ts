@@ -27,6 +27,7 @@ const getCorsHeaders = (origin: string | null) => {
 };
 
 const PASSWORD_REGEX = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=[\]{};':"\\|,.<>/?]).{12,}$/;
+const SLACK_MEMBER_ID_REGEX = /^[UW][A-Z0-9]{8,14}$/;
 
 function redactAuditPayload(obj: any): any {
   if (obj === null || obj === undefined) return obj;
@@ -217,6 +218,31 @@ serve(async (req: Request) => {
       const cleanAvatarUrl = avatarUrl?.trim() || null;
       const cleanCnic = cnic?.trim() || null;
 
+      let cleanSlackMemberId: string | null = null;
+      const rawSlackId = payload.slackMemberId || payload.slack_member_id;
+      if (rawSlackId && typeof rawSlackId === 'string' && rawSlackId.trim()) {
+        const upperSlackId = rawSlackId.trim().toUpperCase();
+        if (!SLACK_MEMBER_ID_REGEX.test(upperSlackId)) {
+          return new Response(
+            JSON.stringify({ error: 'Invalid Slack Member ID format. It must start with U or W followed by 8-14 alphanumeric characters (e.g. U0123456789).' }),
+            { status: 400, headers: corsHeaders }
+          );
+        }
+        const { data: existingSlack } = await supabaseAdmin
+          .from('profiles')
+          .select('id')
+          .eq('slack_member_id', upperSlackId)
+          .limit(1);
+
+        if (existingSlack && existingSlack.length > 0) {
+          return new Response(
+            JSON.stringify({ error: 'This Slack Member ID is already assigned to another team member.' }),
+            { status: 400, headers: corsHeaders }
+          );
+        }
+        cleanSlackMemberId = upperSlackId;
+      }
+
       if (!password || !PASSWORD_REGEX.test(password)) {
         return new Response(
           JSON.stringify({
@@ -353,6 +379,7 @@ serve(async (req: Request) => {
           bio: cleanBio,
           avatar_url: cleanAvatarUrl,
           cnic: cleanCnic,
+          slack_member_id: cleanSlackMemberId,
           role: targetRole,
           status: 'active',
           designation_id: designationId,
@@ -576,6 +603,36 @@ serve(async (req: Request) => {
         }
       }
 
+      let cleanSlackMemberId: string | null | undefined = undefined;
+      if ('slackMemberId' in payload || 'slack_member_id' in payload) {
+        const rawSlackId = payload.slackMemberId !== undefined ? payload.slackMemberId : payload.slack_member_id;
+        if (rawSlackId === null || (typeof rawSlackId === 'string' && !rawSlackId.trim())) {
+          cleanSlackMemberId = null;
+        } else if (typeof rawSlackId === 'string') {
+          const upperSlackId = rawSlackId.trim().toUpperCase();
+          if (!SLACK_MEMBER_ID_REGEX.test(upperSlackId)) {
+            return new Response(
+              JSON.stringify({ error: 'Invalid Slack Member ID format. It must start with U or W followed by 8-14 alphanumeric characters (e.g. U0123456789).' }),
+              { status: 400, headers: corsHeaders }
+            );
+          }
+          const { data: existingSlack } = await supabaseAdmin
+            .from('profiles')
+            .select('id')
+            .eq('slack_member_id', upperSlackId)
+            .neq('id', targetUserId)
+            .limit(1);
+
+          if (existingSlack && existingSlack.length > 0) {
+            return new Response(
+              JSON.stringify({ error: 'This Slack Member ID is already assigned to another team member.' }),
+              { status: 400, headers: corsHeaders }
+            );
+          }
+          cleanSlackMemberId = upperSlackId;
+        }
+      }
+
       // 3. Atomically execute profile details, departments, and client access updates
       // in a single ACID database transaction via update_team_member_tx.
       // This eliminates any partial-write risk without relying on compensating network rollbacks.
@@ -589,6 +646,7 @@ serve(async (req: Request) => {
       if (bio !== undefined) profileData.bio = bio?.trim() || null;
       if (avatarUrl !== undefined) profileData.avatar_url = avatarUrl?.trim() || null;
       if (cnic !== undefined) profileData.cnic = cnic?.trim() || null;
+      if (cleanSlackMemberId !== undefined) profileData.slack_member_id = cleanSlackMemberId;
       if (designationId) profileData.designation_id = designationId;
       if (reportingManagerId && callerProfile.role === 'owner') profileData.reporting_manager_id = reportingManagerId;
       if (startDate) profileData.start_date = startDate;
@@ -628,6 +686,7 @@ serve(async (req: Request) => {
         previous_state: redactAuditPayload({
           phone: targetProfile.phone,
           designation_id: targetProfile.designation_id,
+          slack_member_id: targetProfile.slack_member_id,
           client_ids: currentClientIds
         }),
         new_state: redactAuditPayload({

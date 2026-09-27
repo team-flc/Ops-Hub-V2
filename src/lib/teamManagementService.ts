@@ -27,6 +27,7 @@ export interface CreateTeamMemberPayload {
   designationId: string;
   reportingManagerId?: string;
   clientIds?: string[];
+  slackMemberId?: string;
   password: string;
 }
 
@@ -48,6 +49,7 @@ export interface UpdateTeamMemberPayload {
   designationId: string;
   reportingManagerId?: string;
   clientIds?: string[];
+  slackMemberId?: string | null;
 }
 
 async function extractFunctionsError(error: any, fallbackMessage: string): Promise<string> {
@@ -94,7 +96,7 @@ export const teamManagementService = {
         // Tier 2: Core fields fallback
         const res2 = await supabase
           .from('profiles')
-          .select('id, full_name, role, status, work_email, avatar_url, phone, bio, designation_id, reporting_manager_id, start_date, created_at, updated_at')
+          .select('id, full_name, role, status, work_email, avatar_url, phone, bio, designation_id, reporting_manager_id, start_date, slack_member_id, created_at, updated_at')
           .order('created_at', { ascending: false });
 
         if (!res2.error && res2.data) {
@@ -216,6 +218,7 @@ export const teamManagementService = {
           departments: profDeptsMap.get(p.id) || [],
           clientAccessCount: userClientIds.length,
           clientIds: userClientIds,
+          slackMemberId: p.slack_member_id || null,
           createdAt: p.created_at || new Date().toISOString(),
           updatedAt: p.updated_at || new Date().toISOString()
         };
