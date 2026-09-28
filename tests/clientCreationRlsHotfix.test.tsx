@@ -278,51 +278,31 @@ describe('Hotfix Verification: Client Creation RLS, Persistence & Atomicity', ()
     expect(savedDraft).toBeNull();
   });
 
-  it('5. Preserves Case Studies text without stripping via URL sanitization', async () => {
-    let capturedClientInsert: any = null;
-    let capturedLinksInsert: any = null;
+  it('5. Preserves Case Studies text without stripping via URL sanitization and sends to create_client_tx', async () => {
+    const caseStudyText = 'Client achieved 35% growth in Q3. Detailed docs in internal folder.';
 
-    mockInsert.mockImplementation((table: string, data: any) => {
-      if (table === 'clients') {
-        capturedClientInsert = data;
-        return {
-          select: () => ({
-            single: () => Promise.resolve({
-              data: {
-                id: 'client-case-study',
-                company_name: data.company_name,
-                client_name: data.client_name,
-                package: data.package,
-                operational_manager_id: data.operational_manager_id,
-                activation_date: data.activation_date,
-                status: data.status,
-                pause_reason: data.pause_reason,
-                required_linkedin_profile_count: data.required_linkedin_profile_count,
-                created_by: data.created_by,
-                created_at: data.created_at,
-                updated_at: data.updated_at
-              },
-              error: null
-            })
-          })
-        };
-      }
-      if (table === 'client_links') {
-        capturedLinksInsert = data;
-        return Promise.resolve({ data, error: null });
-      }
-      if (table === 'client_linkedin_profiles') {
-        return {
-          select: () => Promise.resolve({ data: [], error: null })
-        };
-      }
-      if (table === 'client_audit_log') {
-        return Promise.resolve({ data: null, error: null });
+    mockRpc.mockImplementation((fn: string, args: any) => {
+      if (fn === 'create_client_tx') {
+        return Promise.resolve({
+          data: {
+            id: 'client-case-study',
+            companyName: args.p_client_data.company_name,
+            clientName: args.p_client_data.client_name,
+            package: args.p_client_data.package,
+            operationalManagerId: args.p_client_data.operational_manager_id,
+            activationDate: args.p_client_data.activation_date,
+            status: args.p_client_data.status,
+            links: { case_studies: caseStudyText },
+            linkedinProfiles: [],
+            createdBy: mockManager2.id,
+            createdAt: '2026-09-28T00:00:00Z',
+            updatedAt: '2026-09-28T00:00:00Z'
+          },
+          error: null
+        });
       }
       return Promise.resolve({ data: null, error: null });
     });
-
-    const caseStudyText = 'Client achieved 35% growth in Q3. Detailed docs in internal folder.';
 
     const result = await clientManagementService.createClient({
       companyName: 'Bizease',
@@ -334,55 +314,52 @@ describe('Hotfix Verification: Client Creation RLS, Persistence & Atomicity', ()
       links: {
         case_studies: caseStudyText
       }
-    }, mockManager2.id);
+    });
 
     expect(result.error).toBeUndefined();
     expect(result.data).toBeDefined();
 
-    // Verify links insert received exact text
-    expect(capturedLinksInsert).toBeDefined();
-    const caseStudyEntry = capturedLinksInsert.find((l: any) => l.link_type === 'case_studies');
-    expect(caseStudyEntry).toBeDefined();
-    expect(caseStudyEntry.url).toBe(caseStudyText);
+    // Verify create_client_tx received exact case_studies text
+    expect(mockRpc).toHaveBeenCalledWith('create_client_tx', expect.objectContaining({
+      p_links: expect.arrayContaining([
+        expect.objectContaining({
+          link_type: 'case_studies',
+          url: caseStudyText
+        })
+      ])
+    }));
     expect(result.data?.links?.case_studies).toBe(caseStudyText);
   });
 
-  it('6. Preserves hasGmailAccount and gmailAddress on LinkedIn Profiles during creation', async () => {
-    let capturedProfilesInsert: any = null;
-
-    mockInsert.mockImplementation((table: string, data: any) => {
-      if (table === 'clients') {
-        return {
-          select: () => ({
-            single: () => Promise.resolve({
-              data: {
-                id: 'client-li-gmail',
-                company_name: data.company_name,
-                client_name: data.client_name,
-                package: data.package,
-                operational_manager_id: data.operational_manager_id,
-                activation_date: data.activation_date,
-                status: data.status,
-                created_by: data.created_by,
-                created_at: data.created_at,
-                updated_at: data.updated_at
-              },
-              error: null
-            })
-          })
-        };
-      }
-      if (table === 'client_linkedin_profiles') {
-        capturedProfilesInsert = data;
-        return {
-          select: () => Promise.resolve({
-            data: data.map((d: any, idx: number) => ({
-              id: `profile-${idx}`,
-              ...d
-            })),
-            error: null
-          })
-        };
+  it('6. Preserves hasGmailAccount and gmailAddress on LinkedIn Profiles and sends to create_client_tx', async () => {
+    mockRpc.mockImplementation((fn: string, args: any) => {
+      if (fn === 'create_client_tx') {
+        return Promise.resolve({
+          data: {
+            id: 'client-li-gmail',
+            companyName: args.p_client_data.company_name,
+            clientName: args.p_client_data.client_name,
+            package: args.p_client_data.package,
+            operationalManagerId: args.p_client_data.operational_manager_id,
+            activationDate: args.p_client_data.activation_date,
+            status: args.p_client_data.status,
+            links: {},
+            linkedinProfiles: [
+              {
+                id: 'profile-1',
+                profileLabel: 'Lead ID 1',
+                profileUrl: 'https://linkedin.com/in/lead-one',
+                salesNavigatorActive: false,
+                hasGmailAccount: true,
+                gmailAddress: 'lead1.bizease@gmail.com'
+              }
+            ],
+            createdBy: mockManager2.id,
+            createdAt: '2026-09-28T00:00:00Z',
+            updatedAt: '2026-09-28T00:00:00Z'
+          },
+          error: null
+        });
       }
       return Promise.resolve({ data: null, error: null });
     });
@@ -403,18 +380,23 @@ describe('Hotfix Verification: Client Creation RLS, Persistence & Atomicity', ()
           gmailAddress: 'lead1.bizease@gmail.com'
         }
       ]
-    }, mockManager2.id);
+    });
 
     expect(result.error).toBeUndefined();
-    expect(capturedProfilesInsert).toBeDefined();
-    expect(capturedProfilesInsert[0].has_gmail_account).toBe(true);
-    expect(capturedProfilesInsert[0].gmail_address).toBe('lead1.bizease@gmail.com');
+    expect(mockRpc).toHaveBeenCalledWith('create_client_tx', expect.objectContaining({
+      p_linkedin_profiles: expect.arrayContaining([
+        expect.objectContaining({
+          has_gmail_account: true,
+          gmail_address: 'lead1.bizease@gmail.com'
+        })
+      ])
+    }));
 
     expect(result.data?.linkedinProfiles[0].hasGmailAccount).toBe(true);
     expect(result.data?.linkedinProfiles[0].gmailAddress).toBe('lead1.bizease@gmail.com');
   });
 
-  it('7. Invokes atomic transactional RPC create_client_tx when available', async () => {
+  it('7. Invokes create_client_tx without trusting supplied actor ID', async () => {
     mockRpc.mockResolvedValue({
       data: {
         id: 'tx-client-id',
@@ -443,104 +425,106 @@ describe('Hotfix Verification: Client Creation RLS, Persistence & Atomicity', ()
       activationDate: '2026-09-28',
       status: 'Onboarding',
       links: { website: 'https://bizease.com' }
-    }, mockManager2.id);
+    });
 
     expect(mockRpc).toHaveBeenCalledWith('create_client_tx', expect.objectContaining({
       p_client_data: expect.objectContaining({
         company_name: 'Bizease RPC',
         operational_manager_id: mockManager1.id
-      }),
-      p_actor_id: mockManager2.id
+      })
     }));
+
+    // Must NOT pass p_actor_id to RPC
+    const callArgs = mockRpc.mock.calls[0][1];
+    expect(callArgs.p_actor_id).toBeUndefined();
 
     expect(result.error).toBeUndefined();
     expect(result.data?.id).toBe('tx-client-id');
-    expect(result.data?.createdBy).toBe(mockManager2.id);
   });
 
-  it('8. Performs compensating rollback (ACID cleanup) if child records fail in direct fallback flow', async () => {
-    let deleteCalled = false;
-    let deletedClientId = '';
-
-    mockInsert.mockImplementation((table: string, data: any) => {
-      if (table === 'clients') {
-        return {
-          select: () => ({
-            single: () => Promise.resolve({
-              data: { id: 'client-to-rollback', ...data },
-              error: null
-            })
-          })
-        };
-      }
-      if (table === 'client_links') {
-        return Promise.resolve({
-          data: null,
-          error: { message: 'Foreign key constraint violation' }
-        });
-      }
-      return Promise.resolve({ data: null, error: null });
-    });
-
-    mockDelete.mockImplementation((table: string, col: string, val: any) => {
-      if (table === 'clients' && col === 'id') {
-        deleteCalled = true;
-        deletedClientId = val;
-      }
-      return Promise.resolve({ data: null, error: null });
+  it('8. Returns clear error and does NOT fallback to nontransactional direct insert when create_client_tx fails', async () => {
+    mockRpc.mockResolvedValue({
+      data: null,
+      error: { message: 'function create_client_tx does not exist' }
     });
 
     const result = await clientManagementService.createClient({
-      companyName: 'Bizease Failing Child',
+      companyName: 'Bizease No Fallback',
       clientName: 'Bizease Lead',
       package: 'Basic',
       operationalManagerId: mockManager2.id,
       activationDate: '2026-09-28',
       status: 'Onboarding',
       links: { website: 'https://bizease.com' }
-    }, mockManager2.id);
-
-    // Should return error
-    expect(result.error).toContain('Failed to save workspace links');
-    expect(result.error).toContain('Client creation rolled back');
-
-    // Compensating delete must have run on the client
-    expect(deleteCalled).toBe(true);
-    expect(deletedClientId).toBe('client-to-rollback');
-  });
-
-  it('9. Operational Manager assigning client to another manager sets created_by to creator', async () => {
-    let capturedClientInsert: any = null;
-
-    mockInsert.mockImplementation((table: string, data: any) => {
-      if (table === 'clients') {
-        capturedClientInsert = data;
-        return {
-          select: () => ({
-            single: () => Promise.resolve({
-              data: { id: 'client-reassigned', ...data },
-              error: null
-            })
-          })
-        };
-      }
-      return Promise.resolve({ data: null, error: null });
     });
 
-    // Manager 2 creates a client and assigns it to Manager 1
-    const result = await clientManagementService.createClient({
-      companyName: 'Bizease Cross Manager',
+    // Must return the RPC failure directly
+    expect(result.error).toContain('function create_client_tx does not exist');
+    expect(result.data).toBeUndefined();
+
+    // Must NOT call mockInsert (no direct-insert fallback)
+    expect(mockInsert).not.toHaveBeenCalled();
+    // Must NOT call mockDelete
+    expect(mockDelete).not.toHaveBeenCalled();
+  });
+
+  it('9. Handles uncertain or empty response safely without auto-retrying', async () => {
+    // Empty data response
+    mockRpc.mockResolvedValueOnce({
+      data: null,
+      error: null
+    });
+
+    const resultEmpty = await clientManagementService.createClient({
+      companyName: 'Bizease Uncertain',
       clientName: 'Bizease Lead',
       package: 'Intermediate',
       operationalManagerId: mockManager1.id,
       activationDate: '2026-09-28',
       status: 'Onboarding'
-    }, mockManager2.id);
+    });
 
-    expect(result.error).toBeUndefined();
-    expect(capturedClientInsert.operational_manager_id).toBe(mockManager1.id);
-    expect(capturedClientInsert.created_by).toBe(mockManager2.id);
-    expect(result.data?.operationalManagerId).toBe(mockManager1.id);
-    expect(result.data?.createdBy).toBe(mockManager2.id);
+    expect(resultEmpty.error).toContain('uncertain or empty');
+    expect(resultEmpty.data).toBeUndefined();
+
+    // Network / exception response
+    mockRpc.mockRejectedValueOnce(new Error('Connection terminated unexpectedly'));
+
+    const resultNetwork = await clientManagementService.createClient({
+      companyName: 'Bizease Network Error',
+      clientName: 'Bizease Lead',
+      package: 'Intermediate',
+      operationalManagerId: mockManager1.id,
+      activationDate: '2026-09-28',
+      status: 'Onboarding'
+    });
+
+    expect(resultNetwork.error).toContain('Connection terminated unexpectedly');
+    expect(resultNetwork.error).toContain('verify before retrying');
+    expect(resultNetwork.data).toBeUndefined();
+
+    // Only the two explicit calls were made; no automatic retry was triggered
+    expect(mockRpc).toHaveBeenCalledTimes(2);
+    expect(mockInsert).not.toHaveBeenCalled();
+  });
+
+  it('10. Propagates authorization failure when unauthorized user or role is rejected', async () => {
+    mockRpc.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'Access denied. Only Owners and Operational Managers can create clients.' }
+    });
+
+    const result = await clientManagementService.createClient({
+      companyName: 'Bizease Unauthorized',
+      clientName: 'Bizease Lead',
+      package: 'Basic',
+      operationalManagerId: mockManager1.id,
+      activationDate: '2026-09-28',
+      status: 'Onboarding'
+    });
+
+    expect(result.error).toContain('Access denied');
+    expect(result.data).toBeUndefined();
+    expect(mockInsert).not.toHaveBeenCalled();
   });
 });

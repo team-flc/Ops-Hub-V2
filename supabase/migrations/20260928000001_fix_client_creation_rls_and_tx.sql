@@ -19,7 +19,8 @@
 -- 1. Redefine clients_select to inspect candidate tuple attributes directly
 --    (operational_manager_id = auth.uid() OR created_by = auth.uid()) without circular subqueries.
 -- 2. Add default auth.uid() and BEFORE INSERT trigger to ensure created_by is never NULL.
--- 3. Provide atomic create_client_tx RPC to eliminate partial-write risks.
+-- 3. Provide atomic create_client_tx RPC to eliminate partial-write risks, strictly
+--    identifying caller from auth.uid() and validating the assigned manager.
 -- ==============================================================================
 
 -- 1. Role Helper Functions
@@ -130,11 +131,13 @@ CREATE POLICY "clients_insert"
   WITH CHECK (app_private.is_manager_or_owner((SELECT auth.uid())));
 
 -- 5. Atomic Transaction RPC: create_client_tx
+DROP FUNCTION IF EXISTS public.create_client_tx(JSONB, JSONB, JSONB, UUID);
+DROP FUNCTION IF EXISTS public.create_client_tx(JSONB, JSONB, JSONB);
+
 CREATE OR REPLACE FUNCTION public.create_client_tx(
   p_client_data JSONB,
   p_links JSONB DEFAULT '[]'::jsonb,
-  p_linkedin_profiles JSONB DEFAULT '[]'::jsonb,
-  p_actor_id UUID DEFAULT NULL
+  p_linkedin_profiles JSONB DEFAULT '[]'::jsonb
 )
 RETURNS JSONB
 LANGUAGE plpgsql
@@ -150,6 +153,8 @@ DECLARE
   v_client_name TEXT;
   v_package TEXT;
   v_operational_manager_id UUID;
+  v_assigned_manager_role TEXT;
+  v_is_assigned_manager_active BOOLEAN;
   v_activation_date DATE;
   v_status TEXT;
   v_pause_reason TEXT;
@@ -162,14 +167,10 @@ DECLARE
   v_profiles_result JSONB := '[]'::jsonb;
   v_new_profile RECORD;
 BEGIN
-  -- 1. Identify and verify caller
+  -- 1. Identify caller strictly from auth.uid() - never trust a supplied actor ID
   v_caller_id := auth.uid();
   IF v_caller_id IS NULL THEN
-    IF p_actor_id IS NOT NULL THEN
-      v_caller_id := p_actor_id;
-    ELSE
-      RAISE EXCEPTION 'Authentication required to create a client workspace.';
-    END IF;
+    RAISE EXCEPTION 'Authentication required to create a client workspace.';
   END IF;
 
   SELECT role, (status = 'active')
@@ -205,14 +206,34 @@ BEGIN
   IF v_package IS NULL OR v_package = '' THEN
     RAISE EXCEPTION 'Package selection is required.';
   END IF;
+  IF v_package NOT IN ('Basic', 'Intermediate', 'Advanced') THEN
+    RAISE EXCEPTION 'Invalid package. Must be Basic, Intermediate, or Advanced.';
+  END IF;
   IF v_operational_manager_id IS NULL THEN
     RAISE EXCEPTION 'Operational Manager is required.';
   END IF;
   IF v_activation_date IS NULL THEN
     RAISE EXCEPTION 'Activation Date is required.';
   END IF;
+  IF v_status NOT IN ('Onboarding', 'Active', 'Paused') THEN
+    RAISE EXCEPTION 'Invalid status. Must be Onboarding, Active, or Paused.';
+  END IF;
 
-  -- 3. Insert Client Record
+  -- 3. Validate selected Operational Manager under existing authorization rules
+  SELECT role, (status = 'active')
+  INTO v_assigned_manager_role, v_is_assigned_manager_active
+  FROM public.profiles
+  WHERE id = v_operational_manager_id;
+
+  IF v_assigned_manager_role IS NULL OR NOT v_is_assigned_manager_active THEN
+    RAISE EXCEPTION 'Selected Operational Manager profile not found or inactive.';
+  END IF;
+
+  IF v_assigned_manager_role NOT IN ('owner', 'operational_manager') THEN
+    RAISE EXCEPTION 'Invalid Operational Manager assignment. The assigned manager must have an Owner or Operational Manager role.';
+  END IF;
+
+  -- 4. Insert Client Record
   INSERT INTO public.clients (
     company_name,
     client_name,
@@ -242,7 +263,7 @@ BEGIN
   )
   RETURNING id INTO v_client_id;
 
-  -- 4. Insert Links
+  -- 5. Insert Links
   IF p_links IS NOT NULL AND jsonb_array_length(p_links) > 0 THEN
     FOR v_link IN SELECT * FROM jsonb_to_recordset(p_links) AS x(link_type TEXT, url TEXT) LOOP
       IF v_link.url IS NOT NULL AND TRIM(v_link.url) <> '' THEN
@@ -266,7 +287,7 @@ BEGIN
     END LOOP;
   END IF;
 
-  -- 5. Insert LinkedIn Profiles
+  -- 6. Insert LinkedIn Profiles
   IF p_linkedin_profiles IS NOT NULL AND jsonb_array_length(p_linkedin_profiles) > 0 THEN
     FOR v_profile IN SELECT * FROM jsonb_to_recordset(p_linkedin_profiles) AS x(
       profile_label TEXT,
@@ -330,7 +351,7 @@ BEGIN
     END LOOP;
   END IF;
 
-  -- 6. Insert Audit Log
+  -- 7. Insert Audit Log
   INSERT INTO public.client_audit_log (
     client_id,
     actor_id,
@@ -349,7 +370,7 @@ BEGIN
     )
   );
 
-  -- 7. Return complete object
+  -- 8. Return complete object
   RETURN jsonb_build_object(
     'id', v_client_id,
     'companyName', v_company_name,
@@ -370,9 +391,9 @@ BEGIN
 END;
 $$;
 
-REVOKE ALL ON FUNCTION public.create_client_tx(JSONB, JSONB, JSONB, UUID) FROM PUBLIC;
-REVOKE ALL ON FUNCTION public.create_client_tx(JSONB, JSONB, JSONB, UUID) FROM anon;
-GRANT EXECUTE ON FUNCTION public.create_client_tx(JSONB, JSONB, JSONB, UUID) TO authenticated;
-GRANT EXECUTE ON FUNCTION public.create_client_tx(JSONB, JSONB, JSONB, UUID) TO service_role;
+REVOKE ALL ON FUNCTION public.create_client_tx(JSONB, JSONB, JSONB) FROM PUBLIC;
+REVOKE ALL ON FUNCTION public.create_client_tx(JSONB, JSONB, JSONB) FROM anon;
+GRANT EXECUTE ON FUNCTION public.create_client_tx(JSONB, JSONB, JSONB) TO authenticated;
+GRANT EXECUTE ON FUNCTION public.create_client_tx(JSONB, JSONB, JSONB) TO service_role;
 
 NOTIFY pgrst, 'reload schema';

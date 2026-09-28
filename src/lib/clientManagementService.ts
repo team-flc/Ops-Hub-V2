@@ -644,20 +644,14 @@ export const clientManagementService = {
 
   /**
    * Create a new Client Workspace with links and optional LinkedIn profiles.
+   * Transactional ACID execution via create_client_tx RPC.
+   * Strictly server-authorized via auth.uid().
+   * If create_client_tx fails, is missing, or returns an uncertain response,
+   * fails closed without any non-transactional direct insert fallback.
    */
-  async createClient(input: CreateClientInput, actorId?: string): Promise<{ data?: ClientRecord; error?: string }> {
+  async createClient(input: CreateClientInput, _actorId?: string): Promise<{ data?: ClientRecord; error?: string }> {
     if (!isSupabaseConfigured || !supabase) {
       return { error: 'Database connection is not configured.' };
-    }
-
-    let effectiveActorId = actorId;
-    if (!effectiveActorId) {
-      try {
-        const { data: sessionData } = await supabase.auth.getSession();
-        effectiveActorId = sessionData?.session?.user?.id;
-      } catch {
-        // fallback
-      }
     }
 
     if (!input.companyName?.trim()) return { error: 'Company Name is required.' };
@@ -737,7 +731,7 @@ export const clientManagementService = {
       sort_order: idx
     }));
 
-    // 1. Attempt atomic transaction via create_client_tx RPC
+    // Strictly transactional creation via create_client_tx RPC
     try {
       const { data: txData, error: txError } = await supabase.rpc('create_client_tx', {
         p_client_data: {
@@ -752,176 +746,41 @@ export const clientManagementService = {
           source_client_id: null
         },
         p_links: linksArray,
-        p_linkedin_profiles: profilesArray,
-        p_actor_id: effectiveActorId || null
+        p_linkedin_profiles: profilesArray
       });
 
-      if (!txError && txData && txData.id) {
-        return {
-          data: {
-            id: txData.id,
-            companyName: txData.companyName,
-            clientName: txData.clientName,
-            package: txData.package as ClientPackage,
-            operationalManagerId: txData.operationalManagerId,
-            operationalManagerName: 'Assigned Manager',
-            activationDate: txData.activationDate,
-            status: txData.status as ClientStatus,
-            pauseReason: txData.pauseReason as ClientPauseReason | null,
-            requiredLinkedinProfileCount: txData.requiredLinkedinProfileCount || reqLinkedInCount,
-            linkedinProfiles: txData.linkedinProfiles || [],
-            sourceClientId: null,
-            links: txData.links || savedLinks,
-            createdBy: txData.createdBy,
-            createdAt: txData.createdAt,
-            updatedAt: txData.updatedAt
-          }
-        };
-      }
-
       if (txError) {
-        const isFnMissing = txError.message?.includes('function') && (txError.message?.includes('does not exist') || txError.message?.includes('Could not find'));
-        if (!isFnMissing) {
-          return { error: txError.message || 'Failed to create client transaction.' };
-        }
-      }
-    } catch {
-      // Fallback to direct flow
-    }
-
-    // 2. Fallback direct creation with compensating cleanup
-    try {
-      const { data: newClient, error: insertError } = await supabase
-        .from('clients')
-        .insert({
-          company_name: input.companyName.trim(),
-          client_name: input.clientName.trim(),
-          package: input.package,
-          operational_manager_id: input.operationalManagerId,
-          activation_date: input.activationDate,
-          status: input.status || 'Onboarding',
-          pause_reason: input.status === 'Paused' ? input.pauseReason || 'Operational reason' : null,
-          required_linkedin_profile_count: reqLinkedInCount,
-          created_by: effectiveActorId || null,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .select()
-        .single();
-
-      if (insertError || !newClient) {
-        return { error: insertError?.message || 'Failed to create client record.' };
+        return { error: txError.message || 'Failed to create client workspace.' };
       }
 
-      // Insert valid links
-      if (linksArray.length > 0) {
-        const linkEntries = linksArray.map((l) => ({
-          client_id: newClient.id,
-          link_type: l.link_type,
-          url: l.url,
-          created_by: effectiveActorId
-        }));
-
-        const { error: linksError } = await supabase.from('client_links').insert(linkEntries);
-        if (linksError) {
-          // Compensating rollback
-          await supabase.from('clients').delete().eq('id', newClient.id);
-          return { error: `Failed to save workspace links: ${linksError.message}. Client creation rolled back.` };
-        }
-      }
-
-      // Insert valid LinkedIn profiles
-      const savedLinkedInProfiles: ClientLinkedInProfile[] = [];
-      if (validProfilesToInsert.length > 0) {
-        const profileInserts = validProfilesToInsert.map((p, idx) => ({
-          client_id: newClient.id,
-          profile_label: p.profileLabel,
-          profile_url: p.profileUrl,
-          sales_navigator_active: p.salesNavigatorActive,
-          sales_navigator_activated_on: p.salesNavigatorActive ? p.salesNavigatorActivatedOn : null,
-          linkedin_verified: Boolean(p.linkedinVerified),
-          has_gmail_account: Boolean(p.hasGmailAccount),
-          gmail_address: p.hasGmailAccount ? (p.gmailAddress?.trim() || null) : null,
-          sort_order: idx,
-          status: 'active',
-          created_by: effectiveActorId,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }));
-
-        const { data: insertedProfiles, error: profilesError } = await supabase
-          .from('client_linkedin_profiles')
-          .insert(profileInserts)
-          .select();
-
-        if (profilesError) {
-          // Compensating rollback
-          await supabase.from('client_links').delete().eq('client_id', newClient.id);
-          await supabase.from('clients').delete().eq('id', newClient.id);
-          return { error: `Failed to save LinkedIn profiles: ${profilesError.message}. Client creation rolled back.` };
-        }
-
-        if (insertedProfiles) {
-          for (const ip of insertedProfiles) {
-            savedLinkedInProfiles.push({
-              id: ip.id,
-              clientId: ip.client_id,
-              profileLabel: ip.profile_label,
-              profileUrl: ip.profile_url,
-              salesNavigatorActive: Boolean(ip.sales_navigator_active),
-              salesNavigatorActivatedOn: ip.sales_navigator_activated_on,
-              linkedinVerified: Boolean(ip.linkedin_verified),
-              hasGmailAccount: Boolean(ip.has_gmail_account),
-              gmailAddress: ip.gmail_address || null,
-              sortOrder: ip.sort_order,
-              status: ip.status,
-              createdBy: ip.created_by,
-              createdAt: ip.created_at,
-              updatedAt: ip.updated_at
-            });
-          }
-        }
-      }
-
-      // Record Audit Log (safe attempt)
-      try {
-        await supabase.from('client_audit_log').insert({
-          client_id: newClient.id,
-          actor_id: effectiveActorId,
-          action: 'client_created',
-          safe_metadata: {
-            companyName: newClient.company_name,
-            package: newClient.package,
-            managerId: newClient.operational_manager_id,
-            requiredLinkedinProfileCount: reqLinkedInCount,
-            linkedinProfilesCount: savedLinkedInProfiles.length
-          }
-        });
-      } catch (auditErr) {
-        console.warn('Failed to record client_created audit log:', auditErr);
+      if (!txData || !txData.id) {
+        return { error: 'Client workspace creation response was uncertain or empty. Creation was not completed.' };
       }
 
       return {
         data: {
-          id: newClient.id,
-          companyName: newClient.company_name,
-          clientName: newClient.client_name,
-          package: newClient.package as ClientPackage,
-          operationalManagerId: newClient.operational_manager_id,
-          activationDate: newClient.activation_date,
-          status: newClient.status as ClientStatus,
-          pauseReason: newClient.pause_reason as ClientPauseReason | null,
-          requiredLinkedinProfileCount: reqLinkedInCount,
-          linkedinProfiles: savedLinkedInProfiles,
+          id: txData.id,
+          companyName: txData.companyName,
+          clientName: txData.clientName,
+          package: txData.package as ClientPackage,
+          operationalManagerId: txData.operationalManagerId,
+          operationalManagerName: 'Assigned Manager',
+          activationDate: txData.activationDate,
+          status: txData.status as ClientStatus,
+          pauseReason: txData.pauseReason as ClientPauseReason | null,
+          requiredLinkedinProfileCount: txData.requiredLinkedinProfileCount || reqLinkedInCount,
+          linkedinProfiles: txData.linkedinProfiles || [],
           sourceClientId: null,
-          links: savedLinks,
-          createdBy: newClient.created_by,
-          createdAt: newClient.created_at,
-          updatedAt: newClient.updated_at
+          links: txData.links || savedLinks,
+          createdBy: txData.createdBy,
+          createdAt: txData.createdAt,
+          updatedAt: txData.updatedAt
         }
       };
     } catch (err: any) {
-      return { error: err.message || 'An unexpected error occurred while creating client.' };
+      return {
+        error: `Client creation encountered an unexpected error: ${err.message || 'Unknown network or execution failure'}. If unsure, please verify before retrying.`
+      };
     }
   },
 
