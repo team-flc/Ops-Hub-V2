@@ -587,6 +587,7 @@ export const Sidebar: React.FC = () => {
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onSuccess={handleClientCreated}
+        currentUserProfile={profile}
         eligibleManagers={eligibleManagers}
       />
 

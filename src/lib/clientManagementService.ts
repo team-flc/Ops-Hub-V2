@@ -650,6 +650,16 @@ export const clientManagementService = {
       return { error: 'Database connection is not configured.' };
     }
 
+    let effectiveActorId = actorId;
+    if (!effectiveActorId) {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        effectiveActorId = sessionData?.session?.user?.id;
+      } catch {
+        // fallback
+      }
+    }
+
     if (!input.companyName?.trim()) return { error: 'Company Name is required.' };
     if (!input.clientName?.trim()) return { error: 'Client/Owner Name is required.' };
     if (!input.package) return { error: 'Package selection is required.' };
@@ -691,11 +701,95 @@ export const clientManagementService = {
           salesNavigatorActive: Boolean(p.salesNavigatorActive),
           salesNavigatorActivatedOn: p.salesNavigatorActive ? p.salesNavigatorActivatedOn : null,
           linkedinVerified: Boolean(p.linkedinVerified),
+          hasGmailAccount: Boolean(p.hasGmailAccount),
+          gmailAddress: p.hasGmailAccount ? (p.gmailAddress?.trim() || null) : null,
           sortOrder: i
         });
       }
     }
 
+    // Prepare links array & savedLinks map
+    const linksArray: { link_type: string; url: string }[] = [];
+    const savedLinks: Partial<Record<ClientLinkType, string>> = {};
+    if (input.links) {
+      for (const [key, rawUrl] of Object.entries(input.links)) {
+        let cleanUrl: string | null = null;
+        if (key === 'poc_number' || key === 'poc_whatsapp' || key === 'case_studies') {
+          cleanUrl = (rawUrl && typeof rawUrl === 'string' && rawUrl.trim()) ? rawUrl.trim() : null;
+        } else {
+          cleanUrl = sanitizeUrl(rawUrl);
+        }
+        if (cleanUrl) {
+          linksArray.push({ link_type: key, url: cleanUrl });
+          savedLinks[key as ClientLinkType] = cleanUrl;
+        }
+      }
+    }
+
+    const profilesArray = validProfilesToInsert.map((p, idx) => ({
+      profile_label: p.profileLabel,
+      profile_url: p.profileUrl,
+      sales_navigator_active: p.salesNavigatorActive,
+      sales_navigator_activated_on: p.salesNavigatorActive ? p.salesNavigatorActivatedOn : null,
+      linkedin_verified: Boolean(p.linkedinVerified),
+      has_gmail_account: Boolean(p.hasGmailAccount),
+      gmail_address: p.hasGmailAccount ? (p.gmailAddress?.trim() || null) : null,
+      sort_order: idx
+    }));
+
+    // 1. Attempt atomic transaction via create_client_tx RPC
+    try {
+      const { data: txData, error: txError } = await supabase.rpc('create_client_tx', {
+        p_client_data: {
+          company_name: input.companyName.trim(),
+          client_name: input.clientName.trim(),
+          package: input.package,
+          operational_manager_id: input.operationalManagerId,
+          activation_date: input.activationDate,
+          status: input.status || 'Onboarding',
+          pause_reason: input.status === 'Paused' ? input.pauseReason || 'Operational reason' : null,
+          required_linkedin_profile_count: reqLinkedInCount,
+          source_client_id: null
+        },
+        p_links: linksArray,
+        p_linkedin_profiles: profilesArray,
+        p_actor_id: effectiveActorId || null
+      });
+
+      if (!txError && txData && txData.id) {
+        return {
+          data: {
+            id: txData.id,
+            companyName: txData.companyName,
+            clientName: txData.clientName,
+            package: txData.package as ClientPackage,
+            operationalManagerId: txData.operationalManagerId,
+            operationalManagerName: 'Assigned Manager',
+            activationDate: txData.activationDate,
+            status: txData.status as ClientStatus,
+            pauseReason: txData.pauseReason as ClientPauseReason | null,
+            requiredLinkedinProfileCount: txData.requiredLinkedinProfileCount || reqLinkedInCount,
+            linkedinProfiles: txData.linkedinProfiles || [],
+            sourceClientId: null,
+            links: txData.links || savedLinks,
+            createdBy: txData.createdBy,
+            createdAt: txData.createdAt,
+            updatedAt: txData.updatedAt
+          }
+        };
+      }
+
+      if (txError) {
+        const isFnMissing = txError.message?.includes('function') && (txError.message?.includes('does not exist') || txError.message?.includes('Could not find'));
+        if (!isFnMissing) {
+          return { error: txError.message || 'Failed to create client transaction.' };
+        }
+      }
+    } catch {
+      // Fallback to direct flow
+    }
+
+    // 2. Fallback direct creation with compensating cleanup
     try {
       const { data: newClient, error: insertError } = await supabase
         .from('clients')
@@ -708,7 +802,7 @@ export const clientManagementService = {
           status: input.status || 'Onboarding',
           pause_reason: input.status === 'Paused' ? input.pauseReason || 'Operational reason' : null,
           required_linkedin_profile_count: reqLinkedInCount,
-          created_by: actorId || null,
+          created_by: effectiveActorId || null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
@@ -720,29 +814,19 @@ export const clientManagementService = {
       }
 
       // Insert valid links
-      const savedLinks: Partial<Record<ClientLinkType, string>> = {};
-      if (input.links) {
-        const linkEntries: { client_id: string; link_type: string; url: string; created_by?: string }[] = [];
-        for (const [key, rawUrl] of Object.entries(input.links)) {
-          let cleanUrl: string | null = null;
-          if (key === 'poc_number' || key === 'poc_whatsapp') {
-            cleanUrl = (rawUrl && typeof rawUrl === 'string' && rawUrl.trim()) ? rawUrl.trim() : null;
-          } else {
-            cleanUrl = sanitizeUrl(rawUrl);
-          }
-          if (cleanUrl) {
-            linkEntries.push({
-              client_id: newClient.id,
-              link_type: key,
-              url: cleanUrl,
-              created_by: actorId
-            });
-            savedLinks[key as ClientLinkType] = cleanUrl;
-          }
-        }
+      if (linksArray.length > 0) {
+        const linkEntries = linksArray.map((l) => ({
+          client_id: newClient.id,
+          link_type: l.link_type,
+          url: l.url,
+          created_by: effectiveActorId
+        }));
 
-        if (linkEntries.length > 0) {
-          await supabase.from('client_links').insert(linkEntries);
+        const { error: linksError } = await supabase.from('client_links').insert(linkEntries);
+        if (linksError) {
+          // Compensating rollback
+          await supabase.from('clients').delete().eq('id', newClient.id);
+          return { error: `Failed to save workspace links: ${linksError.message}. Client creation rolled back.` };
         }
       }
 
@@ -760,15 +844,22 @@ export const clientManagementService = {
           gmail_address: p.hasGmailAccount ? (p.gmailAddress?.trim() || null) : null,
           sort_order: idx,
           status: 'active',
-          created_by: actorId,
+          created_by: effectiveActorId,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         }));
 
-        const { data: insertedProfiles } = await supabase
+        const { data: insertedProfiles, error: profilesError } = await supabase
           .from('client_linkedin_profiles')
           .insert(profileInserts)
           .select();
+
+        if (profilesError) {
+          // Compensating rollback
+          await supabase.from('client_links').delete().eq('client_id', newClient.id);
+          await supabase.from('clients').delete().eq('id', newClient.id);
+          return { error: `Failed to save LinkedIn profiles: ${profilesError.message}. Client creation rolled back.` };
+        }
 
         if (insertedProfiles) {
           for (const ip of insertedProfiles) {
@@ -792,19 +883,23 @@ export const clientManagementService = {
         }
       }
 
-      // Record Audit Log
-      await supabase.from('client_audit_log').insert({
-        client_id: newClient.id,
-        actor_id: actorId,
-        action: 'client_created',
-        safe_metadata: {
-          companyName: newClient.company_name,
-          package: newClient.package,
-          managerId: newClient.operational_manager_id,
-          requiredLinkedinProfileCount: reqLinkedInCount,
-          linkedinProfilesCount: savedLinkedInProfiles.length
-        }
-      });
+      // Record Audit Log (safe attempt)
+      try {
+        await supabase.from('client_audit_log').insert({
+          client_id: newClient.id,
+          actor_id: effectiveActorId,
+          action: 'client_created',
+          safe_metadata: {
+            companyName: newClient.company_name,
+            package: newClient.package,
+            managerId: newClient.operational_manager_id,
+            requiredLinkedinProfileCount: reqLinkedInCount,
+            linkedinProfilesCount: savedLinkedInProfiles.length
+          }
+        });
+      } catch (auditErr) {
+        console.warn('Failed to record client_created audit log:', auditErr);
+      }
 
       return {
         data: {
@@ -844,6 +939,16 @@ export const clientManagementService = {
       return { error: 'Database connection is not configured.' };
     }
 
+    let effectiveActorId = actorId;
+    if (!effectiveActorId) {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        effectiveActorId = sessionData?.session?.user?.id;
+      } catch {
+        // fallback
+      }
+    }
+
     if (!input.companyName?.trim()) return { error: 'New Company Name is required.' };
     if (!input.clientName?.trim()) return { error: 'New Client/Owner Name is required.' };
     if (!input.activationDate) return { error: 'New Activation Date is required.' };
@@ -869,7 +974,7 @@ export const clientManagementService = {
           pause_reason: input.status === 'Paused' ? input.pauseReason || 'Operational reason' : null,
           required_linkedin_profile_count: reqLinkedInCount,
           source_client_id: sourceClientId,
-          created_by: actorId || null,
+          created_by: effectiveActorId || null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
@@ -883,7 +988,7 @@ export const clientManagementService = {
       // Record Audit Log
       await supabase.from('client_audit_log').insert({
         client_id: newClient.id,
-        actor_id: actorId,
+        actor_id: effectiveActorId,
         action: 'client_duplicated',
         safe_metadata: {
           sourceClientId,

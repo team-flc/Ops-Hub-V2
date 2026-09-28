@@ -31,6 +31,7 @@ import {
   clearFormDraft, 
   DraftRestoredBanner 
 } from '../../lib/autosaveUtils';
+import { useAuth } from '../../context/AuthContext';
 
 interface CreateClientModalProps {
   isOpen: boolean;
@@ -67,6 +68,9 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
   currentUserProfile,
   eligibleManagers
 }) => {
+  const { profile: authProfile } = useAuth();
+  const effectiveProfile = currentUserProfile || authProfile;
+
   const [companyName, setCompanyName] = useState('');
   const [clientName, setClientName] = useState('');
   const [pkg, setPkg] = useState<ClientPackage>('Basic');
@@ -259,12 +263,12 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
 
   // Default manager selection
   useEffect(() => {
-    if (currentUserProfile?.id && (currentUserProfile.role === 'owner' || currentUserProfile.role === 'operational_manager')) {
-      setManagerId(currentUserProfile.id);
+    if (effectiveProfile?.id && (effectiveProfile.role === 'owner' || effectiveProfile.role === 'operational_manager')) {
+      setManagerId(effectiveProfile.id);
     } else if (eligibleManagers.length > 0) {
       setManagerId(eligibleManagers[0].id);
     }
-  }, [currentUserProfile, eligibleManagers]);
+  }, [effectiveProfile, eligibleManagers]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -426,7 +430,7 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
           links: rawLinks,
           linkedinProfiles: nonBlankProfiles
         },
-        currentUserProfile?.id
+        effectiveProfile?.id
       );
 
       if (result.error || !result.data) {
