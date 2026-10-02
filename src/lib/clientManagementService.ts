@@ -184,7 +184,9 @@ export const LINK_ALIASES: Record<string, string> = {
   requirement_docs: 'requirement_documents',
   requirement_documents: 'requirement_docs',
   gohighlevel: 'ghl_account',
-  ghl_account: 'gohighlevel'
+  ghl_account: 'gohighlevel',
+  proposal_contract: 'contract',
+  contract: 'proposal_contract'
 };
 
 /**
@@ -232,6 +234,12 @@ export function normalizeClientLinks(
   if (ghl) {
     normalized.gohighlevel = ghl;
     normalized.ghl_account = ghl;
+  }
+
+  const prop = normalized.proposal_contract || (normalized as any).contract;
+  if (prop) {
+    normalized.proposal_contract = prop;
+    (normalized as any).contract = prop;
   }
 
   return normalized;
@@ -750,6 +758,11 @@ export const clientManagementService = {
       });
 
       if (txError) {
+        if (txError.code === 'PGRST202' || txError.message?.includes('create_client_tx')) {
+          return {
+            error: `Database migration pending: create_client_tx function is not applied in this environment (${txError.message}). Your filled form draft has been preserved.`
+          };
+        }
         return { error: txError.message || 'Failed to create client workspace.' };
       }
 
@@ -840,8 +853,35 @@ export const clientManagementService = {
         .select()
         .single();
 
-      if (insertError || !newClient) {
-        return { error: insertError?.message || 'Failed to duplicate client record.' };
+      // Save optional links if entered during duplication
+      const savedLinks: Partial<Record<ClientLinkType, string>> = {};
+      if (input.links && Object.keys(input.links).length > 0) {
+        const linkEntries: { client_id: string; link_type: string; url: string; created_by?: string; created_at: string; updated_at: string }[] = [];
+        for (const [key, rawUrl] of Object.entries(input.links)) {
+          let cleanUrl: string | null = null;
+          if (key === 'poc_number' || key === 'poc_whatsapp' || key === 'case_studies') {
+            cleanUrl = (rawUrl && typeof rawUrl === 'string' && rawUrl.trim()) ? rawUrl.trim() : null;
+          } else {
+            cleanUrl = sanitizeUrl(rawUrl);
+          }
+          if (cleanUrl) {
+            linkEntries.push({
+              client_id: newClient.id,
+              link_type: key,
+              url: cleanUrl,
+              created_by: effectiveActorId || undefined,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+            savedLinks[key as ClientLinkType] = cleanUrl;
+          }
+        }
+        if (linkEntries.length > 0) {
+          const { error: linksError } = await supabase.from('client_links').insert(linkEntries);
+          if (linksError) {
+            console.warn('Failed to insert duplicated client links:', linksError);
+          }
+        }
       }
 
       // Record Audit Log
@@ -871,7 +911,7 @@ export const clientManagementService = {
           linkedinProfiles: [],
           sourceClientId,
           sourceCompanyName: sourceClient?.company_name,
-          links: {},
+          links: savedLinks,
           createdBy: newClient.created_by,
           createdAt: newClient.created_at,
           updatedAt: newClient.updated_at

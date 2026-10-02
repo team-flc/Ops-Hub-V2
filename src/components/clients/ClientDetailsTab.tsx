@@ -96,6 +96,8 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
   const [videosUrl, setVideosUrl] = useState(client.links?.videos || '');
   const [vslUrl, setVslUrl] = useState(client.links?.vsl || '');
   const [testimonialsUrl, setTestimonialsUrl] = useState(client.links?.testimonials || '');
+  const [reviewsUrl, setReviewsUrl] = useState(client.links?.reviews || '');
+  const [proposalContractUrl, setProposalContractUrl] = useState(client.links?.proposal_contract || (client.links as any)?.contract || '');
   const [gridUrl, setGridUrl] = useState(client.links?.grid || '');
   const [socialMediaManagementUrl, setSocialMediaManagementUrl] = useState(client.links?.social_media_management || '');
   const [linkedinManagementUrl, setLinkedinManagementUrl] = useState(client.links?.linkedin_management || '');
@@ -178,6 +180,8 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     if (videosUrl !== (client.links?.videos || '')) return true;
     if (vslUrl !== (client.links?.vsl || '')) return true;
     if (testimonialsUrl !== (client.links?.testimonials || '')) return true;
+    if (reviewsUrl !== (client.links?.reviews || '')) return true;
+    if (proposalContractUrl !== (client.links?.proposal_contract || (client.links as any)?.contract || '')) return true;
     if (gridUrl !== (client.links?.grid || '')) return true;
     if (socialMediaManagementUrl !== (client.links?.social_media_management || '')) return true;
     if (linkedinManagementUrl !== (client.links?.linkedin_management || '')) return true;
@@ -198,7 +202,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     companyName, clientName, businessBio, industry, logoUrl, pkg, managerId,
     activationDate, status, pauseReason, requiredLinkedInCount,
     websiteUrl, flcLandingPageUrl, brandIdentityUrl, driveUrl, importantDocsUrl, masterBusinessDocUrl, staticCreativesUrl,
-    videosUrl, vslUrl, testimonialsUrl, gridUrl, socialMediaManagementUrl, linkedinManagementUrl, seoManagementUrl,
+    videosUrl, vslUrl, testimonialsUrl, reviewsUrl, proposalContractUrl, gridUrl, socialMediaManagementUrl, linkedinManagementUrl, seoManagementUrl,
     emailMarketingManagementUrl, paidAdsManagementUrl, facebookUrl, instagramUrl, linkedinPageUrl,
     slackUrl, whatsappUrl, pocNumber, caseStudiesText, requirementDocsUrl, ghlAccountUrl, client
   ]);
@@ -230,6 +234,8 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
         setVideosUrl(parsed.videosUrl ?? (client.links?.videos || ''));
         setVslUrl(parsed.vslUrl ?? (client.links?.vsl || ''));
         setTestimonialsUrl(parsed.testimonialsUrl ?? (client.links?.testimonials || ''));
+        setReviewsUrl(parsed.reviewsUrl ?? (client.links?.reviews || ''));
+        setProposalContractUrl(parsed.proposalContractUrl ?? (client.links?.proposal_contract || (client.links as any)?.contract || ''));
         setGridUrl(parsed.gridUrl ?? (client.links?.grid || ''));
         setSocialMediaManagementUrl(parsed.socialMediaManagementUrl ?? (client.links?.social_media_management || ''));
         setLinkedinManagementUrl(parsed.linkedinManagementUrl ?? (client.links?.linkedin_management || ''));
@@ -273,6 +279,8 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     setVideosUrl(client.links?.videos || '');
     setVslUrl(client.links?.vsl || '');
     setTestimonialsUrl(client.links?.testimonials || '');
+    setReviewsUrl(client.links?.reviews || '');
+    setProposalContractUrl(client.links?.proposal_contract || (client.links as any)?.contract || '');
     setGridUrl(client.links?.grid || '');
     setSocialMediaManagementUrl(client.links?.social_media_management || '');
     setLinkedinManagementUrl(client.links?.linkedin_management || '');
@@ -320,6 +328,8 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
             videosUrl,
             vslUrl,
             testimonialsUrl,
+            reviewsUrl,
+            proposalContractUrl,
             gridUrl,
             socialMediaManagementUrl,
             linkedinManagementUrl,
@@ -331,7 +341,10 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
             linkedinPageUrl,
             slackUrl,
             whatsappUrl,
-            pocNumber
+            pocNumber,
+            caseStudiesText,
+            requirementDocsUrl,
+            ghlAccountUrl
           })
         );
       } catch {
@@ -346,7 +359,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     isDirty, client.id, companyName, clientName, businessBio, industry, logoUrl,
     pkg, managerId, activationDate, status, pauseReason, requiredLinkedInCount,
     websiteUrl, flcLandingPageUrl, brandIdentityUrl, driveUrl, importantDocsUrl, masterBusinessDocUrl, staticCreativesUrl,
-    videosUrl, vslUrl, testimonialsUrl, gridUrl, socialMediaManagementUrl, linkedinManagementUrl, seoManagementUrl,
+    videosUrl, vslUrl, testimonialsUrl, reviewsUrl, proposalContractUrl, gridUrl, socialMediaManagementUrl, linkedinManagementUrl, seoManagementUrl,
     emailMarketingManagementUrl, paidAdsManagementUrl, facebookUrl, instagramUrl, linkedinPageUrl,
     slackUrl, whatsappUrl, pocNumber, caseStudiesText, requirementDocsUrl, ghlAccountUrl
   ]);
@@ -377,6 +390,8 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     setVideosUrl(client.links?.videos || '');
     setVslUrl(client.links?.vsl || '');
     setTestimonialsUrl(client.links?.testimonials || '');
+    setReviewsUrl(client.links?.reviews || '');
+    setProposalContractUrl(client.links?.proposal_contract || (client.links as any)?.contract || '');
     setGridUrl(client.links?.grid || '');
     setSocialMediaManagementUrl(client.links?.social_media_management || '');
     setLinkedinManagementUrl(client.links?.linkedin_management || '');
@@ -415,6 +430,10 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
       existing = client.links?.master_business_doc || client.links?.master_business_document;
     } else if (linkKey === 'poc_number' || linkKey === 'poc_whatsapp') {
       existing = client.links?.poc_number || client.links?.poc_whatsapp;
+    } else if (linkKey === 'proposal_contract' || linkKey === 'contract') {
+      existing = client.links?.proposal_contract || (client.links as any)?.contract;
+    } else if (linkKey === 'reviews') {
+      existing = client.links?.reviews;
     } else {
       existing = client.links?.[linkKey as ClientLinkType];
     }
@@ -505,6 +524,9 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
         videos: videosUrl,
         vsl: vslUrl,
         testimonials: testimonialsUrl,
+        reviews: reviewsUrl,
+        proposal_contract: proposalContractUrl,
+        contract: proposalContractUrl,
         grid: gridUrl,
         social_media_management: socialMediaManagementUrl,
         linkedin_management: linkedinManagementUrl,
@@ -1448,6 +1470,54 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 onChange={(e) => setTestimonialsUrl(e.target.value)}
                 disabled={isLinkLocked('testimonials')}
                 placeholder="https://... (Testimonials Video Link)"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="edit-reviews" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  Reviews URL
+                </label>
+                {isLinkLocked('reviews') && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
+              <input
+                id="edit-reviews"
+                data-testid="edit-reviews"
+                type="url"
+                value={reviewsUrl}
+                onChange={(e) => setReviewsUrl(e.target.value)}
+                disabled={isLinkLocked('reviews')}
+                placeholder="https://... (Reviews Link)"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="edit-proposal-contract" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  Proposal / Contract URL
+                </label>
+                {isLinkLocked('proposal_contract') && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
+              <input
+                id="edit-proposal-contract"
+                data-testid="edit-proposal-contract"
+                type="url"
+                value={proposalContractUrl}
+                onChange={(e) => setProposalContractUrl(e.target.value)}
+                disabled={isLinkLocked('proposal_contract')}
+                placeholder="https://... (Proposal / Contract Link)"
                 className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>

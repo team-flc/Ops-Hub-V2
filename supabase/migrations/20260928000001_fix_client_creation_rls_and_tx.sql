@@ -130,7 +130,47 @@ CREATE POLICY "clients_insert"
   TO authenticated
   WITH CHECK (app_private.is_manager_or_owner((SELECT auth.uid())));
 
--- 5. Atomic Transaction RPC: create_client_tx
+-- 5. Update client_links check constraint to safely accept 'reviews', 'proposal_contract', and 'contract'
+ALTER TABLE public.client_links DROP CONSTRAINT IF EXISTS client_links_link_type_check;
+
+ALTER TABLE public.client_links ADD CONSTRAINT client_links_link_type_check
+  CHECK (link_type IN (
+    'website',
+    'flc_landing_page',
+    'brand_identity',
+    'google_drive',
+    'important_docs',
+    'important_documents',
+    'master_business_doc',
+    'master_business_document',
+    'static_creatives',
+    'videos',
+    'grid',
+    'vsl',
+    'testimonials',
+    'reviews',
+    'proposal_contract',
+    'contract',
+    'social_media_management',
+    'linkedin_management',
+    'seo_management',
+    'email_marketing_management',
+    'paid_ads_management',
+    'linkedin_company_page',
+    'facebook',
+    'instagram',
+    'slack_channel',
+    'whatsapp_group',
+    'poc_number',
+    'poc_whatsapp',
+    'case_studies',
+    'requirement_docs',
+    'requirement_documents',
+    'gohighlevel',
+    'ghl_account'
+  ));
+
+-- 6. Atomic Transaction RPC: create_client_tx
 DROP FUNCTION IF EXISTS public.create_client_tx(JSONB, JSONB, JSONB, UUID);
 DROP FUNCTION IF EXISTS public.create_client_tx(JSONB, JSONB, JSONB);
 

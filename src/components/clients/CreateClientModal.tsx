@@ -92,6 +92,8 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
   const [videosUrl, setVideosUrl] = useState('');
   const [vslUrl, setVslUrl] = useState('');
   const [testimonialsUrl, setTestimonialsUrl] = useState('');
+  const [reviewsUrl, setReviewsUrl] = useState('');
+  const [proposalContractUrl, setProposalContractUrl] = useState('');
   const [gridUrl, setGridUrl] = useState('');
   const [socialMediaManagementUrl, setSocialMediaManagementUrl] = useState('');
   const [linkedinManagementUrl, setLinkedinManagementUrl] = useState('');
@@ -146,6 +148,8 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
       if (draft.videosUrl !== undefined) setVideosUrl(draft.videosUrl);
       if (draft.vslUrl !== undefined) setVslUrl(draft.vslUrl);
       if (draft.testimonialsUrl !== undefined) setTestimonialsUrl(draft.testimonialsUrl);
+      if (draft.reviewsUrl !== undefined) setReviewsUrl(draft.reviewsUrl);
+      if (draft.proposalContractUrl !== undefined) setProposalContractUrl(draft.proposalContractUrl);
       if (draft.gridUrl !== undefined) setGridUrl(draft.gridUrl);
       if (draft.socialMediaManagementUrl !== undefined) setSocialMediaManagementUrl(draft.socialMediaManagementUrl);
       if (draft.linkedinManagementUrl !== undefined) setLinkedinManagementUrl(draft.linkedinManagementUrl);
@@ -173,6 +177,7 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
     if (!isOpen || !isLoadedRef.current) return;
     const hasAnyContent = Boolean(
       companyName || clientName || websiteUrl || driveUrl || importantDocsUrl ||
+      reviewsUrl || proposalContractUrl ||
       caseStudiesText || requirementDocsUrl || ghlAccountUrl ||
       profileRows.some(p => p.profileUrl || p.gmailAddress)
     );
@@ -195,6 +200,8 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
         videosUrl,
         vslUrl,
         testimonialsUrl,
+        reviewsUrl,
+        proposalContractUrl,
         gridUrl,
         socialMediaManagementUrl,
         linkedinManagementUrl,
@@ -217,7 +224,7 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
   }, [
     isOpen, companyName, clientName, pkg, managerId, activationDate, status, pauseReason,
     websiteUrl, flcLandingPageUrl, brandIdentityUrl, driveUrl, importantDocsUrl, masterBusinessDocUrl,
-    staticCreativesUrl, videosUrl, vslUrl, testimonialsUrl, gridUrl, socialMediaManagementUrl,
+    staticCreativesUrl, videosUrl, vslUrl, testimonialsUrl, reviewsUrl, proposalContractUrl, gridUrl, socialMediaManagementUrl,
     linkedinManagementUrl, seoManagementUrl, emailMarketingManagementUrl, paidAdsManagementUrl,
     facebookUrl, instagramUrl, linkedinPageUrl, slackUrl, whatsappUrl, pocNumber,
     caseStudiesText, requirementDocsUrl, ghlAccountUrl, requiredCount, profileRows
@@ -239,6 +246,8 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
     setVideosUrl('');
     setVslUrl('');
     setTestimonialsUrl('');
+    setReviewsUrl('');
+    setProposalContractUrl('');
     setGridUrl('');
     setSocialMediaManagementUrl('');
     setLinkedinManagementUrl('');
@@ -347,6 +356,8 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
       videos: videosUrl,
       vsl: vslUrl,
       testimonials: testimonialsUrl,
+      reviews: reviewsUrl,
+      proposal_contract: proposalContractUrl,
       grid: gridUrl,
       social_media_management: socialMediaManagementUrl,
       linkedin_management: linkedinManagementUrl,
@@ -767,6 +778,36 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
                   value={testimonialsUrl}
                   onChange={(e) => setTestimonialsUrl(e.target.value)}
                   placeholder="https://... (Testimonials Video Link)"
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="link-reviews" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Reviews URL
+                </label>
+                <input
+                  id="link-reviews"
+                  data-testid="link-reviews"
+                  type="url"
+                  value={reviewsUrl}
+                  onChange={(e) => setReviewsUrl(e.target.value)}
+                  placeholder="https://... (Reviews Link)"
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="link-proposal-contract" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Proposal / Contract URL
+                </label>
+                <input
+                  id="link-proposal-contract"
+                  data-testid="link-proposal-contract"
+                  type="url"
+                  value={proposalContractUrl}
+                  onChange={(e) => setProposalContractUrl(e.target.value)}
+                  placeholder="https://... (Proposal / Contract Link)"
                   className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
                 />
               </div>
