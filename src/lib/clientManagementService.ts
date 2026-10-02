@@ -15,7 +15,6 @@ import {
   ClientLinkedInProfile,
   LinkedInReadiness
 } from '../types';
-import { getStoredClientLinksFallback, setStoredClientLinksFallback } from './clientPersistence';
 
 /**
  * Validate and sanitize workspace/communication URLs.
@@ -270,12 +269,6 @@ async function saveClientLinkRecord(
   const keysToClean = aliasKey ? [key, aliasKey] : [key];
 
   if (!cleanUrl) {
-    // Clean local fallback storage
-    const fallback = getStoredClientLinksFallback(clientId);
-    delete fallback[key];
-    if (aliasKey) delete fallback[aliasKey];
-    setStoredClientLinksFallback(clientId, fallback);
-
     // User explicitly cleared the field: delete both primary and alias rows
     for (const k of keysToClean) {
       const { error: delErr } = await supabase!
@@ -342,22 +335,8 @@ async function saveClientLinkRecord(
   }
 
   if (upsertErr) {
-    // If database check constraint on unmigrated preview rejects new link type, safely cache locally
-    if (upsertErr.message?.includes('check constraint') || (upsertErr as any).code === '23514') {
-      const fallback = getStoredClientLinksFallback(clientId);
-      fallback[key] = cleanUrl;
-      if (aliasKey) fallback[aliasKey] = cleanUrl;
-      setStoredClientLinksFallback(clientId, fallback);
-      return {};
-    }
     return { error: `Failed to save ${key.replace(/_/g, ' ')}: ${upsertErr.message}` };
   }
-
-  // Also sync cleanUrl into persistent client fallback cache
-  const fallback = getStoredClientLinksFallback(clientId);
-  fallback[key] = cleanUrl;
-  if (aliasKey) fallback[aliasKey] = cleanUrl;
-  setStoredClientLinksFallback(clientId, fallback);
 
   return {};
 }
@@ -431,11 +410,7 @@ export const clientManagementService = {
       }
 
       for (const cid of clientIds) {
-        const localFallback = getStoredClientLinksFallback(cid);
-        linksMap[cid] = normalizeClientLinks({
-          ...(localFallback as Partial<Record<ClientLinkType, string>>),
-          ...(linksMap[cid] || {})
-        });
+        linksMap[cid] = normalizeClientLinks(linksMap[cid] || {});
       }
 
       // 2. Fetch Active LinkedIn Profiles
@@ -853,6 +828,10 @@ export const clientManagementService = {
         .select()
         .single();
 
+      if (insertError || !newClient) {
+        return { error: insertError?.message || 'Failed to duplicate client record.' };
+      }
+
       // Save optional links if entered during duplication
       const savedLinks: Partial<Record<ClientLinkType, string>> = {};
       if (input.links && Object.keys(input.links).length > 0) {
@@ -879,7 +858,11 @@ export const clientManagementService = {
         if (linkEntries.length > 0) {
           const { error: linksError } = await supabase.from('client_links').insert(linkEntries);
           if (linksError) {
-            console.warn('Failed to insert duplicated client links:', linksError);
+            // Clean up partially created client to maintain transactional atomicity
+            await supabase.from('clients').delete().eq('id', newClient.id);
+            return {
+              error: `Failed to persist workspace links for duplicated client: ${linksError.message}. Duplication was rolled back.`
+            };
           }
         }
       }

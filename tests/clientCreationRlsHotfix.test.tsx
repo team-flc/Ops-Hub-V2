@@ -17,6 +17,7 @@ const mockOnAuthStateChange = vi.fn();
 const mockFromSelect = vi.fn();
 const mockRpc = vi.fn();
 const mockInsert = vi.fn();
+const mockUpsert = vi.fn();
 const mockDelete = vi.fn();
 
 vi.mock('../src/lib/supabase', () => {
@@ -35,14 +36,25 @@ vi.mock('../src/lib/supabase', () => {
           eq: (...eqArgs: any[]) => ({
             single: () => mockFromSelect(table, eqArgs),
             maybeSingle: () => mockFromSelect(table, eqArgs),
-            order: () => Promise.resolve({ data: [], error: null })
+            order: () => Promise.resolve({ data: [], error: null }),
+            in: () => Promise.resolve({ data: [], error: null })
           }),
           in: () => ({
-            order: () => Promise.resolve({ data: [], error: null })
+            order: () => Promise.resolve({ data: [], error: null }),
+            eq: () => Promise.resolve({ data: [], error: null })
           }),
           order: () => Promise.resolve({ data: [], error: null })
         }),
-        insert: (data: any) => mockInsert(table, data),
+        insert: (data: any) => {
+          const res = mockInsert(table, data);
+          return {
+            select: () => ({
+              single: () => Promise.resolve(res?.single ? res.single() : res || { data: null, error: null })
+            }),
+            then: (resolve: any) => Promise.resolve(res || { data: null, error: null }).then(resolve)
+          };
+        },
+        upsert: (data: any, opts: any) => mockUpsert(table, data, opts),
         update: () => ({ eq: () => ({ select: () => ({ single: () => Promise.resolve({ data: {}, error: null }) }) }) }),
         delete: () => ({
           eq: (col: string, val: any) => mockDelete(table, col, val)
@@ -97,6 +109,7 @@ describe('Hotfix Verification: Client Creation RLS, Persistence & Atomicity', ()
     mockGetSession.mockResolvedValue({ data: { session: null }, error: null });
     mockOnAuthStateChange.mockReturnValue({ data: { subscription: { unsubscribe: vi.fn() } } });
     mockRpc.mockResolvedValue({ data: null, error: { message: 'function does not exist' } });
+    mockUpsert.mockResolvedValue({ data: null, error: null });
     mockDelete.mockReturnValue({
       eq: () => Promise.resolve({ data: null, error: null })
     });
@@ -1016,5 +1029,129 @@ describe('Hotfix Verification: Client Creation RLS, Persistence & Atomicity', ()
     // No fallback direct inserts were attempted (ensuring atomicity is preserved)
     expect(mockInsert).not.toHaveBeenCalled();
     expect(mockDelete).not.toHaveBeenCalled();
+  });
+
+  it('19. duplicateClient failure-path: checks client insert result and returns error if client creation fails', async () => {
+    mockInsert.mockImplementation((table: string) => {
+      if (table === 'clients') {
+        return { data: null, error: { message: 'new row violates row-level security policy for table "clients"' } };
+      }
+      return { data: null, error: null };
+    });
+
+    const result = await clientManagementService.duplicateClient('source-client-1', {
+      companyName: 'Failed Duplicate',
+      clientName: 'Failed Lead',
+      package: 'Basic',
+      operationalManagerId: mockManager1.id,
+      activationDate: '2026-10-02',
+      status: 'Onboarding',
+      links: {
+        reviews: 'https://reviews.google.com/test'
+      }
+    }, mockManager2.id);
+
+    expect(result.error).toContain('new row violates row-level security policy for table "clients"');
+    expect(result.data).toBeUndefined();
+    // Did not attempt to insert links into client_links
+    expect(mockInsert).toHaveBeenCalledTimes(1); // Only the clients table insert
+  });
+
+  it('20. duplicateClient failure-path: if optional links fail to persist, rolls back client and never reports links as saved', async () => {
+    mockInsert.mockImplementation((table: string, data: any) => {
+      if (table === 'clients') {
+        return {
+          data: {
+            id: 'partial-client-uuid',
+            company_name: data.company_name,
+            client_name: data.client_name,
+            package: data.package,
+            operational_manager_id: data.operational_manager_id,
+            activation_date: data.activation_date,
+            status: data.status,
+            created_by: data.created_by,
+            created_at: data.created_at,
+            updated_at: data.updated_at
+          },
+          error: null
+        };
+      }
+      if (table === 'client_links') {
+        return {
+          data: null,
+          error: {
+            code: '23514',
+            message: 'new row for relation "client_links" violates check constraint "client_links_link_type_check"'
+          }
+        };
+      }
+      return { data: null, error: null };
+    });
+
+    const result = await clientManagementService.duplicateClient('source-client-1', {
+      companyName: 'Duplicate Rollback Client',
+      clientName: 'Duplicate Lead',
+      package: 'Basic',
+      operationalManagerId: mockManager1.id,
+      activationDate: '2026-10-02',
+      status: 'Onboarding',
+      links: {
+        reviews: 'https://reviews.google.com/test',
+        proposal_contract: 'https://docs.google.com/contract'
+      }
+    }, mockManager2.id);
+
+    // Rollback error returned
+    expect(result.error).toContain('Failed to persist workspace links for duplicated client');
+    expect(result.error).toContain('Duplication was rolled back');
+    expect(result.data).toBeUndefined();
+
+    // Verified rollback: deleted the partially created client from database
+    expect(mockDelete).toHaveBeenCalledWith('clients', 'id', 'partial-client-uuid');
+  });
+
+  it('21. Database check-constraint rejection on Reviews/Proposal Contract reports save failure and does not claim saved', async () => {
+    mockFromSelect.mockImplementation((table: string) => {
+      if (table === 'profiles') return Promise.resolve({ data: mockManager1, error: null });
+      if (table === 'clients') {
+        return Promise.resolve({
+          data: {
+            id: 'client-check-test',
+            company_name: 'Alpha Check',
+            client_name: 'Alpha Lead',
+            package: 'Basic',
+            operational_manager_id: mockManager1.id,
+            activation_date: '2026-01-01',
+            status: 'Active'
+          },
+          error: null
+        });
+      }
+      return Promise.resolve({ data: null, error: null });
+    });
+
+    // Check constraint rejection from client_links
+    mockUpsert.mockResolvedValue({
+      data: null,
+      error: {
+        code: '23514',
+        message: 'new row for relation "client_links" violates check constraint "client_links_link_type_check"'
+      }
+    });
+
+    const result = await clientManagementService.updateClient('client-check-test', {
+      links: {
+        reviews: 'https://reviews.badconstraint.com'
+      }
+    }, mockManager1.id);
+
+    // Save failure must be reported
+    expect(result.error).toBeDefined();
+    expect(result.error).toContain('violates check constraint "client_links_link_type_check"');
+    expect(result.data).toBeUndefined();
+
+    // Verify localStorage was NOT polluted with unpersisted link as if it were saved
+    const rawStored = localStorage.getItem('ops_hub_client_ext_links_client-check-test');
+    expect(rawStored).toBeNull();
   });
 });

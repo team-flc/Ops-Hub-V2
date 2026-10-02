@@ -640,7 +640,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
       client.id, companyName, clientName, businessBio, industry, logoUrl, pkg, managerId,
       activationDate, status, pauseReason, requiredLinkedInCount,
       websiteUrl, flcLandingPageUrl, brandIdentityUrl, driveUrl, importantDocsUrl, masterBusinessDocUrl,
-      staticCreativesUrl, videosUrl, vslUrl, testimonialsUrl, gridUrl, socialMediaManagementUrl,
+      staticCreativesUrl, videosUrl, vslUrl, testimonialsUrl, reviewsUrl, proposalContractUrl, gridUrl, socialMediaManagementUrl,
       linkedinManagementUrl, seoManagementUrl, emailMarketingManagementUrl, paidAdsManagementUrl,
       facebookUrl, instagramUrl, linkedinPageUrl, slackUrl, whatsappUrl, pocNumber,
       caseStudiesText, requirementDocsUrl, ghlAccountUrl, currentUserProfile?.id, onClientUpdated,

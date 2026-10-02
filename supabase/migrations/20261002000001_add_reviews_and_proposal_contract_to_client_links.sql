@@ -1,6 +1,6 @@
 -- ==============================================================================
 -- MIGRATION: 20261002000001_add_reviews_and_proposal_contract_to_client_links.sql
--- Description: 
+-- Description:
 --   Update client_links check constraint to safely accept 'reviews',
 --   'proposal_contract', and 'contract'.
 -- Safe Additive Migration: Preserves all existing data, columns, and constraints.
