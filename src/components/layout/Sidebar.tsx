@@ -6,7 +6,7 @@ import {
   Globe, HardDrive, MessageCircle, ExternalLink, Clock, Users, UserCheck,
   Image, Video, PlaySquare, Sparkles, LayoutGrid, Palette, PhoneCall,
   LayoutDashboard, FileText, Share2, Search, Mail, Target, BookOpen, MessageSquareQuote,
-  ClipboardList, Zap
+  ClipboardList, Zap, Star, FileCheck
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { ClientRecord, UserProfile } from '../../types';
@@ -157,6 +157,13 @@ export const Sidebar: React.FC = () => {
       activeColorClass: 'text-indigo-500 dark:text-indigo-400'
     },
     {
+      key: 'proposal_contract',
+      label: 'Proposal / Contract',
+      url: clientLinks.proposal_contract || (clientLinks as any).contract,
+      icon: <FileCheck className="w-3.5 h-3.5" />,
+      activeColorClass: 'text-emerald-600 dark:text-emerald-400'
+    },
+    {
       key: 'master_business_doc',
       label: 'Master Business Document',
       url: clientLinks.master_business_doc || clientLinks.master_business_document,
@@ -197,6 +204,13 @@ export const Sidebar: React.FC = () => {
       url: clientLinks.testimonials,
       icon: <MessageSquareQuote className="w-3.5 h-3.5" />,
       activeColorClass: 'text-amber-500 dark:text-amber-400'
+    },
+    {
+      key: 'reviews',
+      label: 'Reviews',
+      url: clientLinks.reviews,
+      icon: <Star className="w-3.5 h-3.5" />,
+      activeColorClass: 'text-yellow-500 dark:text-yellow-400'
     },
     {
       key: 'case_studies',
@@ -587,6 +601,7 @@ export const Sidebar: React.FC = () => {
         isOpen={isCreateModalOpen}
         onClose={() => setIsCreateModalOpen(false)}
         onSuccess={handleClientCreated}
+        currentUserProfile={profile}
         eligibleManagers={eligibleManagers}
       />
 

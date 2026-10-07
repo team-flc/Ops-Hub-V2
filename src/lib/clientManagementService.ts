@@ -15,7 +15,6 @@ import {
   ClientLinkedInProfile,
   LinkedInReadiness
 } from '../types';
-import { getStoredClientLinksFallback, setStoredClientLinksFallback } from './clientPersistence';
 
 /**
  * Validate and sanitize workspace/communication URLs.
@@ -184,7 +183,9 @@ export const LINK_ALIASES: Record<string, string> = {
   requirement_docs: 'requirement_documents',
   requirement_documents: 'requirement_docs',
   gohighlevel: 'ghl_account',
-  ghl_account: 'gohighlevel'
+  ghl_account: 'gohighlevel',
+  proposal_contract: 'contract',
+  contract: 'proposal_contract'
 };
 
 /**
@@ -234,6 +235,12 @@ export function normalizeClientLinks(
     normalized.ghl_account = ghl;
   }
 
+  const prop = normalized.proposal_contract || (normalized as any).contract;
+  if (prop) {
+    normalized.proposal_contract = prop;
+    (normalized as any).contract = prop;
+  }
+
   return normalized;
 }
 
@@ -262,12 +269,6 @@ async function saveClientLinkRecord(
   const keysToClean = aliasKey ? [key, aliasKey] : [key];
 
   if (!cleanUrl) {
-    // Clean local fallback storage
-    const fallback = getStoredClientLinksFallback(clientId);
-    delete fallback[key];
-    if (aliasKey) delete fallback[aliasKey];
-    setStoredClientLinksFallback(clientId, fallback);
-
     // User explicitly cleared the field: delete both primary and alias rows
     for (const k of keysToClean) {
       const { error: delErr } = await supabase!
@@ -334,22 +335,8 @@ async function saveClientLinkRecord(
   }
 
   if (upsertErr) {
-    // If database check constraint on unmigrated preview rejects new link type, safely cache locally
-    if (upsertErr.message?.includes('check constraint') || (upsertErr as any).code === '23514') {
-      const fallback = getStoredClientLinksFallback(clientId);
-      fallback[key] = cleanUrl;
-      if (aliasKey) fallback[aliasKey] = cleanUrl;
-      setStoredClientLinksFallback(clientId, fallback);
-      return {};
-    }
     return { error: `Failed to save ${key.replace(/_/g, ' ')}: ${upsertErr.message}` };
   }
-
-  // Also sync cleanUrl into persistent client fallback cache
-  const fallback = getStoredClientLinksFallback(clientId);
-  fallback[key] = cleanUrl;
-  if (aliasKey) fallback[aliasKey] = cleanUrl;
-  setStoredClientLinksFallback(clientId, fallback);
 
   return {};
 }
@@ -423,11 +410,7 @@ export const clientManagementService = {
       }
 
       for (const cid of clientIds) {
-        const localFallback = getStoredClientLinksFallback(cid);
-        linksMap[cid] = normalizeClientLinks({
-          ...(localFallback as Partial<Record<ClientLinkType, string>>),
-          ...(linksMap[cid] || {})
-        });
+        linksMap[cid] = normalizeClientLinks(linksMap[cid] || {});
       }
 
       // 2. Fetch Active LinkedIn Profiles
@@ -644,8 +627,12 @@ export const clientManagementService = {
 
   /**
    * Create a new Client Workspace with links and optional LinkedIn profiles.
+   * Transactional ACID execution via create_client_tx RPC.
+   * Strictly server-authorized via auth.uid().
+   * If create_client_tx fails, is missing, or returns an uncertain response,
+   * fails closed without any non-transactional direct insert fallback.
    */
-  async createClient(input: CreateClientInput, actorId?: string): Promise<{ data?: ClientRecord; error?: string }> {
+  async createClient(input: CreateClientInput, _actorId?: string): Promise<{ data?: ClientRecord; error?: string }> {
     if (!isSupabaseConfigured || !supabase) {
       return { error: 'Database connection is not configured.' };
     }
@@ -691,15 +678,46 @@ export const clientManagementService = {
           salesNavigatorActive: Boolean(p.salesNavigatorActive),
           salesNavigatorActivatedOn: p.salesNavigatorActive ? p.salesNavigatorActivatedOn : null,
           linkedinVerified: Boolean(p.linkedinVerified),
+          hasGmailAccount: Boolean(p.hasGmailAccount),
+          gmailAddress: p.hasGmailAccount ? (p.gmailAddress?.trim() || null) : null,
           sortOrder: i
         });
       }
     }
 
+    // Prepare links array & savedLinks map
+    const linksArray: { link_type: string; url: string }[] = [];
+    const savedLinks: Partial<Record<ClientLinkType, string>> = {};
+    if (input.links) {
+      for (const [key, rawUrl] of Object.entries(input.links)) {
+        let cleanUrl: string | null = null;
+        if (key === 'poc_number' || key === 'poc_whatsapp' || key === 'case_studies') {
+          cleanUrl = (rawUrl && typeof rawUrl === 'string' && rawUrl.trim()) ? rawUrl.trim() : null;
+        } else {
+          cleanUrl = sanitizeUrl(rawUrl);
+        }
+        if (cleanUrl) {
+          linksArray.push({ link_type: key, url: cleanUrl });
+          savedLinks[key as ClientLinkType] = cleanUrl;
+        }
+      }
+    }
+
+    const profilesArray = validProfilesToInsert.map((p, idx) => ({
+      profile_label: p.profileLabel,
+      profile_url: p.profileUrl,
+      sales_navigator_active: p.salesNavigatorActive,
+      sales_navigator_activated_on: p.salesNavigatorActive ? p.salesNavigatorActivatedOn : null,
+      linkedin_verified: Boolean(p.linkedinVerified),
+      has_gmail_account: Boolean(p.hasGmailAccount),
+      gmail_address: p.hasGmailAccount ? (p.gmailAddress?.trim() || null) : null,
+      sort_order: idx
+    }));
+
+    // Strictly transactional creation via create_client_tx RPC
     try {
-      const { data: newClient, error: insertError } = await supabase
-        .from('clients')
-        .insert({
+      const { data: txData, error: txError } = await supabase.rpc('create_client_tx', {
+        p_client_data: {
           company_name: input.companyName.trim(),
           client_name: input.clientName.trim(),
           package: input.package,
@@ -708,125 +726,49 @@ export const clientManagementService = {
           status: input.status || 'Onboarding',
           pause_reason: input.status === 'Paused' ? input.pauseReason || 'Operational reason' : null,
           required_linkedin_profile_count: reqLinkedInCount,
-          created_by: actorId || null,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        })
-        .select()
-        .single();
-
-      if (insertError || !newClient) {
-        return { error: insertError?.message || 'Failed to create client record.' };
-      }
-
-      // Insert valid links
-      const savedLinks: Partial<Record<ClientLinkType, string>> = {};
-      if (input.links) {
-        const linkEntries: { client_id: string; link_type: string; url: string; created_by?: string }[] = [];
-        for (const [key, rawUrl] of Object.entries(input.links)) {
-          let cleanUrl: string | null = null;
-          if (key === 'poc_number' || key === 'poc_whatsapp') {
-            cleanUrl = (rawUrl && typeof rawUrl === 'string' && rawUrl.trim()) ? rawUrl.trim() : null;
-          } else {
-            cleanUrl = sanitizeUrl(rawUrl);
-          }
-          if (cleanUrl) {
-            linkEntries.push({
-              client_id: newClient.id,
-              link_type: key,
-              url: cleanUrl,
-              created_by: actorId
-            });
-            savedLinks[key as ClientLinkType] = cleanUrl;
-          }
-        }
-
-        if (linkEntries.length > 0) {
-          await supabase.from('client_links').insert(linkEntries);
-        }
-      }
-
-      // Insert valid LinkedIn profiles
-      const savedLinkedInProfiles: ClientLinkedInProfile[] = [];
-      if (validProfilesToInsert.length > 0) {
-        const profileInserts = validProfilesToInsert.map((p, idx) => ({
-          client_id: newClient.id,
-          profile_label: p.profileLabel,
-          profile_url: p.profileUrl,
-          sales_navigator_active: p.salesNavigatorActive,
-          sales_navigator_activated_on: p.salesNavigatorActive ? p.salesNavigatorActivatedOn : null,
-          linkedin_verified: Boolean(p.linkedinVerified),
-          has_gmail_account: Boolean(p.hasGmailAccount),
-          gmail_address: p.hasGmailAccount ? (p.gmailAddress?.trim() || null) : null,
-          sort_order: idx,
-          status: 'active',
-          created_by: actorId,
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }));
-
-        const { data: insertedProfiles } = await supabase
-          .from('client_linkedin_profiles')
-          .insert(profileInserts)
-          .select();
-
-        if (insertedProfiles) {
-          for (const ip of insertedProfiles) {
-            savedLinkedInProfiles.push({
-              id: ip.id,
-              clientId: ip.client_id,
-              profileLabel: ip.profile_label,
-              profileUrl: ip.profile_url,
-              salesNavigatorActive: Boolean(ip.sales_navigator_active),
-              salesNavigatorActivatedOn: ip.sales_navigator_activated_on,
-              linkedinVerified: Boolean(ip.linkedin_verified),
-              hasGmailAccount: Boolean(ip.has_gmail_account),
-              gmailAddress: ip.gmail_address || null,
-              sortOrder: ip.sort_order,
-              status: ip.status,
-              createdBy: ip.created_by,
-              createdAt: ip.created_at,
-              updatedAt: ip.updated_at
-            });
-          }
-        }
-      }
-
-      // Record Audit Log
-      await supabase.from('client_audit_log').insert({
-        client_id: newClient.id,
-        actor_id: actorId,
-        action: 'client_created',
-        safe_metadata: {
-          companyName: newClient.company_name,
-          package: newClient.package,
-          managerId: newClient.operational_manager_id,
-          requiredLinkedinProfileCount: reqLinkedInCount,
-          linkedinProfilesCount: savedLinkedInProfiles.length
-        }
+          source_client_id: null
+        },
+        p_links: linksArray,
+        p_linkedin_profiles: profilesArray
       });
+
+      if (txError) {
+        if (txError.code === 'PGRST202' || txError.message?.includes('create_client_tx')) {
+          return {
+            error: `Database migration pending: create_client_tx function is not applied in this environment (${txError.message}). Your filled form draft has been preserved.`
+          };
+        }
+        return { error: txError.message || 'Failed to create client workspace.' };
+      }
+
+      if (!txData || !txData.id) {
+        return { error: 'Client workspace creation response was uncertain or empty. Creation was not completed.' };
+      }
 
       return {
         data: {
-          id: newClient.id,
-          companyName: newClient.company_name,
-          clientName: newClient.client_name,
-          package: newClient.package as ClientPackage,
-          operationalManagerId: newClient.operational_manager_id,
-          activationDate: newClient.activation_date,
-          status: newClient.status as ClientStatus,
-          pauseReason: newClient.pause_reason as ClientPauseReason | null,
-          requiredLinkedinProfileCount: reqLinkedInCount,
-          linkedinProfiles: savedLinkedInProfiles,
+          id: txData.id,
+          companyName: txData.companyName,
+          clientName: txData.clientName,
+          package: txData.package as ClientPackage,
+          operationalManagerId: txData.operationalManagerId,
+          operationalManagerName: 'Assigned Manager',
+          activationDate: txData.activationDate,
+          status: txData.status as ClientStatus,
+          pauseReason: txData.pauseReason as ClientPauseReason | null,
+          requiredLinkedinProfileCount: txData.requiredLinkedinProfileCount || reqLinkedInCount,
+          linkedinProfiles: txData.linkedinProfiles || [],
           sourceClientId: null,
-          links: savedLinks,
-          createdBy: newClient.created_by,
-          createdAt: newClient.created_at,
-          updatedAt: newClient.updated_at
+          links: txData.links || savedLinks,
+          createdBy: txData.createdBy,
+          createdAt: txData.createdAt,
+          updatedAt: txData.updatedAt
         }
       };
     } catch (err: any) {
-      return { error: err.message || 'An unexpected error occurred while creating client.' };
+      return {
+        error: `Client creation encountered an unexpected error: ${err.message || 'Unknown network or execution failure'}. If unsure, please verify before retrying.`
+      };
     }
   },
 
@@ -842,6 +784,16 @@ export const clientManagementService = {
   ): Promise<{ data?: ClientRecord; error?: string }> {
     if (!isSupabaseConfigured || !supabase) {
       return { error: 'Database connection is not configured.' };
+    }
+
+    let effectiveActorId = actorId;
+    if (!effectiveActorId) {
+      try {
+        const { data: sessionData } = await supabase.auth.getSession();
+        effectiveActorId = sessionData?.session?.user?.id;
+      } catch {
+        // fallback
+      }
     }
 
     if (!input.companyName?.trim()) return { error: 'New Company Name is required.' };
@@ -869,7 +821,7 @@ export const clientManagementService = {
           pause_reason: input.status === 'Paused' ? input.pauseReason || 'Operational reason' : null,
           required_linkedin_profile_count: reqLinkedInCount,
           source_client_id: sourceClientId,
-          created_by: actorId || null,
+          created_by: effectiveActorId || null,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString()
         })
@@ -880,10 +832,45 @@ export const clientManagementService = {
         return { error: insertError?.message || 'Failed to duplicate client record.' };
       }
 
+      // Save optional links if entered during duplication
+      const savedLinks: Partial<Record<ClientLinkType, string>> = {};
+      if (input.links && Object.keys(input.links).length > 0) {
+        const linkEntries: { client_id: string; link_type: string; url: string; created_by?: string; created_at: string; updated_at: string }[] = [];
+        for (const [key, rawUrl] of Object.entries(input.links)) {
+          let cleanUrl: string | null = null;
+          if (key === 'poc_number' || key === 'poc_whatsapp' || key === 'case_studies') {
+            cleanUrl = (rawUrl && typeof rawUrl === 'string' && rawUrl.trim()) ? rawUrl.trim() : null;
+          } else {
+            cleanUrl = sanitizeUrl(rawUrl);
+          }
+          if (cleanUrl) {
+            linkEntries.push({
+              client_id: newClient.id,
+              link_type: key,
+              url: cleanUrl,
+              created_by: effectiveActorId || undefined,
+              created_at: new Date().toISOString(),
+              updated_at: new Date().toISOString()
+            });
+            savedLinks[key as ClientLinkType] = cleanUrl;
+          }
+        }
+        if (linkEntries.length > 0) {
+          const { error: linksError } = await supabase.from('client_links').insert(linkEntries);
+          if (linksError) {
+            // Clean up partially created client to maintain transactional atomicity
+            await supabase.from('clients').delete().eq('id', newClient.id);
+            return {
+              error: `Failed to persist workspace links for duplicated client: ${linksError.message}. Duplication was rolled back.`
+            };
+          }
+        }
+      }
+
       // Record Audit Log
       await supabase.from('client_audit_log').insert({
         client_id: newClient.id,
-        actor_id: actorId,
+        actor_id: effectiveActorId,
         action: 'client_duplicated',
         safe_metadata: {
           sourceClientId,
@@ -907,7 +894,7 @@ export const clientManagementService = {
           linkedinProfiles: [],
           sourceClientId,
           sourceCompanyName: sourceClient?.company_name,
-          links: {},
+          links: savedLinks,
           createdBy: newClient.created_by,
           createdAt: newClient.created_at,
           updatedAt: newClient.updated_at
