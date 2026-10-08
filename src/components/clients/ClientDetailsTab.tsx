@@ -94,6 +94,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
   const [masterBusinessDocUrl, setMasterBusinessDocUrl] = useState(client.links?.master_business_doc || client.links?.master_business_document || '');
   const [staticCreativesUrl, setStaticCreativesUrl] = useState(client.links?.static_creatives || '');
   const [videosUrl, setVideosUrl] = useState(client.links?.videos || '');
+  const [variationsUrl, setVariationsUrl] = useState(client.links?.variations || '');
   const [vslUrl, setVslUrl] = useState(client.links?.vsl || '');
   const [testimonialsUrl, setTestimonialsUrl] = useState(client.links?.testimonials || '');
   const [reviewsUrl, setReviewsUrl] = useState(client.links?.reviews || '');
@@ -110,6 +111,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
   const [slackUrl, setSlackUrl] = useState(client.links?.slack_channel || '');
   const [whatsappUrl, setWhatsappUrl] = useState(client.links?.whatsapp_group || '');
   const [pocNumber, setPocNumber] = useState(client.links?.poc_number || '');
+  const [pocEmail, setPocEmail] = useState(client.links?.poc_email || '');
   const [caseStudiesText, setCaseStudiesText] = useState(client.links?.case_studies || '');
   const [requirementDocsUrl, setRequirementDocsUrl] = useState(client.links?.requirement_docs || client.links?.requirement_documents || '');
   const [ghlAccountUrl, setGhlAccountUrl] = useState(client.links?.gohighlevel || client.links?.ghl_account || '');
@@ -178,6 +180,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     if (masterBusinessDocUrl !== (client.links?.master_business_doc || client.links?.master_business_document || '')) return true;
     if (staticCreativesUrl !== (client.links?.static_creatives || '')) return true;
     if (videosUrl !== (client.links?.videos || '')) return true;
+    if (variationsUrl !== (client.links?.variations || '')) return true;
     if (vslUrl !== (client.links?.vsl || '')) return true;
     if (testimonialsUrl !== (client.links?.testimonials || '')) return true;
     if (reviewsUrl !== (client.links?.reviews || '')) return true;
@@ -194,6 +197,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     if (slackUrl !== (client.links?.slack_channel || '')) return true;
     if (whatsappUrl !== (client.links?.whatsapp_group || '')) return true;
     if (pocNumber !== (client.links?.poc_number || client.links?.poc_whatsapp || '')) return true;
+    if (pocEmail !== (client.links?.poc_email || '')) return true;
     if (caseStudiesText !== (client.links?.case_studies || '')) return true;
     if (requirementDocsUrl !== (client.links?.requirement_docs || client.links?.requirement_documents || '')) return true;
     if (ghlAccountUrl !== (client.links?.gohighlevel || client.links?.ghl_account || '')) return true;
@@ -202,9 +206,9 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     companyName, clientName, businessBio, industry, logoUrl, pkg, managerId,
     activationDate, status, pauseReason, requiredLinkedInCount,
     websiteUrl, flcLandingPageUrl, brandIdentityUrl, driveUrl, importantDocsUrl, masterBusinessDocUrl, staticCreativesUrl,
-    videosUrl, vslUrl, testimonialsUrl, reviewsUrl, proposalContractUrl, gridUrl, socialMediaManagementUrl, linkedinManagementUrl, seoManagementUrl,
+    videosUrl, variationsUrl, vslUrl, testimonialsUrl, reviewsUrl, proposalContractUrl, gridUrl, socialMediaManagementUrl, linkedinManagementUrl, seoManagementUrl,
     emailMarketingManagementUrl, paidAdsManagementUrl, facebookUrl, instagramUrl, linkedinPageUrl,
-    slackUrl, whatsappUrl, pocNumber, caseStudiesText, requirementDocsUrl, ghlAccountUrl, client
+    slackUrl, whatsappUrl, pocNumber, pocEmail, caseStudiesText, requirementDocsUrl, ghlAccountUrl, client
   ]);
 
   // Load draft if present in sessionStorage, else initialize from client prop
@@ -232,6 +236,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
         setMasterBusinessDocUrl(parsed.masterBusinessDocUrl ?? (client.links?.master_business_doc || client.links?.master_business_document || ''));
         setStaticCreativesUrl(parsed.staticCreativesUrl ?? (client.links?.static_creatives || ''));
         setVideosUrl(parsed.videosUrl ?? (client.links?.videos || ''));
+        setVariationsUrl(parsed.variationsUrl ?? (client.links?.variations || ''));
         setVslUrl(parsed.vslUrl ?? (client.links?.vsl || ''));
         setTestimonialsUrl(parsed.testimonialsUrl ?? (client.links?.testimonials || ''));
         setReviewsUrl(parsed.reviewsUrl ?? (client.links?.reviews || ''));
@@ -248,6 +253,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
         setSlackUrl(parsed.slackUrl ?? (client.links?.slack_channel || ''));
         setWhatsappUrl(parsed.whatsappUrl ?? (client.links?.whatsapp_group || ''));
         setPocNumber(parsed.pocNumber ?? (client.links?.poc_number || client.links?.poc_whatsapp || ''));
+        setPocEmail(parsed.pocEmail ?? (client.links?.poc_email || ''));
         setCaseStudiesText(parsed.caseStudiesText ?? (client.links?.case_studies || ''));
         setRequirementDocsUrl(parsed.requirementDocsUrl ?? (client.links?.requirement_docs || client.links?.requirement_documents || ''));
         setGhlAccountUrl(parsed.ghlAccountUrl ?? (client.links?.gohighlevel || client.links?.ghl_account || ''));
@@ -277,6 +283,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     setMasterBusinessDocUrl(client.links?.master_business_doc || client.links?.master_business_document || '');
     setStaticCreativesUrl(client.links?.static_creatives || '');
     setVideosUrl(client.links?.videos || '');
+    setVariationsUrl(client.links?.variations || '');
     setVslUrl(client.links?.vsl || '');
     setTestimonialsUrl(client.links?.testimonials || '');
     setReviewsUrl(client.links?.reviews || '');
@@ -293,6 +300,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     setSlackUrl(client.links?.slack_channel || '');
     setWhatsappUrl(client.links?.whatsapp_group || '');
     setPocNumber(client.links?.poc_number || client.links?.poc_whatsapp || '');
+    setPocEmail(client.links?.poc_email || '');
     setCaseStudiesText(client.links?.case_studies || '');
     setRequirementDocsUrl(client.links?.requirement_docs || client.links?.requirement_documents || '');
     setGhlAccountUrl(client.links?.gohighlevel || client.links?.ghl_account || '');
@@ -326,6 +334,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
             masterBusinessDocUrl,
             staticCreativesUrl,
             videosUrl,
+            variationsUrl,
             vslUrl,
             testimonialsUrl,
             reviewsUrl,
@@ -342,6 +351,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
             slackUrl,
             whatsappUrl,
             pocNumber,
+            pocEmail,
             caseStudiesText,
             requirementDocsUrl,
             ghlAccountUrl
@@ -359,9 +369,9 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     isDirty, client.id, companyName, clientName, businessBio, industry, logoUrl,
     pkg, managerId, activationDate, status, pauseReason, requiredLinkedInCount,
     websiteUrl, flcLandingPageUrl, brandIdentityUrl, driveUrl, importantDocsUrl, masterBusinessDocUrl, staticCreativesUrl,
-    videosUrl, vslUrl, testimonialsUrl, reviewsUrl, proposalContractUrl, gridUrl, socialMediaManagementUrl, linkedinManagementUrl, seoManagementUrl,
+    videosUrl, variationsUrl, vslUrl, testimonialsUrl, reviewsUrl, proposalContractUrl, gridUrl, socialMediaManagementUrl, linkedinManagementUrl, seoManagementUrl,
     emailMarketingManagementUrl, paidAdsManagementUrl, facebookUrl, instagramUrl, linkedinPageUrl,
-    slackUrl, whatsappUrl, pocNumber, caseStudiesText, requirementDocsUrl, ghlAccountUrl
+    slackUrl, whatsappUrl, pocNumber, pocEmail, caseStudiesText, requirementDocsUrl, ghlAccountUrl
   ]);
 
   const handleConfirmDiscard = () => {
@@ -388,6 +398,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     setMasterBusinessDocUrl(client.links?.master_business_doc || client.links?.master_business_document || '');
     setStaticCreativesUrl(client.links?.static_creatives || '');
     setVideosUrl(client.links?.videos || '');
+    setVariationsUrl(client.links?.variations || '');
     setVslUrl(client.links?.vsl || '');
     setTestimonialsUrl(client.links?.testimonials || '');
     setReviewsUrl(client.links?.reviews || '');
@@ -404,6 +415,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     setSlackUrl(client.links?.slack_channel || '');
     setWhatsappUrl(client.links?.whatsapp_group || '');
     setPocNumber(client.links?.poc_number || client.links?.poc_whatsapp || '');
+    setPocEmail(client.links?.poc_email || '');
     setCaseStudiesText(client.links?.case_studies || '');
     setRequirementDocsUrl(client.links?.requirement_docs || client.links?.requirement_documents || '');
     setGhlAccountUrl(client.links?.gohighlevel || client.links?.ghl_account || '');
@@ -522,6 +534,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
         master_business_document: masterBusinessDocUrl,
         static_creatives: staticCreativesUrl,
         videos: videosUrl,
+        variations: variationsUrl,
         vsl: vslUrl,
         testimonials: testimonialsUrl,
         reviews: reviewsUrl,
@@ -540,6 +553,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
         whatsapp_group: whatsappUrl,
         poc_number: pocNumber,
         poc_whatsapp: pocNumber,
+        poc_email: pocEmail,
         case_studies: caseStudiesText,
         requirement_docs: requirementDocsUrl,
         requirement_documents: requirementDocsUrl,
@@ -551,6 +565,16 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
         if (raw && raw.trim()) {
           // Exempt poc_number, poc_whatsapp, and case_studies from URL check
           if (key === 'poc_number' || key === 'poc_whatsapp' || key === 'case_studies') {
+            continue;
+          }
+          if (key === 'poc_email') {
+            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+            if (!emailRegex.test(raw.trim())) {
+              if (isManualClick) {
+                setErrorMsg('Invalid email format for POC Email.');
+              }
+              return false;
+            }
             continue;
           }
           const sanitized = sanitizeUrl(raw);
@@ -640,9 +664,9 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
       client.id, companyName, clientName, businessBio, industry, logoUrl, pkg, managerId,
       activationDate, status, pauseReason, requiredLinkedInCount,
       websiteUrl, flcLandingPageUrl, brandIdentityUrl, driveUrl, importantDocsUrl, masterBusinessDocUrl,
-      staticCreativesUrl, videosUrl, vslUrl, testimonialsUrl, reviewsUrl, proposalContractUrl, gridUrl, socialMediaManagementUrl,
+      staticCreativesUrl, videosUrl, variationsUrl, vslUrl, testimonialsUrl, reviewsUrl, proposalContractUrl, gridUrl, socialMediaManagementUrl,
       linkedinManagementUrl, seoManagementUrl, emailMarketingManagementUrl, paidAdsManagementUrl,
-      facebookUrl, instagramUrl, linkedinPageUrl, slackUrl, whatsappUrl, pocNumber,
+      facebookUrl, instagramUrl, linkedinPageUrl, slackUrl, whatsappUrl, pocNumber, pocEmail,
       caseStudiesText, requirementDocsUrl, ghlAccountUrl, currentUserProfile?.id, onClientUpdated,
       verifyClientUrlMatch
     ]
@@ -857,7 +881,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
       )}
 
       {/* 1. Core Information & Communication Channels Form */}
-      <form onSubmit={handleSaveDetails} className="bg-white dark:bg-dark-card rounded-2xl border border-gray-200 dark:border-dark-border p-6 shadow-sm space-y-6">
+      <form onSubmit={handleSaveDetails} noValidate className="bg-white dark:bg-dark-card rounded-2xl border border-gray-200 dark:border-dark-border p-6 shadow-sm space-y-6">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-gray-100 dark:border-dark-border">
           <div>
             <div className="flex items-center gap-2.5 flex-wrap">
@@ -1429,6 +1453,30 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
 
             <div>
               <div className="flex items-center justify-between mb-1">
+                <label htmlFor="edit-variations" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  Variations URL
+                </label>
+                {isLinkLocked('variations') && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
+              <input
+                id="edit-variations"
+                data-testid="edit-variations"
+                type="url"
+                value={variationsUrl}
+                onChange={(e) => setVariationsUrl(e.target.value)}
+                disabled={isLinkLocked('variations')}
+                placeholder="https://... (Variations Link)"
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
                 <label htmlFor="edit-vsl" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
                   VSL (Video Sales Letter) URL
                 </label>
@@ -1884,6 +1932,30 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 onChange={(e) => setPocNumber(e.target.value)}
                 disabled={isLinkLocked('poc_number')}
                 placeholder="+92 300 1234567 or https://wa.me/..."
+                className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
+              />
+            </div>
+
+            <div>
+              <div className="flex items-center justify-between mb-1">
+                <label htmlFor="edit-poc-email" className="block text-xs font-medium text-gray-700 dark:text-gray-300">
+                  POC Email
+                </label>
+                {isLinkLocked('poc_email') && (
+                  <span className="inline-flex items-center gap-1 text-[10px] font-semibold text-gray-400 dark:text-gray-500 bg-gray-100 dark:bg-dark-100 px-1.5 py-0.5 rounded">
+                    <Lock className="w-2.5 h-2.5" />
+                    <span>Set by Management</span>
+                  </span>
+                )}
+              </div>
+              <input
+                id="edit-poc-email"
+                data-testid="edit-poc-email"
+                type="email"
+                value={pocEmail}
+                onChange={(e) => setPocEmail(e.target.value)}
+                disabled={isLinkLocked('poc_email')}
+                placeholder="poc@clientdomain.com"
                 className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>

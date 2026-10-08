@@ -917,7 +917,7 @@ describe('Workspace Links & Unsaved Draft Protection Enhancement Suite', () => {
 
     // Missing links are rendered as non-clickable containers with title="Link not added" and aria-disabled="true"
     const missingElements = screen.getAllByTitle('Link not added');
-    expect(missingElements.length).toBe(26); // 27 total - 1 active = 26 missing
+    expect(missingElements.length).toBe(28); // 29 total - 1 active = 28 missing
 
     missingElements.forEach((el) => {
       expect(el).toHaveAttribute('aria-disabled', 'true');

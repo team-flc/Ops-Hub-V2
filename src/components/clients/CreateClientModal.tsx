@@ -90,6 +90,7 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
   const [masterBusinessDocUrl, setMasterBusinessDocUrl] = useState('');
   const [staticCreativesUrl, setStaticCreativesUrl] = useState('');
   const [videosUrl, setVideosUrl] = useState('');
+  const [variationsUrl, setVariationsUrl] = useState('');
   const [vslUrl, setVslUrl] = useState('');
   const [testimonialsUrl, setTestimonialsUrl] = useState('');
   const [reviewsUrl, setReviewsUrl] = useState('');
@@ -106,6 +107,7 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
   const [slackUrl, setSlackUrl] = useState('');
   const [whatsappUrl, setWhatsappUrl] = useState('');
   const [pocNumber, setPocNumber] = useState('');
+  const [pocEmail, setPocEmail] = useState('');
   const [caseStudiesText, setCaseStudiesText] = useState('');
   const [requirementDocsUrl, setRequirementDocsUrl] = useState('');
   const [ghlAccountUrl, setGhlAccountUrl] = useState('');
@@ -146,6 +148,7 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
       if (draft.masterBusinessDocUrl !== undefined) setMasterBusinessDocUrl(draft.masterBusinessDocUrl);
       if (draft.staticCreativesUrl !== undefined) setStaticCreativesUrl(draft.staticCreativesUrl);
       if (draft.videosUrl !== undefined) setVideosUrl(draft.videosUrl);
+      if (draft.variationsUrl !== undefined) setVariationsUrl(draft.variationsUrl);
       if (draft.vslUrl !== undefined) setVslUrl(draft.vslUrl);
       if (draft.testimonialsUrl !== undefined) setTestimonialsUrl(draft.testimonialsUrl);
       if (draft.reviewsUrl !== undefined) setReviewsUrl(draft.reviewsUrl);
@@ -162,6 +165,7 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
       if (draft.slackUrl !== undefined) setSlackUrl(draft.slackUrl);
       if (draft.whatsappUrl !== undefined) setWhatsappUrl(draft.whatsappUrl);
       if (draft.pocNumber !== undefined) setPocNumber(draft.pocNumber);
+      if (draft.pocEmail !== undefined) setPocEmail(draft.pocEmail);
       if (draft.caseStudiesText !== undefined) setCaseStudiesText(draft.caseStudiesText);
       if (draft.requirementDocsUrl !== undefined) setRequirementDocsUrl(draft.requirementDocsUrl);
       if (draft.ghlAccountUrl !== undefined) setGhlAccountUrl(draft.ghlAccountUrl);
@@ -198,6 +202,7 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
         masterBusinessDocUrl,
         staticCreativesUrl,
         videosUrl,
+        variationsUrl,
         vslUrl,
         testimonialsUrl,
         reviewsUrl,
@@ -214,6 +219,7 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
         slackUrl,
         whatsappUrl,
         pocNumber,
+        pocEmail,
         caseStudiesText,
         requirementDocsUrl,
         ghlAccountUrl,
@@ -224,9 +230,9 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
   }, [
     isOpen, companyName, clientName, pkg, managerId, activationDate, status, pauseReason,
     websiteUrl, flcLandingPageUrl, brandIdentityUrl, driveUrl, importantDocsUrl, masterBusinessDocUrl,
-    staticCreativesUrl, videosUrl, vslUrl, testimonialsUrl, reviewsUrl, proposalContractUrl, gridUrl, socialMediaManagementUrl,
+    staticCreativesUrl, videosUrl, variationsUrl, vslUrl, testimonialsUrl, reviewsUrl, proposalContractUrl, gridUrl, socialMediaManagementUrl,
     linkedinManagementUrl, seoManagementUrl, emailMarketingManagementUrl, paidAdsManagementUrl,
-    facebookUrl, instagramUrl, linkedinPageUrl, slackUrl, whatsappUrl, pocNumber,
+    facebookUrl, instagramUrl, linkedinPageUrl, slackUrl, whatsappUrl, pocNumber, pocEmail,
     caseStudiesText, requirementDocsUrl, ghlAccountUrl, requiredCount, profileRows
   ]);
 
@@ -244,6 +250,7 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
     setMasterBusinessDocUrl('');
     setStaticCreativesUrl('');
     setVideosUrl('');
+    setVariationsUrl('');
     setVslUrl('');
     setTestimonialsUrl('');
     setReviewsUrl('');
@@ -260,6 +267,7 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
     setSlackUrl('');
     setWhatsappUrl('');
     setPocNumber('');
+    setPocEmail('');
     setCaseStudiesText('');
     setRequirementDocsUrl('');
     setGhlAccountUrl('');
@@ -354,6 +362,7 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
       master_business_doc: masterBusinessDocUrl,
       static_creatives: staticCreativesUrl,
       videos: videosUrl,
+      variations: variationsUrl,
       vsl: vslUrl,
       testimonials: testimonialsUrl,
       reviews: reviewsUrl,
@@ -370,6 +379,7 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
       slack_channel: slackUrl,
       whatsapp_group: whatsappUrl,
       poc_number: pocNumber,
+      poc_email: pocEmail,
       case_studies: caseStudiesText,
       requirement_docs: requirementDocsUrl,
       gohighlevel: ghlAccountUrl
@@ -378,6 +388,14 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
     for (const [key, raw] of Object.entries(rawLinks)) {
       if (raw && raw.trim()) {
         if (key === 'poc_number' || key === 'poc_whatsapp' || key === 'case_studies') {
+          continue;
+        }
+        if (key === 'poc_email') {
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(raw.trim())) {
+            setErrorMsg('Invalid email format for POC Email.');
+            return;
+          }
           continue;
         }
         const sanitized = sanitizeUrl(raw);
@@ -754,6 +772,21 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
               </div>
 
               <div>
+                <label htmlFor="link-variations" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Variations URL
+                </label>
+                <input
+                  id="link-variations"
+                  data-testid="link-variations"
+                  type="url"
+                  value={variationsUrl}
+                  onChange={(e) => setVariationsUrl(e.target.value)}
+                  placeholder="https://... (Variations Link)"
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                />
+              </div>
+
+              <div>
                 <label htmlFor="link-vsl" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
                   VSL (Video Sales Letter) URL
                 </label>
@@ -1027,6 +1060,21 @@ export const CreateClientModal: React.FC<CreateClientModalProps> = ({
                   value={pocNumber}
                   onChange={(e) => setPocNumber(e.target.value)}
                   placeholder="+92 300 1234567 or https://wa.me/..."
+                  className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
+                />
+              </div>
+
+              <div>
+                <label htmlFor="link-poc-email" className="block text-xs font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  POC Email
+                </label>
+                <input
+                  id="link-poc-email"
+                  data-testid="link-poc-email"
+                  type="email"
+                  value={pocEmail}
+                  onChange={(e) => setPocEmail(e.target.value)}
+                  placeholder="poc@clientdomain.com"
                   className="w-full px-3.5 py-2 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50"
                 />
               </div>

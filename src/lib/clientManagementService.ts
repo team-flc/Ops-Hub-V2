@@ -259,7 +259,7 @@ async function saveClientLinkRecord(
   }
 
   let cleanUrl: string | null = null;
-  if (key === 'poc_number' || key === 'poc_whatsapp' || key === 'case_studies') {
+  if (key === 'poc_number' || key === 'poc_whatsapp' || key === 'case_studies' || key === 'poc_email') {
     cleanUrl = (rawUrl && typeof rawUrl === 'string' && rawUrl.trim()) ? rawUrl.trim() : null;
   } else {
     cleanUrl = sanitizeUrl(rawUrl);
@@ -691,7 +691,7 @@ export const clientManagementService = {
     if (input.links) {
       for (const [key, rawUrl] of Object.entries(input.links)) {
         let cleanUrl: string | null = null;
-        if (key === 'poc_number' || key === 'poc_whatsapp' || key === 'case_studies') {
+        if (key === 'poc_number' || key === 'poc_whatsapp' || key === 'case_studies' || key === 'poc_email') {
           cleanUrl = (rawUrl && typeof rawUrl === 'string' && rawUrl.trim()) ? rawUrl.trim() : null;
         } else {
           cleanUrl = sanitizeUrl(rawUrl);
@@ -838,7 +838,7 @@ export const clientManagementService = {
         const linkEntries: { client_id: string; link_type: string; url: string; created_by?: string; created_at: string; updated_at: string }[] = [];
         for (const [key, rawUrl] of Object.entries(input.links)) {
           let cleanUrl: string | null = null;
-          if (key === 'poc_number' || key === 'poc_whatsapp' || key === 'case_studies') {
+          if (key === 'poc_number' || key === 'poc_whatsapp' || key === 'case_studies' || key === 'poc_email') {
             cleanUrl = (rawUrl && typeof rawUrl === 'string' && rawUrl.trim()) ? rawUrl.trim() : null;
           } else {
             cleanUrl = sanitizeUrl(rawUrl);

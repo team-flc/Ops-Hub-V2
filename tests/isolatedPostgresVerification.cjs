@@ -188,7 +188,13 @@ async function runDatabaseVerification() {
   await db.exec(migration2Sql);
   console.log('[OK] Applied Migration 2: 20261002000001_add_reviews_and_proposal_contract_to_client_links.sql');
 
-  // 4. Seed test profiles
+  // 4. Load and apply Migration 3
+  const migration3Path = path.join(__dirname, '..', 'supabase', 'migrations', '20261008000001_add_variations_and_poc_email_to_client_links.sql');
+  const migration3Sql = fs.readFileSync(migration3Path, 'utf8');
+  await db.exec(migration3Sql);
+  console.log('[OK] Applied Migration 3: 20261008000001_add_variations_and_poc_email_to_client_links.sql');
+
+  // 5. Seed test profiles
   const OWNER_ID = '11111111-1111-1111-1111-111111111111';
   const MGR1_ID  = '22222222-2222-2222-2222-222222222222';
   const MGR2_ID  = '33333333-3333-3333-3333-333333333333';
@@ -222,7 +228,9 @@ async function runDatabaseVerification() {
   const ownerLinks = JSON.stringify([
     { link_type: 'website', url: 'https://bizease.com' },
     { link_type: 'reviews', url: 'https://g.page/r/bizease/review' },
-    { link_type: 'proposal_contract', url: 'https://docs.bizease.com/proposal-2026' }
+    { link_type: 'proposal_contract', url: 'https://docs.bizease.com/proposal-2026' },
+    { link_type: 'variations', url: 'https://variations.bizease.com/creatives' },
+    { link_type: 'poc_email', url: 'poc.bizease@global.com' }
   ]);
 
   const ownerProfiles = JSON.stringify([
@@ -254,6 +262,8 @@ async function runDatabaseVerification() {
   if (!ownerResult.id) throw new Error('Owner client creation failed to return client id');
   if (ownerResult.links.reviews !== 'https://g.page/r/bizease/review') throw new Error('reviews link not returned in result');
   if (ownerResult.links.proposal_contract !== 'https://docs.bizease.com/proposal-2026') throw new Error('proposal_contract link not returned');
+  if (ownerResult.links.variations !== 'https://variations.bizease.com/creatives') throw new Error('variations link not returned');
+  if (ownerResult.links.poc_email !== 'poc.bizease@global.com') throw new Error('poc_email link not returned');
 
   // Verify actual PostgreSQL rows
   const clientsInDb = await db.query(`SELECT * FROM public.clients WHERE id = $1;`, [ownerResult.id]);
@@ -261,8 +271,8 @@ async function runDatabaseVerification() {
   console.log('[OK] Owner client record confirmed in public.clients table.');
 
   const linksInDb = await db.query(`SELECT link_type, url FROM public.client_links WHERE client_id = $1 ORDER BY link_type;`, [ownerResult.id]);
-  if (linksInDb.rows.length !== 3) throw new Error(`Expected 3 links in public.client_links, found ${linksInDb.rows.length}`);
-  console.log('[OK] Reviews and Proposal/Contract links verified in public.client_links table:', linksInDb.rows);
+  if (linksInDb.rows.length !== 5) throw new Error(`Expected 5 links in public.client_links, found ${linksInDb.rows.length}`);
+  console.log('[OK] Reviews, Proposal/Contract, Variations, and POC Email links verified in public.client_links table:', linksInDb.rows);
 
   const profilesInDb = await db.query(`SELECT profile_label, linkedin_verified, has_gmail_account, gmail_address FROM public.client_linkedin_profiles WHERE client_id = $1;`, [ownerResult.id]);
   if (profilesInDb.rows.length !== 1 || !profilesInDb.rows[0].linkedin_verified || !profilesInDb.rows[0].has_gmail_account) {
@@ -384,13 +394,15 @@ async function runDatabaseVerification() {
     `INSERT INTO public.client_links (client_id, link_type, url, created_by)
      VALUES
        ($1, 'reviews', 'https://reviews.bizease.com/clone', $2),
-       ($1, 'proposal_contract', 'https://docs.bizease.com/contract-clone', $2);`,
+       ($1, 'proposal_contract', 'https://docs.bizease.com/contract-clone', $2),
+       ($1, 'variations', 'https://variations.bizease.com/clone', $2),
+       ($1, 'poc_email', 'dup.poc@bizease.com', $2);`,
     [dupClientId, MGR1_ID]
   );
 
   const dupLinksCheck = await db.query(`SELECT link_type, url FROM public.client_links WHERE client_id = $1 ORDER BY link_type;`, [dupClientId]);
-  if (dupLinksCheck.rows.length !== 2) throw new Error('Duplicate client links failed to insert');
-  console.log('[OK] Duplicate client with Reviews and Proposal/Contract links verified in database:', dupLinksCheck.rows);
+  if (dupLinksCheck.rows.length !== 4) throw new Error('Duplicate client links failed to insert');
+  console.log('[OK] Duplicate client with Reviews, Proposal/Contract, Variations, and POC Email links verified in database:', dupLinksCheck.rows);
 
   // ============================================================================
   // TEST F: Saved Links After Refresh (Direct Query Retrieval)
@@ -412,6 +424,12 @@ async function runDatabaseVerification() {
   }
   if (refreshedMap['proposal_contract'] !== 'https://docs.bizease.com/proposal-2026') {
     throw new Error('proposal_contract link did not persist properly upon retrieval');
+  }
+  if (refreshedMap['variations'] !== 'https://variations.bizease.com/creatives') {
+    throw new Error('variations link did not persist properly upon retrieval');
+  }
+  if (refreshedMap['poc_email'] !== 'poc.bizease@global.com') {
+    throw new Error('poc_email link did not persist properly upon retrieval');
   }
 
   console.log('[OK] Refreshed link retrieval confirmed:', refreshedMap);

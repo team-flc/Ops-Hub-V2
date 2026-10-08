@@ -6,7 +6,7 @@ import {
   Globe, HardDrive, MessageCircle, ExternalLink, Clock, Users, UserCheck,
   Image, Video, PlaySquare, Sparkles, LayoutGrid, Palette, PhoneCall,
   LayoutDashboard, FileText, Share2, Search, Mail, Target, BookOpen, MessageSquareQuote,
-  ClipboardList, Zap, Star, FileCheck
+  ClipboardList, Zap, Star, FileCheck, Layers
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { ClientRecord, UserProfile } from '../../types';
@@ -14,6 +14,7 @@ import { ClientSwitcher } from '../clients/ClientSwitcher';
 import { CreateClientModal } from '../clients/CreateClientModal';
 import { DuplicateClientModal } from '../clients/DuplicateClientModal';
 import { CaseStudiesModal } from '../clients/CaseStudiesModal';
+import { PocEmailModal } from '../clients/PocEmailModal';
 import { clientManagementService, formatWhatsAppUrl } from '../../lib/clientManagementService';
 import { resolveSelectedClientId, setStoredSelectedClientId } from '../../lib/clientPersistence';
 
@@ -61,6 +62,7 @@ export const Sidebar: React.FC = () => {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isDuplicateModalOpen, setIsDuplicateModalOpen] = useState(false);
   const [isCaseStudiesModalOpen, setIsCaseStudiesModalOpen] = useState(false);
+  const [isPocEmailModalOpen, setIsPocEmailModalOpen] = useState(false);
   const [sourceClientForDuplicate, setSourceClientForDuplicate] = useState<ClientRecord | null>(null);
   const [isClientsLoading, setIsClientsLoading] = useState(false);
   const [clientsError, setClientsError] = useState<string | null>(null);
@@ -183,6 +185,13 @@ export const Sidebar: React.FC = () => {
       url: clientLinks.videos,
       icon: <Video className="w-3.5 h-3.5" />,
       activeColorClass: 'text-red-500 dark:text-red-400'
+    },
+    {
+      key: 'variations',
+      label: 'Variations',
+      url: clientLinks.variations,
+      icon: <Layers className="w-3.5 h-3.5" />,
+      activeColorClass: 'text-purple-500 dark:text-purple-400'
     },
     {
       key: 'grid',
@@ -310,6 +319,14 @@ export const Sidebar: React.FC = () => {
       url: formatWhatsAppUrl(clientLinks.poc_number || clientLinks.poc_whatsapp),
       icon: <PhoneCall className="w-3.5 h-3.5" />,
       activeColorClass: 'text-emerald-600 dark:text-emerald-400'
+    },
+    {
+      key: 'poc_email',
+      label: 'POC Email',
+      url: clientLinks.poc_email,
+      isEmailDialogAction: true,
+      icon: <Mail className="w-3.5 h-3.5" />,
+      activeColorClass: 'text-sky-600 dark:text-sky-400'
     }
   ];
 
@@ -533,12 +550,34 @@ export const Sidebar: React.FC = () => {
                         </button>
                       );
                     }
+                    if ((link as any).isEmailDialogAction) {
+                      return (
+                        <button
+                          key={link.key}
+                          type="button"
+                          onClick={() => setIsPocEmailModalOpen(true)}
+                          data-testid="sidebar-link-poc-email"
+                          className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:white hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors group cursor-pointer text-left"
+                          title={`Open ${link.label}`}
+                          aria-label={link.label}
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <span className={`shrink-0 transition-colors ${link.activeColorClass}`}>
+                              {link.icon}
+                            </span>
+                            <span className="truncate">{link.label}</span>
+                          </div>
+                          <Mail className="w-3 h-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+                        </button>
+                      );
+                    }
                     return (
                       <a
                         key={link.key}
                         href={link.url}
                         target="_blank"
                         rel="noopener noreferrer"
+                        data-testid={`sidebar-link-${link.key.replace(/_/g, '-')}`}
                         className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:white hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors group cursor-pointer"
                         title={`Open ${link.label}`}
                         aria-label={link.label}
@@ -556,6 +595,7 @@ export const Sidebar: React.FC = () => {
                   return (
                     <div
                       key={link.key}
+                      data-testid={`sidebar-link-${link.key.replace(/_/g, '-')}-disabled`}
                       className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-500 dark:text-gray-400 cursor-not-allowed select-none transition-colors"
                       title="Link not added"
                       aria-label={`${link.label} (Link not added)`}
@@ -623,6 +663,13 @@ export const Sidebar: React.FC = () => {
         onClose={() => setIsCaseStudiesModalOpen(false)}
         companyName={selectedClient?.companyName || ''}
         caseStudiesText={clientLinks.case_studies || ''}
+      />
+
+      <PocEmailModal
+        isOpen={isPocEmailModalOpen}
+        onClose={() => setIsPocEmailModalOpen(false)}
+        companyName={selectedClient?.companyName || ''}
+        pocEmail={clientLinks.poc_email || ''}
       />
     </>
   );
