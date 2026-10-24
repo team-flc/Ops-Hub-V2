@@ -381,7 +381,7 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
                 Primary Assignee
               </span>
-              {currentUserProfile?.role !== 'client' ? (
+              {!isEffectiveClientView ? (
                 <div className="flex items-center gap-2">
                   <select
                     value={task.assigneeId || ''}
