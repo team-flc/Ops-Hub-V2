@@ -26,6 +26,7 @@ interface ClientTaskDetailsModalProps {
   currentUser?: UserProfile | null;
   currentUserProfile?: UserProfile | null;
   isClientPortal?: boolean;
+  isClientView?: boolean;
   departments?: Department[];
   eligibleAssignees?: UserProfile[];
   onTaskUpdated?: (updated: ClientTask) => void;
@@ -41,12 +42,18 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
   currentUser,
   currentUserProfile,
   isClientPortal = false,
+  isClientView = false,
   eligibleAssignees = [],
   onTaskUpdated = () => {},
   onOpenEditModal = () => {}
 }) => {
   const activeUser = currentUserProfile || currentUser || null;
   const effectiveClientStatus = client?.status || clientStatus || 'Active';
+
+  const isPreview = typeof window !== 'undefined' && window.location.search.includes('preview=true');
+  const isEffectiveClientView = Boolean(isClientView || isClientPortal || activeUser?.role === 'client' || isPreview);
+  const isOwnerOrManager = !isEffectiveClientView && (activeUser?.role === 'owner' || activeUser?.role === 'operational_manager');
+  const isClient = isEffectiveClientView;
 
   // Custom hook managing conversation feed state, composite pagination, and single Realtime subscription
   const {
@@ -86,8 +93,6 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
   // Auto-scroll ref
   const feedEndRef = useRef<HTMLDivElement>(null);
 
-  const isOwnerOrManager = activeUser?.role === 'owner' || activeUser?.role === 'operational_manager';
-  const isClient = activeUser?.role === 'client' || isClientPortal;
   const isAssignedMember = task?.assigneeId === activeUser?.id;
   const isTaskArchived = Boolean(task?.archivedAt);
   const isClientPaused = effectiveClientStatus === 'Paused';
@@ -462,23 +467,25 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
             </div>
           )}
 
-          {/* WORKFLOW STATUS MANAGEMENT BAR (Extracted Component) */}
-          <TaskReviewActions
-            task={task}
-            activeUser={activeUser}
-            isClient={isClient}
-            isOwnerOrManager={isOwnerOrManager}
-            isAssignedMember={isAssignedMember}
-            isClientPaused={isClientPaused}
-            isTaskArchived={isTaskArchived}
-            isUpdatingStatus={isUpdatingStatus}
-            onStatusChange={handleStatusChange}
-            onRequestReasonModal={(params) => {
-              setReasonError(null);
-              setReasonText('');
-              setShowReasonModal(params);
-            }}
-          />
+          {/* WORKFLOW STATUS MANAGEMENT BAR (Extracted Component, disabled in preview) */}
+          {!isPreview && (
+            <TaskReviewActions
+              task={task}
+              activeUser={activeUser}
+              isClient={isClient}
+              isOwnerOrManager={isOwnerOrManager}
+              isAssignedMember={isAssignedMember}
+              isClientPaused={isClientPaused}
+              isTaskArchived={isTaskArchived}
+              isUpdatingStatus={isUpdatingStatus}
+              onStatusChange={handleStatusChange}
+              onRequestReasonModal={(params) => {
+                setReasonError(null);
+                setReasonText('');
+                setShowReasonModal(params);
+              }}
+            />
+          )}
 
           {/* CHRONOLOGICAL TASK CONVERSATION FEED (Extracted Component) */}
           <TaskConversationFeed
@@ -493,17 +500,19 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
           />
         </div>
 
-        {/* COMPOSER AT BOTTOM OF DRAWER (Extracted Component) */}
-        <TaskMessageComposer
-          taskId={task.id}
-          clientId={task.clientId}
-          isClient={isClient}
-          isOwnerOrManager={isOwnerOrManager}
-          isTaskArchived={isTaskArchived}
-          isClientArchived={isClientArchived}
-          isClientPaused={isClientPaused}
-          onMessageSent={refreshFeed}
-        />
+        {/* COMPOSER AT BOTTOM OF DRAWER (Hidden in preview mode) */}
+        {!isPreview && (
+          <TaskMessageComposer
+            taskId={task.id}
+            clientId={task.clientId}
+            isClient={isClient}
+            isOwnerOrManager={isOwnerOrManager}
+            isTaskArchived={isTaskArchived}
+            isClientArchived={isClientArchived}
+            isClientPaused={isClientPaused}
+            onMessageSent={refreshFeed}
+          />
+        )}
 
         {/* MANDATORY REASON MODAL (For Blocked, Changes Requested, Reopen, Owner Override) */}
         {showReasonModal && (

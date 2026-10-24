@@ -9,6 +9,7 @@ import { useSignedUrl } from '../../lib/storageService';
 interface ClientKanbanCardProps {
   task: ClientTask;
   currentUserProfile?: UserProfile | null;
+  isClientView?: boolean;
   onSelectTask: (task: ClientTask) => void;
   onOpenEditModal: (task: ClientTask) => void;
   onStatusChange: (task: ClientTask, targetStatus: ClientTaskStatus, options?: any) => void;
@@ -67,6 +68,7 @@ function formatCompact(secs: number): string {
 export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
   task,
   currentUserProfile,
+  isClientView = false,
   onSelectTask,
   onOpenEditModal,
   onStatusChange,
@@ -77,11 +79,12 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
   onRequestFeedback,
   isDragging
 }) => {
+  const isPreview = typeof window !== 'undefined' && window.location.search.includes('preview=true');
+  const isClient = currentUserProfile?.role === 'client' || isClientView || isPreview;
   const isOwnerOrManager =
-    currentUserProfile?.role === 'owner' || currentUserProfile?.role === 'operational_manager';
-  const isClient = currentUserProfile?.role === 'client';
+    !isClient && (currentUserProfile?.role === 'owner' || currentUserProfile?.role === 'operational_manager');
   const isAssignedMember = task.assigneeId === currentUserProfile?.id;
-  const canActOnTask = isAssignedMember || isOwnerOrManager;
+  const canActOnTask = (isAssignedMember || isOwnerOrManager) && !isClient;
   const isTimerRunning = Boolean(task.timerStartedAt);
 
   // Live seconds ticker when timer is running
@@ -137,6 +140,10 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
   };
 
   const handleDragStart = (e: React.DragEvent) => {
+    if (isClient) {
+      e.preventDefault();
+      return;
+    }
     e.dataTransfer.setData('text/plain', JSON.stringify({ taskId: task.id, currentStatus: task.status }));
     e.dataTransfer.effectAllowed = 'move';
   };
@@ -150,7 +157,7 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
 
   return (
     <div
-      draggable
+      draggable={!isClient}
       onDragStart={handleDragStart}
       onClick={() => onSelectTask(task)}
       data-testid={`kanban-card-${task.id}`}
@@ -311,6 +318,22 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
 
         {/* Accessible Kanban Status Action Buttons */}
         <div className="flex items-center gap-1 flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+
+          {/* Pending for clients */}
+          {isPending && isClient && (
+            <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-dark-100 px-2 py-0.5 rounded-md border border-slate-200 dark:border-dark-border flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              <span>Pending</span>
+            </span>
+          )}
+
+          {/* In Progress for clients */}
+          {isInProgress && isClient && (
+            <span className="text-[10px] font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-900/30 flex items-center gap-1">
+              <Play className="w-3 h-3" />
+              <span>In Progress</span>
+            </span>
+          )}
 
           {/* Pending → In Progress + Start Timer (single click) */}
           {isPending && canActOnTask && (

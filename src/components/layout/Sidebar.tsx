@@ -70,6 +70,10 @@ export const Sidebar: React.FC = () => {
   const location = useSafeLocation();
   const routeClientId = location.pathname.match(/\/clients\/([a-zA-Z0-9_-]+)/)?.[1];
 
+  const isClient = profile?.role === 'client';
+  const isClientPreview = typeof window !== 'undefined' && location.search.includes('preview=true');
+  const isClientView = isClient || isClientPreview;
+
   const loadClientData = useCallback(async () => {
     setIsClientsLoading(true);
     setClientsError(null);
@@ -509,6 +513,7 @@ export const Sidebar: React.FC = () => {
               clients={clients}
               selectedClient={selectedClient}
               currentUserRole={profile?.role}
+              isClientView={isClientView}
               isLoading={isClientsLoading}
               fetchError={clientsError}
               onRetry={loadClientData}
@@ -615,25 +620,27 @@ export const Sidebar: React.FC = () => {
           )}
         </div>
 
-        {/* Bottom Section: Settings Action for All Staff */}
-        <div className="p-3 border-t border-gray-100 dark:border-dark-border/60 bg-gray-50/50 dark:bg-dark-300/30 flex-shrink-0 pb-safe md:pb-3">
-          <button
-            type="button"
-            onClick={() => {
-              navigate('/settings');
-              setViewMode('settings');
-              setMobileSidebarOpen(false);
-            }}
-            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer touch-target ${
-              isSettingsActive
-                ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
-                : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-dark-100'
-            }`}
-          >
-            <Building2 className="w-4 h-4 shrink-0" />
-            <span className="truncate">Settings</span>
-          </button>
-        </div>
+        {/* Bottom Section: Settings Action for All Staff (Hidden for clients) */}
+        {!isClientView && (
+          <div className="p-3 border-t border-gray-100 dark:border-dark-border/60 bg-gray-50/50 dark:bg-dark-300/30 flex-shrink-0 pb-safe md:pb-3">
+            <button
+              type="button"
+              onClick={() => {
+                navigate('/settings');
+                setViewMode('settings');
+                setMobileSidebarOpen(false);
+              }}
+              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer touch-target ${
+                isSettingsActive
+                  ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
+                  : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-dark-100'
+              }`}
+            >
+              <Building2 className="w-4 h-4 shrink-0" />
+              <span className="truncate">Settings</span>
+            </button>
+          </div>
+        )}
       </aside>
 
       {/* Portalled Modals: mounted direct to document.body to prevent CSS transform containment */}

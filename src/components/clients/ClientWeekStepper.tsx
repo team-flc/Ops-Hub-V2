@@ -10,6 +10,7 @@ interface ClientWeekStepperProps {
   onRenameWeek?: (weekNum: 1 | 2 | 3 | 4, newName: string) => Promise<void>;
   tasksByWeek: Record<1 | 2 | 3 | 4, ClientTask[]>;
   currentUserProfile?: UserProfile | null;
+  isClientView?: boolean;
 }
 
 export const ClientWeekStepper: React.FC<ClientWeekStepperProps> = ({
@@ -19,7 +20,8 @@ export const ClientWeekStepper: React.FC<ClientWeekStepperProps> = ({
   weekNames,
   onRenameWeek,
   tasksByWeek,
-  currentUserProfile
+  currentUserProfile,
+  isClientView = false
 }) => {
   const [editingWeek, setEditingWeek] = useState<1 | 2 | 3 | 4 | null>(null);
   const [editNameValue, setEditNameValue] = useState('');
@@ -32,7 +34,7 @@ export const ClientWeekStepper: React.FC<ClientWeekStepperProps> = ({
 
   const handleStartEditing = (weekNum: 1 | 2 | 3 | 4, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!isOwnerOrManager || client.status === 'Paused') return;
+    if (!isOwnerOrManager || client.status === 'Paused' || isClientView) return;
     setEditingWeek(weekNum);
     setEditNameValue(weekNames[weekNum] || DEFAULT_WEEK_NAMES[weekNum]);
   };
@@ -105,8 +107,8 @@ export const ClientWeekStepper: React.FC<ClientWeekStepperProps> = ({
                   )}
                 </button>
 
-                {/* Rename button for Owner / Operational Manager */}
-                {isOwnerOrManager && client.status !== 'Paused' && !isEditingThisWeek && (
+                {/* Rename button for Owner / Operational Manager (hidden in client view) */}
+                {isOwnerOrManager && client.status !== 'Paused' && !isEditingThisWeek && !isClientView && (
                   <button
                     type="button"
                     data-testid={`rename-week-btn-${weekNum}`}

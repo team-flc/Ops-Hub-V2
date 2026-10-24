@@ -22,6 +22,7 @@ interface SelectedClientHeaderProps {
   client: ClientRecord;
   currentUserProfile?: UserProfile | null;
   currentUserRole?: string;
+  isClientView?: boolean;
   onClientUpdated?: (updated: ClientRecord) => void;
 }
 
@@ -59,11 +60,15 @@ export const SelectedClientHeader: React.FC<SelectedClientHeaderProps> = ({
   client,
   currentUserProfile,
   currentUserRole,
+  isClientView = false,
   onClientUpdated
 }) => {
   const auth = useAuth();
   const profile = currentUserProfile ?? auth?.profile;
   const role = currentUserRole ?? profile?.role;
+  const isPreview = typeof window !== 'undefined' && window.location.search.includes('preview=true');
+  const isEffectiveClientView = Boolean(isClientView || role === 'client' || isPreview);
+
   const [isLinkedInPopoverOpen, setIsLinkedInPopoverOpen] = useState(false);
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false);
   const [isEditStartDateOpen, setIsEditStartDateOpen] = useState(false);
@@ -180,7 +185,7 @@ export const SelectedClientHeader: React.FC<SelectedClientHeaderProps> = ({
           >
             <Calendar className="w-3.5 h-3.5 text-brand-500 flex-shrink-0" />
             <span>{onboardingInfo.formattedBadge}</span>
-            {isManagerOrOwner && (
+            {isManagerOrOwner && !isEffectiveClientView && (
               <button
                 type="button"
                 data-testid="edit-start-date-btn"
@@ -220,8 +225,8 @@ export const SelectedClientHeader: React.FC<SelectedClientHeaderProps> = ({
 
       {/* Right Area: LinkedIn Readiness Tracker Popover & Quick Links */}
       <div className="flex items-center gap-2.5 flex-wrap">
-        {/* Owner & Manager Portal Entry Points */}
-        {isManagerOrOwner && (
+        {/* Owner & Manager Portal Entry Points (Hidden in Client View / Preview) */}
+        {isManagerOrOwner && !isEffectiveClientView && (
           <>
             {/* Client Link Sharing Modal Trigger */}
             <button
@@ -236,7 +241,7 @@ export const SelectedClientHeader: React.FC<SelectedClientHeaderProps> = ({
 
             {/* View as Client (Read-Only Preview) */}
             <a
-              href={`/portal/${client.id}?preview=true`}
+              href={`/clients/${client.id}?preview=true`}
               target="_blank"
               rel="noopener noreferrer"
               className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gray-900 hover:bg-black text-white dark:bg-white dark:hover:bg-gray-100 dark:text-gray-900 text-xs font-bold transition-all shadow-xs"
@@ -251,8 +256,10 @@ export const SelectedClientHeader: React.FC<SelectedClientHeaderProps> = ({
         <div className="relative" ref={popoverRef}>
           <button
             type="button"
-            onClick={() => setIsLinkedInPopoverOpen(!isLinkedInPopoverOpen)}
-            className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold transition-all shadow-xs cursor-pointer ${
+            onClick={() => !isEffectiveClientView && setIsLinkedInPopoverOpen(!isLinkedInPopoverOpen)}
+            className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-xs font-bold transition-all shadow-xs ${
+              isEffectiveClientView ? 'cursor-default' : 'cursor-pointer'
+            } ${
               readiness.isComplete
                 ? 'bg-gray-900 text-white dark:bg-white dark:text-gray-900 border-transparent hover:opacity-90'
                 : 'bg-gray-100 text-gray-800 dark:bg-dark-100 dark:text-gray-200 border-gray-300 dark:border-dark-border hover:bg-gray-200/60'
@@ -273,8 +280,8 @@ export const SelectedClientHeader: React.FC<SelectedClientHeaderProps> = ({
             {isLinkedInPopoverOpen ? <ChevronUp className="w-3.5 h-3.5 opacity-60" /> : <ChevronDown className="w-3.5 h-3.5 opacity-60" />}
           </button>
 
-          {/* LinkedIn Details Popover */}
-          {isLinkedInPopoverOpen && (
+          {/* LinkedIn Details Popover (Management Only) */}
+          {isLinkedInPopoverOpen && !isEffectiveClientView && (
             <div className="fixed inset-x-3 top-20 sm:absolute sm:inset-x-auto sm:right-0 sm:top-full mt-2 w-auto sm:w-96 max-w-[calc(100vw-1.5rem)] bg-white dark:bg-dark-card rounded-2xl shadow-2xl border border-gray-200 dark:border-dark-border z-50 overflow-hidden animate-scale-up p-4 space-y-3">
               <div className="flex items-center justify-between pb-2 border-b border-gray-100 dark:border-dark-border">
                 <div className="flex items-center gap-2">

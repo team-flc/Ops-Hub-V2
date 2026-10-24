@@ -11,6 +11,7 @@ interface ClientSwitcherProps {
   clients: ClientRecord[];
   selectedClient: ClientRecord | null;
   currentUserRole?: string;
+  isClientView?: boolean;
   isLoading?: boolean;
   fetchError?: string | null;
   onRetry?: () => void;
@@ -68,6 +69,7 @@ export const ClientSwitcher: React.FC<ClientSwitcherProps> = ({
   clients,
   selectedClient,
   currentUserRole,
+  isClientView = false,
   isLoading = false,
   fetchError = null,
   onRetry,
@@ -75,6 +77,7 @@ export const ClientSwitcher: React.FC<ClientSwitcherProps> = ({
   onOpenCreateModal,
   onOpenDuplicateModal
 }) => {
+  const isClientLocked = Boolean(isClientView || currentUserRole === 'client');
   const isManagerOrOwner = currentUserRole ? (currentUserRole === 'owner' || currentUserRole === 'operational_manager') : true;
   const [isOpen, setIsOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -120,10 +123,12 @@ export const ClientSwitcher: React.FC<ClientSwitcherProps> = ({
       {/* Collapsed GoHighLevel-Style Client Switcher Button */}
       <button
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
-        aria-label="Switch Client Workspace"
-        className="w-full flex items-center justify-between p-2 rounded-xl bg-gray-50 dark:bg-dark-card/80 hover:bg-gray-100 dark:hover:bg-dark-100 border border-gray-200 dark:border-dark-border transition-all text-left group"
-        title="Switch Client Workspace"
+        onClick={() => !isClientLocked && setIsOpen(!isOpen)}
+        aria-label={isClientLocked ? "Client Workspace" : "Switch Client Workspace"}
+        className={`w-full flex items-center justify-between p-2 rounded-xl bg-gray-50 dark:bg-dark-card/80 border border-gray-200 dark:border-dark-border transition-all text-left ${
+          isClientLocked ? 'cursor-default' : 'hover:bg-gray-100 dark:hover:bg-dark-100 group cursor-pointer'
+        }`}
+        title={isClientLocked ? (selectedClient?.companyName || 'Client Workspace') : "Switch Client Workspace"}
       >
         <div className="flex items-center gap-2.5 min-w-0">
           <ClientLogoAvatar
@@ -142,13 +147,15 @@ export const ClientSwitcher: React.FC<ClientSwitcherProps> = ({
           </div>
         </div>
 
-        <div className="text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-200 transition-colors ml-1 flex-shrink-0">
-          {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
-        </div>
+        {!isClientLocked && (
+          <div className="text-gray-400 group-hover:text-gray-600 dark:group-hover:text-gray-200 transition-colors ml-1 flex-shrink-0">
+            {isOpen ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+          </div>
+        )}
       </button>
 
-      {/* Popover Dropdown (Desktop) / Mobile Bottom Sheet (Mobile) */}
-      {isOpen && (
+      {/* Popover Dropdown (Desktop) / Mobile Bottom Sheet (Mobile) - strictly hidden if client locked */}
+      {isOpen && !isClientLocked && (
         <>
           {/* Mobile Sheet Backdrop */}
           <div

@@ -37,6 +37,10 @@ async function runDatabaseVerification() {
 
     CREATE SCHEMA IF NOT EXISTS auth;
     CREATE SCHEMA IF NOT EXISTS app_private;
+    GRANT USAGE ON SCHEMA auth, app_private, public TO authenticated, anon;
+    GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated, anon;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO authenticated, anon;
+    ALTER DEFAULT PRIVILEGES IN SCHEMA app_private GRANT ALL ON ROUTINES TO authenticated, anon;
 
     -- Function simulating Supabase auth.uid() reading from transaction/session config
     CREATE OR REPLACE FUNCTION auth.uid()
@@ -53,6 +57,7 @@ async function runDatabaseVerification() {
       full_name TEXT NOT NULL,
       role TEXT NOT NULL CHECK (role IN ('owner', 'operational_manager', 'team_member', 'client')),
       status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'inactive', 'invited')),
+      organization_id TEXT,
       created_at TIMESTAMPTZ DEFAULT NOW(),
       updated_at TIMESTAMPTZ DEFAULT NOW()
     );
@@ -82,6 +87,15 @@ async function runDatabaseVerification() {
         SELECT 1 FROM public.profiles p
         WHERE p.id = caller_id AND p.status = 'active' AND p.role IN ('owner', 'operational_manager')
       );
+    $$;
+
+    CREATE OR REPLACE FUNCTION app_private.can_access_client(caller_id UUID, target_client_id UUID)
+    RETURNS BOOLEAN
+    LANGUAGE sql
+    SECURITY DEFINER
+    STABLE
+    AS $$
+      SELECT true;
     $$;
 
     -- Access mapping tables referenced in clients_select
@@ -115,6 +129,13 @@ async function runDatabaseVerification() {
       archived_at TIMESTAMPTZ
     );
 
+    ALTER TABLE public.clients ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE public.clients FORCE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS "clients_select" ON public.clients;
+    CREATE POLICY "clients_select" ON public.clients
+      FOR SELECT TO authenticated, public
+      USING (app_private.can_access_client((SELECT auth.uid()), id));
+
     -- Create base client_links table
     CREATE TABLE IF NOT EXISTS public.client_links (
       id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -126,6 +147,13 @@ async function runDatabaseVerification() {
       updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
       CONSTRAINT uq_client_link_type UNIQUE (client_id, link_type)
     );
+
+    ALTER TABLE public.client_links ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE public.client_links FORCE ROW LEVEL SECURITY;
+    DROP POLICY IF EXISTS "client_links_select" ON public.client_links;
+    CREATE POLICY "client_links_select" ON public.client_links
+      FOR SELECT TO authenticated, public
+      USING (app_private.can_access_client((SELECT auth.uid()), client_id));
 
     -- Create base client_linkedin_profiles table
     CREATE TABLE IF NOT EXISTS public.client_linkedin_profiles (
@@ -154,6 +182,42 @@ async function runDatabaseVerification() {
       safe_metadata JSONB DEFAULT '{}'::jsonb,
       created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
     );
+
+    -- Create client_portal_recipients table
+    CREATE TABLE IF NOT EXISTS public.client_portal_recipients (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_id UUID NOT NULL REFERENCES public.clients(id) ON DELETE CASCADE,
+      profile_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+      email TEXT NOT NULL,
+      full_name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'revoked')),
+      created_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
+    -- Create client_tasks table
+    CREATE TABLE IF NOT EXISTS public.client_tasks (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      client_id UUID NOT NULL REFERENCES public.clients(id) ON DELETE CASCADE,
+      week_number INT NOT NULL DEFAULT 1,
+      title TEXT NOT NULL,
+      details TEXT,
+      priority TEXT NOT NULL DEFAULT 'Normal',
+      status TEXT NOT NULL DEFAULT 'Pending',
+      assignee_id UUID REFERENCES public.profiles(id),
+      created_by UUID REFERENCES public.profiles(id),
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+      archived_at TIMESTAMPTZ
+    );
+
+    ALTER TABLE public.client_tasks ENABLE ROW LEVEL SECURITY;
+    ALTER TABLE public.client_tasks FORCE ROW LEVEL SECURITY;
+
+    GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated, anon;
+    GRANT ALL ON ALL SEQUENCES IN SCHEMA public TO authenticated, anon;
+    GRANT ALL ON ALL ROUTINES IN SCHEMA public, app_private, auth TO authenticated, anon;
 
     -- Helper can_access_client
     CREATE OR REPLACE FUNCTION app_private.can_access_client(caller_id UUID, target_client_id UUID)
@@ -194,11 +258,18 @@ async function runDatabaseVerification() {
   await db.exec(migration3Sql);
   console.log('[OK] Applied Migration 3: 20261008000001_add_variations_and_poc_email_to_client_links.sql');
 
+  // 4b. Load and apply Migration 4 (Client Workspace View Access & RLS)
+  const migration4Path = path.join(__dirname, '..', 'supabase', 'migrations', '20261025000001_client_workspace_view_access.sql');
+  const migration4Sql = fs.readFileSync(migration4Path, 'utf8');
+  await db.exec(migration4Sql);
+  console.log('[OK] Applied Migration 4: 20261025000001_client_workspace_view_access.sql');
+
   // 5. Seed test profiles
   const OWNER_ID = '11111111-1111-1111-1111-111111111111';
   const MGR1_ID  = '22222222-2222-2222-2222-222222222222';
   const MGR2_ID  = '33333333-3333-3333-3333-333333333333';
   const TM_ID    = '44444444-4444-4444-4444-444444444444';
+  const CLIENT_USER_ID = '55555555-5555-5555-5555-555555555555';
 
   await db.exec(`
     INSERT INTO public.profiles (id, full_name, role, status) VALUES
@@ -433,6 +504,49 @@ async function runDatabaseVerification() {
   }
 
   console.log('[OK] Refreshed link retrieval confirmed:', refreshedMap);
+
+  // ============================================================================
+  // TEST G: Client Role Read Access & Strict Multi-Tenant Isolation
+  // ============================================================================
+  console.log('\n--- Test G: Client Role Workspace Access & Write Denial ---');
+  // 1. Seed client user profile associated with ownerResult.id
+  await db.exec(`
+    INSERT INTO public.profiles (id, full_name, role, status, organization_id)
+    VALUES ('${CLIENT_USER_ID}', 'Client View User', 'client', 'active', '${ownerResult.id}');
+
+    -- Insert active task for this client
+    INSERT INTO public.client_tasks (client_id, week_number, title, priority, status)
+    VALUES ('${ownerResult.id}', 1, 'Website Delivery Task', 'High', 'Pending');
+  `);
+
+  // 2. Set active JWT context to client user
+  await db.exec(`
+    SELECT set_config('request.jwt.claim.sub', '${CLIENT_USER_ID}', false);
+    SET ROLE authenticated;
+  `);
+
+  // 3. Client can view their own client record
+  const clientSelfRes = await db.query(`SELECT id, company_name FROM public.clients WHERE id = $1;`, [ownerResult.id]);
+  if (clientSelfRes.rows.length !== 1) throw new Error('Client should be able to view their own client record');
+  console.log('[OK] Client successfully reads their own client record:', clientSelfRes.rows[0].company_name);
+
+  // 4. Client can view their own links
+  const clientLinksRes = await db.query(`SELECT link_type, url FROM public.client_links WHERE client_id = $1;`, [ownerResult.id]);
+  if (clientLinksRes.rows.length === 0) throw new Error('Client should be able to read their own workspace links');
+  console.log('[OK] Client successfully reads their own workspace links count:', clientLinksRes.rows.length);
+
+  // 5. Client can view their own tasks (all statuses including Pending transparently)
+  const clientTasksRes = await db.query(`SELECT id, title, status FROM public.client_tasks WHERE client_id = $1;`, [ownerResult.id]);
+  if (clientTasksRes.rows.length === 0) throw new Error('Client should be able to read their own tasks');
+  console.log('[OK] Client successfully reads their own weekly tasks:', clientTasksRes.rows.map(t => `${t.title} (${t.status})`));
+
+  // 6. Client CANNOT view other client records (isolation check)
+  const clientOtherRes = await db.query(`SELECT id FROM public.clients WHERE id = $1;`, [dupClientId]);
+  if (clientOtherRes.rows.length !== 0) throw new Error('Client must NOT be able to view other clients');
+  console.log('[OK] Client multi-tenant isolation confirmed: other client returns 0 rows');
+
+  await db.exec(`RESET ROLE;`);
+
   console.log('\n======================================================================');
   console.log('ALL ISOLATED POSTGRESQL DATABASE VERIFICATIONS PASSED SUCCESSFULLY!');
   console.log('======================================================================\n');

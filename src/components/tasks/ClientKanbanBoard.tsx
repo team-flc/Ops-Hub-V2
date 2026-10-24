@@ -14,6 +14,7 @@ interface ClientKanbanBoardProps {
   weekNumber?: 1 | 2 | 3 | 4;
   weekName?: string;
   currentUserProfile?: UserProfile | null;
+  isClientView?: boolean;
   onSelectTask: (task: ClientTask) => void;
   onOpenEditModal: (task: ClientTask) => void;
   onOpenCreateTask: () => void;
@@ -42,6 +43,7 @@ export const ClientKanbanBoard: React.FC<ClientKanbanBoardProps> = ({
   weekNumber,
   weekName,
   currentUserProfile,
+  isClientView = false,
   onSelectTask,
   onOpenEditModal,
   onOpenCreateTask: _onOpenCreateTask,
@@ -57,8 +59,11 @@ export const ClientKanbanBoard: React.FC<ClientKanbanBoardProps> = ({
   const [feedbackModalTask, setFeedbackModalTask] = useState<ClientTask | null>(null);
   const [archiveModalColumn, setArchiveModalColumn] = useState<{ id: KanbanColumnId; label: string; tasks: ClientTask[] } | null>(null);
 
+  const isPreview = typeof window !== 'undefined' && window.location.search.includes('preview=true');
+  const isClient = Boolean(isClientView || currentUserProfile?.role === 'client' || isPreview);
+
   const isOwnerOrManager =
-    currentUserProfile?.role === 'owner' || currentUserProfile?.role === 'operational_manager';
+    !isClient && (currentUserProfile?.role === 'owner' || currentUserProfile?.role === 'operational_manager');
 
   const columns: ColumnConfig[] = [
     {
@@ -100,6 +105,7 @@ export const ClientKanbanBoard: React.FC<ClientKanbanBoardProps> = ({
   };
 
   const handleDragOver = (e: React.DragEvent, colId: KanbanColumnId) => {
+    if (isClient) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     if (dragOverColumn !== colId) {
@@ -108,12 +114,14 @@ export const ClientKanbanBoard: React.FC<ClientKanbanBoardProps> = ({
   };
 
   const handleDragLeave = (colId: KanbanColumnId) => {
+    if (isClient) return;
     if (dragOverColumn === colId) {
       setDragOverColumn(null);
     }
   };
 
   const handleDrop = async (e: React.DragEvent, targetColumn: KanbanColumnId) => {
+    if (isClient) return;
     e.preventDefault();
     setDragOverColumn(null);
 
@@ -237,6 +245,7 @@ export const ClientKanbanBoard: React.FC<ClientKanbanBoardProps> = ({
                       key={task.id}
                       task={task}
                       currentUserProfile={currentUserProfile}
+                      isClientView={isClient}
                       onSelectTask={onSelectTask}
                       onOpenEditModal={onOpenEditModal}
                       onStatusChange={onStatusChange}

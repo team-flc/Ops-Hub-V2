@@ -36,6 +36,7 @@ interface ClientWorkspaceViewProps {
   currentUserProfile?: UserProfile | null;
   eligibleManagers: UserProfile[];
   onClientUpdated: (updated: ClientRecord) => void;
+  isClientView?: boolean;
 }
 
 type MainTab = 'setup' | 'workplans' | 'details';
@@ -45,8 +46,13 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
   client,
   currentUserProfile,
   eligibleManagers,
-  onClientUpdated
+  onClientUpdated,
+  isClientView = false
 }) => {
+  const isPreview = typeof window !== 'undefined' && window.location.search.includes('preview=true');
+  const isClient = currentUserProfile?.role === 'client';
+  const isEffectiveClientView = Boolean(isClientView || isClient || isPreview);
+
   const [activeTab, setActiveTab] = useState<MainTab>('setup');
   const [activeWeek, setActiveWeek] = useState<WeekTab>('week1');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -367,7 +373,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
   return (
     <div className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto bg-gray-50/50 dark:bg-dark-400 select-none">
       {/* 1. Selected Client Top Header */}
-      <SelectedClientHeader client={client} currentUserProfile={currentUserProfile} />
+      <SelectedClientHeader client={client} currentUserProfile={currentUserProfile} isClientView={isEffectiveClientView} />
 
       {/* Paused Client Warning Banner */}
       {client.status === 'Paused' && (
@@ -408,18 +414,20 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
             <span>90-Day Work Plans</span>
           </button>
 
-          <button
-            type="button"
-            onClick={() => setActiveTab('details')}
-            className={`flex items-center gap-2 px-4 py-3 min-h-[44px] text-xs font-bold border-b-2 transition-all cursor-pointer ${
-              activeTab === 'details'
-                ? 'border-brand-500 text-brand-600 dark:text-brand-400'
-                : 'border-transparent text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'
-            }`}
-          >
-            <Info className="w-4 h-4" />
-            <span>Client Details</span>
-          </button>
+          {!isEffectiveClientView && (
+            <button
+              type="button"
+              onClick={() => setActiveTab('details')}
+              className={`flex items-center gap-2 px-4 py-3 min-h-[44px] text-xs font-bold border-b-2 transition-all cursor-pointer ${
+                activeTab === 'details'
+                  ? 'border-brand-500 text-brand-600 dark:text-brand-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'
+              }`}
+            >
+              <Info className="w-4 h-4" />
+              <span>Client Details</span>
+            </button>
+          )}
         </div>
       </div>
 
@@ -447,6 +455,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
               onRenameWeek={handleRenameWeek}
               tasksByWeek={tasksByWeek}
               currentUserProfile={currentUserProfile}
+              isClientView={isEffectiveClientView}
             />
 
             {/* 2. Week Action Bar & Kanban Board */}
@@ -460,7 +469,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                   {isLoadingTasks && <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-500" />}
                 </div>
 
-                {currentUserProfile?.role !== 'client' && (
+                {!isEffectiveClientView && currentUserProfile?.role !== 'client' && (
                   client.status === 'Paused' ? (
                     <span 
                       className="px-3.5 py-2 min-h-[44px] rounded-xl bg-gray-100 dark:bg-dark-200 border border-gray-300 dark:border-dark-border text-gray-500 dark:text-gray-400 text-xs font-bold flex items-center gap-1.5 opacity-80 cursor-not-allowed"
@@ -490,6 +499,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                 weekNumber={currentWeekNum}
                 weekName={weekNames[currentWeekNum]}
                 currentUserProfile={currentUserProfile}
+                isClientView={isEffectiveClientView}
                 onSelectTask={(t) => setSelectedTaskDetails(t)}
                 onOpenEditModal={(t) => setEditingTask(t)}
                 onOpenCreateTask={handleOpenCreateTaskFlow}
@@ -627,6 +637,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
             task={selectedTaskDetails}
             client={client}
             currentUserProfile={currentUserProfile}
+            isClientView={isEffectiveClientView}
             departments={departments}
             eligibleAssignees={eligibleAssignees}
             onTaskUpdated={handleTaskUpdated}

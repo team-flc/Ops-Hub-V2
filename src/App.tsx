@@ -7,7 +7,7 @@ import { useAuth } from './context/AuthContext';
 import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { Sidebar } from './components/layout/Sidebar';
 import { Header } from './components/layout/Header';
-import { Building2 } from 'lucide-react';
+import { Building2, Eye, ArrowLeft } from 'lucide-react';
 import { UserProfile, SettingsTab } from './types';
 
 // Lazy-loaded Auth Pages
@@ -22,9 +22,6 @@ const UpdatePasswordPage = React.lazy(() =>
 );
 const ClientPortalHoldingPage = React.lazy(() =>
   import('./components/auth/ClientPortalHoldingPage').then((m) => ({ default: m.ClientPortalHoldingPage }))
-);
-const ClientPortalGate = React.lazy(() =>
-  import('./components/portal/ClientPortalGate').then((m) => ({ default: m.ClientPortalGate }))
 );
 
 // Lazy-loaded Workspace Views
@@ -182,9 +179,25 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
 
   const navigate = useNavigate();
   const isManagerOrOwner = profile?.role === 'owner' || profile?.role === 'operational_manager';
+  const isClient = profile?.role === 'client';
+  const isClientPreview = typeof window !== 'undefined' && location.search.includes('preview=true');
+  const isClientView = isClient || isClientPreview;
+
+  // Multi-tenant client isolation guard: Client role is strictly confined to their own client record
+  useEffect(() => {
+    if (profile?.role === 'client' && profile.organizationId) {
+      if (params.clientId && params.clientId !== profile.organizationId) {
+        navigate(`/clients/${profile.organizationId}`, { replace: true });
+      } else if (!params.clientId && location.pathname.startsWith('/clients')) {
+        navigate(`/clients/${profile.organizationId}`, { replace: true });
+      }
+    }
+  }, [profile?.role, profile?.organizationId, params.clientId, location.pathname, navigate]);
+
   const selectedClient =
     clients.find((c) => c.id === selectedClientId) ||
     (params.clientId ? clients.find((c) => c.id === params.clientId) : undefined) ||
+    (profile?.organizationId ? clients.find((c) => c.id === profile.organizationId) : undefined) ||
     clients.find((c) => c.status !== 'Archived') ||
     clients[0] ||
     null;
@@ -246,6 +259,7 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
             currentUserProfile={profile}
             eligibleManagers={eligibleManagers}
             onClientUpdated={updateClientRecord}
+            isClientView={isClientView}
           />
         ) : (
           <div className="p-12 text-center text-gray-500 max-w-lg mx-auto mt-16 space-y-3">
@@ -270,6 +284,27 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
 
       {/* Main Workspace Area */}
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
+        {/* Client Preview Mode Banner for Staff */}
+        {isClientPreview && (
+          <div className="bg-amber-500 text-white px-4 py-2 text-xs font-bold flex items-center justify-between shadow-md z-30 shrink-0">
+            <div className="flex items-center gap-2">
+              <Eye className="w-4 h-4 shrink-0" />
+              <span>Client Preview Mode &bull; Read-Only (Staff Mode: editing tasks, moving columns, and internal controls are disabled)</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => {
+                const cleanSearch = location.search.replace(/[?&]preview=true/, '').replace(/^\?$/, '');
+                navigate(`${location.pathname}${cleanSearch}`, { replace: true });
+              }}
+              className="px-2.5 py-1 bg-white text-amber-900 rounded-lg text-xs font-extrabold hover:bg-amber-50 transition-colors shadow-xs flex items-center gap-1 cursor-pointer shrink-0"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" />
+              <span>Exit Preview</span>
+            </button>
+          </div>
+        )}
+
         {/* Top Header */}
         <Header />
 
@@ -307,9 +342,18 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
 const ClientRedirect: React.FC = () => {
   const { profile } = useAuth();
   if (profile?.organizationId) {
-    return <Navigate to={`/portal/${profile.organizationId}`} replace />;
+    return <Navigate to={`/clients/${profile.organizationId}`} replace />;
   }
   return <ClientPortalHoldingPage />;
+};
+
+const PortalRedirect: React.FC = () => {
+  const params = useParams<{ clientId?: string }>();
+  const location = useLocation();
+  if (params.clientId) {
+    return <Navigate to={`/clients/${params.clientId}${location.search}`} replace />;
+  }
+  return <ClientRedirect />;
 };
 
 export const App: React.FC = () => {
@@ -327,27 +371,27 @@ export const App: React.FC = () => {
       <Route path="/forgot-password" element={<ForgotPasswordPage />} />
       <Route path="/update-password" element={<UpdatePasswordPage />} />
 
-      {/* Dedicated Client Portal Route with Strict Role Isolation & Server Authorization */}
+      {/* Client Portal Route Redirecting to Unified Client Workspace */}
       <Route
         path="/portal/:clientId"
         element={
-          <ProtectedRoute allowedRoles={['client', 'owner', 'operational_manager']}>
-            <ClientPortalGate />
+          <ProtectedRoute allowedRoles={['client', 'owner', 'operational_manager', 'team_member']}>
+            <PortalRedirect />
           </ProtectedRoute>
         }
       />
 
-      {/* Portal root fallback (redirects to client's portal or shows holding page) */}
+      {/* Portal root fallback (redirects to client's workspace or shows holding page) */}
       <Route
         path="/portal"
         element={
-          <ProtectedRoute allowedRoles={['client', 'owner', 'operational_manager']}>
+          <ProtectedRoute allowedRoles={['client', 'owner', 'operational_manager', 'team_member']}>
             <ClientRedirect />
           </ProtectedRoute>
         }
       />
 
-      {/* Protected Client Portal Route (Redirects authenticated client to their portal) */}
+      {/* Protected Client Portal Route (Redirects authenticated client to their workspace) */}
       <Route
         path="/client"
         element={
@@ -437,7 +481,7 @@ export const App: React.FC = () => {
       <Route
         path="/clients/:clientId"
         element={
-          <ProtectedRoute allowedRoles={['owner', 'operational_manager', 'team_member']}>
+          <ProtectedRoute allowedRoles={['owner', 'operational_manager', 'team_member', 'client']}>
             <OpsHubWorkspace initialView="client_workspace" />
           </ProtectedRoute>
         }
@@ -445,7 +489,7 @@ export const App: React.FC = () => {
       <Route
         path="/clients"
         element={
-          <ProtectedRoute allowedRoles={['owner', 'operational_manager', 'team_member']}>
+          <ProtectedRoute allowedRoles={['owner', 'operational_manager', 'team_member', 'client']}>
             <OpsHubWorkspace initialView="client_workspace" />
           </ProtectedRoute>
         }
