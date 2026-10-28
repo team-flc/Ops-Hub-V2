@@ -13,6 +13,7 @@ import { employeeOperationsService } from '../../lib/employeeOperationsService';
 import { getPKTTodayDateString, formatWorkingScheduleDescription } from '../../lib/pktDateUtils';
 import { storageService, useSignedUrl } from '../../lib/storageService';
 import { supabase } from '../../lib/supabase';
+import { twoFactorService, TwoFactorStatus } from '../../lib/twoFactorService';
 
 interface EditTeamMemberModalProps {
   isOpen: boolean;
@@ -81,6 +82,12 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [member2FAStatus, setMember2FAStatus] = useState<TwoFactorStatus | null>(null);
+  const [isReset2FAModalOpen, setIsReset2FAModalOpen] = useState(false);
+  const [resetReason, setResetReason] = useState('');
+  const [isResetting2FA, setIsResetting2FA] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
+  const [resetSuccessMessage, setResetSuccessMessage] = useState<string | null>(null);
 
   useEffect(() => {
     async function loadCompanionData() {
@@ -94,6 +101,11 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
       setSelectedManagerId(member.reportingManagerId || '');
       setSelectedClientIds(member.clientIds || []);
       setErrorMessage(null);
+      if (currentUserProfile?.role === 'owner' && member?.id) {
+        twoFactorService.get2FAStatus(member.id).then((res) => {
+          if (res.data) setMember2FAStatus(res.data);
+        });
+      }
 
       try {
         if (supabase) {
@@ -229,6 +241,36 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
     } else {
       setSelectedClientIds((prev) => [...prev, clientId]);
     }
+  };
+
+    const handleAdminReset2FA = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!member?.id || isResetting2FA) return;
+    if (!resetReason.trim()) {
+      setResetError('A reason is required to reset 2FA.');
+      return;
+    }
+
+    setResetError(null);
+    setIsResetting2FA(true);
+
+    const res = await twoFactorService.adminReset2FA({
+      targetUserId: member.id,
+      reason: resetReason.trim()
+    });
+
+    setIsResetting2FA(false);
+
+    if (!res.success) {
+      setResetError(res.error || 'Failed to reset 2FA.');
+      return;
+    }
+
+    setIsReset2FAModalOpen(false);
+    setResetReason('');
+    setMember2FAStatus({ isEnabled: false, factorId: null, remainingRecoveryCodes: 0 });
+    setResetSuccessMessage('Two-Factor Authentication was successfully reset for this member.');
+    setTimeout(() => setResetSuccessMessage(null), 5000);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -984,6 +1026,59 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
             </div>
           </div>
 
+          {/* 7. Security & Two-Factor Authentication (Owner Only) */}
+          {currentUserProfile?.role === 'owner' && (
+            <div className="space-y-3 pt-2 border-t border-slate-100 dark:border-dark-border">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-gray-400 flex items-center gap-1.5">
+                <Shield className="w-3.5 h-3.5 text-brand-600" />
+                <span>7. Security & Two-Factor Authentication (Owner Emergency Reset)</span>
+              </h3>
+
+              <div className="p-3.5 rounded-xl border border-slate-200 dark:border-dark-border bg-slate-50 dark:bg-dark-sidebar flex items-center justify-between gap-3">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold text-slate-800 dark:text-gray-200">2FA Protection:</span>
+                    {member2FAStatus?.isEnabled ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-emerald-100 text-emerald-800">
+                        Active
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-[11px] font-bold bg-slate-200 text-slate-700">
+                        Disabled
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-[11px] text-slate-500 dark:text-gray-400 mt-0.5">
+                    {member2FAStatus?.isEnabled
+                      ? 'Member has active two-factor protection. You can perform an emergency reset if they lose device access.'
+                      : 'Two-Factor Authentication is currently not active on this staff account.'}
+                  </p>
+                </div>
+
+                {member2FAStatus?.isEnabled && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setResetReason('');
+                      setResetError(null);
+                      setIsReset2FAModalOpen(true);
+                    }}
+                    className="flex-shrink-0 px-3 py-1.5 rounded-lg border border-rose-300 dark:border-rose-700 text-rose-700 dark:text-rose-300 text-xs font-semibold hover:bg-rose-50 transition-colors shadow-sm"
+                  >
+                    Reset 2FA
+                  </button>
+                )}
+              </div>
+
+              {resetSuccessMessage && (
+                <div className="p-2.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium flex items-center gap-2">
+                  <Check className="w-3.5 h-3.5 text-emerald-600 flex-shrink-0" />
+                  <span>{resetSuccessMessage}</span>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Submit */}
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-slate-100 dark:border-dark-border">
             <button
@@ -1011,6 +1106,78 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
           </div>
         </form>
       </div>
+{isReset2FAModalOpen && (
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-in fade-in duration-150">
+          <div className="bg-white dark:bg-dark-card border border-slate-200 dark:border-dark-border rounded-3xl p-6 max-w-md w-full shadow-2xl space-y-4 animate-in zoom-in-95 duration-150">
+            <div className="flex items-center justify-between border-b border-slate-100 dark:border-dark-border pb-3">
+              <div className="flex items-center gap-2 text-rose-600">
+                <Shield className="w-5 h-5" />
+                <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                  Reset 2FA for {member?.fullName}
+                </h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsReset2FAModalOpen(false)}
+                className="p-1 text-slate-400 hover:text-slate-600"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {resetError && (
+              <div className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium flex items-center gap-2">
+                <AlertCircle className="w-4 h-4 text-rose-600 flex-shrink-0" />
+                <span>{resetError}</span>
+              </div>
+            )}
+
+            <form onSubmit={handleAdminReset2FA} className="space-y-4 text-xs">
+              <div className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900">
+                <strong className="block font-bold">Emergency Reset Confirmation</strong>
+                <p className="text-[11px] leading-relaxed mt-0.5">
+                  This will immediately remove the user's authenticator factor and recovery codes,
+                  allowing them to sign in with password only. This action will be permanently recorded
+                  in the system audit log.
+                </p>
+              </div>
+
+              <div className="space-y-1.5">
+                <label className="block font-bold text-slate-700 dark:text-gray-300">
+                  Reason for Emergency Reset <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={resetReason}
+                  onChange={(e) => setResetReason(e.target.value)}
+                  placeholder="e.g. Employee lost authenticator phone, emergency access granted"
+                  className="w-full px-3.5 py-2.5 bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl focus:ring-2 focus:ring-rose-500 outline-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2.5 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsReset2FAModalOpen(false)}
+                  disabled={isResetting2FA}
+                  className="px-4 py-2 rounded-xl border border-slate-200 text-slate-600 font-semibold hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isResetting2FA || !resetReason.trim()}
+                  className="flex items-center gap-1.5 px-5 py-2 rounded-xl bg-rose-600 hover:bg-rose-700 text-white font-bold disabled:opacity-50"
+                >
+                  {isResetting2FA ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+                  <span>Confirm Emergency Reset</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 

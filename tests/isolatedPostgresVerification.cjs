@@ -37,6 +37,43 @@ async function runDatabaseVerification() {
 
     CREATE SCHEMA IF NOT EXISTS auth;
     CREATE SCHEMA IF NOT EXISTS app_private;
+
+    -- Base auth mock tables
+    CREATE TABLE IF NOT EXISTS auth.users (
+      id UUID PRIMARY KEY,
+      email TEXT
+    );
+    CREATE TABLE IF NOT EXISTS auth.mfa_factors (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      user_id UUID NOT NULL,
+      friendly_name TEXT,
+      factor_type TEXT NOT NULL,
+      status TEXT NOT NULL,
+      secret TEXT,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      updated_at TIMESTAMPTZ DEFAULT NOW()
+    );
+    CREATE TABLE IF NOT EXISTS auth.mfa_challenges (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      factor_id UUID NOT NULL,
+      created_at TIMESTAMPTZ DEFAULT NOW(),
+      verified_at TIMESTAMPTZ
+    );
+
+    -- Base public system_audit_events table
+    CREATE TABLE IF NOT EXISTS public.system_audit_events (
+      id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+      actor_id UUID,
+      actor_name TEXT NOT NULL,
+      actor_role TEXT NOT NULL,
+      action TEXT NOT NULL,
+      entity_type TEXT NOT NULL,
+      entity_id TEXT NOT NULL,
+      reason TEXT,
+      metadata JSONB,
+      created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+    );
+
     GRANT USAGE ON SCHEMA auth, app_private, public TO authenticated, anon;
     GRANT ALL ON ALL TABLES IN SCHEMA public TO authenticated, anon;
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT ALL ON TABLES TO authenticated, anon;
@@ -263,6 +300,12 @@ async function runDatabaseVerification() {
   const migration4Sql = fs.readFileSync(migration4Path, 'utf8');
   await db.exec(migration4Sql);
   console.log('[OK] Applied Migration 4: 20261025000001_client_workspace_view_access.sql');
+
+  // 4c. Load and apply Migration 5 (Two-Factor Authentication TOTP & Recovery Codes)
+  const migration5Path = path.join(__dirname, '..', 'supabase', 'migrations', '20261029000001_two_factor_authentication_totp_and_recovery.sql');
+  const migration5Sql = fs.readFileSync(migration5Path, 'utf8');
+  await db.exec(migration5Sql);
+  console.log('[OK] Applied Migration 5: 20261029000001_two_factor_authentication_totp_and_recovery.sql');
 
   // 5. Seed test profiles
   const OWNER_ID = '11111111-1111-1111-1111-111111111111';
@@ -546,6 +589,132 @@ async function runDatabaseVerification() {
   console.log('[OK] Client multi-tenant isolation confirmed: other client returns 0 rows');
 
   await db.exec(`RESET ROLE;`);
+
+  // ============================================================================
+  // TEST H: Two-Factor Authentication Security, Recovery Codes & Rate Limiting
+  // ============================================================================
+  console.log('\n--- Test H: Two-Factor Authentication Security, Recovery Codes & Rate Limiting ---');
+
+  // 1. Store 10 recovery codes for MGR1_ID
+  await db.exec(`SELECT set_config('request.jwt.claim.sub', '${MGR1_ID}', false);`);
+  const testCodes = [
+    'ABCD-1111', 'ABCD-2222', 'ABCD-3333', 'ABCD-4444', 'ABCD-5555',
+    'EFGH-6666', 'EFGH-7777', 'EFGH-8888', 'EFGH-9999', 'EFGH-0000'
+  ];
+
+  const storeRes = await db.query(
+    `SELECT public.fn_2fa_store_recovery_codes($1, $2) AS result;`,
+    [MGR1_ID, testCodes]
+  );
+  const storeJson = storeRes.rows[0].result;
+  if (!storeJson.success || storeJson.count !== 10) {
+    throw new Error('Failed to store 10 recovery codes: ' + JSON.stringify(storeJson));
+  }
+  console.log('[OK] 10 single-use recovery codes stored securely for manager.');
+
+  // 2. Verify codes are stored hashed at rest (not plain text)
+  const codeCheck = await db.query(`SELECT code_hash, used_at FROM public.user_2fa_recovery_codes WHERE user_id = $1;`, [MGR1_ID]);
+  if (codeCheck.rows.length !== 10) throw new Error('Expected 10 rows in user_2fa_recovery_codes');
+  for (const row of codeCheck.rows) {
+    if (row.code_hash.includes('ABCD') || row.code_hash.includes('EFGH')) {
+      throw new Error('SECURITY VIOLATION: Recovery code stored in plain text!');
+    }
+    if (row.used_at !== null) {
+      throw new Error('Newly created recovery code should not be marked used');
+    }
+  }
+  console.log('[OK] Verified all recovery codes are hashed at rest and unused.');
+
+  // 3. Verify single-use consumption of recovery code
+  const verifyRes1 = await db.query(
+    `SELECT public.fn_2fa_verify_recovery_code($1, $2) AS result;`,
+    [MGR1_ID, 'abcd-1111'] // case-insensitive, with hyphen
+  );
+  if (!verifyRes1.rows[0].result.success) {
+    throw new Error('Valid recovery code verification failed: ' + JSON.stringify(verifyRes1.rows[0].result));
+  }
+  console.log('[OK] Valid recovery code successfully verified.');
+
+  // 4. Verify the code CANNOT be reused (single-use guarantee)
+  const verifyRes2 = await db.query(
+    `SELECT public.fn_2fa_verify_recovery_code($1, $2) AS result;`,
+    [MGR1_ID, 'ABCD-1111']
+  );
+  if (verifyRes2.rows[0].result.success) {
+    throw new Error('SECURITY VIOLATION: Single-use recovery code was accepted a second time!');
+  }
+  console.log('[OK] Re-use of consumed recovery code was correctly rejected.');
+
+  // 5. Test Rate-Limiting & Lockout: 4 more failed attempts brings total to 5
+  console.log('Testing rate-limiting lockout after 5 consecutive failures...');
+  for (let i = 2; i <= 4; i++) {
+    const failRes = await db.query(
+      `SELECT public.fn_2fa_record_failed_attempt($1, 'Bad TOTP code') AS result;`,
+      [MGR1_ID]
+    );
+    if (failRes.rows[0].result.is_locked) {
+      throw new Error(`Unexpected early lockout on attempt ${i}`);
+    }
+  }
+
+  // 5th failed attempt -> MUST lock out
+  const fifthFail = await db.query(
+    `SELECT public.fn_2fa_record_failed_attempt($1, 'Bad TOTP code') AS result;`,
+    [MGR1_ID]
+  );
+  if (!fifthFail.rows[0].result.is_locked) {
+    throw new Error('5th failed attempt MUST trigger temporary lockout');
+  }
+  console.log('[OK] Account temporary lockout triggered on 5th consecutive failure.');
+
+  // Check lockout RPC
+  const lockoutCheck = await db.query(
+    `SELECT public.fn_2fa_check_lockout($1) AS result;`,
+    [MGR1_ID]
+  );
+  if (!lockoutCheck.rows[0].result.is_locked) {
+    throw new Error('fn_2fa_check_lockout must report is_locked = true during active lockout');
+  }
+  console.log('[OK] fn_2fa_check_lockout confirms active lockout.');
+
+  // 6. Test Admin 2FA Reset by Owner
+  console.log('Testing Owner admin reset of 2FA...');
+  // Non-owner (TM_ID) attempting reset MUST be denied
+  await db.exec(`SELECT set_config('request.jwt.claim.sub', '${TM_ID}', false);`);
+  let tmDenied = false;
+  try {
+    await db.query(`SELECT public.fn_2fa_admin_reset($1, 'Unauthorized attempt');`, [MGR1_ID]);
+  } catch (err) {
+    tmDenied = true;
+    console.log('[OK] Team Member correctly denied from resetting 2FA:', err.message);
+  }
+  if (!tmDenied) throw new Error('Non-owner must NOT be allowed to reset 2FA');
+
+  // Owner resetting 2FA MUST succeed
+  await db.exec(`SELECT set_config('request.jwt.claim.sub', '${OWNER_ID}', false);`);
+  const resetRes = await db.query(
+    `SELECT public.fn_2fa_admin_reset($1, 'Staff lost device') AS result;`,
+    [MGR1_ID]
+  );
+  if (!resetRes.rows[0].result.success) {
+    throw new Error('Owner reset failed: ' + JSON.stringify(resetRes.rows[0].result));
+  }
+
+  // Verify all recovery codes wiped for MGR1_ID
+  const codesAfterReset = await db.query(`SELECT COUNT(*)::int AS count FROM public.user_2fa_recovery_codes WHERE user_id = $1;`, [MGR1_ID]);
+  if (codesAfterReset.rows[0].count !== 0) throw new Error('Recovery codes must be wiped after 2FA reset');
+
+  // Verify lockout cleared
+  const lockoutAfterReset = await db.query(`SELECT public.fn_2fa_check_lockout($1) AS result;`, [MGR1_ID]);
+  if (lockoutAfterReset.rows[0].result.is_locked) throw new Error('Lockout must be cleared after 2FA reset');
+
+  // Verify audit log has two_factor_reset_by_admin
+  const auditRes = await db.query(
+    `SELECT action, actor_id, entity_id FROM public.system_audit_events WHERE action = 'two_factor_reset_by_admin' AND entity_id = $1;`,
+    [MGR1_ID]
+  );
+  if (auditRes.rows.length === 0) throw new Error('Audit event two_factor_reset_by_admin missing from system_audit_events');
+  console.log('[OK] Owner 2FA reset verified with full cleanup and immutable audit logging.');
 
   console.log('\n======================================================================');
   console.log('ALL ISOLATED POSTGRESQL DATABASE VERIFICATIONS PASSED SUCCESSFULLY!');

@@ -4,6 +4,14 @@ import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { UserProfile, UserRole, AccountStatus, isStaffRole, isClientRole } from '../types';
 import { useOpsStore } from '../store/opsStore';
 
+export interface SignInResult {
+  error?: string;
+  requires2FA?: boolean;
+  factorId?: string;
+  userId?: string;
+  userEmail?: string;
+}
+
 interface AuthContextType {
   user: User | null;
   profile: UserProfile | null;
@@ -11,7 +19,9 @@ interface AuthContextType {
   isLoading: boolean;
   profileError: string | null;
   isConfigured: boolean;
-  signIn: (email: string, password: string) => Promise<{ error?: string }>;
+  signIn: (email: string, password: string) => Promise<SignInResult>;
+  complete2FASignIn: (isRecoveryCode?: boolean) => Promise<{ error?: string }>;
+  cancel2FASignIn: () => Promise<void>;
   signOut: () => Promise<void>;
   resetPasswordForEmail: (email: string) => Promise<{ error?: string }>;
   updatePassword: (newPassword: string) => Promise<{ error?: string }>;
@@ -134,6 +144,34 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     setIsLoading(false);
   }, [user, fetchProfile, syncProfileToStore]);
 
+  // Check whether 2FA verification has been satisfied for the given user
+  const is2FAComplete = useCallback(async (checkUser: User): Promise<boolean> => {
+    if (!supabase?.auth?.mfa?.listFactors) return true;
+    try {
+      const factorsRes = await supabase.auth.mfa.listFactors();
+      const verifiedFactor = factorsRes.data?.totp?.find((f) => f.status === 'verified');
+      if (!verifiedFactor) {
+        return true; // No 2FA enabled for this account
+      }
+
+      if (supabase.auth.mfa.getAuthenticatorAssuranceLevel) {
+        const aalRes = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+        if (aalRes.data?.currentLevel === 'aal2') {
+          return true; // Verified with TOTP
+        }
+      }
+
+      const recKey = `flc_2fa_rec_verified_${checkUser.id}`;
+      if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(recKey) === 'true') {
+        return true; // Verified with single-use recovery code this session
+      }
+
+      return false; // Factor exists but neither AAL2 nor recovery code satisfied
+    } catch {
+      return true;
+    }
+  }, []);
+
   // Initial Auth Check & Session Listener
   useEffect(() => {
     let mounted = true;
@@ -148,6 +186,20 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         const { data: { user: verifiedUser }, error: verifyError } = await supabase.auth.getUser();
 
         if (verifyError || !verifiedUser) {
+          if (mounted) {
+            setUser(null);
+            setSession(null);
+            setProfile(null);
+            setProfileError(null);
+            setIsLoading(false);
+          }
+          return;
+        }
+
+        const completed2FA = await is2FAComplete(verifiedUser);
+        if (!completed2FA) {
+          // If page was reloaded before completing 2FA, sign out to prevent bypass
+          await supabase.auth.signOut();
           if (mounted) {
             setUser(null);
             setSession(null);
@@ -196,6 +248,12 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
             setIsLoading(false);
           } else if (event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED' || event === 'USER_UPDATED') {
             const authUser = newSession.user;
+            const completed2FA = await is2FAComplete(authUser);
+            if (!completed2FA) {
+              // 2FA pending — do not issue active user or profile to app state
+              return;
+            }
+
             setUser(authUser);
             setSession(newSession);
             const { profile: prof, error: profErr } = await fetchProfile(authUser.id, authUser.email);
@@ -214,10 +272,10 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } else {
       mounted = false;
     }
-  }, [fetchProfile, syncProfileToStore]);
+  }, [fetchProfile, syncProfileToStore, is2FAComplete]);
 
-  // Real Email/Password Sign-In
-  const signIn = async (email: string, password: string): Promise<{ error?: string }> => {
+  // Real Email/Password Sign-In with 2FA Gate
+  const signIn = async (email: string, password: string): Promise<SignInResult> => {
     if (!supabase) {
       return { error: 'Authentication service is not configured. Contact your administrator.' };
     }
@@ -237,6 +295,35 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return { error: GENERIC_AUTH_ERROR };
       }
 
+      // Check if user has 2FA enabled
+      if (supabase.auth?.mfa?.listFactors) {
+        const factorsRes = await supabase.auth.mfa.listFactors();
+        const verifiedFactor = factorsRes.data?.totp?.find((f) => f.status === 'verified');
+        if (verifiedFactor) {
+          // Check rate-limiting lockout status
+          if (supabase.rpc) {
+            const { data: lockout } = await supabase.rpc('fn_2fa_check_lockout', {
+              p_user_id: data.user.id
+            });
+            if (lockout?.is_locked) {
+              await supabase.auth.signOut();
+              return {
+                error: lockout?.error || 'Account is temporarily locked due to multiple failed verification attempts. Please try again later.'
+              };
+            }
+          }
+
+          // Return 2FA requirement to trigger Step 2 in login form
+          return {
+            requires2FA: true,
+            factorId: verifiedFactor.id,
+            userId: data.user.id,
+            userEmail: cleanEmail
+          };
+        }
+      }
+
+      // Normal flow for accounts without 2FA
       const { profile: prof, error: profErr } = await fetchProfile(data.user.id, data.user.email);
       if (profErr || !prof) {
         await supabase.auth.signOut();
@@ -258,6 +345,59 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     } catch {
       return { error: GENERIC_AUTH_ERROR };
     }
+  };
+
+  // Complete 2FA Sign-In after successful code verification
+  const complete2FASignIn = async (isRecoveryCode?: boolean): Promise<{ error?: string }> => {
+    if (!supabase) return { error: 'Authentication service is not configured.' };
+    try {
+      const { data: { user: currentUser }, error: userErr } = await supabase.auth.getUser();
+      const { data: { session: currentSession } } = await supabase.auth.getSession();
+
+      if (userErr || !currentUser) {
+        return { error: 'Session expired. Please sign in again.' };
+      }
+
+      if (isRecoveryCode && typeof sessionStorage !== 'undefined') {
+        sessionStorage.setItem(`flc_2fa_rec_verified_${currentUser.id}`, 'true');
+      }
+
+      const { profile: prof, error: profErr } = await fetchProfile(currentUser.id, currentUser.email);
+      if (profErr || !prof) {
+        await supabase.auth.signOut();
+        return { error: profErr || 'Account configuration error. Please contact your FLC administrator.' };
+      }
+
+      if (prof.status !== 'active') {
+        await supabase.auth.signOut();
+        return { error: prof.status === 'suspended' ? 'Your account has been suspended.' : 'Your account is inactive.' };
+      }
+
+      setUser(currentUser);
+      setSession(currentSession);
+      setProfile(prof);
+      setProfileError(null);
+      syncProfileToStore(prof);
+
+      return {};
+    } catch {
+      return { error: 'Failed to complete two-factor authentication.' };
+    }
+  };
+
+  // Cancel 2FA Sign-In
+  const cancel2FASignIn = async (): Promise<void> => {
+    if (supabase) {
+      try {
+        await supabase.auth.signOut();
+      } catch {
+        // Ignored on cancel
+      }
+    }
+    setUser(null);
+    setSession(null);
+    setProfile(null);
+    setProfileError(null);
   };
 
   const resetPasswordForEmail = async (email: string): Promise<{ error?: string }> => {
@@ -312,6 +452,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
   const signOut = async () => {
     if (supabase) {
       try {
+        if (user && typeof sessionStorage !== 'undefined') {
+          sessionStorage.removeItem(`flc_2fa_rec_verified_${user.id}`);
+        }
         await supabase.auth.signOut();
       } catch (err) {
         console.error('Sign out error:', err);
@@ -334,6 +477,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         profileError,
         isConfigured: isSupabaseConfigured,
         signIn,
+        complete2FASignIn,
+        cancel2FASignIn,
         signOut,
         resetPasswordForEmail,
         updatePassword,
@@ -353,6 +498,8 @@ const defaultAuthContext: AuthContextType = {
   profileError: null,
   isConfigured: false,
   signIn: async () => ({ error: 'AuthProvider not initialized' }),
+  complete2FASignIn: async () => ({ error: 'AuthProvider not initialized' }),
+  cancel2FASignIn: async () => {},
   signOut: async () => {},
   resetPasswordForEmail: async () => ({ error: 'AuthProvider not initialized' }),
   updatePassword: async () => ({ error: 'AuthProvider not initialized' }),
@@ -366,5 +513,3 @@ export const useAuth = (): AuthContextType => {
   }
   return context;
 };
-
-
