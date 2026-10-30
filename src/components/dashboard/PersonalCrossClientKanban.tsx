@@ -5,7 +5,7 @@ import {
   AlertTriangle, Check, ExternalLink, Search,
   Briefcase, ArrowUpRight, ShieldCheck, Eye
 } from 'lucide-react';
-import { ClientTask, ClientTaskStatus, UserProfile, ClientRecord } from '../../types';
+import { ClientTask, ClientTaskStatus, UserProfile, ClientRecord, AWAITING_APPROVAL_STATUSES, isTaskAwaitingApproval } from '../../types';
 import { taskManagementService } from '../../lib/taskManagementService';
 import { useSignedUrl } from '../../lib/storageService';
 import { isTaskDueToday } from '../../lib/pktDateUtils';
@@ -81,7 +81,7 @@ const KANBAN_COLUMNS: KanbanColumnConfig[] = [
   {
     key: 'approval',
     title: 'Awaiting Approval',
-    statuses: ['Team Review', 'Client Review'],
+    statuses: [...AWAITING_APPROVAL_STATUSES],
     color: 'text-purple-700 dark:text-purple-300',
     badgeBg: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
     headerBorder: 'border-t-purple-500'
@@ -305,7 +305,7 @@ export const PersonalKanbanCard: React.FC<PersonalKanbanCardProps> = ({
         )}
 
         {/* Approval Actions for Managers & Owners */}
-        {isOwnerOrManager && (task.status === 'Team Review' || task.status === 'Client Review') && (
+        {isOwnerOrManager && isTaskAwaitingApproval(task.status) && (
           <div className="flex items-center gap-1">
             <button
               type="button"

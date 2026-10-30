@@ -484,6 +484,14 @@ export type ClientTaskStatus =
   | 'Client Review'
   | 'Completed';
 
+export const AWAITING_APPROVAL_STATUSES: readonly ClientTaskStatus[] = ['Team Review', 'Client Review'] as const;
+
+export const isTaskAwaitingApproval = (taskOrStatus?: { status: ClientTaskStatus } | string | null): boolean => {
+  if (!taskOrStatus) return false;
+  const status = typeof taskOrStatus === 'string' ? taskOrStatus : taskOrStatus.status;
+  return status === 'Team Review' || status === 'Client Review';
+};
+
 export interface ClientWeek {
   clientId: string;
   weekNumber: 1 | 2 | 3 | 4;

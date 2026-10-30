@@ -15,7 +15,7 @@ import { taskManagementService } from '../../lib/taskManagementService';
 import { employeeOperationsService } from '../../lib/employeeOperationsService';
 import { teamManagementService } from '../../lib/teamManagementService';
 import { clientManagementService } from '../../lib/clientManagementService';
-import { isTaskDueToday } from '../../lib/pktDateUtils';
+import { isTaskDueToday, isTaskAwaitingApproval } from '../../lib/pktDateUtils';
 
 // Dashboard Components
 import { PersonalCrossClientKanban } from '../dashboard/PersonalCrossClientKanban';
@@ -145,7 +145,7 @@ export const DashboardView: React.FC = () => {
   const totalTasks = tasks.length;
   const completedTasks = tasks.filter((t) => t.status === 'Completed' || t.status === 'Done').length;
   const inProgressTasks = tasks.filter((t) => t.status === 'In Progress').length;
-  const awaitingApprovalTasks = tasks.filter((t) => ['Team Review', 'Client Review', 'Approval'].includes(t.status)).length;
+  const awaitingApprovalTasks = tasks.filter((t) => isTaskAwaitingApproval(t.status)).length;
   const overdueTasks = tasks.filter((t) => t.isOverdue && t.status !== 'Completed' && t.status !== 'Done').length;
   const dueTodayTasks = tasks.filter((t) => isTaskDueToday(t.dueDate) && t.status !== 'Completed' && t.status !== 'Done').length;
 

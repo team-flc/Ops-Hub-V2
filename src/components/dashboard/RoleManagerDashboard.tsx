@@ -4,7 +4,7 @@ import {
   Users, CheckCircle2, Clock, AlertTriangle, ArrowUpRight,
   ExternalLink, Check, RotateCcw, Activity
 } from 'lucide-react';
-import { ClientTask, ClientRecord, UserProfile, EmployeeWorkReport } from '../../types';
+import { ClientTask, ClientRecord, UserProfile, EmployeeWorkReport, isTaskAwaitingApproval } from '../../types';
 import { taskManagementService } from '../../lib/taskManagementService';
 import { employeeOperationsService } from '../../lib/employeeOperationsService';
 import { useSignedUrl } from '../../lib/storageService';
@@ -56,7 +56,7 @@ export const RoleManagerDashboard: React.FC<RoleManagerDashboardProps> = ({
 
   // Team Approvals Queue (tasks assigned to direct reports or in assigned clients awaiting approval)
   const teamApprovals = tasks.filter((t) => {
-    const isUnderReview = ['Team Review', 'Client Review'].includes(t.status);
+    const isUnderReview = isTaskAwaitingApproval(t.status);
     const isReportingStaff = t.assigneeId ? reportingIds.has(t.assigneeId) : false;
     return isUnderReview && (isReportingStaff || reportingMembers.length === 0);
   });

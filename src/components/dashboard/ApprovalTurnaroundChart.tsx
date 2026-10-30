@@ -1,6 +1,6 @@
 import React from 'react';
 import { CheckCircle2, RotateCcw, Clock, Award } from 'lucide-react';
-import { ClientTask } from '../../types';
+import { ClientTask, isTaskAwaitingApproval } from '../../types';
 
 interface ApprovalTurnaroundChartProps {
   tasks: ClientTask[];
@@ -9,7 +9,7 @@ interface ApprovalTurnaroundChartProps {
 export const ApprovalTurnaroundChart: React.FC<ApprovalTurnaroundChartProps> = ({ tasks }) => {
   const approvalTasks = tasks.filter((t) => Boolean(t.approvalMode));
   const completedApprovals = approvalTasks.filter((t) => t.status === 'Completed');
-  const pendingApprovals = tasks.filter((t) => ['Team Review', 'Client Review'].includes(t.status));
+  const pendingApprovals = tasks.filter((t) => isTaskAwaitingApproval(t.status));
   const reopenedTasks = tasks.filter((t) => Boolean(t.reopenedAt));
 
   // First pass approval rate

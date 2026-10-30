@@ -4,7 +4,7 @@ import {
   ShieldCheck, CheckCircle2, Clock, Activity, ArrowUpRight,
   Send, ExternalLink, Check, RotateCcw
 } from 'lucide-react';
-import { ClientTask, ClientRecord, UserProfile, EmployeeWorkReport } from '../../types';
+import { ClientTask, ClientRecord, UserProfile, EmployeeWorkReport, isTaskAwaitingApproval } from '../../types';
 import { taskManagementService } from '../../lib/taskManagementService';
 import { employeeOperationsService } from '../../lib/employeeOperationsService';
 import { useSignedUrl } from '../../lib/storageService';
@@ -54,7 +54,7 @@ export const RoleOwnerDashboard: React.FC<RoleOwnerDashboardProps> = ({
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
 
   // Pending Approvals Queue
-  const pendingApprovals = tasks.filter((t) => ['Team Review', 'Client Review'].includes(t.status));
+  const pendingApprovals = tasks.filter((t) => isTaskAwaitingApproval(t.status));
 
   // Active Timers
   const activeTimerTasks = tasks.filter((t) => Boolean(t.timerStartedAt));

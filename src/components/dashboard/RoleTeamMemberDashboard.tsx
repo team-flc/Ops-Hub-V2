@@ -4,7 +4,7 @@ import {
   Clock, CheckCircle2, FileText, AlertCircle, Play,
   Briefcase, ArrowUpRight, TrendingUp, ShieldCheck
 } from 'lucide-react';
-import { ClientTask, UserProfile, EmployeeRecord, WorkShift, EmployeeAttendance, EmployeeWorkReport } from '../../types';
+import { ClientTask, UserProfile, EmployeeRecord, WorkShift, EmployeeAttendance, EmployeeWorkReport, isTaskAwaitingApproval } from '../../types';
 
 interface RoleTeamMemberDashboardProps {
   tasks: ClientTask[];
@@ -40,7 +40,7 @@ export const RoleTeamMemberDashboard: React.FC<RoleTeamMemberDashboardProps> = (
   const myTasks = tasks.filter((t) => t.assigneeId === currentUserProfile?.id);
   const myCompleted = myTasks.filter((t) => t.status === 'Completed' || t.status === 'Done').length;
   const myInProgress = myTasks.filter((t) => t.status === 'In Progress').length;
-  const myApproval = myTasks.filter((t) => ['Team Review', 'Client Review', 'Approval'].includes(t.status)).length;
+  const myApproval = myTasks.filter((t) => isTaskAwaitingApproval(t.status)).length;
   const myOverdue = myTasks.filter((t) => t.isOverdue && t.status !== 'Completed' && t.status !== 'Done').length;
 
   const totalLoggedSeconds = myTasks.reduce((acc, t) => acc + (t.timeSpentSeconds || 0), 0);
