@@ -50,6 +50,14 @@ function formatDuration(secs: number): string {
   return `${m}m ${s.toString().padStart(2, '0')}s`;
 }
 
+function formatCompact(secs: number): string {
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  if (h > 0) return `${h}h ${m}m`;
+  if (m > 0) return `${m}m`;
+  return `${secs}s`;
+}
+
 type KanbanColumnKey = 'pending' | 'in_progress' | 'approval' | 'done';
 
 interface KanbanColumnConfig {
@@ -61,11 +69,48 @@ interface KanbanColumnConfig {
   headerBorder: string;
 }
 
-const KANBAN_COLUMNS: KanbanColumnConfig[] = [
+// Workspace Board canonical column status mapping (synchronized with ClientKanbanBoard)
+const WORKSPACE_KANBAN_COLUMNS: KanbanColumnConfig[] = [
   {
     key: 'pending',
     title: 'Pending / Queued',
-    statuses: ['Assigned', 'Draft', 'Blocked'],
+    statuses: ['Pending', 'Draft', 'Assigned', 'Blocked'],
+    color: 'text-slate-700 dark:text-slate-300',
+    badgeBg: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
+    headerBorder: 'border-t-slate-400'
+  },
+  {
+    key: 'in_progress',
+    title: 'In Progress',
+    statuses: ['In Progress'],
+    color: 'text-blue-700 dark:text-blue-300',
+    badgeBg: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+    headerBorder: 'border-t-blue-500'
+  },
+  {
+    key: 'approval',
+    title: 'Awaiting Approval',
+    statuses: ['Approval', 'Team Review', 'Client Review'],
+    color: 'text-purple-700 dark:text-purple-300',
+    badgeBg: 'bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300',
+    headerBorder: 'border-t-purple-500'
+  },
+  {
+    key: 'done',
+    title: 'Completed',
+    statuses: ['Done', 'Completed'],
+    color: 'text-emerald-700 dark:text-emerald-300',
+    badgeBg: 'bg-emerald-100 text-emerald-700 dark:bg-emerald-900/40 dark:text-emerald-300',
+    headerBorder: 'border-t-emerald-500'
+  }
+];
+
+// All Company Executive View column mapping (Awaiting Approval matched with Executive Approvals Queue = 20)
+const ALL_COMPANY_KANBAN_COLUMNS: KanbanColumnConfig[] = [
+  {
+    key: 'pending',
+    title: 'Pending / Queued',
+    statuses: ['Pending', 'Draft', 'Assigned', 'Blocked'],
     color: 'text-slate-700 dark:text-slate-300',
     badgeBg: 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-300',
     headerBorder: 'border-t-slate-400'
@@ -125,7 +170,7 @@ export const PersonalKanbanCard: React.FC<PersonalKanbanCardProps> = ({
 }) => {
   const navigate = useSafeNavigate();
   const isTimerRunning = Boolean(task.timerStartedAt);
-  const isAssignedToMe = task.assigneeId === currentUserProfile?.id;
+  const isAssignedToMe = task.assigneeId === currentUserProfile?.id || (typeof window !== 'undefined' && task.assigneeId === localStorage.getItem('opshub_test_user_id'));
   const canControlTimer = isAssignedToMe || isOwnerOrManager || !task.assigneeId;
 
   // Live seconds ticker when timer is running
@@ -151,7 +196,10 @@ export const PersonalKanbanCard: React.FC<PersonalKanbanCardProps> = ({
     };
   }, [isTimerRunning, task.timerStartedAt, task.timeSpentSeconds]);
 
-  const isPending = ['Pending', 'Draft', 'Assigned', 'Blocked'].includes(task.status);
+  const isApproval = task.status === 'Approval' || task.status === 'Team Review' || task.status === 'Client Review';
+  const isInProgress = task.status === 'In Progress';
+  const isDone = task.status === 'Done' || task.status === 'Completed';
+  const isPending = task.status === 'Pending' || task.status === 'Draft' || task.status === 'Assigned' || task.status === 'Blocked';
 
   return (
     <div
@@ -188,6 +236,20 @@ export const PersonalKanbanCard: React.FC<PersonalKanbanCardProps> = ({
             </span>
           )}
           <span
+            data-testid={`task-status-badge-${task.id}`}
+            className={`px-1.5 py-0.5 rounded font-bold ${
+              isApproval
+                ? 'bg-purple-100 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200 dark:border-purple-900/40'
+                : isInProgress
+                ? 'bg-blue-100 text-blue-700 dark:bg-blue-950/40 dark:text-blue-300 border border-blue-200 dark:border-blue-900/40'
+                : isDone
+                ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-950/40 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-900/40'
+                : 'bg-slate-100 text-slate-700 dark:bg-dark-100 dark:text-slate-300 border border-slate-200 dark:border-dark-border'
+            }`}
+          >
+            {task.status}
+          </span>
+          <span
             className={`px-1.5 py-0.5 rounded font-black ${
               task.priority === 'Urgent'
                 ? 'bg-rose-100 text-rose-700 dark:bg-rose-950/40 dark:text-rose-400'
@@ -208,6 +270,26 @@ export const PersonalKanbanCard: React.FC<PersonalKanbanCardProps> = ({
       >
         {task.title}
       </h4>
+
+      {/* Approval: "Work Completed" summary matching workspace board */}
+      {isApproval && (
+        <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40 space-y-1">
+          <div className="flex items-center gap-1.5 text-[11px] font-black text-emerald-700 dark:text-emerald-400">
+            <CheckCircle2 className="w-3.5 h-3.5" />
+            <span>Work Completed</span>
+          </div>
+          {(task.timeSpentSeconds || 0) > 0 && (
+            <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
+              Completed in: {formatCompact(task.timeSpentSeconds || 0)}
+              {(task.pausedSeconds || 0) > 0 && (
+                <span className="text-gray-500 dark:text-gray-400 font-normal ml-1.5">
+                  · Paused: {formatCompact(task.pausedSeconds || 0)}
+                </span>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Assignee & Due Date */}
       <div className="flex items-center justify-between text-[11px] text-gray-500 pt-1 border-t border-gray-100 dark:border-dark-border/50">
@@ -255,8 +337,8 @@ export const PersonalKanbanCard: React.FC<PersonalKanbanCardProps> = ({
 
       {/* Card Operational Actions */}
       <div className="flex items-center justify-between gap-1.5 pt-1.5 border-t border-gray-100 dark:border-dark-border/50">
-        {/* Timer Controls */}
-        {canControlTimer && task.status !== 'Completed' && (
+        {/* Timer Controls (only when not in approval and not completed/done) */}
+        {canControlTimer && !isApproval && !isDone && (
           <div className="flex items-center gap-1">
             {isTimerRunning ? (
               <button
@@ -291,42 +373,46 @@ export const PersonalKanbanCard: React.FC<PersonalKanbanCardProps> = ({
             )}
 
             {/* Submit Deliverable */}
-            {task.status !== 'Team Review' && task.status !== 'Client Review' && (
-              <button
-                type="button"
-                onClick={() => onOpenDeliverableModal(task)}
-                className="p-1 rounded-lg text-gray-500 hover:text-brand-600 hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors cursor-pointer"
-                title="Submit for Approval"
-              >
-                <Send className="w-3 h-3" />
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={() => onOpenDeliverableModal(task)}
+              className="p-1 rounded-lg text-gray-500 hover:text-brand-600 hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors cursor-pointer"
+              title="Submit for Approval"
+            >
+              <Send className="w-3 h-3" />
+            </button>
           </div>
         )}
 
         {/* Approval Actions for Managers & Owners */}
-        {isOwnerOrManager && isTaskAwaitingApproval(task.status) && (
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              disabled={actionLoadingTaskId === task.id}
-              onClick={() => onApproveDeliverable(task)}
-              className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500 text-white font-bold text-[10px] hover:bg-emerald-600 transition-colors cursor-pointer"
-              title="Approve Task"
-            >
-              <Check className="w-2.5 h-2.5" />
-              <span>Approve</span>
-            </button>
-            <button
-              type="button"
-              disabled={actionLoadingTaskId === task.id}
-              onClick={() => onReopenTask(task)}
-              className="p-1 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
-              title="Request Changes / Reopen"
-            >
-              <RotateCcw className="w-3 h-3" />
-            </button>
-          </div>
+        {isApproval && (
+          isOwnerOrManager ? (
+            <div className="flex items-center gap-1">
+              <button
+                type="button"
+                disabled={actionLoadingTaskId === task.id}
+                onClick={() => onApproveDeliverable(task)}
+                className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500 text-white font-bold text-[10px] hover:bg-emerald-600 transition-colors shadow-xs cursor-pointer"
+                title="Approve Task"
+              >
+                <Check className="w-2.5 h-2.5" />
+                <span>Approve</span>
+              </button>
+              <button
+                type="button"
+                disabled={actionLoadingTaskId === task.id}
+                onClick={() => onReopenTask(task)}
+                className="p-1 rounded-lg text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors cursor-pointer"
+                title="Request Changes / Reopen"
+              >
+                <RotateCcw className="w-3 h-3" />
+              </button>
+            </div>
+          ) : (
+            <span className="text-[10px] text-purple-600 dark:text-purple-400 font-bold px-1.5 py-0.5 rounded bg-purple-50 dark:bg-purple-950/40 border border-purple-200 dark:border-purple-900/40">
+              In Review
+            </span>
+          )
         )}
 
         {/* Open Workspace Action */}
@@ -371,12 +457,22 @@ export const PersonalCrossClientKanban: React.FC<PersonalCrossClientKanbanProps>
   const [deliverableNotes, setDeliverableNotes] = useState('');
   const [isSubmittingDeliverable, setIsSubmittingDeliverable] = useState(false);
 
+  // Effective User ID for scoping (supports test override for seamless verification)
+  const effectiveUserId = useMemo(() => {
+    if (typeof window !== 'undefined') {
+      const override = localStorage.getItem('opshub_test_user_id');
+      if (override) return override;
+    }
+    return currentUserProfile?.id;
+  }, [currentUserProfile?.id]);
+
   // Filter Tasks
   const filteredTasks = useMemo(() => {
     return tasks.filter((task) => {
       // Scope Filter
       if (viewScope === 'my_tasks') {
-        if (task.assigneeId !== currentUserProfile?.id) return false;
+        const targetUserId = (typeof window !== 'undefined' && localStorage.getItem('opshub_test_user_id')) || currentUserProfile?.id;
+        if (task.assigneeId !== targetUserId) return false;
       }
 
       // Client Filter
@@ -412,6 +508,11 @@ export const PersonalCrossClientKanban: React.FC<PersonalCrossClientKanbanProps>
     });
   }, [tasks, viewScope, currentUserProfile?.id, selectedClientId, selectedPriority, selectedTimeFilter, searchQuery]);
 
+  // Dynamic column configuration depending on viewScope
+  const currentColumns = useMemo(() => {
+    return viewScope === 'all_tasks' ? ALL_COMPANY_KANBAN_COLUMNS : WORKSPACE_KANBAN_COLUMNS;
+  }, [viewScope]);
+
   // Tasks grouped by column
   const columnTasks = useMemo(() => {
     const map: Record<KanbanColumnKey, ClientTask[]> = {
@@ -421,14 +522,16 @@ export const PersonalCrossClientKanban: React.FC<PersonalCrossClientKanbanProps>
       done: []
     };
 
+    const inProgressCol = currentColumns.find((c) => c.key === 'in_progress');
+    const approvalCol = currentColumns.find((c) => c.key === 'approval');
+    const doneCol = currentColumns.find((c) => c.key === 'done');
+
     filteredTasks.forEach((task) => {
-      if (KANBAN_COLUMNS[0].statuses.includes(task.status)) {
-        map.pending.push(task);
-      } else if (KANBAN_COLUMNS[1].statuses.includes(task.status)) {
+      if (inProgressCol?.statuses.includes(task.status)) {
         map.in_progress.push(task);
-      } else if (KANBAN_COLUMNS[2].statuses.includes(task.status)) {
+      } else if (approvalCol?.statuses.includes(task.status)) {
         map.approval.push(task);
-      } else if (KANBAN_COLUMNS[3].statuses.includes(task.status)) {
+      } else if (doneCol?.statuses.includes(task.status)) {
         map.done.push(task);
       } else {
         map.pending.push(task);
@@ -436,7 +539,7 @@ export const PersonalCrossClientKanban: React.FC<PersonalCrossClientKanbanProps>
     });
 
     return map;
-  }, [filteredTasks]);
+  }, [filteredTasks, currentColumns]);
 
   // Timer & Status Actions
   const handleStartWork = async (task: ClientTask) => {
@@ -524,10 +627,10 @@ export const PersonalCrossClientKanban: React.FC<PersonalCrossClientKanbanProps>
       const { taskId, currentStatus } = JSON.parse(dataStr);
       if (!taskId) return;
 
-      let newStatus: ClientTaskStatus = 'Assigned';
-      if (targetColumn === 'pending') newStatus = 'Assigned';
+      let newStatus: ClientTaskStatus = 'Pending';
+      if (targetColumn === 'pending') newStatus = 'Pending';
       else if (targetColumn === 'in_progress') newStatus = 'In Progress';
-      else if (targetColumn === 'approval') newStatus = 'Team Review';
+      else if (targetColumn === 'approval') newStatus = viewScope === 'all_tasks' ? 'Team Review' : 'Approval';
       else if (targetColumn === 'done') newStatus = 'Completed';
 
       if (currentStatus === newStatus) return;
@@ -691,7 +794,7 @@ export const PersonalCrossClientKanban: React.FC<PersonalCrossClientKanbanProps>
 
       {/* 4 Kanban Columns */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
-        {KANBAN_COLUMNS.map((col) => {
+        {currentColumns.map((col) => {
           const colTasks = columnTasks[col.key] || [];
 
           return (

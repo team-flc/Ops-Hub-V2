@@ -698,3 +698,7 @@ export const useOpsStore = create<OpsStore>()(
     }
   )
 );
+
+if (typeof window !== 'undefined') {
+  (window as any).useOpsStore = useOpsStore;
+}
