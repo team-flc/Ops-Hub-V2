@@ -210,17 +210,17 @@ describe('Employee Operations System Full Behavioral Test Suite', () => {
   // 6. Overnight Shift & Midnight Crossing (Asia/Karachi PKT)
   describe('6. Overnight Shift & Midnight Crossing', () => {
     it('detects overnight shift when end time is earlier in clock time than start time', () => {
-      expect(isOvernightShift('20:00:00', '05:00:00')).toBe(true);
+      expect(isOvernightShift('21:00:00', '06:00:00')).toBe(true);
       expect(isOvernightShift('22:00:00', '07:00:00')).toBe(true);
       expect(isOvernightShift('11:00:00', '20:00:00')).toBe(false);
       expect(isOvernightShift('09:00:00', '18:00:00')).toBe(false);
     });
 
     it('computes overnight shift window starting on workDate and ending on next calendar day in PKT', () => {
-      const window = calculateShiftWindow('2026-09-12', '20:00:00', '05:00:00', true);
+      const window = calculateShiftWindow('2026-09-12', '21:00:00', '06:00:00', true);
       expect(window.isOvernight).toBe(true);
-      expect(window.startIso).toBe('2026-09-12T20:00:00+05:00');
-      expect(window.endIso).toBe('2026-09-13T05:00:00+05:00');
+      expect(window.startIso).toBe('2026-09-12T21:00:00+05:00');
+      expect(window.endIso).toBe('2026-09-13T06:00:00+05:00');
     });
 
     it('computes standard daytime shift window on the same calendar day', () => {
@@ -793,10 +793,10 @@ describe('Employee Operations System Full Behavioral Test Suite', () => {
 
 
   // 26. Night Shift Anchoring & Boundary Tests (PKT UTC+5)
-  describe('26. Night Shift Anchoring & Boundary Tests (8 PM - 5 AM PKT)', () => {
+  describe('26. Night Shift Anchoring & Boundary Tests (9 PM - 6 AM PKT)', () => {
     const shift = {
-      startTime: '20:00:00',
-      endTime: '05:00:00',
+      startTime: '21:00:00',
+      endTime: '06:00:00',
       crossesMidnight: true
     };
 
@@ -804,11 +804,11 @@ describe('Employee Operations System Full Behavioral Test Suite', () => {
       // pktTimeStr: "HH:MM:SS"
       const [h, m] = pktTimeStr.split(':').map(Number);
       const timeInMins = h * 60 + m;
-      const shiftStartMins = 20 * 60; // 1200
-      const shiftEndMins = 5 * 60;    // 300
+      const shiftStartMins = 21 * 60; // 1260
+      const shiftEndMins = 6 * 60;    // 360
 
       if (timeInMins <= shiftEndMins) {
-        // Post-midnight before 05:00 AM: Anchored to yesterday
+        // Post-midnight before 06:00 AM: Anchored to yesterday
         const yesterday = new Date(currentDate);
         yesterday.setDate(yesterday.getDate() - 1);
         return {
@@ -833,14 +833,14 @@ describe('Employee Operations System Full Behavioral Test Suite', () => {
       }
     };
 
-    it('anchors 7:59 PM PKT to today instance (within 2h pre-shift check-in window)', () => {
-      const res = resolveNightShiftAnchor('19:59:00', '2026-09-12');
+    it('anchors 8:59 PM PKT to today instance (within 2h pre-shift check-in window)', () => {
+      const res = resolveNightShiftAnchor('20:59:00', '2026-09-12');
       expect(res.anchoredWorkDate).toBe('2026-09-12');
       expect(res.isShiftActive).toBe(true);
     });
 
-    it('anchors 8:00 PM PKT (shift start) to today instance', () => {
-      const res = resolveNightShiftAnchor('20:00:00', '2026-09-12');
+    it('anchors 9:00 PM PKT (shift start) to today instance', () => {
+      const res = resolveNightShiftAnchor('21:00:00', '2026-09-12');
       expect(res.anchoredWorkDate).toBe('2026-09-12');
       expect(res.isShiftActive).toBe(true);
     });
@@ -857,14 +857,14 @@ describe('Employee Operations System Full Behavioral Test Suite', () => {
       expect(res.isShiftActive).toBe(true);
     });
 
-    it('anchors 4:59 AM PKT to yesterday instance', () => {
-      const res = resolveNightShiftAnchor('04:59:00', '2026-09-13');
+    it('anchors 5:59 AM PKT to yesterday instance', () => {
+      const res = resolveNightShiftAnchor('05:59:00', '2026-09-13');
       expect(res.anchoredWorkDate).toBe('2026-09-12');
       expect(res.isShiftActive).toBe(true);
     });
 
-    it('anchors 5:00 AM PKT (shift end) to yesterday instance', () => {
-      const res = resolveNightShiftAnchor('05:00:00', '2026-09-13');
+    it('anchors 6:00 AM PKT (shift end) to yesterday instance', () => {
+      const res = resolveNightShiftAnchor('06:00:00', '2026-09-13');
       expect(res.anchoredWorkDate).toBe('2026-09-12');
       expect(res.isShiftActive).toBe(true);
     });
@@ -1254,10 +1254,10 @@ describe('Employee Operations System Full Behavioral Test Suite', () => {
 
   // 34. Release Gate: Overnight Shift Late Checkout & Strict Identity Gate
   describe('34. Release Gate: Overnight Shift Late Checkout & Strict Identity Gate', () => {
-    it('supports late checkout after scheduled shift end (e.g. 05:30 AM for 21:00-05:00 shift) without marking absence', () => {
+    it('supports late checkout after scheduled shift end (e.g. 06:30 AM for 21:00-06:00 shift) without marking absence', () => {
       const shiftStart = new Date('2026-09-12T21:00:00+05:00');
-      const shiftEnd = new Date('2026-09-13T05:00:00+05:00');
-      const actualCheckOut = new Date('2026-09-13T05:30:00+05:00');
+      const shiftEnd = new Date('2026-09-13T06:00:00+05:00');
+      const actualCheckOut = new Date('2026-09-13T06:30:00+05:00');
 
       // Late checkout after scheduled end is overtime/completed shift, not early checkout
       const isEarly = actualCheckOut.getTime() < shiftEnd.getTime();
@@ -1265,7 +1265,7 @@ describe('Employee Operations System Full Behavioral Test Suite', () => {
 
       // Duration worked: 8.5 hours
       const durationHours = (actualCheckOut.getTime() - shiftStart.getTime()) / (1000 * 60 * 60);
-      expect(durationHours).toBe(8.5);
+      expect(durationHours).toBe(9.5);
     });
 
     it('rejects check-out when caller is not authenticated via getUser()', async () => {

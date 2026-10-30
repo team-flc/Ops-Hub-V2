@@ -2,7 +2,7 @@
 -- MIGRATION: 20260913000003_employee_operations_final_verification_corrections.sql
 -- Description: 
 --   1. Server-authoritative current-shift attendance lookup RPC (fn_employee_get_current_attendance).
---   2. Overnight shift resolution (00:00 - 05:00 PKT anchored to yesterday's shift instance).
+--   2. Overnight shift resolution (00:00 - 06:00 PKT anchored to yesterday's shift instance).
 --   3. Multi-layer active-employee RLS enforcement across all employee tables:
 --      - Active internal profile (owner, operational_manager, team_member)
 --      - Explicit client-role denial
@@ -64,9 +64,9 @@ BEGIN
     v_pkt_now := timezone('Asia/Karachi', now());
     v_pkt_time := v_pkt_now::time;
 
-    -- Overnight shift resolution (e.g. 20:00 - 05:00)
+    -- Overnight shift resolution (e.g. 21:00 - 06:00)
     IF v_active_shift.crosses_midnight OR v_active_shift.end_time < v_active_shift.start_time THEN
-        -- If current PKT time is between midnight and shift end (e.g. 00:00 - 05:00), anchor to yesterday
+        -- If current PKT time is between midnight and shift end (e.g. 00:00 - 06:00), anchor to yesterday
         IF v_pkt_time <= v_active_shift.end_time THEN
             v_target_work_date := (v_pkt_now - interval '1 day')::date;
         ELSE

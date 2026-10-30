@@ -260,7 +260,7 @@ export function calculateDaysWithCompany(startDateStr: string, refDate: Date = n
 
 /**
  * Checks whether a shift crosses midnight.
- * e.g. Start 20:00, End 05:00 -> true
+ * e.g. Start 21:00, End 06:00 -> true
  */
 export function isOvernightShift(startTime: string, endTime: string): boolean {
   if (!startTime || !endTime) return false;

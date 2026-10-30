@@ -6,7 +6,7 @@
 --      - Use custom employee check-in/out times before standard shift times.
 --      - Do not fallback to arbitrary shift when unconfigured (return NULL / Setup Pending).
 --      - First return latest unclosed attendance record from current/recent overnight shift window,
---        allowing late checkout after 05:00 AM.
+--        allowing late checkout after 06:00 AM.
 --      - Local timestamp without time zone calendar calculations and now() for instants.
 --   2. company_work_schedules RLS:
 --      - Active internal employees have read-only access.
@@ -78,7 +78,7 @@ BEGIN
     v_crosses_midnight := COALESCE(v_active_shift.crosses_midnight, false) OR (v_end_time < v_start_time);
 
     -- Priority 1: Check for an unclosed attendance record from the current/recent shift window
-    -- (This allows an unclosed 8:00 PM - 5:00 AM attendance record to remain available at 5:01 AM+ for late checkout)
+    -- (This allows an unclosed 9:00 PM - 6:00 AM attendance record to remain available at 6:01 AM+ for late checkout)
     SELECT * INTO v_open_att FROM public.employee_attendance
     WHERE employee_id = v_user_id 
       AND check_in_time IS NOT NULL 

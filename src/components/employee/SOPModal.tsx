@@ -83,7 +83,7 @@ export const SOPModal: React.FC<SOPModalProps> = ({
                 <span>1. Shift Timings, Punctuality & Late Arrival Policy</span>
               </div>
               <p className="text-xs text-slate-600 dark:text-gray-400">
-                Standard shift timings are Morning Shift (11:00 AM – 8:00 PM PKT) and Night Shift (8:00 PM – 5:00 AM PKT). Employees must check in punctually at or before scheduled shift start time.
+                Standard shift timings are Morning Shift (11:00 AM – 8:00 PM PKT) and Night Shift (9:00 PM – 6:00 AM PKT). Employees must check in punctually at or before scheduled shift start time.
               </p>
               <div className="p-2.5 rounded-xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/50 text-amber-900 dark:text-amber-200 text-xs font-medium">
                 <strong>Strict Late Policy:</strong> There is no grace period. Any check-in even 1 minute past shift start time constitutes a Late arrival and incurs a flat penalty deduction of <strong>PKR 500</strong> per late day without monthly cap.

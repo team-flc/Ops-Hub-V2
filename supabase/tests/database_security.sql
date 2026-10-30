@@ -53,7 +53,7 @@ GRANT ALL ON ALL FUNCTIONS IN SCHEMA tests TO PUBLIC, authenticated, anon, servi
 INSERT INTO public.work_shifts (id, name, code, start_time, end_time, crosses_midnight)
 VALUES
   ('a1111111-1111-1111-1111-111111111111', 'Standard Day Shift', 'DAY', '11:00:00', '20:00:00', false),
-  ('a2222222-2222-2222-2222-222222222222', 'Overnight Shift', 'NIGHT', '20:00:00', '05:00:00', true)
+  ('a2222222-2222-2222-2222-222222222222', 'Overnight Shift', 'NIGHT', '21:00:00', '06:00:00', true)
 ON CONFLICT (id) DO NOTHING;
 
 -- Insert Work Schedules:
@@ -136,7 +136,7 @@ INSERT INTO public.employee_attendance (
     check_out_time = EXCLUDED.check_out_time,
     status = EXCLUDED.status;
 
--- Seed an unclosed night-shift attendance for Emp B (started yesterday at 20:00)
+-- Seed an unclosed night-shift attendance for Emp B (started yesterday at 21:00)
 INSERT INTO public.employee_attendance (
     id, employee_id, work_date, shift_id, scheduled_check_in, scheduled_check_out,
     check_in_time, check_out_time, status, check_in_screenshot_path
@@ -145,9 +145,9 @@ INSERT INTO public.employee_attendance (
     '33333333-3333-3333-3333-333333333333',
     (timezone('Asia/Karachi', now()) - interval '1 day')::date,
     'a2222222-2222-2222-2222-222222222222',
-    ((timezone('Asia/Karachi', now()) - interval '1 day')::date || ' 20:00:00')::timestamp AT TIME ZONE 'Asia/Karachi',
-    (timezone('Asia/Karachi', now())::date || ' 05:00:00')::timestamp AT TIME ZONE 'Asia/Karachi',
-    ((timezone('Asia/Karachi', now()) - interval '1 day')::date || ' 20:00:00')::timestamp AT TIME ZONE 'Asia/Karachi',
+    ((timezone('Asia/Karachi', now()) - interval '1 day')::date || ' 21:00:00')::timestamp AT TIME ZONE 'Asia/Karachi',
+    (timezone('Asia/Karachi', now())::date || ' 06:00:00')::timestamp AT TIME ZONE 'Asia/Karachi',
+    ((timezone('Asia/Karachi', now()) - interval '1 day')::date || ' 21:00:00')::timestamp AT TIME ZONE 'Asia/Karachi',
     NULL,
     'on_time',
     '33333333-3333-3333-3333-333333333333/checkin_night.jpg'
@@ -393,11 +393,11 @@ SELECT is(
 );
 
 -- 14. Overnight Shift Retrieval & Late Checkout after 5:00 AM
-SELECT tests.authenticate_as('33333333-3333-3333-3333-333333333333'); -- Emp B (Night Shift 20:00 - 05:00)
+SELECT tests.authenticate_as('33333333-3333-3333-3333-333333333333'); -- Emp B (Night Shift 21:00 - 06:00)
 SELECT is(
     (public.fn_employee_get_current_attendance() ->> 'id'),
     '88888888-8888-8888-8888-888888888888',
-    '40. Correct unclosed night shift attendance ID is returned for late checkout after 05:00 AM'
+    '40. Correct unclosed night shift attendance ID is returned for late checkout after 06:00 AM'
 );
 
 -- 15. Repeated Automation Cycle Row Count Comparison & Idempotency

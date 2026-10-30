@@ -127,9 +127,9 @@ BEGIN
         SELECT * INTO v_active_shift FROM public.work_shifts ORDER BY created_at LIMIT 1;
     END IF;
 
-    -- Night Shift & Midnight Crossing Resolution (e.g. 20:00 - 05:00)
+    -- Night Shift & Midnight Crossing Resolution (e.g. 21:00 - 06:00)
     IF v_active_shift.crosses_midnight OR v_active_shift.end_time < v_active_shift.start_time THEN
-        -- If current PKT time is between midnight and shift end (e.g. 00:00 - 05:00), anchor to yesterday
+        -- If current PKT time is between midnight and shift end (e.g. 00:00 - 06:00), anchor to yesterday
         IF v_pkt_time <= v_active_shift.end_time THEN
             v_work_date := (v_pkt_now - interval '1 day')::date;
             v_sched_start := (v_work_date || ' ' || COALESCE(v_emp_record.custom_check_in_time, v_active_shift.start_time))::timestamp AT TIME ZONE 'Asia/Karachi';
@@ -390,7 +390,7 @@ BEGIN
     LOOP
         -- Determine anchored work date and shift window
         IF v_rec.crosses_midnight THEN
-            -- Night Shift (e.g. 20:00 - 05:00)
+            -- Night Shift (e.g. 21:00 - 06:00)
             IF v_pkt_time <= v_rec.end_time THEN
                 -- Midnight to Shift End: Anchored to yesterday
                 v_target_work_date := (v_pkt_now - interval '1 day')::date;

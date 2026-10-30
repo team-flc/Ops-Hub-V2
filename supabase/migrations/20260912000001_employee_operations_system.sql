@@ -33,11 +33,11 @@ CREATE TABLE IF NOT EXISTS public.work_shifts (
     CONSTRAINT chk_work_shifts_name CHECK (length(trim(name)) > 0)
 );
 
--- Seed Default Company Shifts (Morning: 11:00 AM - 8:00 PM, Night: 8:00 PM - 5:00 AM PKT)
+-- Seed Default Company Shifts (Morning: 11:00 AM - 8:00 PM, Night: 9:00 PM - 6:00 AM PKT)
 INSERT INTO public.work_shifts (name, code, start_time, end_time, crosses_midnight, timezone)
 VALUES 
     ('Morning Shift', 'morning', '11:00:00', '20:00:00', false, 'Asia/Karachi'),
-    ('Night Shift', 'night', '20:00:00', '05:00:00', true, 'Asia/Karachi')
+    ('Night Shift', 'night', '21:00:00', '06:00:00', true, 'Asia/Karachi')
 ON CONFLICT (code) DO UPDATE 
 SET start_time = EXCLUDED.start_time,
     end_time = EXCLUDED.end_time,
