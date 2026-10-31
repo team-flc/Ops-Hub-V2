@@ -225,7 +225,7 @@ export const DashboardView: React.FC = () => {
             </div>
           </div>
           <div className="text-3xl font-black text-gray-900 dark:text-gray-100">
-            {dueTodayTasks}
+            {isLoading ? <div className="h-9 w-16 bg-gray-200 dark:bg-dark-100 rounded-lg animate-pulse" /> : dueTodayTasks}
           </div>
           <div className="text-xs text-gray-500">
             <span>Target resolution date today</span>
@@ -243,7 +243,7 @@ export const DashboardView: React.FC = () => {
             </div>
           </div>
           <div className="text-3xl font-black text-blue-600 dark:text-blue-400">
-            {inProgressTasks}
+            {isLoading ? <div className="h-9 w-16 bg-blue-100 dark:bg-dark-100 rounded-lg animate-pulse" /> : inProgressTasks}
           </div>
           <div className="text-xs text-gray-500">
             <span>Actively being worked on</span>
@@ -261,7 +261,7 @@ export const DashboardView: React.FC = () => {
             </div>
           </div>
           <div className="text-3xl font-black text-purple-600 dark:text-purple-400">
-            {awaitingApprovalTasks}
+            {isLoading ? <div className="h-9 w-16 bg-purple-100 dark:bg-dark-100 rounded-lg animate-pulse" /> : awaitingApprovalTasks}
           </div>
           <div className="text-xs text-gray-500">
             <span>Submitted for management review</span>
@@ -279,7 +279,7 @@ export const DashboardView: React.FC = () => {
             </div>
           </div>
           <div className={`text-3xl font-black ${overdueTasks > 0 ? 'text-rose-600 dark:text-rose-400' : 'text-emerald-600 dark:text-emerald-400'}`}>
-            {overdueTasks > 0 ? overdueTasks : `${healthScore}%`}
+            {isLoading ? <div className="h-9 w-16 bg-gray-200 dark:bg-dark-100 rounded-lg animate-pulse" /> : (overdueTasks > 0 ? overdueTasks : `${healthScore}%`)}
           </div>
           <div className="text-xs text-gray-500">
             <span>{overdueTasks > 0 ? 'Passed target deadline' : 'Optimal operational efficiency'}</span>
@@ -297,6 +297,7 @@ export const DashboardView: React.FC = () => {
           currentUserProfile={profile}
           onRefreshData={loadDashboardData}
           onOpenCreateTaskModal={() => setIsCreateTaskModalOpen(true)}
+          isLoading={isLoading}
         />
       )}
 
@@ -336,7 +337,7 @@ export const DashboardView: React.FC = () => {
       {/* 5. Reporting & Progress Analytics Visualizations */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         <TaskCompletionTrendChart tasks={tasks} />
-        <ApprovalTurnaroundChart tasks={tasks} />
+        <ApprovalTurnaroundChart tasks={tasks} isLoading={isLoading} />
       </div>
 
       <ClientWorkloadDistributionChart tasks={tasks} clients={clients} />

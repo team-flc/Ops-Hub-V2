@@ -4,9 +4,10 @@ import { ClientTask, isTaskAwaitingApproval } from '../../types';
 
 interface ApprovalTurnaroundChartProps {
   tasks: ClientTask[];
+  isLoading?: boolean;
 }
 
-export const ApprovalTurnaroundChart: React.FC<ApprovalTurnaroundChartProps> = ({ tasks }) => {
+export const ApprovalTurnaroundChart: React.FC<ApprovalTurnaroundChartProps> = ({ tasks, isLoading = false }) => {
   const approvalTasks = tasks.filter((t) => Boolean(t.approvalMode));
   const completedApprovals = approvalTasks.filter((t) => t.status === 'Completed');
   const pendingApprovals = tasks.filter((t) => isTaskAwaitingApproval(t.status));
@@ -44,7 +45,7 @@ export const ApprovalTurnaroundChart: React.FC<ApprovalTurnaroundChartProps> = (
             <CheckCircle2 className="w-4 h-4 text-purple-500" />
           </div>
           <div className="text-2xl font-black text-purple-700 dark:text-purple-300">
-            {firstPassRate}%
+            {isLoading ? <div className="h-7 w-12 bg-purple-200/50 dark:bg-purple-900/40 rounded animate-pulse" /> : `${firstPassRate}%`}
           </div>
           <span className="text-[10px] text-purple-500/80">Approved without revisions</span>
         </div>
@@ -58,7 +59,7 @@ export const ApprovalTurnaroundChart: React.FC<ApprovalTurnaroundChartProps> = (
             <Clock className="w-4 h-4 text-blue-500" />
           </div>
           <div className="text-2xl font-black text-blue-700 dark:text-blue-300">
-            {pendingApprovals.length}
+            {isLoading ? <div className="h-7 w-12 bg-blue-200/50 dark:bg-blue-900/40 rounded animate-pulse" /> : pendingApprovals.length}
           </div>
           <span className="text-[10px] text-blue-500/80">Awaiting management sign-off</span>
         </div>
@@ -72,7 +73,7 @@ export const ApprovalTurnaroundChart: React.FC<ApprovalTurnaroundChartProps> = (
             <RotateCcw className="w-4 h-4 text-amber-500" />
           </div>
           <div className="text-2xl font-black text-amber-700 dark:text-amber-300">
-            {reopenedTasks.length}
+            {isLoading ? <div className="h-7 w-12 bg-amber-200/50 dark:bg-amber-900/40 rounded animate-pulse" /> : reopenedTasks.length}
           </div>
           <span className="text-[10px] text-amber-500/80">Returned for feedback/edits</span>
         </div>

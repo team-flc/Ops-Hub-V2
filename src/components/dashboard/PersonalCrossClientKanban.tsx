@@ -9,6 +9,7 @@ import { ClientTask, ClientTaskStatus, UserProfile, ClientRecord, AWAITING_APPRO
 import { taskManagementService } from '../../lib/taskManagementService';
 import { useSignedUrl } from '../../lib/storageService';
 import { isTaskDueToday } from '../../lib/pktDateUtils';
+import { formatDate } from '../../utils/helpers';
 
 interface PersonalCrossClientKanbanProps {
   tasks: ClientTask[];
@@ -309,7 +310,7 @@ export const PersonalKanbanCard: React.FC<PersonalKanbanCardProps> = ({
             }`}
           >
             {task.isOverdue && task.status !== 'Completed' && <AlertTriangle className="w-2.5 h-2.5" />}
-            {task.dueDate}
+            {formatDate(task.dueDate)}
           </span>
         )}
       </div>
@@ -365,10 +366,10 @@ export const PersonalKanbanCard: React.FC<PersonalKanbanCardProps> = ({
                 }}
                 data-testid={`start-work-btn-${task.id}`}
                 className="flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-500 text-white font-bold text-[10px] hover:bg-emerald-600 transition-colors shadow-xs cursor-pointer"
-                title={isPending ? 'Start Work & Timer' : 'Resume Timer'}
+                title={isInProgress ? 'Resume Timer' : 'Start Work & Timer'}
               >
                 <Play className="w-2.5 h-2.5 fill-current" />
-                <span>{isPending ? 'Start' : (task.timeSpentSeconds ? 'Resume' : 'Start')}</span>
+                <span>{isInProgress ? 'Resume' : 'Start'}</span>
               </button>
             )}
 

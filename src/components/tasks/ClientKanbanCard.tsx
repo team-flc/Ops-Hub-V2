@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { ClientTask, ClientTaskStatus, UserProfile } from '../../types';
 import { useSignedUrl } from '../../lib/storageService';
+import { sanitizeClientTaskDetails } from '../../utils/helpers';
 
 interface ClientKanbanCardProps {
   task: ClientTask;
@@ -19,6 +20,7 @@ interface ClientKanbanCardProps {
   onRequestApproval: (task: ClientTask) => void;
   onRequestFeedback: (task: ClientTask) => void;
   isDragging?: boolean;
+  isArchived?: boolean;
 }
 
 const AssigneeAvatar: React.FC<{ avatarPath?: string | null; name?: string | null }> = ({ avatarPath, name }) => {
@@ -77,14 +79,15 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
   onResumeTimer,
   onRequestApproval,
   onRequestFeedback,
-  isDragging
+  isDragging,
+  isArchived = false
 }) => {
   const isPreview = typeof window !== 'undefined' && window.location.search.includes('preview=true');
   const isClient = currentUserProfile?.role === 'client' || isClientView || isPreview;
   const isOwnerOrManager =
     !isClient && (currentUserProfile?.role === 'owner' || currentUserProfile?.role === 'operational_manager');
   const isAssignedMember = task.assigneeId === currentUserProfile?.id;
-  const canActOnTask = (isAssignedMember || isOwnerOrManager) && !isClient;
+  const canActOnTask = (isAssignedMember || isOwnerOrManager) && !isClient && !isArchived;
   const isTimerRunning = Boolean(task.timerStartedAt);
 
   // Live seconds ticker when timer is running
@@ -157,12 +160,13 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
 
   return (
     <div
-      draggable={!isClient}
+      draggable={!isClient && !isArchived}
       onDragStart={handleDragStart}
       onClick={() => onSelectTask(task)}
       data-testid={`kanban-card-${task.id}`}
       className={`group relative bg-white dark:bg-dark-card border border-gray-200 dark:border-dark-border rounded-xl p-3.5 shadow-xs hover:shadow-md hover:border-brand-500/50 transition-all cursor-pointer flex flex-col justify-between gap-2.5 select-none ${
-        isDragging ? 'opacity-40 scale-95 border-dashed border-brand-500' : ''
+        isDragging ?
+          'opacity-40 scale-95 border-dashed border-brand-500' : ''
       }`}
     >
       {/* Top Meta: Department & Priority Badges */}
@@ -182,7 +186,7 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
               Overdue
             </span>
           )}
-          {!isClient && (
+          {!isClient && !isArchived && (
             <button
               type="button"
               onClick={(e) => {
@@ -205,7 +209,7 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
         </h4>
         {task.details && (
           <p className="text-[11px] text-gray-400 dark:text-gray-400 mt-1 line-clamp-2 break-words">
-            {task.details}
+            {isClient ? sanitizeClientTaskDetails(task.details) : task.details}
           </p>
         )}
       </div>
@@ -228,7 +232,7 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
             <CheckCircle2 className="w-3.5 h-3.5" />
             <span>Work Completed</span>
           </div>
-          {(task.timeSpentSeconds || 0) > 0 && (
+          {!isClient && (task.timeSpentSeconds || 0) > 0 && (
             <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
               Completed in: {formatCompact(task.timeSpentSeconds || 0)}
               {pausedSecs > 0 && (
@@ -242,7 +246,7 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
       )}
 
       {/* Timer Meta Bar (In Progress) */}
-      {(isInProgress || isPending) && (
+      {!isClient && (isInProgress || isPending) && (
         <div className="flex items-center gap-1.5 text-[10px] pt-0.5">
           <span
             className={`px-2 py-0.5 rounded-md font-mono font-bold flex items-center gap-1 ${

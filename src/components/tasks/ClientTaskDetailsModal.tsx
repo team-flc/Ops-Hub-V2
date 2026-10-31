@@ -16,6 +16,7 @@ import { useTaskFeed } from './useTaskFeed';
 import { TaskConversationFeed } from './TaskConversationFeed';
 import { TaskMessageComposer } from './TaskMessageComposer';
 import { TaskReviewActions } from './TaskReviewActions';
+import { sanitizeClientTaskDetails } from '../../utils/helpers';
 
 interface ClientTaskDetailsModalProps {
   isOpen: boolean;
@@ -462,7 +463,7 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
                 Task Instructions & SOP Deliverables
               </span>
               <div className="p-3.5 rounded-xl bg-gray-50/60 dark:bg-dark-100/50 border border-gray-200 dark:border-dark-border text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
-                {task.details}
+                {isClient ? sanitizeClientTaskDetails(task.details) : task.details}
               </div>
             </div>
           )}

@@ -77,6 +77,7 @@ export const SelectedClientHeader: React.FC<SelectedClientHeaderProps> = ({
   const [dateError, setDateError] = useState<string | null>(null);
 
   const isManagerOrOwner = role === 'owner' || role === 'operational_manager';
+  const isArchived = client.status === 'Archived';
   const popoverRef = useRef<HTMLDivElement>(null);
 
   const onboardingInfo = useDaysSinceOnboarding(client.activationDate);
@@ -185,7 +186,7 @@ export const SelectedClientHeader: React.FC<SelectedClientHeaderProps> = ({
           >
             <Calendar className="w-3.5 h-3.5 text-brand-500 flex-shrink-0" />
             <span>{onboardingInfo.formattedBadge}</span>
-            {isManagerOrOwner && !isEffectiveClientView && (
+            {isManagerOrOwner && !isEffectiveClientView && !isArchived && (
               <button
                 type="button"
                 data-testid="edit-start-date-btn"
@@ -225,8 +226,16 @@ export const SelectedClientHeader: React.FC<SelectedClientHeaderProps> = ({
 
       {/* Right Area: LinkedIn Readiness Tracker Popover & Quick Links */}
       <div className="flex items-center gap-2.5 flex-wrap">
+        {/* Archived Workspace (Read-Only) Indicator */}
+        {isArchived && (
+          <div className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-gray-100 dark:bg-dark-100 border border-gray-300 dark:border-dark-border text-xs font-bold text-gray-600 dark:text-gray-300">
+            <Archive className="w-3.5 h-3.5 text-gray-500" />
+            <span>Archived Workspace (Read-Only)</span>
+          </div>
+        )}
+
         {/* Owner & Manager Portal Entry Points (Hidden in Client View / Preview) */}
-        {isManagerOrOwner && !isEffectiveClientView && (
+        {isManagerOrOwner && !isEffectiveClientView && !isArchived && (
           <>
             {/* Client Link Sharing Modal Trigger */}
             <button

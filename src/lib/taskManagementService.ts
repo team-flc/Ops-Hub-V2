@@ -962,11 +962,47 @@ export const taskManagementService = {
           .select('status')
           .eq('id', params.clientId)
           .single();
-        if (clientRec && clientRec.status === 'Paused') {
-          return { data: null, error: 'Cannot create tasks for a paused client.' };
+        if (clientRec && (clientRec.status === 'Paused' || clientRec.status === 'Archived')) {
+          return { data: null, error: clientRec.status === 'Archived' ? 'Cannot create tasks in an archived workspace.' : 'Cannot create tasks for a paused client.' };
         }
       } catch {
         // Continue if unable to query
+      }
+    }
+
+    // Verify user role & designation permissions (interns and unauthorized members blocked)
+    if (supabase) {
+      try {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user?.id) {
+          const { data: prof } = await supabase
+            .from('profiles')
+            .select('role, designation_name')
+            .eq('id', session.user.id)
+            .single();
+          if (prof) {
+            const des = (prof.designation_name || '').toLowerCase().trim();
+            if (des.includes('intern')) {
+              return { data: null, error: 'Unauthorized: Interns cannot create tasks.' };
+            }
+            const isAllowed =
+              prof.role === 'owner' ||
+              prof.role === 'operational_manager' ||
+              des.includes('team lead') ||
+              des.includes('lead') ||
+              des.includes('team manager') ||
+              des.includes('manager') ||
+              des.includes('founder') ||
+              des.includes('owner') ||
+              des.includes('cfo') ||
+              des.includes('chief financial officer');
+            if (!isAllowed) {
+              return { data: null, error: 'Unauthorized: Only Team Lead, Team Manager, Owner, or CFO can create tasks.' };
+            }
+          }
+        }
+      } catch {
+        // Continue if profile query fails
       }
     }
 
@@ -1125,6 +1161,17 @@ export const taskManagementService = {
 
     if (edgeRes.error) {
       return { error: edgeRes.error };
+    }
+
+    if (supabase && ['Completed', 'Done', 'Approval', 'Team Review', 'Client Review'].includes(status)) {
+      try {
+        await supabase
+          .from('client_tasks')
+          .update({ timer_started_at: null, updated_at: new Date().toISOString() })
+          .eq('id', taskId);
+      } catch {
+        // Non-blocking timer clear
+      }
     }
 
     return { error: null, task: edgeRes.data?.task };
@@ -1351,7 +1398,7 @@ export const taskManagementService = {
       };
 
       // If moving to Approval, automatically stop timer
-      if (targetStatus === 'Approval' || targetStatus === 'Team Review') {
+      if (targetStatus === 'Approval' || targetStatus === 'Team Review' || targetStatus === 'Client Review') {
         let totalSeconds = options?.timeSpentSeconds || 0;
         if (options?.timerStartedAt) {
           const startMs = new Date(options.timerStartedAt).getTime();
@@ -1372,6 +1419,13 @@ export const taskManagementService = {
       // If moving to Done
       if (targetStatus === 'Done' || targetStatus === 'Completed') {
         updates.completed_at = nowIso;
+        if (options?.timerStartedAt) {
+          const startMs = new Date(options.timerStartedAt).getTime();
+          if (!isNaN(startMs)) {
+            const extra = Math.max(0, Math.floor((Date.now() - startMs) / 1000));
+            updates.time_spent_seconds = (options?.timeSpentSeconds || 0) + extra;
+          }
+        }
         updates.timer_started_at = null;
       }
 

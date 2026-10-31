@@ -81,6 +81,24 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return { profile: null, error: status === 'suspended' ? 'Your account has been suspended.' : 'Your account is currently inactive.' };
       }
 
+      let designationName: string | undefined = undefined;
+      if (data.designation_id) {
+        try {
+          const { data: desData } = await supabase
+            .from('designations')
+            .select('name')
+            .eq('id', data.designation_id)
+            .maybeSingle();
+          if (desData?.name) {
+            designationName = desData.name;
+          }
+        } catch (e) {
+          console.warn('Could not fetch designation name:', e);
+        }
+      } else if (role === 'owner') {
+        designationName = 'Owner & Founder';
+      }
+
       const userProf: UserProfile = {
         id: data.id,
         email: userEmail || data.work_email,
@@ -97,6 +115,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         role,
         status,
         designationId: data.designation_id,
+        designationName,
         reportingManagerId: data.reporting_manager_id,
         startDate: data.start_date,
         suspendedAt: data.suspended_at,
@@ -162,7 +181,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       const recKey = `flc_2fa_rec_verified_${checkUser.id}`;
-      if (typeof sessionStorage !== 'undefined' && sessionStorage.getItem(recKey) === 'true') {
+      const recInLocal = typeof localStorage !== 'undefined' && localStorage.getItem(recKey) === 'true';
+      const recInSession = typeof sessionStorage !== 'undefined' && sessionStorage.getItem(recKey) === 'true';
+      if (recInLocal || recInSession) {
         return true; // Verified with single-use recovery code this session
       }
 
@@ -198,8 +219,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
         const completed2FA = await is2FAComplete(verifiedUser);
         if (!completed2FA) {
-          // If page was reloaded before completing 2FA, sign out to prevent bypass
-          await supabase.auth.signOut();
+          // Unverified tab does not broadcast signOut to other tabs
           if (mounted) {
             setUser(null);
             setSession(null);
@@ -358,8 +378,9 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         return { error: 'Session expired. Please sign in again.' };
       }
 
-      if (isRecoveryCode && typeof sessionStorage !== 'undefined') {
-        sessionStorage.setItem(`flc_2fa_rec_verified_${currentUser.id}`, 'true');
+      if (isRecoveryCode) {
+        if (typeof localStorage !== 'undefined') localStorage.setItem(`flc_2fa_rec_verified_${currentUser.id}`, 'true');
+        if (typeof sessionStorage !== 'undefined') sessionStorage.setItem(`flc_2fa_rec_verified_${currentUser.id}`, 'true');
       }
 
       const { profile: prof, error: profErr } = await fetchProfile(currentUser.id, currentUser.email);
@@ -412,12 +433,28 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
 
     try {
       const redirectTo = `${window.location.origin}/update-password`;
-      const { error } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
+      const { error: directError } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
         redirectTo
       });
 
-      if (error) {
-        console.warn('Reset password error (masked):', error.message);
+      try {
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('work_email, contact_email')
+          .or(`contact_email.ilike.${cleanEmail},work_email.ilike.${cleanEmail}`)
+          .limit(1)
+          .maybeSingle();
+
+        const altEmail = prof?.work_email?.toLowerCase().trim();
+        if (altEmail && altEmail !== cleanEmail) {
+          await supabase.auth.resetPasswordForEmail(altEmail, { redirectTo });
+        }
+      } catch {
+        // Fallback
+      }
+
+      if (directError) {
+        console.warn('Reset password error (masked):', directError.message);
       }
       return {};
     } catch {

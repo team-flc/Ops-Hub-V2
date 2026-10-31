@@ -255,6 +255,7 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
       default:
         return selectedClient ? (
           <ClientWorkspaceView
+            key={selectedClient.id}
             client={selectedClient}
             currentUserProfile={profile}
             eligibleManagers={eligibleManagers}

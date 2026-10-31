@@ -17,6 +17,7 @@ interface RoleOwnerDashboardProps {
   currentUserProfile: UserProfile | null;
   onRefreshData: () => void;
   onOpenCreateTaskModal?: () => void;
+  isLoading?: boolean;
 }
 
 const MemberAvatar: React.FC<{ avatarPath?: string | null; name?: string | null }> = ({ avatarPath, name }) => {
@@ -48,7 +49,8 @@ export const RoleOwnerDashboard: React.FC<RoleOwnerDashboardProps> = ({
   dailyReports,
   currentUserProfile,
   onRefreshData,
-  onOpenCreateTaskModal
+  onOpenCreateTaskModal,
+  isLoading = false
 }) => {
   const navigate = useSafeNavigate();
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
@@ -109,11 +111,16 @@ export const RoleOwnerDashboard: React.FC<RoleOwnerDashboardProps> = ({
               </div>
             </div>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
-              {pendingApprovals.length} Pending
+              {isLoading ? <span className="inline-block h-3.5 w-14 bg-purple-200/50 dark:bg-purple-800/40 rounded animate-pulse" /> : `${pendingApprovals.length} Pending`}
             </span>
           </div>
 
-          {pendingApprovals.length === 0 ? (
+          {isLoading ? (
+            <div className="py-6 space-y-3">
+              <div className="h-12 bg-gray-100 dark:bg-dark-200 rounded-xl animate-pulse" />
+              <div className="h-12 bg-gray-100 dark:bg-dark-200 rounded-xl animate-pulse" />
+            </div>
+          ) : pendingApprovals.length === 0 ? (
             <div className="py-8 text-center text-gray-400 text-xs italic">
               All client deliverables are up to date. Zero pending approvals.
             </div>

@@ -20,7 +20,7 @@ file_size_limit = "50MiB"
 [auth]
 enabled = true
 site_url = "http://127.0.0.1:3000"
-additional_redirect_urls = ["https://127.0.0.1:3000"]
+additional_redirect_urls = ["https://127.0.0.1:3000", "http://localhost:4173/**", "http://localhost:5173/**", "http://localhost:3000/**", "https://ops.faseehlall.com/**"]
 jwt_expiry = 3600
 enable_signup = true
 

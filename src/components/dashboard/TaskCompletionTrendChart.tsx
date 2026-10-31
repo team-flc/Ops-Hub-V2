@@ -11,10 +11,11 @@ export const TaskCompletionTrendChart: React.FC<TaskCompletionTrendChartProps> =
 
   // Compute Weekly metrics (Weeks 1 to 4)
   const weekData = [1, 2, 3, 4].map((w) => {
-    const weekTasks = tasks.filter((t) => t.weekNumber === w);
+    const weekTasks = w === 1 ? tasks : tasks.filter((t) => t.weekNumber === w);
     const completed = weekTasks.filter((t) => t.status === 'Completed').length;
-    const inProgress = weekTasks.filter((t) => t.status === 'In Progress' || t.status === 'Team Review' || t.status === 'Client Review').length;
-    const pending = weekTasks.filter((t) => t.status === 'Assigned' || t.status === 'Draft' || t.status === 'Blocked').length;
+    const inProgress = weekTasks.filter((t) => t.status === 'In Progress').length;
+    const approval = weekTasks.filter((t) => t.status === 'Team Review').length;
+    const pending = weekTasks.length - completed - inProgress - approval;
     const total = weekTasks.length;
     const rate = total > 0 ? Math.round((completed / total) * 100) : 0;
     return {
@@ -30,8 +31,9 @@ export const TaskCompletionTrendChart: React.FC<TaskCompletionTrendChartProps> =
   // Compute Monthly Status Breakdown
   const totalTasks = tasks.length;
   const totalCompleted = tasks.filter((t) => t.status === 'Completed').length;
-  const totalInProgress = tasks.filter((t) => ['In Progress', 'Team Review', 'Client Review'].includes(t.status)).length;
-  const totalPending = tasks.filter((t) => ['Assigned', 'Draft', 'Blocked'].includes(t.status)).length;
+  const totalInProgress = tasks.filter((t) => t.status === 'In Progress').length;
+  const totalApproval = tasks.filter((t) => t.status === 'Team Review').length;
+  const totalPending = totalTasks - totalCompleted - totalInProgress - totalApproval;
   const overallRate = totalTasks > 0 ? Math.round((totalCompleted / totalTasks) * 100) : 0;
 
   const maxTotal = Math.max(1, ...weekData.map((d) => d.total));
@@ -130,6 +132,10 @@ export const TaskCompletionTrendChart: React.FC<TaskCompletionTrendChartProps> =
                     <div className="flex justify-between text-blue-500">
                       <span>In Flight</span>
                       <span>{d.inProgress}</span>
+                    </div>
+                    <div className="flex justify-between text-slate-500">
+                      <span>Pending</span>
+                      <span>{d.pending}</span>
                     </div>
                   </div>
                 </div>

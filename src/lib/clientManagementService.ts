@@ -643,6 +643,36 @@ export const clientManagementService = {
     if (!input.operationalManagerId) return { error: 'Operational Manager is required.' };
     if (!input.activationDate) return { error: 'Activation Date is required.' };
 
+    try {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (session?.user?.id) {
+        const { data: prof } = await supabase
+          .from('profiles')
+          .select('role, designation_name')
+          .eq('id', session.user.id)
+          .single();
+        if (prof) {
+          const des = (prof.designation_name || '').toLowerCase().trim();
+          if (des.includes('intern')) {
+            return { error: 'Unauthorized: Interns cannot register clients.' };
+          }
+          const isAllowed =
+            prof.role === 'owner' ||
+            prof.role === 'operational_manager' ||
+            des.includes('team lead') ||
+            des.includes('lead') ||
+            des.includes('manager') ||
+            des.includes('founder') ||
+            des.includes('owner');
+          if (!isAllowed) {
+            return { error: 'Unauthorized: Only Owner, Manager, or Team Lead can register clients.' };
+          }
+        }
+      }
+    } catch {
+      // Continue if session query fails
+    }
+
     const reqLinkedInCount = Math.max(1, input.requiredLinkedinProfileCount || 3);
 
     // Validate LinkedIn profile rows if provided

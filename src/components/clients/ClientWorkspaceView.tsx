@@ -42,6 +42,22 @@ interface ClientWorkspaceViewProps {
 type MainTab = 'setup' | 'workplans' | 'details';
 type WeekTab = 'week1' | 'week2' | 'week3' | 'week4';
 
+const isInternalTask = (task: ClientTask): boolean => {
+  const t = (task.title || '').toLowerCase();
+  const d = (task.details || '').toLowerCase();
+  const full = `${t} ${d}`;
+  if (full.includes('pkr') || full.includes('invoice') || full.includes('sales navigator')) {
+    return true;
+  }
+  if (t.includes('zain se') || t.includes('login/hosting') || t.includes('approve karo') || t.includes('asset bank ke baad')) {
+    return true;
+  }
+  if (full.includes('internal')) {
+    return true;
+  }
+  return false;
+};
+
 export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
   client,
   currentUserProfile,
@@ -63,6 +79,12 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
   // Phase 3A Tasks State
   const [allTasks, setAllTasks] = useState<ClientTask[]>([]);
   const [isLoadingTasks, setIsLoadingTasks] = useState(false);
+
+  // Immediately reset week and tasks when selected client changes
+  useEffect(() => {
+    setActiveWeek('week1');
+    setAllTasks([]);
+  }, [client.id]);
 
   // Departments & Eligible Assignees
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -117,6 +139,25 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
 
   const isOwnerOrManager = currentUserProfile?.role === 'owner' || currentUserProfile?.role === 'operational_manager';
 
+  const canAddTask = useMemo(() => {
+    if (!currentUserProfile) return false;
+    if (isEffectiveClientView || currentUserProfile.role === 'client') return false;
+    if (client.status === 'Archived' || client.status === 'Paused') return false;
+    const des = (currentUserProfile.designationName || '').toLowerCase().trim();
+    if (des.includes('intern')) return false;
+    if (currentUserProfile.role === 'owner' || currentUserProfile.role === 'operational_manager') return true;
+    return (
+      des.includes('team lead') ||
+      des.includes('lead') ||
+      des.includes('team manager') ||
+      des.includes('manager') ||
+      des.includes('founder') ||
+      des.includes('owner') ||
+      des.includes('cfo') ||
+      des.includes('chief financial officer')
+    );
+  }, [currentUserProfile, isEffectiveClientView, client.status]);
+
   // Load Departments & Eligible Assignees & Week Names on mount
   useEffect(() => {
     let isMounted = true;
@@ -164,14 +205,19 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
     loadTasks();
   }, [loadTasks]);
 
+  const visibleTasks = useMemo(() => {
+    if (!isEffectiveClientView) return allTasks;
+    return allTasks.filter((t) => !isInternalTask(t));
+  }, [allTasks, isEffectiveClientView]);
+
   const tasksByWeek: Record<1 | 2 | 3 | 4, ClientTask[]> = useMemo(() => {
     return {
-      1: allTasks.filter((t) => t.weekNumber === 1),
-      2: allTasks.filter((t) => t.weekNumber === 2),
-      3: allTasks.filter((t) => t.weekNumber === 3),
-      4: allTasks.filter((t) => t.weekNumber === 4)
+      1: visibleTasks.filter((t) => t.weekNumber === 1),
+      2: visibleTasks.filter((t) => t.weekNumber === 2),
+      3: visibleTasks.filter((t) => t.weekNumber === 3),
+      4: visibleTasks.filter((t) => t.weekNumber === 4)
     };
-  }, [allTasks]);
+  }, [visibleTasks]);
 
   const currentWeekTasks = useMemo(() => {
     return tasksByWeek[currentWeekNum] || [];
@@ -469,7 +515,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                   {isLoadingTasks && <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-500" />}
                 </div>
 
-                {!isEffectiveClientView && currentUserProfile?.role !== 'client' && (
+                {canAddTask && (
                   client.status === 'Paused' ? (
                     <span 
                       className="px-3.5 py-2 min-h-[44px] rounded-xl bg-gray-100 dark:bg-dark-200 border border-gray-300 dark:border-dark-border text-gray-500 dark:text-gray-400 text-xs font-bold flex items-center gap-1.5 opacity-80 cursor-not-allowed"
@@ -538,7 +584,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
         )}
 
         {/* TAB 3: CLIENT DETAILS */}
-        {activeTab === 'details' && (
+        {activeTab === 'details' && !isEffectiveClientView && (
           <ClientDetailsTab
             client={client}
             currentUserProfile={currentUserProfile}

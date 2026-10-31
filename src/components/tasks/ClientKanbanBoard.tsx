@@ -125,6 +125,10 @@ export const ClientKanbanBoard: React.FC<ClientKanbanBoardProps> = ({
     e.preventDefault();
     setDragOverColumn(null);
 
+    if (client.status === 'Archived') {
+      onShowToast('This workspace is archived and read-only.');
+      return;
+    }
     const rawData = e.dataTransfer.getData('text/plain');
     if (!rawData) return;
 
@@ -254,6 +258,7 @@ export const ClientKanbanBoard: React.FC<ClientKanbanBoardProps> = ({
                       onResumeTimer={onResumeTimer}
                       onRequestApproval={(t) => setApprovalModalTask(t)}
                       onRequestFeedback={(t) => setFeedbackModalTask(t)}
+                      isArchived={client.status === 'Archived'}
                     />
                   ))
                 ) : (

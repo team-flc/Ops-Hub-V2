@@ -19,7 +19,8 @@ export const ClientWorkloadDistributionChart: React.FC<ClientWorkloadDistributio
   clients
 }) => {
   // Aggregate tasks & hours per client
-  const clientMetrics = clients.map((c) => {
+  const activeClients = clients.filter((c) => c.status !== 'Archived');
+  const clientMetrics = activeClients.map((c) => {
     const clientTasks = tasks.filter((t) => t.clientId === c.id);
     const completedTasks = clientTasks.filter((t) => t.status === 'Completed').length;
     const inProgressTasks = clientTasks.filter((t) => ['In Progress', 'Team Review', 'Client Review'].includes(t.status)).length;
@@ -38,7 +39,7 @@ export const ClientWorkloadDistributionChart: React.FC<ClientWorkloadDistributio
       totalMinutes,
       completionRate: clientTasks.length > 0 ? Math.round((completedTasks / clientTasks.length) * 100) : 0
     };
-  }).filter((c) => c.totalTasks > 0 || c.status === 'Active');
+  });
 
   const maxTasks = Math.max(1, ...clientMetrics.map((c) => c.totalTasks));
 

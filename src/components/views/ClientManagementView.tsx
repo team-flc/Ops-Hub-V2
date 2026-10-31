@@ -91,6 +91,14 @@ export const ClientManagementView: React.FC = () => {
   const [isArchiving, setIsArchiving] = useState(false);
   const [archiveError, setArchiveError] = useState<string | null>(null);
 
+  const canAddClient = useMemo(() => {
+    if (!currentUserProfile) return false;
+    if (currentUserProfile.role === 'owner' || currentUserProfile.role === 'operational_manager') return true;
+    const des = (currentUserProfile.designationName || '').toLowerCase().trim();
+    if (des.includes('intern')) return false;
+    return des.includes('team lead') || des.includes('lead') || des.includes('manager') || des.includes('founder') || des.includes('owner');
+  }, [currentUserProfile]);
+
   const isManagerOrOwner =
     currentUserProfile?.role === 'owner' || currentUserProfile?.role === 'operational_manager';
 
@@ -267,7 +275,7 @@ export const ClientManagementView: React.FC = () => {
           </p>
         </div>
 
-        {isManagerOrOwner && (
+        {canAddClient && (
           <div className="flex items-center gap-3">
             <button
               type="button"
@@ -622,7 +630,7 @@ export const ClientManagementView: React.FC = () => {
                         >
                           Reset Filters
                         </button>
-                      ) : isManagerOrOwner ? (
+                      ) : canAddClient ? (
                         <button
                           type="button"
                           onClick={() => setIsCreateModalOpen(true)}

@@ -88,7 +88,7 @@ export function formatDate(dateString?: string): string {
   try {
     const d = new Date(dateString);
     if (isNaN(d.getTime())) return dateString;
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: 'Asia/Karachi' });
   } catch {
     return dateString;
   }
@@ -107,4 +107,23 @@ export function triggerConfetti() {
     origin: { y: 0.8 },
     colors: ['#7b68ee', '#38bdf8', '#10b981', '#f59e0b']
   });
+}
+
+export function sanitizeClientTaskDetails(details?: string | null): string {
+  if (!details) return '';
+  return details
+    .split('\n')
+    .filter((line) => {
+      const l = line.toLowerCase();
+      return (
+        !l.includes('kahan se aaya') &&
+        !l.includes('invoice') &&
+        !l.includes('pkr') &&
+        !l.includes('sales navigator') &&
+        !l.includes('zain se') &&
+        !l.includes('internal note')
+      );
+    })
+    .join('\n')
+    .trim();
 }
