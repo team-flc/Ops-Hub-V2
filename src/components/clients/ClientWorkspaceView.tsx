@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Calendar, Info, Plus, Sparkles, Loader2, Layers, AlertTriangle } from 'lucide-react';
+import { Calendar, Info, Plus, Sparkles, Loader2, Layers, AlertTriangle, ShieldCheck } from 'lucide-react';
 import { 
   ClientRecord, 
   ClientTask, 
@@ -17,6 +17,8 @@ import { CreateClientTaskModal } from '../tasks/CreateClientTaskModal';
 import { EditClientTaskModal } from '../tasks/EditClientTaskModal';
 import { TaskTemplate } from '../../types';
 import { taskManagementService } from '../../lib/taskManagementService';
+import { sanitizeClientDeliverableTitle, isInternalOnlyTask, filterAndSanitizeClientDeliverables } from '../../lib/permissions';
+export { filterAndSanitizeClientDeliverables };
 
 const TaskTemplatePickerModal = React.lazy(() =>
   import('../tasks/TaskTemplatePickerModal').then((m) => ({ default: m.TaskTemplatePickerModal }))
@@ -42,21 +44,46 @@ interface ClientWorkspaceViewProps {
 type MainTab = 'setup' | 'workplans' | 'details';
 type WeekTab = 'week1' | 'week2' | 'week3' | 'week4';
 
-const isInternalTask = (task: ClientTask): boolean => {
-  const t = (task.title || '').toLowerCase();
-  const d = (task.details || '').toLowerCase();
-  const full = `${t} ${d}`;
-  if (full.includes('pkr') || full.includes('invoice') || full.includes('sales navigator')) {
+function isFinancialOrInternalTitle(title: string = ''): boolean {
+  const t = title.toLowerCase();
+  if (
+    /pkr\s*\d+|invoice|payment|billing|fee|\$\d+|salary|payroll|profit|margin|internal chat|gmail notes/i.test(t)
+  ) {
     return true;
   }
-  if (t.includes('zain se') || t.includes('login/hosting') || t.includes('approve karo') || t.includes('asset bank ke baad')) {
-    return true;
-  }
-  if (full.includes('internal')) {
+  if (
+    t.includes('zain se') ||
+    t.includes('login/hosting') ||
+    t.includes('approve karo') ||
+    t.includes('asset bank ke baad') ||
+    t.includes('sales navigator')
+  ) {
     return true;
   }
   return false;
-};
+}
+
+function sanitizeEvidenceUrl(url?: string | null): string | undefined {
+  if (!url) return undefined;
+  const u = url.toLowerCase();
+  if (
+    u.includes('drive.google.com') ||
+    u.includes('docs.google.com/spreadsheets') ||
+    u.includes('slack.com') ||
+    u.includes('chat.whatsapp.com') ||
+    u.includes('wa.me') ||
+    u.includes('gohighlevel.com') ||
+    u.includes('leadconnectorhq.com') ||
+    /id=[a-zA-Z0-9_-]{15,}/.test(url) ||
+    /\/d\/[a-zA-Z0-9_-]{15,}/.test(url) ||
+    /\/folders\/[a-zA-Z0-9_-]{15,}/.test(url)
+  ) {
+    return undefined;
+  }
+  return url;
+}
+
+
 
 export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
   client,
@@ -142,7 +169,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
   const canAddTask = useMemo(() => {
     if (!currentUserProfile) return false;
     if (isEffectiveClientView || currentUserProfile.role === 'client') return false;
-    if (client.status === 'Archived' || client.status === 'Paused') return false;
+    if (client.status === 'Archived') return false;
     const des = (currentUserProfile.designationName || '').toLowerCase().trim();
     if (des.includes('intern')) return false;
     if (currentUserProfile.role === 'owner' || currentUserProfile.role === 'operational_manager') return true;
@@ -190,7 +217,10 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
     if (!client.id) return;
     setIsLoadingTasks(true);
     try {
-      const res = await taskManagementService.fetchClientTasks(client.id);
+      const res = await taskManagementService.fetchCrossClientTasks({
+        clientId: client.id,
+        isClientView: isEffectiveClientView
+      });
       if (!res.error && res.data) {
         setAllTasks(res.data);
       }
@@ -199,7 +229,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
     } finally {
       setIsLoadingTasks(false);
     }
-  }, [client.id]);
+  }, [client.id, isEffectiveClientView]);
 
   useEffect(() => {
     loadTasks();
@@ -207,21 +237,38 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
 
   const visibleTasks = useMemo(() => {
     if (!isEffectiveClientView) return allTasks;
-    return allTasks.filter((t) => !isInternalTask(t));
+    return filterAndSanitizeClientDeliverables(allTasks);
   }, [allTasks, isEffectiveClientView]);
 
   const tasksByWeek: Record<1 | 2 | 3 | 4, ClientTask[]> = useMemo(() => {
     return {
-      1: visibleTasks.filter((t) => t.weekNumber === 1),
-      2: visibleTasks.filter((t) => t.weekNumber === 2),
-      3: visibleTasks.filter((t) => t.weekNumber === 3),
-      4: visibleTasks.filter((t) => t.weekNumber === 4)
+      1: visibleTasks.filter((t) => Number(t.weekNumber) === 1),
+      2: visibleTasks.filter((t) => Number(t.weekNumber) === 2),
+      3: visibleTasks.filter((t) => Number(t.weekNumber) === 3),
+      4: visibleTasks.filter((t) => Number(t.weekNumber) === 4)
     };
   }, [visibleTasks]);
 
   const currentWeekTasks = useMemo(() => {
     return tasksByWeek[currentWeekNum] || [];
   }, [tasksByWeek, currentWeekNum]);
+
+  // Reconciliation for Staff side
+  const totalStaffTasks = useMemo(() => allTasks.filter((t) => !t.archivedAt).length, [allTasks]);
+  const totalInternalTasks = useMemo(() => allTasks.filter((t) => !t.archivedAt && isInternalOnlyTask(t)).length, [allTasks]);
+  const totalClientVisibleTasks = totalStaffTasks - totalInternalTasks;
+
+  const currentWeekRawTasks = useMemo(() => {
+    return allTasks.filter((t) => Number(t.weekNumber) === currentWeekNum && !t.archivedAt);
+  }, [allTasks, currentWeekNum]);
+
+  const currentWeekInternalCount = useMemo(() => {
+    return currentWeekRawTasks.filter(isInternalOnlyTask).length;
+  }, [currentWeekRawTasks]);
+
+  const currentWeekClientVisibleCount = useMemo(() => {
+    return currentWeekRawTasks.length - currentWeekInternalCount;
+  }, [currentWeekRawTasks, currentWeekInternalCount]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -506,11 +553,28 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
 
             {/* 2. Week Action Bar & Kanban Board */}
             <div className="space-y-4">
+              {!isEffectiveClientView && totalInternalTasks > 0 && (
+                <div
+                  data-testid="staff-client-reconciliation"
+                  className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-dark-100 border border-slate-200 dark:border-dark-border text-xs text-slate-700 dark:text-slate-300 flex flex-wrap items-center justify-between gap-2 shadow-xs"
+                >
+                  <div className="flex items-center gap-2">
+                    <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+                    <span>
+                      <strong className="font-bold">Client Safe Reconciliation:</strong> {totalClientVisibleTasks} Client Visible Deliverables + {totalInternalTasks} Internal Staff Only = {totalStaffTasks} Total Tasks
+                    </span>
+                  </div>
+                  <span className="text-[11px] text-gray-500 dark:text-gray-400">
+                    Internal notes, invoices & operational reminders are automatically shielded from Client Portal
+                  </span>
+                </div>
+              )}
+
               {/* Header Action Bar */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
-                    Week {currentWeekNum}: {weekNames[currentWeekNum]} ({currentWeekTasks.length} {currentWeekTasks.length === 1 ? 'Task' : 'Tasks'})
+                    Week {currentWeekNum}: {weekNames[currentWeekNum]} ({currentWeekTasks.length} {currentWeekTasks.length === 1 ? 'Task' : 'Tasks'}{!isEffectiveClientView && currentWeekInternalCount > 0 ? ` — ${currentWeekClientVisibleCount} Client Visible, ${currentWeekInternalCount} Internal Staff Only` : ''})
                   </span>
                   {isLoadingTasks && <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-500" />}
                 </div>
