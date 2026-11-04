@@ -1,21 +1,24 @@
 import React, { useState } from 'react';
-import { TrendingUp, BarChart3, Calendar, CheckCircle2 } from 'lucide-react';
+import { TrendingUp } from 'lucide-react';
 import { ClientTask } from '../../types';
+import { isTaskAwaitingApproval } from '../../lib/pktDateUtils';
 
 interface TaskCompletionTrendChartProps {
   tasks: ClientTask[];
+  isLoading?: boolean;
 }
 
-export const TaskCompletionTrendChart: React.FC<TaskCompletionTrendChartProps> = ({ tasks }) => {
+export const TaskCompletionTrendChart: React.FC<TaskCompletionTrendChartProps> = ({ tasks, isLoading = false }) => {
   const [timeframe, setTimeframe] = useState<'weekly' | 'monthly'>('weekly');
+  const isDataLoading = Boolean(isLoading);
 
   // Compute Weekly metrics (Weeks 1 to 4)
   const weekData = [1, 2, 3, 4].map((w) => {
-    const weekTasks = w === 1 ? tasks : tasks.filter((t) => t.weekNumber === w);
-    const completed = weekTasks.filter((t) => t.status === 'Completed').length;
+    const weekTasks = w === 1 ? tasks : tasks.filter((t) => Number(t.weekNumber) === w);
+    const completed = weekTasks.filter((t) => t.status === 'Completed' || t.status === 'Done').length;
     const inProgress = weekTasks.filter((t) => t.status === 'In Progress').length;
-    const approval = weekTasks.filter((t) => t.status === 'Team Review').length;
-    const pending = weekTasks.length - completed - inProgress - approval;
+    const approval = weekTasks.filter((t) => isTaskAwaitingApproval(t.status)).length;
+    const pending = Math.max(0, weekTasks.length - completed - inProgress - approval);
     const total = weekTasks.length;
     const rate = total > 0 ? Math.round((completed / total) * 100) : 0;
     return {
@@ -23,6 +26,7 @@ export const TaskCompletionTrendChart: React.FC<TaskCompletionTrendChartProps> =
       total,
       completed,
       inProgress,
+      approval,
       pending,
       rate
     };
@@ -30,13 +34,11 @@ export const TaskCompletionTrendChart: React.FC<TaskCompletionTrendChartProps> =
 
   // Compute Monthly Status Breakdown
   const totalTasks = tasks.length;
-  const totalCompleted = tasks.filter((t) => t.status === 'Completed').length;
+  const totalCompleted = tasks.filter((t) => t.status === 'Completed' || t.status === 'Done').length;
   const totalInProgress = tasks.filter((t) => t.status === 'In Progress').length;
-  const totalApproval = tasks.filter((t) => t.status === 'Team Review').length;
+  const totalApproval = tasks.filter((t) => isTaskAwaitingApproval(t.status)).length;
   const totalPending = totalTasks - totalCompleted - totalInProgress - totalApproval;
   const overallRate = totalTasks > 0 ? Math.round((totalCompleted / totalTasks) * 100) : 0;
-
-  const maxTotal = Math.max(1, ...weekData.map((d) => d.total));
 
   return (
     <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-dark-300 border border-gray-200 dark:border-dark-border shadow-sm space-y-5 select-none">
@@ -81,13 +83,30 @@ export const TaskCompletionTrendChart: React.FC<TaskCompletionTrendChartProps> =
         </div>
       </div>
 
-      {timeframe === 'weekly' ? (
+      {isDataLoading ? (
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 py-2">
+          {[1, 2, 3, 4].map((i) => (
+            <div
+              key={i}
+              className="p-3.5 rounded-2xl bg-gray-50 dark:bg-dark-200 border border-gray-100 dark:border-dark-border space-y-3 animate-pulse"
+            >
+              <div className="flex justify-between items-center">
+                <div className="h-3 w-16 bg-gray-200 dark:bg-dark-100 rounded" />
+                <div className="h-3 w-10 bg-gray-200 dark:bg-dark-100 rounded" />
+              </div>
+              <div className="w-full h-24 bg-gray-200 dark:bg-dark-100 rounded-xl" />
+              <div className="space-y-1.5">
+                <div className="h-2.5 w-full bg-gray-200 dark:bg-dark-100 rounded" />
+                <div className="h-2.5 w-3/4 bg-gray-200 dark:bg-dark-100 rounded" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : timeframe === 'weekly' ? (
         <div className="space-y-4">
           {/* Visual SVG & Bar Distribution */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
             {weekData.map((d, idx) => {
-              const barHeightPct = Math.max(12, Math.round((d.total / maxTotal) * 100));
-
               return (
                 <div
                   key={idx}
@@ -101,20 +120,25 @@ export const TaskCompletionTrendChart: React.FC<TaskCompletionTrendChartProps> =
                   </div>
 
                   {/* Vertical Progress Bar */}
-                  <div className="w-full h-24 bg-gray-200/60 dark:bg-dark-300 rounded-xl overflow-hidden flex flex-col-reverse relative p-1 gap-1">
+                  <div className="w-full h-24 bg-gray-200/60 dark:bg-dark-300 rounded-xl overflow-hidden flex flex-col-reverse relative p-1 gap-0.5">
                     <div
                       style={{ height: `${(d.completed / Math.max(1, d.total)) * 100}%` }}
-                      className="w-full bg-emerald-500 rounded-lg transition-all duration-500"
+                      className="w-full bg-emerald-500 rounded-sm transition-all duration-500"
                       title={`Completed: ${d.completed}`}
                     />
                     <div
                       style={{ height: `${(d.inProgress / Math.max(1, d.total)) * 100}%` }}
-                      className="w-full bg-blue-500 rounded-lg transition-all duration-500"
-                      title={`In Progress: ${d.inProgress}`}
+                      className="w-full bg-blue-500 rounded-sm transition-all duration-500"
+                      title={`In Flight: ${d.inProgress}`}
+                    />
+                    <div
+                      style={{ height: `${(d.approval / Math.max(1, d.total)) * 100}%` }}
+                      className="w-full bg-purple-500 rounded-sm transition-all duration-500"
+                      title={`Awaiting Approval: ${d.approval}`}
                     />
                     <div
                       style={{ height: `${(d.pending / Math.max(1, d.total)) * 100}%` }}
-                      className="w-full bg-slate-300 dark:bg-slate-600 rounded-lg transition-all duration-500"
+                      className="w-full bg-slate-300 dark:bg-slate-600 rounded-sm transition-all duration-500"
                       title={`Pending: ${d.pending}`}
                     />
                   </div>
@@ -133,6 +157,10 @@ export const TaskCompletionTrendChart: React.FC<TaskCompletionTrendChartProps> =
                       <span>In Flight</span>
                       <span>{d.inProgress}</span>
                     </div>
+                    <div className="flex justify-between text-purple-600 dark:text-purple-400 font-semibold">
+                      <span>Awaiting Approval</span>
+                      <span>{d.approval}</span>
+                    </div>
                     <div className="flex justify-between text-slate-500">
                       <span>Pending</span>
                       <span>{d.pending}</span>
@@ -144,18 +172,22 @@ export const TaskCompletionTrendChart: React.FC<TaskCompletionTrendChartProps> =
           </div>
 
           {/* Accessible Legend */}
-          <div className="flex items-center justify-center gap-5 text-xs text-gray-500 pt-1">
+          <div className="flex flex-wrap items-center justify-center gap-4 text-xs text-gray-500 pt-1">
             <div className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-emerald-500" />
-              <span>Completed Deliverables</span>
+              <span>Completed</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-blue-500" />
-              <span>In Progress / Review</span>
+              <span>In Flight</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2.5 h-2.5 rounded-full bg-purple-500" />
+              <span>Awaiting Approval</span>
             </div>
             <div className="flex items-center gap-1.5">
               <span className="w-2.5 h-2.5 rounded-full bg-slate-400" />
-              <span>Queued / Backlog</span>
+              <span>Pending</span>
             </div>
           </div>
         </div>
@@ -177,7 +209,12 @@ export const TaskCompletionTrendChart: React.FC<TaskCompletionTrendChartProps> =
             <div
               style={{ width: `${totalTasks > 0 ? (totalInProgress / totalTasks) * 100 : 0}%` }}
               className="bg-blue-500 transition-all duration-500"
-              title={`In Progress: ${totalInProgress}`}
+              title={`In Flight: ${totalInProgress}`}
+            />
+            <div
+              style={{ width: `${totalTasks > 0 ? (totalApproval / totalTasks) * 100 : 0}%` }}
+              className="bg-purple-500 transition-all duration-500"
+              title={`Awaiting Approval: ${totalApproval}`}
             />
             <div
               style={{ width: `${totalTasks > 0 ? (totalPending / totalTasks) * 100 : 0}%` }}
@@ -186,7 +223,7 @@ export const TaskCompletionTrendChart: React.FC<TaskCompletionTrendChartProps> =
             />
           </div>
 
-          <div className="grid grid-cols-3 gap-3 text-center text-xs">
+          <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-center text-xs">
             <div className="p-2.5 rounded-xl bg-white dark:bg-dark-card border border-gray-100 dark:border-dark-border">
               <span className="text-[10px] text-gray-400 uppercase font-bold block">Total Scope</span>
               <span className="text-base font-black text-gray-900 dark:text-gray-100">{totalTasks}</span>
@@ -196,8 +233,16 @@ export const TaskCompletionTrendChart: React.FC<TaskCompletionTrendChartProps> =
               <span className="text-base font-black text-emerald-600 dark:text-emerald-400">{totalCompleted}</span>
             </div>
             <div className="p-2.5 rounded-xl bg-white dark:bg-dark-card border border-gray-100 dark:border-dark-border">
-              <span className="text-[10px] text-blue-500 uppercase font-bold block">Active</span>
+              <span className="text-[10px] text-blue-500 uppercase font-bold block">In Flight</span>
               <span className="text-base font-black text-blue-600 dark:text-blue-400">{totalInProgress}</span>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white dark:bg-dark-card border border-gray-100 dark:border-dark-border">
+              <span className="text-[10px] text-purple-600 dark:text-purple-400 uppercase font-bold block">Awaiting Approval</span>
+              <span className="text-base font-black text-purple-600 dark:text-purple-400">{totalApproval}</span>
+            </div>
+            <div className="p-2.5 rounded-xl bg-white dark:bg-dark-card border border-gray-100 dark:border-dark-border">
+              <span className="text-[10px] text-slate-500 uppercase font-bold block">Pending</span>
+              <span className="text-base font-black text-slate-700 dark:text-slate-300">{totalPending}</span>
             </div>
           </div>
         </div>
