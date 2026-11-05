@@ -65,9 +65,9 @@ export const ClientWeekStepper: React.FC<ClientWeekStepperProps> = ({
   return (
     <div
       data-testid="client-week-stepper"
-      className="bg-white dark:bg-dark-card rounded-2xl border border-gray-200 dark:border-dark-border p-3 shadow-xs"
+      className="bg-white dark:bg-dark-card rounded-2xl border border-slate-200/90 dark:border-dark-border p-3.5 shadow-xs"
     >
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
         {weeks.map((weekNum) => {
           const isActive = activeWeekNum === weekNum;
           const name = weekNames[weekNum] || DEFAULT_WEEK_NAMES[weekNum];
@@ -83,10 +83,10 @@ export const ClientWeekStepper: React.FC<ClientWeekStepperProps> = ({
             <div
               key={weekNum}
               data-testid={`week-step-${weekNum}`}
-              className={`group relative p-3 rounded-xl border transition-all flex flex-col justify-between gap-2 select-none ${
+              className={`group relative p-3.5 rounded-xl border transition-all flex flex-col justify-between gap-2.5 select-none ${
                 isActive
-                  ? 'bg-brand-500/10 border-brand-500/50 shadow-sm ring-1 ring-brand-500/20'
-                  : 'bg-gray-50/50 dark:bg-dark-200/50 border-gray-200 dark:border-dark-border hover:bg-gray-100/70 dark:hover:bg-dark-200'
+                  ? 'bg-teal-50/70 dark:bg-teal-950/20 border-[#0D9488] ring-2 ring-teal-500/20 shadow-xs'
+                  : 'bg-white dark:bg-dark-200/40 border-slate-200 dark:border-dark-border hover:bg-slate-50 dark:hover:bg-dark-200'
               }`}
             >
               {/* Header: Week Label & Rename Controls */}
@@ -97,10 +97,10 @@ export const ClientWeekStepper: React.FC<ClientWeekStepperProps> = ({
                   className="flex items-center gap-1.5 cursor-pointer text-left focus:outline-none"
                 >
                   <span
-                    className={`text-[11px] font-black uppercase tracking-wider px-2 py-0.5 rounded-md ${
+                    className={`text-[11px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-md shadow-2xs ${
                       isActive
-                        ? 'bg-brand-500 text-white'
-                        : 'bg-gray-200 dark:bg-dark-100 text-gray-700 dark:text-gray-300'
+                        ? 'bg-[#0D9488] text-white'
+                        : 'bg-slate-100 dark:bg-dark-100 text-slate-700 dark:text-slate-300'
                     }`}
                   >
                     Week {weekNum}
@@ -116,7 +116,7 @@ export const ClientWeekStepper: React.FC<ClientWeekStepperProps> = ({
                     type="button"
                     data-testid={`rename-week-btn-${weekNum}`}
                     onClick={(e) => handleStartEditing(weekNum, e)}
-                    className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 rounded-md text-gray-400 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-white dark:hover:bg-dark-card transition-all cursor-pointer"
+                    className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 rounded-md text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 hover:bg-white dark:hover:bg-dark-card transition-all cursor-pointer"
                     title="Rename week (client-specific)"
                   >
                     <Edit2 className="w-3 h-3" />
@@ -139,7 +139,7 @@ export const ClientWeekStepper: React.FC<ClientWeekStepperProps> = ({
                     autoFocus
                     maxLength={100}
                     disabled={isSaving}
-                    className="w-full text-xs font-bold px-2 py-1 rounded-lg border border-brand-500 bg-white dark:bg-dark-card text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-brand-500"
+                    className="w-full text-xs font-bold px-2 py-1 rounded-lg border border-teal-500 bg-white dark:bg-dark-card text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-teal-500"
                     placeholder="Week Name"
                   />
                   <button
@@ -147,7 +147,7 @@ export const ClientWeekStepper: React.FC<ClientWeekStepperProps> = ({
                     data-testid={`save-week-name-${weekNum}`}
                     onClick={(e) => handleSaveRename(weekNum, e)}
                     disabled={isSaving || !editNameValue.trim()}
-                    className="p-1 rounded-md bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50 cursor-pointer"
+                    className="p-1 rounded-md bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 cursor-pointer"
                     title="Save"
                   >
                     <Check className="w-3.5 h-3.5" />
@@ -170,8 +170,8 @@ export const ClientWeekStepper: React.FC<ClientWeekStepperProps> = ({
                   <h4
                     className={`text-xs font-bold truncate ${
                       isActive
-                        ? 'text-brand-900 dark:text-brand-300'
-                        : 'text-gray-800 dark:text-gray-200'
+                        ? 'text-teal-950 dark:text-teal-200'
+                        : 'text-slate-800 dark:text-slate-200'
                     }`}
                     title={name}
                   >
@@ -183,25 +183,25 @@ export const ClientWeekStepper: React.FC<ClientWeekStepperProps> = ({
               {/* Progress & Task Count Pill */}
               <div 
                 onClick={() => onSelectWeek(weekNum)}
-                className="flex items-center justify-between text-[10px] text-gray-500 dark:text-gray-400 pt-1 border-t border-gray-200/50 dark:border-dark-border/50 cursor-pointer"
+                className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 pt-1.5 border-t border-slate-200/60 dark:border-dark-border/60 cursor-pointer"
               >
                 <span className="font-semibold flex items-center gap-1">
-                  <Clock className="w-3 h-3 text-gray-400" />
+                  <Clock className="w-3 h-3 text-slate-400" />
                   {totalTasks} {totalTasks === 1 ? 'task' : 'tasks'}
                 </span>
-                <span className="font-bold text-gray-700 dark:text-gray-300">
+                <span className="font-bold text-slate-700 dark:text-slate-300">
                   {doneTasks}/{totalTasks} ({percent}%)
                 </span>
               </div>
 
-              {/* Mini progress bar */}
+              {/* Mini progress bar (Thicker & Teal) */}
               <div 
                 onClick={() => onSelectWeek(weekNum)}
-                className="w-full bg-gray-200 dark:bg-dark-border h-1 rounded-full overflow-hidden cursor-pointer"
+                className="w-full bg-slate-100 dark:bg-dark-100 h-2 rounded-full overflow-hidden cursor-pointer"
               >
                 <div
-                  className={`h-full transition-all duration-300 ${
-                    percent === 100 ? 'bg-emerald-500' : 'bg-brand-500'
+                  className={`h-full rounded-full transition-all duration-300 ${
+                    percent === 100 ? 'bg-emerald-500' : 'bg-[#0D9488]'
                   }`}
                   style={{ width: `${percent}%` }}
                 />

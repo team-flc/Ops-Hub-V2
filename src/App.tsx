@@ -8,7 +8,7 @@ import { ProtectedRoute } from './components/auth/ProtectedRoute';
 import { Sidebar } from './components/layout/Sidebar';
 import { FinfixClientPortalView } from './components/portal/FinfixClientPortalView';
 import { Header } from './components/layout/Header';
-import { Building2, Eye, ArrowLeft } from 'lucide-react';
+import { Building2, Eye, ArrowLeft, Loader2 } from 'lucide-react';
 import { UserProfile, SettingsTab } from './types';
 
 // Lazy-loaded Auth Pages
@@ -108,6 +108,7 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
   const location = useLocation();
 
   const [eligibleManagers, setEligibleManagers] = useState<UserProfile[]>([]);
+  const [isLoadingClients, setIsLoadingClients] = useState(true);
 
   // Synchronize route param clientId with store and persistence
   useEffect(() => {
@@ -152,6 +153,8 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
     if (!user) return;
 
     async function loadData() {
+      setIsLoadingClients(true);
+      try {
       const [clientRes, managers] = await Promise.all([
         clientManagementService.fetchClients(),
         clientManagementService.fetchEligibleManagers()
@@ -173,6 +176,11 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
             setStoredSelectedClientId(user.id, resolvedId);
           }
         }
+      }
+      } catch (err) {
+        console.warn('Failed to load client workspace data:', err);
+      } finally {
+        setIsLoadingClients(false);
       }
     }
     loadData();
@@ -254,16 +262,38 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
       case 'client_workspace':
       case 'clients':
       default:
-        return selectedClient ? (
-          <ClientWorkspaceView
-            key={selectedClient.id}
-            client={selectedClient}
-            currentUserProfile={profile}
-            eligibleManagers={eligibleManagers}
-            onClientUpdated={updateClientRecord}
-            isClientView={isClientView}
-          />
-        ) : (
+        if (selectedClient) {
+          return (
+            <ClientWorkspaceView
+              key={selectedClient.id}
+              client={selectedClient}
+              currentUserProfile={profile}
+              eligibleManagers={eligibleManagers}
+              onClientUpdated={updateClientRecord}
+              isClientView={isClientView}
+            />
+          );
+        }
+
+        if (isLoadingClients || (!selectedClient && clients.length === 0)) {
+          return (
+            <div className="flex-1 flex flex-col items-center justify-center p-12 space-y-4 min-h-[400px]">
+              <div className="w-12 h-12 rounded-2xl bg-teal-500/10 text-teal-600 dark:text-teal-400 flex items-center justify-center border border-teal-500/20 shadow-xs animate-pulse">
+                <Loader2 className="w-6 h-6 animate-spin text-teal-600 dark:text-teal-400" />
+              </div>
+              <div className="text-center space-y-1">
+                <h3 className="text-sm font-bold text-gray-800 dark:text-gray-200">
+                  Loading Client Workspace...
+                </h3>
+                <p className="text-xs text-gray-500 dark:text-gray-400">
+                  Synchronizing client records and active deliverables
+                </p>
+              </div>
+            </div>
+          );
+        }
+
+        return (
           <div className="p-12 text-center text-gray-500 max-w-lg mx-auto mt-16 space-y-3">
             <div className="w-12 h-12 rounded-2xl bg-brand-500/10 text-brand-500 flex items-center justify-center mx-auto border border-brand-500/20">
               <Building2 className="w-6 h-6" />
@@ -276,7 +306,7 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
             </p>
           </div>
         );
-    }
+      }
   };
 
   return (

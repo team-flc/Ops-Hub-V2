@@ -197,22 +197,22 @@ export const ClientKanbanBoard: React.FC<ClientKanbanBoardProps> = ({
               onDragOver={(e) => handleDragOver(e, col.id)}
               onDragLeave={() => handleDragLeave(col.id)}
               onDrop={(e) => handleDrop(e, col.id)}
-              className={`flex flex-col bg-gray-50/70 dark:bg-dark-300/40 rounded-2xl border transition-all min-h-[360px] ${
+              className={`flex flex-col bg-white dark:bg-dark-card rounded-2xl border transition-all min-h-[360px] shadow-xs ${
                 isDragOver
-                  ? 'border-brand-500 ring-2 ring-brand-500/20 bg-brand-500/5'
-                  : 'border-gray-200 dark:border-dark-border'
+                  ? 'border-[#0D9488] ring-2 ring-teal-500/20 bg-teal-500/5'
+                  : 'border-slate-200/90 dark:border-dark-border'
               }`}
             >
               {/* Column Header */}
-              <div className="p-3.5 border-b border-gray-200 dark:border-dark-border flex items-center justify-between">
+              <div className="p-3.5 border-b border-slate-100 dark:border-dark-border flex items-center justify-between bg-slate-50/40 dark:bg-dark-300/30 rounded-t-2xl">
                 <div className="flex items-center gap-2 min-w-0">
                   <div className={`w-6 h-6 rounded-lg flex items-center justify-center ${col.badgeBg}`}>
                     <IconComponent className="w-3.5 h-3.5" />
                   </div>
-                  <h3 className="text-xs font-bold text-gray-800 dark:text-gray-200 truncate">
+                  <h3 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 truncate">
                     {col.label}
                   </h3>
-                  <span className={`text-[10px] font-black px-1.5 py-0.5 rounded-full ${col.badgeBg}`}>
+                  <span className={`text-xs font-mono font-black px-2 py-0.5 rounded-full ${col.badgeBg} shadow-2xs`}>
                     {colTasks.length}
                   </span>
                 </div>

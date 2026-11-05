@@ -468,13 +468,10 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
   };
 
   return (
-    <div className="flex-1 flex flex-col min-w-0 h-full overflow-y-auto bg-gray-50/50 dark:bg-dark-400 select-none">
-      {/* 1. Selected Client Top Header */}
-      <SelectedClientHeader client={client} currentUserProfile={currentUserProfile} isClientView={isEffectiveClientView} />
-
+    <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-gray-50/50 dark:bg-dark-400 select-none">
       {/* Paused Client Warning Banner */}
       {client.status === 'Paused' && (
-        <div className="bg-brand-500/10 border-b border-brand-500/20 px-4 sm:px-6 py-3 flex items-center gap-3 text-brand-800 dark:text-brand-300 text-xs font-semibold animate-fade-in">
+        <div className="bg-brand-500/10 border-b border-brand-500/20 px-4 sm:px-6 py-3 flex items-center gap-3 text-brand-800 dark:text-brand-300 text-xs font-semibold animate-fade-in shrink-0">
           <AlertTriangle className="w-4 h-4 flex-shrink-0 text-brand-600 dark:text-brand-400" />
           <div className="flex-1">
             <span>Workspace Paused: This client organization is currently paused ({client.pauseReason || 'Operational reason'}). Creating new tasks and active work mutations are blocked.</span>
@@ -482,69 +479,10 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
         </div>
       )}
 
-      {/* 2. Top-Level Tab Navigation (Dashboard, 30-Day Setup, 90-Day Work Plans, and Client Details) */}
-      <div className="bg-white dark:bg-dark-card border-b border-gray-200 dark:border-dark-border px-4 sm:px-6 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          {!isArchived && (
-            <button
-              type="button"
-              data-testid="tab-dashboard"
-              onClick={() => setActiveTab('dashboard')}
-              className={`flex items-center gap-2 px-4 py-3 min-h-[44px] text-xs font-bold border-b-2 transition-all cursor-pointer ${
-                activeTab === 'dashboard'
-                  ? 'border-brand-500 text-brand-600 dark:text-brand-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'
-              }`}
-            >
-              <LayoutDashboard className="w-4 h-4" />
-              <span>Dashboard</span>
-            </button>
-          )}
-
-          <button
-            type="button"
-            data-testid="tab-setup"
-            onClick={() => setActiveTab('setup')}
-            className={`flex items-center gap-2 px-4 py-3 min-h-[44px] text-xs font-bold border-b-2 transition-all cursor-pointer ${
-              activeTab === 'setup'
-                ? 'border-brand-500 text-brand-600 dark:text-brand-400'
-                : 'border-transparent text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'
-            }`}
-          >
-            <Calendar className="w-4 h-4" />
-            <span>30-Day Setup</span>
-          </button>
-
-          <button
-            type="button"
-            data-testid="tab-workplans"
-            onClick={() => setActiveTab('workplans')}
-            className={`flex items-center gap-2 px-4 py-3 min-h-[44px] text-xs font-bold border-b-2 transition-all cursor-pointer ${
-              activeTab === 'workplans'
-                ? 'border-brand-500 text-brand-600 dark:text-brand-400'
-                : 'border-transparent text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'
-            }`}
-          >
-            <Layers className="w-4 h-4" />
-            <span>90-Day Work Plans</span>
-          </button>
-
-          {!isEffectiveClientView && (
-            <button
-              type="button"
-              onClick={() => setActiveTab('details')}
-              className={`flex items-center gap-2 px-4 py-3 min-h-[44px] text-xs font-bold border-b-2 transition-all cursor-pointer ${
-                activeTab === 'details'
-                  ? 'border-brand-500 text-brand-600 dark:text-brand-400'
-                  : 'border-transparent text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'
-              }`}
-            >
-              <Info className="w-4 h-4" />
-              <span>Client Details</span>
-            </button>
-          )}
-        </div>
-      </div>
+      {/* Staff Header if staff mode */}
+      {!isEffectiveClientView && (
+        <SelectedClientHeader client={client} currentUserProfile={currentUserProfile} isClientView={false} />
+      )}
 
       {/* Toast Notification Container */}
       {toastMessage && (
@@ -556,28 +494,21 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
         </div>
       )}
 
-      {/* 3. Main Tab Content */}
-      <div className="flex-1 min-w-0">
-        {/* TAB 0: CLIENT DASHBOARD (Mixed Design) */}
-        {!isArchived && activeTab === 'dashboard' && (
-          <div className="w-full bg-[#F4F7FB]">
-            <FinfixClientPortalView
-              key={`portal-${client.id}`}
-              client={client}
-              currentUserProfile={currentUserProfile}
-              isPreview={isPreview}
-              onClientUpdated={onClientUpdated}
-              tasks={visibleTasks}
-              weekNames={weekNames}
-              onNavigateToTab={(t) => setActiveTab(t)}
-            />
-          </div>
-        )}
-
-        {/* TAB 1: 30-DAY SETUP WORKSPACE */}
-        {activeTab === 'setup' && (
-          <div className="p-3.5 sm:p-6 max-w-7xl mx-auto space-y-6">
-            {/* 1. Polished Compact Week Stepper with Rename controls */}
+      {/* Unified Client Portal Shell (Houses Dashboard, 30-Day Setup, 90-Day Work Plans, and Client Details) */}
+      <FinfixClientPortalView
+        key={`portal-${client.id}`}
+        client={client}
+        currentUserProfile={currentUserProfile}
+        isPreview={isPreview}
+        onClientUpdated={onClientUpdated}
+        tasks={visibleTasks}
+        weekNames={weekNames}
+        activeMainTab={activeTab}
+        onMainTabChange={(t) => setActiveTab(t)}
+        canViewDetailsTab={!isEffectiveClientView}
+        renderSetupView={() => (
+          <div className="space-y-6">
+            {/* 1. Restyled Compact Week Stepper with Rename controls */}
             <ClientWeekStepper
               client={client}
               activeWeekNum={currentWeekNum}
@@ -594,7 +525,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
               {!isEffectiveClientView && totalInternalTasks > 0 && (
                 <div
                   data-testid="staff-client-reconciliation"
-                  className="px-4 py-3 rounded-xl bg-slate-100 dark:bg-dark-100 border border-slate-200 dark:border-dark-border text-xs text-slate-700 dark:text-slate-300 space-y-2 shadow-xs"
+                  className="px-4 py-3 rounded-xl bg-white dark:bg-dark-card border border-slate-200 dark:border-dark-border text-xs text-slate-700 dark:text-slate-300 space-y-2 shadow-xs"
                 >
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <div className="flex items-center gap-2">
@@ -606,7 +537,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                     <button
                       type="button"
                       onClick={() => setShowShieldedBreakdown(!showShieldedBreakdown)}
-                      className="text-[11px] font-bold text-brand-600 dark:text-brand-400 hover:underline cursor-pointer flex items-center gap-1"
+                      className="text-[11px] font-bold text-teal-600 dark:text-teal-400 hover:underline cursor-pointer flex items-center gap-1"
                     >
                       <span>{showShieldedBreakdown ? 'Hide Breakdown ▲' : `View ${totalInternalTasks} Shielded Tasks & Reasons ▼`}</span>
                     </button>
@@ -618,7 +549,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                       </span>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-1">
                         {internalTasksList.map((t) => (
-                          <div key={t.id} className="p-2 rounded-lg bg-white dark:bg-dark-200 border border-slate-200 dark:border-dark-border flex items-start justify-between gap-2">
+                          <div key={t.id} className="p-2 rounded-lg bg-slate-50 dark:bg-dark-200 border border-slate-200 dark:border-dark-border flex items-start justify-between gap-2">
                             <div className="min-w-0 flex-1">
                               <span className="font-semibold text-gray-800 dark:text-gray-200 block truncate">{t.title}</span>
                               <span className="text-[10px] text-gray-400">Week {t.weekNumber || 1} &bull; {t.status}</span>
@@ -642,10 +573,10 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
               {/* Header Action Bar */}
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-gray-500 dark:text-gray-400">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                     Week {currentWeekNum}: {weekNames[currentWeekNum]} ({currentWeekTasks.length} {currentWeekTasks.length === 1 ? 'Task' : 'Tasks'}{!isEffectiveClientView && currentWeekInternalCount > 0 ? ` — ${currentWeekClientVisibleCount} Client Visible, ${currentWeekInternalCount} Internal Staff Only` : ''})
                   </span>
-                  {isLoadingTasks && <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-500" />}
+                  {isLoadingTasks && <Loader2 className="w-3.5 h-3.5 animate-spin text-teal-600" />}
                 </div>
 
                 {canAddTask && (
@@ -662,7 +593,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                       type="button"
                       aria-label="+ Add Task"
                       onClick={handleOpenCreateTaskFlow}
-                      className="flex items-center gap-1.5 px-4 py-2 min-h-[44px] bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-xs font-bold shadow-md shadow-brand-500/25 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
+                      className="flex items-center gap-1.5 px-4 py-2 min-h-[44px] bg-[#0D9488] hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-md shadow-teal-900/20 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
                     >
                       <Plus className="w-4 h-4" />
                       <span>Add Task</span>
@@ -692,9 +623,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
             </div>
           </div>
         )}
-
-        {/* TAB 2: 90-DAY WORK PLANS (Phase 3D) */}
-        {activeTab === 'workplans' && (
+        renderWorkPlansView={() => (
           <React.Suspense
             fallback={
               <div className="p-12 flex items-center justify-center text-gray-400 text-xs">
@@ -715,9 +644,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
             />
           </React.Suspense>
         )}
-
-        {/* TAB 3: CLIENT DETAILS */}
-        {activeTab === 'details' && !isEffectiveClientView && (
+        renderDetailsView={() => (
           <ClientDetailsTab
             client={client}
             currentUserProfile={currentUserProfile}
@@ -725,7 +652,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
             onClientUpdated={onClientUpdated}
           />
         )}
-      </div>
+      />
 
       {/* Task Creation Entry Flow Modals */}
       {isModeModalOpen && (
