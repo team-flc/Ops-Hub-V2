@@ -479,11 +479,6 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
         </div>
       )}
 
-      {/* Staff Header if staff mode */}
-      {!isEffectiveClientView && (
-        <SelectedClientHeader client={client} currentUserProfile={currentUserProfile} isClientView={false} />
-      )}
-
       {/* Toast Notification Container */}
       {toastMessage && (
         <div className="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-50 max-w-[calc(100vw-2rem)] animate-bounce">
@@ -494,8 +489,10 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
         </div>
       )}
 
-      {/* Unified Client Portal Shell (Houses Dashboard, 30-Day Setup, 90-Day Work Plans, and Client Details) */}
-      <FinfixClientPortalView
+      {/* ROLE-BASED MUTUALLY EXCLUSIVE VIEW: Client Portal vs Staff Workspace */}
+      {isEffectiveClientView ? (
+        /* CLIENT VIEW: Dark Navy Client Sidebar only, Client Header, Client Dashboard */
+        <FinfixClientPortalView
         key={`portal-${client.id}`}
         client={client}
         currentUserProfile={currentUserProfile}
@@ -653,6 +650,198 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
           />
         )}
       />
+      ) : (
+        /* STAFF VIEW: Single Staff Navigation (Sidebar.tsx in App.tsx), Staff Header, Staff Tabs, Staff Kanban */
+        <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-gray-50/50 dark:bg-dark-400">
+          {/* 1. Staff Header */}
+          <SelectedClientHeader client={client} currentUserProfile={currentUserProfile} isClientView={false} />
+
+          {/* 2. Staff Workspace Navigation Tabs */}
+          <div className="px-4 sm:px-6 pt-3 pb-2 border-b border-slate-200 dark:border-dark-border bg-white dark:bg-dark-card flex items-center justify-between shrink-0">
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                data-testid="tab-setup"
+                onClick={() => setActiveTab('setup')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'setup'
+                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-200'
+                }`}
+              >
+                <Calendar className="w-3.5 h-3.5" />
+                <span>30-Day Setup</span>
+              </button>
+
+              <button
+                type="button"
+                data-testid="tab-workplans"
+                onClick={() => setActiveTab('workplans')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'workplans'
+                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-200'
+                }`}
+              >
+                <Layers className="w-3.5 h-3.5" />
+                <span>90-Day Work Plans</span>
+              </button>
+
+              <button
+                type="button"
+                data-testid="tab-details"
+                onClick={() => setActiveTab('details')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'details'
+                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-200'
+                }`}
+              >
+                <Info className="w-3.5 h-3.5" />
+                <span>Client Details</span>
+              </button>
+            </div>
+          </div>
+
+          {/* 3. Tab Content for Staff */}
+          <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-6 custom-scrollbar">
+            {activeTab === 'setup' && (
+              <div className="space-y-6">
+                {/* Compact Week Stepper */}
+                <ClientWeekStepper
+                  client={client}
+                  activeWeekNum={currentWeekNum}
+                  onSelectWeek={(wk) => setActiveWeek(`week${wk}` as WeekTab)}
+                  weekNames={weekNames}
+                  onRenameWeek={handleRenameWeek}
+                  tasksByWeek={tasksByWeek}
+                  currentUserProfile={currentUserProfile}
+                  isClientView={false}
+                />
+
+                {/* Staff Reconciliation Bar */}
+                {totalInternalTasks > 0 && (
+                  <div
+                    data-testid="staff-client-reconciliation"
+                    className="px-4 py-3 rounded-xl bg-white dark:bg-dark-card border border-slate-200 dark:border-dark-border text-xs text-slate-700 dark:text-slate-300 space-y-2 shadow-xs"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+                        <span>
+                          <strong className="font-bold">Client Safe Reconciliation:</strong> {totalClientVisibleTasks} Client Visible Deliverables + {totalInternalTasks} Internal Staff Only = {totalStaffTasks} Total Tasks
+                        </span>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowShieldedBreakdown(!showShieldedBreakdown)}
+                        className="text-[11px] font-bold text-teal-600 dark:text-teal-400 hover:underline cursor-pointer flex items-center gap-1"
+                      >
+                        <span>{showShieldedBreakdown ? 'Hide Breakdown ▲' : `View ${totalInternalTasks} Shielded Tasks & Reasons ▼`}</span>
+                      </button>
+                    </div>
+                    {showShieldedBreakdown && (
+                      <div className="pt-2 border-t border-slate-200 dark:border-dark-border text-[11px] space-y-1.5">
+                        <span className="font-bold text-gray-500 dark:text-gray-400 block uppercase tracking-wider text-[10px]">
+                          Shielded from Client Portal (With Classification Reason):
+                        </span>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-1">
+                          {internalTasksList.map((t) => (
+                            <div key={t.id} className="p-2 rounded-lg bg-slate-50 dark:bg-dark-200 border border-slate-200 dark:border-dark-border flex items-start justify-between gap-2">
+                              <div className="min-w-0 flex-1">
+                                <span className="font-semibold text-gray-800 dark:text-gray-200 block truncate">{t.title}</span>
+                                <span className="text-[10px] text-gray-400">Week {t.weekNumber || 1} &bull; {t.status}</span>
+                              </div>
+                              <span className="shrink-0 px-2 py-0.5 rounded text-[10px] bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 font-bold border border-amber-300/40">
+                                {getInternalTaskReason(t) || 'Internal Only'}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+                    {!showShieldedBreakdown && (
+                      <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                        Internal notes, invoices, operational reminders & credentials are automatically shielded from Client Portal
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Week Action Bar & Kanban Board */}
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                      Week {currentWeekNum}: {weekNames[currentWeekNum]} ({currentWeekTasks.length} {currentWeekTasks.length === 1 ? 'Task' : 'Tasks'}{currentWeekInternalCount > 0 ? ` — ${currentWeekClientVisibleCount} Client Visible, ${currentWeekInternalCount} Internal Staff Only` : ''})
+                    </span>
+                    {isLoadingTasks && <Loader2 className="w-3.5 h-3.5 animate-spin text-teal-600" />}
+                  </div>
+
+                  <div className="flex items-center gap-2">
+                    {client.status === 'Paused' ? (
+                      <span 
+                        className="px-3 py-1.5 rounded-xl bg-gray-100 dark:bg-dark-200 border border-gray-300 dark:border-dark-border text-gray-500 dark:text-gray-400 text-xs font-bold flex items-center gap-1.5 opacity-80 cursor-not-allowed"
+                        title="Task creation is blocked while client organization is paused."
+                      >
+                        <AlertTriangle className="w-3.5 h-3.5 text-brand-500" />
+                        <span>Tasks Paused</span>
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        data-testid="add-task-btn"
+                        aria-label="+ Add Task"
+                        onClick={handleOpenCreateTaskFlow}
+                        className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-black text-white dark:bg-white dark:hover:bg-slate-100 dark:text-slate-900 text-xs font-bold transition-all shadow-xs cursor-pointer"
+                      >
+                        <Plus className="w-3.5 h-3.5" />
+                        <span>Add Task</span>
+                      </button>
+                    )}
+                  </div>
+                </div>
+
+                <ClientKanbanBoard
+                  tasks={currentWeekTasks}
+                  departments={departments}
+                  eligibleAssignees={eligibleAssignees}
+                  currentUserProfile={currentUserProfile}
+                  onTaskClick={(t) => setSelectedTaskDetails(t)}
+                  onStatusChange={handleKanbanStatusChange}
+                  onOpenEditModal={(t) => setEditingTask(t)}
+                  isClientView={false}
+                  isClientOrganizationPaused={client.status === 'Paused'}
+                />
+              </div>
+            )}
+
+            {activeTab === 'workplans' && (
+              <React.Suspense fallback={<div className="p-8 text-center text-xs text-slate-400">Loading work plans...</div>}>
+                <ClientWorkPlanView
+                  client={client}
+                  currentUserProfile={currentUserProfile}
+                  departments={departments}
+                  onSelectWeek={(wk) => {
+                    if (wk >= 1 && wk <= 4) {
+                      setActiveWeek(`week${wk}` as WeekTab);
+                      setActiveTab('setup');
+                    }
+                  }}
+                />
+              </React.Suspense>
+            )}
+
+            {activeTab === 'details' && (
+              <ClientDetailsTab
+                client={client}
+                currentUserProfile={currentUserProfile}
+                eligibleManagers={eligibleManagers}
+                onClientUpdated={onClientUpdated}
+              />
+            )}
+          </div>
+        </div>
+      )}
 
       {/* Task Creation Entry Flow Modals */}
       {isModeModalOpen && (

@@ -14,6 +14,7 @@ import { teamManagementService } from '../../lib/teamManagementService';
 import { archiveService } from '../../lib/archiveService';
 import { CreateClientModal } from '../clients/CreateClientModal';
 import { ClientRecord, UserProfile, ClientPackage, ClientStatus } from '../../types';
+import { useDaysSinceOnboarding, formatOnboardingDate } from '../../lib/pktDateUtils';
 
 export const ClientLogoAvatar: React.FC<{
   logoUrl?: string | null;
@@ -62,6 +63,20 @@ const STATUS_BADGE_STYLES: Record<string, string> = {
   Active: 'bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/20',
   Onboarding: 'bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20',
   Paused: 'bg-rose-500/10 text-rose-600 dark:text-rose-400 border-rose-500/20'
+};
+
+const ClientOnboardingCell: React.FC<{ activationDate?: string | null }> = ({ activationDate }) => {
+  const onboardingInfo = useDaysSinceOnboarding(activationDate);
+  return (
+    <div className="space-y-0.5">
+      <div className="font-semibold text-slate-800 dark:text-gray-200">
+        {activationDate ? formatOnboardingDate(activationDate) : 'Not set'}
+      </div>
+      <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400">
+        {onboardingInfo.formattedBadge}
+      </div>
+    </div>
+  );
 };
 
 export const ClientManagementView: React.FC = () => {
@@ -486,7 +501,8 @@ export const ClientManagementView: React.FC = () => {
               <tr className="border-b border-slate-100 dark:border-dark-border bg-slate-50/70 dark:bg-dark-sidebar/70 text-[11px] uppercase tracking-wider text-slate-400 font-bold">
                 <th className="py-3.5 px-6">Company & Brand</th>
                 <th className="py-3.5 px-6">Client / Owner</th>
-                <th className="py-3.5 px-6">Package</th>
+                <th className="py-3.5 px-6">Package / Tier</th>
+                <th className="py-3.5 px-6">Started / Day</th>
                 <th className="py-3.5 px-6">Operational Manager</th>
                 <th className="py-3.5 px-6">Status</th>
                 <th className="py-3.5 px-6 text-right">Actions</th>
@@ -540,13 +556,18 @@ export const ClientManagementView: React.FC = () => {
                         </div>
                       </td>
 
-                      {/* Package */}
+                      {/* Package / Tier */}
                       <td className="py-4 px-6">
                         <span
                           className={`inline-flex items-center px-2.5 py-1 rounded-lg text-[10px] font-bold border ${pkgBadgeClass}`}
                         >
                           {client.package}
                         </span>
+                      </td>
+
+                      {/* Started / Day (Single source of truth with SelectedClientHeader) */}
+                      <td className="py-4 px-6">
+                        <ClientOnboardingCell activationDate={client.activationDate} />
                       </td>
 
                       {/* Operational Manager */}

@@ -40,6 +40,13 @@ export const ClientWorkPlanView: React.FC<ClientWorkPlanViewProps> = ({
 
   const isOwnerOrManager = currentUserProfile?.role === 'owner' || currentUserProfile?.role === 'operational_manager';
 
+  const totalTasksAcrossPlans = React.useMemo(() => {
+    return plans.reduce((acc, plan) => {
+      const stats = getPlanStats(plan);
+      return acc + stats.totalTasks;
+    }, 0);
+  }, [plans]);
+
   const loadPlans = useCallback(async () => {
     setIsLoading(true);
     setErrorMessage(null);
@@ -139,7 +146,10 @@ export const ClientWorkPlanView: React.FC<ClientWorkPlanViewProps> = ({
                   13 Weeks
                 </span>
                 <span className="px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-dark-200 text-slate-700 dark:text-slate-300 font-mono text-xs font-black border border-slate-200 dark:border-dark-border">
-                  {plans.length} {plans.length === 1 ? 'Plan' : 'Plans'} ({plans.filter(p => p.status === 'Launched').length} Launched, {plans.filter(p => p.status === 'Draft').length} Drafts)
+                  {plans.length} {plans.length === 1 ? 'Plan' : 'Plans'}
+                </span>
+                <span className="px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-dark-200 text-slate-700 dark:text-slate-300 font-mono text-xs font-black border border-slate-200 dark:border-dark-border">
+                  {totalTasksAcrossPlans} Tasks
                 </span>
               </div>
               <p className="text-xs text-slate-600 dark:text-slate-300 font-medium mt-1">
@@ -350,17 +360,17 @@ export const ClientWorkPlanView: React.FC<ClientWorkPlanViewProps> = ({
           })}
         </div>
       ) : (
-        /* Empty State */
-        <div className="bg-white dark:bg-dark-card rounded-2xl border border-gray-200 dark:border-dark-border p-12 shadow-sm min-h-[260px] flex flex-col items-center justify-center text-center space-y-4">
-          <div className="w-12 h-12 rounded-2xl bg-brand-500/10 text-brand-500 flex items-center justify-center border border-brand-500/20">
+        /* Empty State (Modern Dashboard Card Format) */
+        <div className="bg-white dark:bg-dark-card rounded-2xl border border-slate-200/90 dark:border-dark-border p-12 shadow-sm min-h-[260px] flex flex-col items-center justify-center text-center space-y-4">
+          <div className="w-12 h-12 rounded-2xl bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 flex items-center justify-center border border-teal-200/80 dark:border-teal-800/40 shadow-xs">
             <Calendar className="w-6 h-6" />
           </div>
           <div className="max-w-md space-y-1.5">
-            <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">
+            <h3 className="text-base font-bold text-slate-900 dark:text-white">
               No 90-Day Work Plans Defined
             </h3>
-            <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
-              Design a 13-week operational schedule by assembling Service Templates and custom tasks. Plans persist as drafts until launched atomically into Draft tasks.
+            <p className="text-xs text-slate-500 dark:text-slate-400 leading-relaxed">
+              Design a 13-week operational schedule by assembling Service Templates and custom tasks. Plans persist as drafts until launched atomically into deliverables.
             </p>
           </div>
 
@@ -370,7 +380,7 @@ export const ClientWorkPlanView: React.FC<ClientWorkPlanViewProps> = ({
               onClick={handleOpenNewBuilder}
               disabled={client.status === 'Paused' || isUnavailable}
               title={isUnavailable ? 'Phase 3D backend is not enabled in this environment yet. Preview is read-only.' : undefined}
-              className="flex items-center gap-1.5 px-4 py-2.5 min-h-[44px] bg-brand-500 hover:bg-brand-600 disabled:bg-gray-300 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold shadow-md shadow-brand-500/20 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-4 py-2.5 min-h-[44px] bg-[#0D9488] hover:bg-teal-700 disabled:bg-slate-300 dark:disabled:bg-dark-100 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold shadow-md shadow-teal-900/20 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>Create First 90-Day Work Plan</span>

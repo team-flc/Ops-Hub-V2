@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
 import {
+  Moon,
+  Sun,
   LayoutDashboard,
   FolderKanban,
   Folder,
@@ -110,6 +112,12 @@ export interface FinfixClientPortalViewProps {
   canViewDetailsTab?: boolean;
 }
 
+function isApprovalStatus(status?: string | null): boolean {
+  if (!status) return false;
+  const s = status.toLowerCase();
+  return s === 'approval' || s === 'awaiting approval' || s === 'team review' || s === 'client review' || s.includes('approval');
+}
+
 export const FinfixClientPortalView: React.FC<FinfixClientPortalViewProps> = ({
   client,
   currentUserProfile: _currentUserProfile,
@@ -135,6 +143,25 @@ export const FinfixClientPortalView: React.FC<FinfixClientPortalViewProps> = ({
   const [reportSuccessMsg, setReportSuccessMsg] = useState<string | null>(null);
 
   // Search Modal State
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof document !== 'undefined') {
+      return document.documentElement.classList.contains('dark');
+    }
+    return false;
+  });
+
+  const togglePortalTheme = () => {
+    if (typeof document === 'undefined') return;
+    const html = document.documentElement;
+    if (html.classList.contains('dark')) {
+      html.classList.remove('dark');
+      setIsDark(false);
+    } else {
+      html.classList.add('dark');
+      setIsDark(true);
+    }
+  };
+
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -236,10 +263,22 @@ export const FinfixClientPortalView: React.FC<FinfixClientPortalViewProps> = ({
     : 0;
 
   const pendingApprovals = useMemo(() => {
-    return clientVisibleTasks.filter(
-      (t) => isTaskAwaitingApproval(t.status) || (t.approvalMode === 'Client Approval Required' && t.status === 'Approval')
-    );
+    return clientVisibleTasks.filter((t) => isApprovalStatus(t.status));
   }, [clientVisibleTasks]);
+
+  const completedThisWeek = useMemo(() => {
+    const now = Date.now();
+    const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
+    return completedTasks.filter((t) => {
+      if (!t.completedAt) return false;
+      const compTime = new Date(t.completedAt).getTime();
+      return !isNaN(compTime) && now - compTime <= sevenDaysMs;
+    }).length;
+  }, [completedTasks]);
+
+  const clientMonthlyRate = (client as any).monthlyRate || (client as any).monthly_rate;
+  const hasClientPrice = Boolean(clientMonthlyRate && Number(clientMonthlyRate) > 0);
+  const formattedClientRate = hasClientPrice ? `${clientMonthlyRate}` : 'Not provided';
 
   // Real Subscription info from client record
   const subscriptionPlan = useMemo(() => {
@@ -442,130 +481,195 @@ export const FinfixClientPortalView: React.FC<FinfixClientPortalViewProps> = ({
       timestamp: string;
     }> = [];
 
-    // Row 1: Task Completed (real deliverable if completed, or default milestone)
-    if (completedTasks.length > 0) {
-      list.push({
-        id: `act-comp-${completedTasks[0].id}`,
-        title: 'Task Completed',
-        subtitle: completedTasks[0].title,
-        iconType: 'check',
-        timestamp: completedTasks[0].completedAt ? formatPKTDate(completedTasks[0].completedAt) : '2 hours ago'
+    if (clientVisibleTasks.length > 0) {
+      const sorted = [...clientVisibleTasks].sort((a, b) => {
+        const timeA = new Date(b.completedAt || b.createdAt || 0).getTime();
+        const timeB = new Date(a.completedAt || a.createdAt || 0).getTime();
+        return timeA - timeB;
       });
-    } else {
-      list.push({
-        id: 'act-sample-1',
-        title: 'Task Completed',
-        subtitle: 'New Lead Form Build',
-        iconType: 'check',
-        timestamp: '2 hours ago'
+
+      sorted.slice(0, 4).forEach((t) => {
+        let action = 'Deliverable Planned';
+        let iconType: 'check' | 'message' | 'dollar' | 'edit' = 'edit';
+        if (t.status === 'Completed' || t.status === 'Done') {
+          action = 'Task Completed';
+          iconType = 'check';
+        } else if (isApprovalStatus(t.status)) {
+          action = 'Submitted for Review';
+          iconType = 'message';
+        } else if (t.status === 'In Progress') {
+          action = 'Work in Progress';
+          iconType = 'edit';
+        }
+
+        const timeStr = t.completedAt
+          ? formatPKTDate(t.completedAt)
+          : t.createdAt
+          ? formatPKTDate(t.createdAt)
+          : 'Recently';
+
+        list.push({
+          id: `act-${t.id}`,
+          title: action,
+          subtitle: t.title,
+          iconType,
+          timestamp: timeStr
+        });
       });
     }
-
-    // Row 2: Client Review / Feedback Comment
-    if (pendingApprovals.length > 0) {
-      list.push({
-        id: `act-appr-${pendingApprovals[0].id}`,
-        title: 'Review Requested',
-        subtitle: pendingApprovals[0].title,
-        iconType: 'message',
-        timestamp: '4 hours ago'
-      });
-    } else {
-      list.push({
-        id: 'act-sample-2',
-        title: 'New Comment',
-        subtitle: '"Great funnel ideas!"',
-        iconType: 'message',
-        timestamp: '4 hours ago'
-      });
-    }
-
-    // Row 3: Payment Received
-    list.push({
-      id: 'act-sample-3',
-      title: 'Payment Received',
-      subtitle: '$149.00 via Stripe',
-      iconType: 'dollar',
-      timestamp: '1 day ago'
-    });
-
-    // Row 4: Project Updated
-    const lastProjName = projectRows[3]?.name || 'Paid Ads Setup';
-    list.push({
-      id: 'act-sample-4',
-      title: 'Project Updated',
-      subtitle: lastProjName,
-      iconType: 'edit',
-      timestamp: '1 day ago'
-    });
 
     return list;
-  }, [completedTasks, pendingApprovals, projectRows]);
+  }, [clientVisibleTasks]);
 
   // Real Client Notifications derived strictly from client tasks
   const clientNotifications = useMemo(() => {
-    const list: Array<{ id: string; title: string; subtitle: string; type: 'approval' | 'progress' | 'done'; timestamp: string }> = [];
+    const list: Array<{ id: string; title: string; subtitle: string; type: 'approval' | 'progress' | 'done'; timestamp: string; task: ClientTask }> = [];
     
     // Priority 1: Pending Approvals
     pendingApprovals.forEach((t) => {
       list.push({
         id: `notif-approval-${t.id}`,
         title: `Action Required: ${t.title}`,
-        subtitle: `Week ${t.weekNumber} Deliverable awaiting client review`,
+        subtitle: `Week ${t.weekNumber || 1} Deliverable awaiting client review`,
         type: 'approval',
-        timestamp: t.createdAt ? formatPKTDate(t.createdAt) : 'Recently'
+        timestamp: t.createdAt ? formatPKTDate(t.createdAt) : 'Recently',
+        task: t
       });
     });
 
     // Priority 2: In Flight
     clientVisibleTasks
       .filter((t) => t.status === 'In Progress')
-      .slice(0, 3)
+      .slice(0, 4)
       .forEach((t) => {
         list.push({
           id: `notif-progress-${t.id}`,
           title: `In Progress: ${t.title}`,
-          subtitle: `Sprint delivery underway (Week ${t.weekNumber})`,
+          subtitle: `Sprint delivery underway (Week ${t.weekNumber || 1})`,
           type: 'progress',
-          timestamp: t.createdAt ? formatPKTDate(t.createdAt) : 'Recently'
+          timestamp: t.updatedAt ? formatPKTDate(t.updatedAt) : 'Recently',
+          task: t
         });
       });
 
     // Priority 3: Completed
-    completedTasks.slice(0, 2).forEach((t) => {
+    completedTasks.slice(0, 3).forEach((t) => {
       list.push({
         id: `notif-done-${t.id}`,
-        title: `Completed: ${t.title}`,
-        subtitle: `Verified deliverable in Week ${t.weekNumber}`,
+        title: `Milestone Completed: ${t.title}`,
+        subtitle: `Verified deliverable in Week ${t.weekNumber || 1}`,
         type: 'done',
-        timestamp: t.completedAt ? formatPKTDate(t.completedAt) : 'Recently'
+        timestamp: t.completedAt ? formatPKTDate(t.completedAt) : 'Recently',
+        task: t
       });
     });
 
     return list;
   }, [pendingApprovals, clientVisibleTasks, completedTasks]);
 
-  // Search Results
+  const handleNotificationClick = (notif: (typeof clientNotifications)[0]) => {
+    setIsNotificationsOpen(false);
+    if (notif.task.evidenceUrl) {
+      window.open(notif.task.evidenceUrl, '_blank', 'noopener,noreferrer');
+    } else if (onMainTabChange && renderSetupView) {
+      onMainTabChange('setup');
+    }
+  };
+
+  // Enhanced Search Results matching tasks, sections, enterprise, and LinkedIn
   const searchResults = useMemo(() => {
     if (!searchQuery.trim()) return [];
     const q = searchQuery.toLowerCase().trim();
-    return clientVisibleTasks.filter(
-      (t) =>
-        t.title.toLowerCase().includes(q) ||
-        (t.status && t.status.toLowerCase().includes(q)) ||
-        `week ${t.weekNumber}`.includes(q) ||
-        (client.companyName && client.companyName.toLowerCase().includes(q))
-    );
-  }, [clientVisibleTasks, searchQuery, client.companyName]);
 
-  // Download Monthly Report Action
+    const results: Array<{
+      id: string;
+      type: 'task' | 'section';
+      title: string;
+      subtitle: string;
+      status?: string;
+      weekNumber?: number;
+      evidenceUrl?: string;
+      sectionKey?: FinfixNavTab;
+      task?: ClientTask;
+    }> = [];
+
+    // 1. Match Sections
+    FINFIX_NAV_ITEMS.forEach((item) => {
+      const matchLabel = item.label.toLowerCase().includes(q) || item.key.toLowerCase().includes(q);
+      const isLinkedInQuery = (q.includes('linkedin') || q.includes('outreach')) && (item.key === 'linkedin' || item.key === 'social');
+      const isEnterpriseQuery = q.includes('enterprise') && (item.key === 'subscription' || item.key === 'billing' || item.key === 'settings');
+
+      if (matchLabel || isLinkedInQuery || isEnterpriseQuery) {
+        results.push({
+          id: `sec-${item.key}`,
+          type: 'section',
+          title: item.label,
+          subtitle: `Workspace Section &bull; ${item.label}`,
+          sectionKey: item.key
+        });
+      }
+    });
+
+    // 2. Match Tasks / Deliverables
+    clientVisibleTasks.forEach((t) => {
+      const titleLower = (t.title || '').toLowerCase();
+      const statusLower = (t.status || '').toLowerCase();
+      const weekStr = `week ${t.weekNumber}`.toLowerCase();
+      const clientName = (client.companyName || '').toLowerCase();
+      const pkgName = (client.package || '').toLowerCase();
+
+      const matchTitle = titleLower.includes(q);
+      const matchStatus = statusLower.includes(q);
+      const matchWeek = weekStr.includes(q);
+      const matchClient = clientName.includes(q);
+      const matchEnterprise = q.includes('enterprise') && (pkgName.includes('advanced') || titleLower.includes('enterprise') || titleLower.includes('verification'));
+      const matchLinkedIn = (q.includes('linkedin') || q.includes('outreach')) && (t.weekNumber === 2 || titleLower.includes('linkedin') || titleLower.includes('outreach') || titleLower.includes('navigator'));
+
+      if (matchTitle || matchStatus || matchWeek || matchClient || matchEnterprise || matchLinkedIn) {
+        results.push({
+          id: `task-${t.id}`,
+          type: 'task',
+          title: t.title,
+          subtitle: `Week ${t.weekNumber || 1} Deliverable &bull; ${t.status}`,
+          status: t.status,
+          weekNumber: t.weekNumber,
+          evidenceUrl: t.evidenceUrl,
+          task: t
+        });
+      }
+    });
+
+    return results;
+  }, [clientVisibleTasks, searchQuery, client.companyName, client.package]);
+
+  const handleSearchResultClick = (res: (typeof searchResults)[0]) => {
+    setIsSearchOpen(false);
+    setSearchQuery('');
+    if (res.type === 'section' && res.sectionKey) {
+      handleNavClick(res.sectionKey);
+    } else if (res.type === 'task' && res.task) {
+      if (res.task.evidenceUrl) {
+        window.open(res.task.evidenceUrl, '_blank', 'noopener,noreferrer');
+      } else if (onMainTabChange && renderSetupView) {
+        onMainTabChange('setup');
+      }
+    }
+  };
+
+  // Download Monthly Report Action (Synchronous & Real Data Only)
   const handleDownloadReport = () => {
     setIsGeneratingReport(true);
-    setReportSuccessMsg(null);
-    setTimeout(() => {
-      setIsGeneratingReport(false);
-      setReportSuccessMsg('Monthly Report generated from verified live deliverables. Ready for download.');
-      const printableContent = `
+    setTimeout(() => setIsGeneratingReport(false), 600);
+
+    if (totalVisibleTasks === 0) {
+      setReportSuccessMsg('Report not available: No deliverable data on file for this workspace.');
+      setTimeout(() => setReportSuccessMsg(null), 4000);
+      return;
+    }
+
+    const clientSlug = (client.companyName || client.clientName || 'client').toLowerCase().replace(/[^\w]/g, '_');
+    const fileName = `${clientSlug}_monthly_report.txt`;
+    const printableContent = `
 Ops Hub - Monthly Operations Report
 Client: ${client.companyName || client.clientName}
 Date: ${new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
@@ -577,27 +681,45 @@ Subscription Status: ${subscriptionPlan} (${subscriptionStatus})
 Next Billing Date: ${nextBillingDate}
 --------------------------------------------------
 Project Deliverables:
-${projectRows.map(p => `- ${p.name}: ${p.percent}% completed (${p.done}/${p.total} tasks) [${p.status}]`).join('\n')}
+${projectRows.map((p) => `- ${p.name}: ${p.percent}% completed (${p.done}/${p.total} tasks) [${p.status}]`).join('\n')}
 --------------------------------------------------
 All figures verified against live Ops Hub workspace records.
-      `.trim();
+    `.trim();
 
+    try {
       const blob = new Blob([printableContent], { type: 'text/plain;charset=utf-8' });
       const url = URL.createObjectURL(blob);
       const link = document.createElement('a');
       link.href = url;
-      link.download = `${(client.companyName || 'client').toLowerCase().replace(/\s+/g, '_')}_monthly_report.txt`;
+      link.download = fileName;
       document.body.appendChild(link);
       link.click();
-      setTimeout(() => {
-        document.body.removeChild(link);
-        URL.revokeObjectURL(url);
-      }, 500);
-    }, 600);
+      document.body.removeChild(link);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      const encodedUri = 'data:text/plain;charset=utf-8,' + encodeURIComponent(printableContent);
+      const link = document.createElement('a');
+      link.href = encodedUri;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
+    setReportSuccessMsg('Monthly Report downloaded successfully.');
+    setTimeout(() => setReportSuccessMsg(null), 3500);
   };
 
-  // Download Official Receipt Action
+  // Download Official Receipt Action (Synchronous & Real Data Only)
   const handleDownloadReceipt = () => {
+    if (isArchived) {
+      setReportSuccessMsg('Receipt not available: Client workspace is archived.');
+      setTimeout(() => setReportSuccessMsg(null), 4000);
+      return;
+    }
+
+    const clientSlug = (client.companyName || client.clientName || 'client').toLowerCase().replace(/[^\w]/g, '_');
+    const fileName = `${clientSlug}_receipt.txt`;
     const receiptContent = `
 ==================================================
               OFFICIAL RECEIPT
@@ -608,23 +730,33 @@ Account Ref: OPS-${client.id.slice(0, 8).toUpperCase()}
 Date: ${new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric' })}
 Billing Cycle: Monthly Retainer
 Plan Tier: ${subscriptionPlan}
+Subscription Rate: ${formattedClientRate}
 Payment Status: ${subscriptionStatus === 'Active' ? 'Paid' : 'Pending'}
 Next Billing Date: ${nextBillingDate}
 ==================================================
 Thank you for partnering with us.
     `.trim();
 
-    const blob = new Blob([receiptContent], { type: 'text/plain;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `${(client.companyName || 'client').toLowerCase().replace(/\s+/g, '_')}_receipt.txt`;
-    document.body.appendChild(link);
-    link.click();
-    setTimeout(() => {
+    try {
+      const blob = new Blob([receiptContent], { type: 'text/plain;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
       document.body.removeChild(link);
-      URL.revokeObjectURL(url);
-    }, 500);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch {
+      const encodedUri = 'data:text/plain;charset=utf-8,' + encodeURIComponent(receiptContent);
+      const link = document.createElement('a');
+      link.href = encodedUri;
+      link.download = fileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+
     setReportSuccessMsg('Official receipt downloaded successfully.');
     setTimeout(() => setReportSuccessMsg(null), 3500);
   };
@@ -753,6 +885,18 @@ Thank you for partnering with us.
           </div>
 
           <div className="flex items-center gap-3">
+            {/* Theme Toggle (Dark / Light) */}
+            <button
+              type="button"
+              data-testid="portal-theme-toggle"
+              onClick={togglePortalTheme}
+              className="p-2.5 rounded-xl text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-200 transition-colors cursor-pointer"
+              title={isDark ? "Switch to Light Mode" : "Switch to Dark Mode"}
+              aria-label="Toggle Theme"
+            >
+              {isDark ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4" />}
+            </button>
+
             {/* Search Icon Trigger */}
             <button
               type="button"
@@ -805,9 +949,11 @@ Thank you for partnering with us.
                   <div className="max-h-80 overflow-y-auto divide-y divide-slate-100 dark:divide-dark-border custom-scrollbar">
                     {clientNotifications.length > 0 ? (
                       clientNotifications.map((notif) => (
-                        <div
+                        <button
                           key={notif.id}
-                          className="p-3.5 hover:bg-slate-50 dark:hover:bg-dark-300/40 transition-colors flex items-start gap-3"
+                          type="button"
+                          onClick={() => handleNotificationClick(notif)}
+                          className="w-full text-left p-3.5 hover:bg-slate-50 dark:hover:bg-dark-300/40 transition-colors flex items-start gap-3 cursor-pointer"
                         >
                           <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
                             notif.type === 'approval' ? 'bg-amber-500' : notif.type === 'progress' ? 'bg-teal-500' : 'bg-emerald-500'
@@ -823,7 +969,7 @@ Thank you for partnering with us.
                               {notif.timestamp}
                             </span>
                           </div>
-                        </div>
+                        </button>
                       ))
                     ) : (
                       <div className="p-8 text-center text-xs text-slate-500 dark:text-slate-400">
@@ -969,9 +1115,15 @@ Thank you for partnering with us.
               <div className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight font-sans">
                 {completionPercent}%
               </div>
-              <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
-                <span>▲ +9% vs last month</span>
-              </div>
+              {totalVisibleTasks > 0 && completedTasks.length > 0 ? (
+                <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                  <span>{completedTasks.length} of {totalVisibleTasks} completed</span>
+                </div>
+              ) : (
+                <div className="text-xs text-slate-400 dark:text-slate-500 font-medium">
+                  {totalVisibleTasks === 0 ? 'No deliverables active' : 'Awaiting completion'}
+                </div>
+              )}
             </div>
 
             {/* Card 2: Tasks Completed */}
@@ -989,9 +1141,15 @@ Thank you for partnering with us.
                 <span className="sr-only">{completedTasks.length}/{totalVisibleTasks}</span>
                 <span aria-hidden="true">{completedTasks.length} / {totalVisibleTasks}</span>
               </div>
-              <div className="text-xs font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-                <span>+{completedTasks.length > 0 ? completedTasks.length : 5} completed this week</span>
-              </div>
+              {completedThisWeek > 0 ? (
+                <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
+                  <span>+{completedThisWeek} completed this week</span>
+                </div>
+              ) : (
+                <div className="text-xs text-slate-400 dark:text-slate-500 font-medium">
+                  {completedTasks.length > 0 ? `${completedTasks.length} total completed` : 'No completions this week'}
+                </div>
+              )}
             </div>
 
             {/* Card 3: Pending Approvals */}
@@ -1008,10 +1166,16 @@ Thank you for partnering with us.
               <div className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight font-sans">
                 {pendingApprovals.length}
               </div>
-              <div className="text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
-                <span className="w-2 h-2 rounded-full bg-amber-500" />
-                <span>Needs your review &bull;</span>
-              </div>
+              {pendingApprovals.length > 0 ? (
+                <div className="text-xs font-bold text-amber-600 dark:text-amber-400 flex items-center gap-1.5">
+                  <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                  <span>Needs your review &bull;</span>
+                </div>
+              ) : (
+                <div className="text-xs font-bold text-slate-400 dark:text-slate-500 flex items-center gap-1.5">
+                  <span>All caught up</span>
+                </div>
+              )}
             </div>
 
             {/* Card 4: Subscription */}
@@ -1098,155 +1262,32 @@ Thank you for partnering with us.
                   {/* Accessible check for automated tests */}
                   <span className="sr-only">Website Traffic & Leads: Not connected</span>
 
-                  {/* SVG Chart Canvas */}
-                  <div className="relative w-full h-64 pt-2">
-                    <svg viewBox="0 0 540 220" className="w-full h-full overflow-visible select-none">
-                      <defs>
-                        <linearGradient id="trafficGradient" x1="0" y1="0" x2="0" y2="1">
-                          <stop offset="0%" stopColor="#0D9488" stopOpacity="0.22" />
-                          <stop offset="100%" stopColor="#0D9488" stopOpacity="0.0" />
-                        </linearGradient>
-                      </defs>
-
-                      {/* Y Axis Gridlines & Labels */}
-                      {[
-                        { y: 25, label: '4k' },
-                        { y: 65, label: '3k' },
-                        { y: 105, label: '2k' },
-                        { y: 145, label: '1k' },
-                        { y: 185, label: '0' }
-                      ].map((grid) => (
-                        <g key={grid.label}>
-                          <text
-                            x="24"
-                            y={grid.y + 4}
-                            textAnchor="end"
-                            className="text-[11px] font-semibold fill-slate-400 dark:fill-slate-500"
-                          >
-                            {grid.label}
-                          </text>
-                          <line
-                            x1="38"
-                            y1={grid.y}
-                            x2="520"
-                            y2={grid.y}
-                            stroke="currentColor"
-                            className="text-slate-100 dark:text-dark-border"
-                            strokeWidth="1"
-                          />
-                        </g>
-                      ))}
-
-                      {/* X Axis Labels */}
-                      {chartData.dates.map((date, idx) => {
-                        const step = chartData.dates.length > 1 ? (440 / (chartData.dates.length - 1)) : 220;
-                        const x = 55 + idx * step;
-                        return (
-                          <text
-                            key={date}
-                            x={x}
-                            y="208"
-                            textAnchor="middle"
-                            className="text-[11px] font-semibold fill-slate-500 dark:fill-slate-400"
-                          >
-                            {date}
-                          </text>
-                        );
-                      })}
-
-                      {/* Website Traffic Area Fill */}
-                      <path
-                        d={chartData.trafficAreaPath}
-                        fill="url(#trafficGradient)"
-                      />
-
-                      {/* Leads Purple Line */}
-                      <path
-                        d={chartData.leadsPath}
-                        fill="none"
-                        stroke="#8B5CF6"
-                        strokeWidth="2.5"
-                        strokeLinecap="round"
-                      />
-
-                      {/* Leads Data Points */}
-                      {chartData.leadsPoints.map((pt, idx) => (
-                        <circle
-                          key={`leads-pt-${idx}`}
-                          cx={pt.x}
-                          cy={pt.y}
-                          r="4.5"
-                          fill="#8B5CF6"
-                          stroke="#ffffff"
-                          strokeWidth="2"
-                        />
-                      ))}
-
-                      {/* Website Traffic Teal Line */}
-                      <path
-                        d={chartData.trafficPath}
-                        fill="none"
-                        stroke="#0D9488"
-                        strokeWidth="2.5"
-                        strokeLinecap="round"
-                      />
-
-                      {/* Website Traffic Data Points */}
-                      {chartData.trafficPoints.map((pt, idx) => (
-                        <circle
-                          key={`traffic-pt-${idx}`}
-                          cx={pt.x}
-                          cy={pt.y}
-                          r="4.5"
-                          fill="#0D9488"
-                          stroke="#ffffff"
-                          strokeWidth="2"
-                        />
-                      ))}
-
-                      {/* Tooltip Badge on Peak Point */}
-                      <g transform={`translate(${chartData.tooltip.x}, ${chartData.tooltip.y})`}>
-                        <rect
-                          x="0"
-                          y="0"
-                          width="140"
-                          height="32"
-                          rx="8"
-                          className="fill-white dark:fill-dark-card filter drop-shadow-md stroke-slate-200/80 dark:stroke-dark-border"
-                          strokeWidth="1"
-                        />
-                        <text
-                          x="12"
-                          y="20"
-                          className="text-[11px] font-black fill-slate-900 dark:fill-white font-sans"
-                        >
-                          {chartData.tooltip.text}
-                        </text>
-                        <text
-                          x="96"
-                          y="20"
-                          className="text-[11px] font-bold fill-emerald-600 dark:fill-emerald-400 font-sans"
-                        >
-                          {chartData.tooltip.badge}
-                        </text>
-                        <polygon
-                          points="70,32 65,37 75,37"
-                          className="fill-white dark:fill-dark-card stroke-slate-200/80 dark:stroke-dark-border"
-                          strokeWidth="1"
-                        />
-                      </g>
-                    </svg>
+                  {/* Performance Overview Body: Real Data if connected, otherwise clean Not connected */}
+                  <div className="relative w-full h-64 flex flex-col items-center justify-center p-6 text-center rounded-xl bg-slate-50/70 dark:bg-dark-300/30 border border-dashed border-slate-200 dark:border-dark-border space-y-2.5 my-auto">
+                    <div className="w-10 h-10 rounded-full bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 flex items-center justify-center">
+                      <TrendingUp className="w-5 h-5" />
+                    </div>
+                    <div className="space-y-1">
+                      <h5 className="text-sm font-bold text-slate-800 dark:text-white">Website Traffic & Leads: Not connected</h5>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm leading-relaxed">
+                        No analytics integration connected. Connect Google Analytics or LeadConnector in Settings to stream live traffic and conversion data.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 pt-1 text-[11px] font-bold text-slate-400 dark:text-slate-500">
+                      <span className="w-2 h-2 rounded-full bg-slate-300 dark:bg-slate-600" />
+                      <span>Telemetry: Standby</span>
+                    </div>
                   </div>
 
                   {/* Chart Legend */}
-                  <div className="flex items-center justify-center gap-6 pt-1 text-xs font-bold text-slate-700 dark:text-slate-300">
+                  <div className="flex items-center justify-center gap-6 pt-1 text-xs font-bold text-slate-400 dark:text-slate-500">
                     <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full bg-[#0D9488]" />
-                      <span>Website Traffic</span>
+                      <span className="w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-slate-600" />
+                      <span>Website Traffic (Not connected)</span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full bg-[#8B5CF6]" />
-                      <span>Leads</span>
+                      <span className="w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-slate-600" />
+                      <span>Leads (Not connected)</span>
                     </div>
                   </div>
                 </div>
@@ -1360,7 +1401,13 @@ Thank you for partnering with us.
                       </div>
                       <div className="text-right">
                         <span className="text-sm font-black text-slate-900 dark:text-white block">
-                          $149 <span className="text-xs font-normal text-slate-500">/month</span>
+                          {hasClientPrice ? (
+                            <>
+                              ${clientMonthlyRate} <span className="text-xs font-normal text-slate-500 dark:text-slate-400">/month</span>
+                            </>
+                          ) : (
+                            <span className="text-xs font-bold text-slate-500 dark:text-slate-400">Not provided</span>
+                          )}
                         </span>
                         <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300">
                           {subscriptionStatus}
@@ -1421,45 +1468,53 @@ Thank you for partnering with us.
                   </div>
 
                   <div className="space-y-3 pt-1">
-                    {recentActivitiesPreview.map((act) => (
-                      <div
-                        key={act.id}
-                        className="flex items-start gap-3 text-xs pb-2.5 border-b border-slate-100 dark:border-dark-border last:border-b-0 last:pb-0"
-                      >
+                    {recentActivitiesPreview.length > 0 ? (
+                      recentActivitiesPreview.map((act) => (
                         <div
-                          className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5 shadow-xs ${
-                            act.iconType === 'check'
-                              ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
-                              : act.iconType === 'message'
-                              ? 'bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300'
-                              : act.iconType === 'dollar'
-                              ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
-                              : 'bg-orange-100 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300'
-                          }`}
+                          key={act.id}
+                          className="flex items-start gap-3 text-xs pb-2.5 border-b border-slate-100 dark:border-dark-border last:border-b-0 last:pb-0"
                         >
-                          {act.iconType === 'check' ? (
-                            <CheckCircle2 className="w-4 h-4" />
-                          ) : act.iconType === 'message' ? (
-                            <MessageSquare className="w-4 h-4" />
-                          ) : act.iconType === 'dollar' ? (
-                            <DollarSign className="w-4 h-4" />
-                          ) : (
-                            <Edit3 className="w-4 h-4" />
-                          )}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <span className="font-bold text-slate-900 dark:text-white block truncate text-xs sm:text-sm">
-                            {act.title}
+                          <div
+                            className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5 shadow-xs ${
+                              act.iconType === 'check'
+                                ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
+                                : act.iconType === 'message'
+                                ? 'bg-purple-100 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300'
+                                : act.iconType === 'dollar'
+                                ? 'bg-emerald-100 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
+                                : 'bg-orange-100 dark:bg-orange-950/40 text-orange-700 dark:text-orange-300'
+                            }`}
+                          >
+                            {act.iconType === 'check' ? (
+                              <CheckCircle2 className="w-4 h-4" />
+                            ) : act.iconType === 'message' ? (
+                              <MessageSquare className="w-4 h-4" />
+                            ) : act.iconType === 'dollar' ? (
+                              <DollarSign className="w-4 h-4" />
+                            ) : (
+                              <Edit3 className="w-4 h-4" />
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <span className="font-bold text-slate-900 dark:text-white block truncate text-xs sm:text-sm">
+                              {act.title}
+                            </span>
+                            <span className="text-xs text-slate-500 dark:text-slate-400 font-medium truncate block">
+                              {act.subtitle}
+                            </span>
+                          </div>
+                          <span className="text-xs text-slate-400 dark:text-slate-500 shrink-0 font-medium">
+                            {act.timestamp}
                           </span>
-                          <span className="text-xs text-slate-500 dark:text-slate-400 font-medium truncate block">
-                            {act.subtitle}
-                          </span>
                         </div>
-                        <span className="text-xs text-slate-400 dark:text-slate-500 shrink-0 font-medium">
-                          {act.timestamp}
-                        </span>
+                      ))
+                    ) : (
+                      <div className="py-8 text-center text-xs text-slate-500 dark:text-slate-400 space-y-1">
+                        <Clock className="w-6 h-6 mx-auto text-slate-300 dark:text-slate-600 mb-1" />
+                        <span className="font-semibold block">No recent activity</span>
+                        <span className="text-[11px] text-slate-400 dark:text-slate-500 block">No events recorded yet for this workspace.</span>
                       </div>
-                    ))}
+                    )}
                   </div>
                 </div>
 
@@ -1860,56 +1915,62 @@ Thank you for partnering with us.
             {/* Search Results List */}
             <div className="max-h-96 overflow-y-auto p-2 custom-scrollbar">
               {searchQuery.trim() === '' ? (
-                <div className="p-8 text-center text-xs text-slate-400">
-                  Start typing to search across all deliverables, sprints, and milestones for {clientGreetingName}.
+                <div className="p-8 text-center text-xs text-slate-400 dark:text-slate-500">
+                  Start typing to search deliverables, milestones, enterprise services, or workspace sections for {clientGreetingName}.
                 </div>
               ) : searchResults.length > 0 ? (
                 <div className="space-y-1">
-                  {searchResults.map((task) => (
-                    <div
-                      key={task.id}
-                      className="p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-dark-300/40 transition-colors flex items-center justify-between gap-3 border border-transparent hover:border-slate-200 dark:hover:border-dark-border"
+                  {searchResults.map((item) => (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => handleSearchResultClick(item)}
+                      className="w-full text-left p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-dark-300/40 transition-colors flex items-center justify-between gap-3 border border-transparent hover:border-slate-200 dark:hover:border-dark-border cursor-pointer group"
                     >
                       <div className="min-w-0 flex-1">
                         <div className="flex items-center gap-2 mb-1">
                           <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 dark:bg-dark-200 text-slate-700 dark:text-slate-300">
-                            Week {task.weekNumber}
+                            {item.type === 'section' ? 'Section' : `Week ${item.weekNumber || 1}`}
                           </span>
-                          <span
-                            className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                              task.status === 'Completed' || task.status === 'Done'
-                                ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
-                                : isTaskAwaitingApproval(task.status)
-                                ? 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300'
-                                : task.status === 'In Progress'
-                                ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300'
-                                : 'bg-slate-100 dark:bg-dark-200 text-slate-600 dark:text-slate-400'
-                            }`}
-                          >
-                            {task.status}
-                          </span>
+                          {item.status && (
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                item.status === 'Completed' || item.status === 'Done'
+                                  ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300'
+                                  : isApprovalStatus(item.status)
+                                  ? 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300'
+                                  : item.status === 'In Progress'
+                                  ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300'
+                                  : 'bg-slate-100 dark:bg-dark-200 text-slate-600 dark:text-slate-400'
+                              }`}
+                            >
+                              {item.status}
+                            </span>
+                          )}
                         </div>
-                        <h5 className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                          {task.title}
+                        <h5 className="text-xs font-bold text-slate-900 dark:text-white truncate group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors">
+                          {item.title}
                         </h5>
+                        <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 truncate">
+                          {item.subtitle}
+                        </p>
                       </div>
 
-                      {task.evidenceUrl && (
-                        <a
-                          href={task.evidenceUrl}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="shrink-0 text-xs text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-1 font-bold"
-                        >
+                      {item.evidenceUrl ? (
+                        <span className="shrink-0 text-xs text-teal-600 dark:text-teal-400 flex items-center gap-1 font-bold">
                           <span>Deliverable</span>
                           <ExternalLink className="w-3.5 h-3.5" />
-                        </a>
+                        </span>
+                      ) : (
+                        <span className="shrink-0 text-xs text-slate-400 group-hover:text-teal-600 font-bold transition-colors">
+                          Open &rarr;
+                        </span>
                       )}
-                    </div>
+                    </button>
                   ))}
                 </div>
               ) : (
-                <div className="p-8 text-center text-xs text-slate-400">
+                <div className="p-8 text-center text-xs text-slate-400 dark:text-slate-500">
                   No deliverables found matching "{searchQuery}".
                 </div>
               )}

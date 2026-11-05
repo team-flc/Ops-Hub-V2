@@ -108,13 +108,29 @@ export const ClientSwitcher: React.FC<ClientSwitcherProps> = ({
     return () => window.removeEventListener('keydown', handleKeyDown);
   }, [isOpen]);
 
+  function normalizeClientSearch(text?: string | null): string {
+    if (!text) return '';
+    return text
+      .toLowerCase()
+      .replace(/&/g, 'and')
+      .replace(/[^\w\s]/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim();
+  }
+
   const filteredClients = clients.filter((c) => {
     if (!searchQuery.trim()) return true;
-    const q = searchQuery.toLowerCase();
+    const qNorm = normalizeClientSearch(searchQuery);
+    const companyNorm = normalizeClientSearch(c.companyName);
+    const clientNorm = normalizeClientSearch(c.clientName);
+    const pkgNorm = normalizeClientSearch(c.package);
+
     return (
-      c.companyName.toLowerCase().includes(q) ||
-      c.clientName.toLowerCase().includes(q) ||
-      c.package.toLowerCase().includes(q)
+      companyNorm.includes(qNorm) ||
+      clientNorm.includes(qNorm) ||
+      pkgNorm.includes(qNorm) ||
+      c.companyName.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      c.clientName.toLowerCase().includes(searchQuery.toLowerCase())
     );
   });
 

@@ -337,8 +337,8 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
           </div>
         )}
 
-        {/* Top Header */}
-        <Header />
+        {/* Top Header (Staff navigation only, hidden in Client View & Preview Mode) */}
+        {!isClientView && <Header />}
 
         {/* Dynamic Views Content Container */}
         <main className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-dark-400">
@@ -383,7 +383,11 @@ const PortalRedirect: React.FC = () => {
   const params = useParams<{ clientId?: string }>();
   const location = useLocation();
   if (params.clientId) {
-    return <Navigate to={`/clients/${params.clientId}${location.search}`} replace />;
+    const hasPreview = location.search.includes('preview=true');
+    const search = location.search
+      ? (hasPreview ? location.search : `${location.search}&preview=true`)
+      : '?preview=true';
+    return <Navigate to={`/clients/${params.clientId}${search}`} replace />;
   }
   return <ClientRedirect />;
 };
