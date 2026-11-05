@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import {
   Calendar, Clock, Play, Pause, ExternalLink, Send, CheckCircle2, RotateCcw,
-  Edit3, AlertTriangle, MessageSquare, Check, User, Timer
+  Edit3, AlertTriangle, MessageSquare, Check, User, Timer, Lock
 } from 'lucide-react';
 import { ClientTask, ClientTaskStatus, UserProfile } from '../../types';
 import { useSignedUrl } from '../../lib/storageService';
 import { sanitizeClientTaskDetails } from '../../utils/helpers';
+import { sanitizeClientDeliverableTitle, isInternalOnlyTask, getInternalTaskReason } from '../../lib/permissions';
 
 interface ClientKanbanCardProps {
   task: ClientTask;
@@ -86,9 +87,14 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
   const isClient = currentUserProfile?.role === 'client' || isClientView || isPreview;
   const isOwnerOrManager =
     !isClient && (currentUserProfile?.role === 'owner' || currentUserProfile?.role === 'operational_manager');
+  const isPending = task.status === 'Pending' || task.status === 'Draft' || task.status === 'Assigned';
+  const isInProgress = task.status === 'In Progress';
+  const isApproval = task.status === 'Approval' || task.status === 'Team Review' || task.status === 'Client Review';
+  const isDone = task.status === 'Done' || task.status === 'Completed';
+
   const isAssignedMember = task.assigneeId === currentUserProfile?.id;
   const canActOnTask = (isAssignedMember || isOwnerOrManager) && !isClient && !isArchived;
-  const isTimerRunning = Boolean(task.timerStartedAt);
+  const isTimerRunning = Boolean(task.timerStartedAt) && isInProgress && !isClient;
 
   // Live seconds ticker when timer is running
   const [liveSeconds, setLiveSeconds] = useState(task.timeSpentSeconds || 0);
@@ -151,11 +157,6 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
     e.dataTransfer.effectAllowed = 'move';
   };
 
-  const isPending = task.status === 'Pending' || task.status === 'Draft' || task.status === 'Assigned';
-  const isInProgress = task.status === 'In Progress';
-  const isApproval = task.status === 'Approval' || task.status === 'Team Review' || task.status === 'Client Review';
-  const isDone = task.status === 'Done' || task.status === 'Completed';
-
   const pausedSecs = task.pausedSeconds || 0;
 
   return (
@@ -205,11 +206,22 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
       {/* Task Title & Details Snippet */}
       <div>
         <h4 className="text-xs font-bold text-gray-900 dark:text-gray-100 group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors line-clamp-2 break-words leading-snug">
-          {task.title}
+          {isClient ? sanitizeClientDeliverableTitle(task.title) : task.title}
         </h4>
-        {task.details && (
+        {!isClient && isInternalOnlyTask(task) && (
+          <div className="mt-1 flex items-center gap-1">
+            <span
+              className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-900/50"
+              title={`Shielded from client views. Reason: ${getInternalTaskReason(task) || 'Internal Only'}`}
+            >
+              <Lock className="w-2.5 h-2.5 text-amber-600" />
+              <span>Staff Only: {getInternalTaskReason(task) || 'Internal'}</span>
+            </span>
+          </div>
+        )}
+        {!isClient && task.details && (
           <p className="text-[11px] text-gray-400 dark:text-gray-400 mt-1 line-clamp-2 break-words">
-            {isClient ? sanitizeClientTaskDetails(task.details) : task.details}
+            {task.details}
           </p>
         )}
       </div>
@@ -226,13 +238,13 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
       )}
 
       {/* Approval: "Work Completed" summary */}
-      {isApproval && (
+      {!isClient && isApproval && (
         <div className="p-2 rounded-lg bg-emerald-50 dark:bg-emerald-950/30 border border-emerald-200 dark:border-emerald-900/40 space-y-1">
           <div className="flex items-center gap-1.5 text-[11px] font-black text-emerald-700 dark:text-emerald-400">
             <CheckCircle2 className="w-3.5 h-3.5" />
             <span>Work Completed</span>
           </div>
-          {!isClient && (task.timeSpentSeconds || 0) > 0 && (
+          {(task.timeSpentSeconds || 0) > 0 && (
             <div className="text-[10px] text-emerald-600 dark:text-emerald-400 font-bold">
               Completed in: {formatCompact(task.timeSpentSeconds || 0)}
               {pausedSecs > 0 && (
@@ -288,7 +300,7 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
       )}
 
       {/* Evidence Link (Approval/Done) */}
-      {task.evidenceUrl && (isApproval || isDone) && (
+      {!isClient && task.evidenceUrl && (isApproval || isDone) && (
         <a
           href={task.evidenceUrl}
           target="_blank"
@@ -307,12 +319,14 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
       <div className="pt-2 border-t border-gray-100 dark:border-dark-border flex items-center justify-between gap-2 text-[11px]">
         {/* Assignee & Due Date */}
         <div className="flex items-center gap-2 text-gray-500 dark:text-gray-400 min-w-0">
-          <div className="flex items-center gap-1.5 truncate">
-            <AssigneeAvatar avatarPath={task.assigneeAvatar} name={task.assigneeName} />
-            <span className="truncate font-semibold text-gray-700 dark:text-gray-300 text-[10px]">
-              {task.assigneeName || 'Unassigned'}
-            </span>
-          </div>
+          {!isClient && (
+            <div className="flex items-center gap-1.5 truncate">
+              <AssigneeAvatar avatarPath={task.assigneeAvatar} name={task.assigneeName} />
+              <span className="truncate font-semibold text-gray-700 dark:text-gray-300 text-[10px]">
+                {task.assigneeName || 'Unassigned'}
+              </span>
+            </div>
+          )}
 
           <div className="flex items-center gap-1 flex-shrink-0 text-[10px]">
             <Calendar className="w-3 h-3 text-gray-400" />

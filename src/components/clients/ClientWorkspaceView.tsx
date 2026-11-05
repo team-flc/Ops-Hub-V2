@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Calendar, Info, Plus, Sparkles, Loader2, Layers, AlertTriangle, ShieldCheck } from 'lucide-react';
+import { Calendar, Info, Plus, Sparkles, Loader2, Layers, AlertTriangle, ShieldCheck, LayoutDashboard } from 'lucide-react';
 import { 
   ClientRecord, 
   ClientTask, 
@@ -17,7 +17,8 @@ import { CreateClientTaskModal } from '../tasks/CreateClientTaskModal';
 import { EditClientTaskModal } from '../tasks/EditClientTaskModal';
 import { TaskTemplate } from '../../types';
 import { taskManagementService } from '../../lib/taskManagementService';
-import { sanitizeClientDeliverableTitle, isInternalOnlyTask, filterAndSanitizeClientDeliverables } from '../../lib/permissions';
+import { sanitizeClientDeliverableTitle, isInternalOnlyTask, getInternalTaskReason, filterAndSanitizeClientDeliverables } from '../../lib/permissions';
+import { FinfixClientPortalView } from '../portal/FinfixClientPortalView';
 export { filterAndSanitizeClientDeliverables };
 
 const TaskTemplatePickerModal = React.lazy(() =>
@@ -41,7 +42,7 @@ interface ClientWorkspaceViewProps {
   isClientView?: boolean;
 }
 
-type MainTab = 'setup' | 'workplans' | 'details';
+type MainTab = 'dashboard' | 'setup' | 'workplans' | 'details';
 type WeekTab = 'week1' | 'week2' | 'week3' | 'week4';
 
 function isFinancialOrInternalTitle(title: string = ''): boolean {
@@ -96,7 +97,9 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
   const isClient = currentUserProfile?.role === 'client';
   const isEffectiveClientView = Boolean(isClientView || isClient || isPreview);
 
-  const [activeTab, setActiveTab] = useState<MainTab>('setup');
+  const isArchived = client.status === 'Archived';
+  const [activeTab, setActiveTab] = useState<MainTab>(isArchived ? 'setup' : (isEffectiveClientView ? 'dashboard' : 'setup'));
+  const [showShieldedBreakdown, setShowShieldedBreakdown] = useState(false);
   const [activeWeek, setActiveWeek] = useState<WeekTab>('week1');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -111,7 +114,8 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
   useEffect(() => {
     setActiveWeek('week1');
     setAllTasks([]);
-  }, [client.id]);
+    setActiveTab(client.status === 'Archived' ? 'setup' : (isEffectiveClientView ? 'dashboard' : 'setup'));
+  }, [client.id, client.status, isEffectiveClientView]);
 
   // Departments & Eligible Assignees
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -255,7 +259,8 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
 
   // Reconciliation for Staff side
   const totalStaffTasks = useMemo(() => allTasks.filter((t) => !t.archivedAt).length, [allTasks]);
-  const totalInternalTasks = useMemo(() => allTasks.filter((t) => !t.archivedAt && isInternalOnlyTask(t)).length, [allTasks]);
+  const internalTasksList = useMemo(() => allTasks.filter((t) => !t.archivedAt && isInternalOnlyTask(t)), [allTasks]);
+  const totalInternalTasks = internalTasksList.length;
   const totalClientVisibleTasks = totalStaffTasks - totalInternalTasks;
 
   const currentWeekRawTasks = useMemo(() => {
@@ -478,11 +483,28 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
         </div>
       )}
 
-      {/* 2. Top-Level Tab Navigation (30-Day Setup, 90-Day Work Plans, and Client Details) */}
+      {/* 2. Top-Level Tab Navigation (Dashboard, 30-Day Setup, 90-Day Work Plans, and Client Details) */}
       <div className="bg-white dark:bg-dark-card border-b border-gray-200 dark:border-dark-border px-4 sm:px-6 flex items-center justify-between">
         <div className="flex items-center gap-2">
+          {!isArchived && (
+            <button
+              type="button"
+              data-testid="tab-dashboard"
+              onClick={() => setActiveTab('dashboard')}
+              className={`flex items-center gap-2 px-4 py-3 min-h-[44px] text-xs font-bold border-b-2 transition-all cursor-pointer ${
+                activeTab === 'dashboard'
+                  ? 'border-brand-500 text-brand-600 dark:text-brand-400'
+                  : 'border-transparent text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'
+              }`}
+            >
+              <LayoutDashboard className="w-4 h-4" />
+              <span>Dashboard</span>
+            </button>
+          )}
+
           <button
             type="button"
+            data-testid="tab-setup"
             onClick={() => setActiveTab('setup')}
             className={`flex items-center gap-2 px-4 py-3 min-h-[44px] text-xs font-bold border-b-2 transition-all cursor-pointer ${
               activeTab === 'setup'
@@ -496,6 +518,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
 
           <button
             type="button"
+            data-testid="tab-workplans"
             onClick={() => setActiveTab('workplans')}
             className={`flex items-center gap-2 px-4 py-3 min-h-[44px] text-xs font-bold border-b-2 transition-all cursor-pointer ${
               activeTab === 'workplans'
@@ -536,6 +559,22 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
 
       {/* 3. Main Tab Content */}
       <div className="flex-1 min-w-0">
+        {/* TAB 0: CLIENT DASHBOARD (Mixed Design) */}
+        {!isArchived && activeTab === 'dashboard' && (
+          <div className="w-full bg-[#F4F7FB]">
+            <FinfixClientPortalView
+              key={`portal-${client.id}`}
+              client={client}
+              currentUserProfile={currentUserProfile}
+              isPreview={isPreview}
+              onClientUpdated={onClientUpdated}
+              tasks={visibleTasks}
+              weekNames={weekNames}
+              onNavigateToTab={(t) => setActiveTab(t)}
+            />
+          </div>
+        )}
+
         {/* TAB 1: 30-DAY SETUP WORKSPACE */}
         {activeTab === 'setup' && (
           <div className="p-3.5 sm:p-6 max-w-7xl mx-auto space-y-6">
@@ -556,17 +595,48 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
               {!isEffectiveClientView && totalInternalTasks > 0 && (
                 <div
                   data-testid="staff-client-reconciliation"
-                  className="px-4 py-2.5 rounded-xl bg-slate-100 dark:bg-dark-100 border border-slate-200 dark:border-dark-border text-xs text-slate-700 dark:text-slate-300 flex flex-wrap items-center justify-between gap-2 shadow-xs"
+                  className="px-4 py-3 rounded-xl bg-slate-100 dark:bg-dark-100 border border-slate-200 dark:border-dark-border text-xs text-slate-700 dark:text-slate-300 space-y-2 shadow-xs"
                 >
-                  <div className="flex items-center gap-2">
-                    <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
-                    <span>
-                      <strong className="font-bold">Client Safe Reconciliation:</strong> {totalClientVisibleTasks} Client Visible Deliverables + {totalInternalTasks} Internal Staff Only = {totalStaffTasks} Total Tasks
-                    </span>
+                  <div className="flex flex-wrap items-center justify-between gap-2">
+                    <div className="flex items-center gap-2">
+                      <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+                      <span>
+                        <strong className="font-bold">Client Safe Reconciliation:</strong> {totalClientVisibleTasks} Client Visible Deliverables + {totalInternalTasks} Internal Staff Only = {totalStaffTasks} Total Tasks
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setShowShieldedBreakdown(!showShieldedBreakdown)}
+                      className="text-[11px] font-bold text-brand-600 dark:text-brand-400 hover:underline cursor-pointer flex items-center gap-1"
+                    >
+                      <span>{showShieldedBreakdown ? 'Hide Breakdown ▲' : `View ${totalInternalTasks} Shielded Tasks & Reasons ▼`}</span>
+                    </button>
                   </div>
-                  <span className="text-[11px] text-gray-500 dark:text-gray-400">
-                    Internal notes, invoices & operational reminders are automatically shielded from Client Portal
-                  </span>
+                  {showShieldedBreakdown && (
+                    <div className="pt-2 border-t border-slate-200 dark:border-dark-border text-[11px] space-y-1.5">
+                      <span className="font-bold text-gray-500 dark:text-gray-400 block uppercase tracking-wider text-[10px]">
+                        Shielded from Client Portal (With Classification Reason):
+                      </span>
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-1">
+                        {internalTasksList.map((t) => (
+                          <div key={t.id} className="p-2 rounded-lg bg-white dark:bg-dark-200 border border-slate-200 dark:border-dark-border flex items-start justify-between gap-2">
+                            <div className="min-w-0 flex-1">
+                              <span className="font-semibold text-gray-800 dark:text-gray-200 block truncate">{t.title}</span>
+                              <span className="text-[10px] text-gray-400">Week {t.weekNumber || 1} &bull; {t.status}</span>
+                            </div>
+                            <span className="shrink-0 px-2 py-0.5 rounded text-[10px] bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 font-bold border border-amber-300/40">
+                              {getInternalTaskReason(t) || 'Internal Only'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                  {!showShieldedBreakdown && (
+                    <div className="text-[11px] text-gray-500 dark:text-gray-400">
+                      Internal notes, invoices, operational reminders & credentials are automatically shielded from Client Portal
+                    </div>
+                  )}
                 </div>
               )}
 

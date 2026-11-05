@@ -34,7 +34,7 @@ export const ClientWeekStepper: React.FC<ClientWeekStepperProps> = ({
 
   const handleStartEditing = (weekNum: 1 | 2 | 3 | 4, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (!isOwnerOrManager || client.status === 'Paused' || isClientView) return;
+    if (!isOwnerOrManager || client.status === 'Paused' || client.status === 'Archived' || isClientView) return;
     setEditingWeek(weekNum);
     setEditNameValue(weekNames[weekNum] || DEFAULT_WEEK_NAMES[weekNum]);
   };
@@ -63,7 +63,10 @@ export const ClientWeekStepper: React.FC<ClientWeekStepperProps> = ({
   };
 
   return (
-    <div className="bg-white dark:bg-dark-card rounded-2xl border border-gray-200 dark:border-dark-border p-3 shadow-xs">
+    <div
+      data-testid="client-week-stepper"
+      className="bg-white dark:bg-dark-card rounded-2xl border border-gray-200 dark:border-dark-border p-3 shadow-xs"
+    >
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5">
         {weeks.map((weekNum) => {
           const isActive = activeWeekNum === weekNum;
@@ -108,7 +111,7 @@ export const ClientWeekStepper: React.FC<ClientWeekStepperProps> = ({
                 </button>
 
                 {/* Rename button for Owner / Operational Manager (hidden in client view) */}
-                {isOwnerOrManager && client.status !== 'Paused' && !isEditingThisWeek && !isClientView && (
+                {isOwnerOrManager && client.status !== 'Paused' && client.status !== 'Archived' && !isEditingThisWeek && !isClientView && (
                   <button
                     type="button"
                     data-testid={`rename-week-btn-${weekNum}`}

@@ -279,34 +279,6 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
     }
   };
 
-  const isFinfixPro = Boolean(
-    (selectedClient && (selectedClient.id === '5d585580-d378-44a5-8dc1-d2653d4d6d8a' || selectedClient.companyName?.toLowerCase().includes('finfix'))) ||
-    params.clientId === '5d585580-d378-44a5-8dc1-d2653d4d6d8a'
-  );
-
-  if (isClientView && isFinfixPro) {
-    if (!selectedClient) {
-      return (
-        <div className="flex h-screen w-full items-center justify-center bg-[#0B111E] text-slate-400">
-          <div className="flex flex-col items-center gap-3">
-            <div className="w-8 h-8 border-2 border-teal-500 border-t-transparent rounded-full animate-spin" />
-            <span className="text-xs font-semibold">Loading Client Workspace...</span>
-          </div>
-        </div>
-      );
-    }
-
-    return (
-      <FinfixClientPortalView
-        key={selectedClient.id}
-        client={selectedClient}
-        currentUserProfile={profile}
-        isPreview={isClientPreview}
-        onClientUpdated={updateClientRecord}
-      />
-    );
-  }
-
   return (
     <div className="flex h-[100dvh] w-full max-w-full overflow-hidden bg-gray-50 dark:bg-dark-400 text-gray-900 dark:text-gray-100 font-sans antialiased">
       {/* Left Sidebar (Hidden in Client Preview Mode & Client View) */}

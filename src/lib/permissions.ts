@@ -224,6 +224,29 @@ export function isInternalOnlyTask(task: {
   return false;
 }
 
+/**
+ * Returns a human-readable categorization reason for why a task is shielded from client views.
+ */
+export function getInternalTaskReason(task: {
+  title?: string;
+  approvalMode?: string;
+  isInternalOnly?: boolean;
+}): string | null {
+  if (!task) return null;
+  if (task.isInternalOnly) return 'Marked as Internal Only';
+  if (task.approvalMode === 'Internal Only') return 'Approval Mode: Internal Only';
+  const t = (task.title || '').toLowerCase().trim();
+  if (/invoice|billing|payment|fee/i.test(t)) return 'Financial / Invoice / Billing';
+  if (/salary|payroll/i.test(t)) return 'Staff Payroll / Salary';
+  if (/pkr\s*[\d,]+|\$[\d,]+/i.test(t)) return 'Financial figures in title';
+  if (/internal\s+admin|admin\s+task|internal\s+ops/i.test(t)) return 'Internal Administration';
+  if (/gmail\s+notes|internal\s+chat/i.test(t)) return 'Internal notes / chatter';
+  if (t.includes('sales navigator')) return 'Sales Navigator credentials';
+  if (t.includes('login/hosting') || t.includes('zain se') || t.includes('asset bank ke baad')) return 'Internal operational coordination';
+  if (isInternalOnlyTask(task)) return 'Internal Operations Only';
+  return null;
+}
+
 export function filterAndSanitizeClientDeliverables(tasks: ClientTask[]): ClientTask[] {
   return tasks
     .filter((t) => !t.archivedAt && !isInternalOnlyTask(t))
