@@ -1555,102 +1555,18 @@ Thank you for partnering with us.
                   {/* Accessible check for automated tests */}
                   <span className="sr-only">Marketing Channels: Not connected</span>
 
-                  <div className="flex items-center justify-between gap-4 pt-1">
-                    {/* SVG Donut Chart */}
-                    <div className="relative w-36 h-36 shrink-0 flex items-center justify-center">
-                      <svg viewBox="0 0 140 140" className="w-full h-full -rotate-90">
-                        {/* Background ring */}
-                        <circle
-                          cx="70"
-                          cy="70"
-                          r="48"
-                          fill="transparent"
-                          stroke="currentColor"
-                          className="text-slate-100 dark:text-dark-200"
-                          strokeWidth="18"
-                        />
-                        {/* Google Ads 38.4% */}
-                        <circle
-                          cx="70"
-                          cy="70"
-                          r="48"
-                          fill="transparent"
-                          stroke="#0D9488"
-                          strokeWidth="18"
-                          strokeDasharray="115.8 301.59"
-                          strokeDashoffset="0"
-                        />
-                        {/* Meta Social 27.1% */}
-                        <circle
-                          cx="70"
-                          cy="70"
-                          r="48"
-                          fill="transparent"
-                          stroke="#8B5CF6"
-                          strokeWidth="18"
-                          strokeDasharray="81.7 301.59"
-                          strokeDashoffset="-115.8"
-                        />
-                        {/* Organic 10.5% */}
-                        <circle
-                          cx="70"
-                          cy="70"
-                          r="48"
-                          fill="transparent"
-                          stroke="#F59E0B"
-                          strokeWidth="18"
-                          strokeDasharray="31.6 301.59"
-                          strokeDashoffset="-197.5"
-                        />
-                        {/* Email 6.0% */}
-                        <circle
-                          cx="70"
-                          cy="70"
-                          r="48"
-                          fill="transparent"
-                          stroke="#FBBF24"
-                          strokeWidth="18"
-                          strokeDasharray="18.1 301.59"
-                          strokeDashoffset="-229.1"
-                        />
-                      </svg>
-                      {/* Center Label */}
-                      <div className="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
-                        <span className="text-xl font-black text-slate-900 dark:text-white leading-none">22.4K</span>
-                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider mt-0.5">Total Leads</span>
-                      </div>
+                  {/* Standby Not Connected Card (Zero Mock Numbers) */}
+                  <div className="relative w-full h-44 flex flex-col items-center justify-center p-5 text-center rounded-xl bg-slate-50/70 dark:bg-dark-300/30 border border-dashed border-slate-200 dark:border-dark-border space-y-2 my-auto">
+                    <div className="w-9 h-9 rounded-full bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 flex items-center justify-center">
+                      <BarChart3 className="w-4 h-4 text-teal-500" />
                     </div>
-
-                    {/* Legend */}
-                    <div className="space-y-2 text-xs font-semibold flex-1">
-                      <div className="flex items-center justify-between text-slate-700 dark:text-slate-300">
-                        <div className="flex items-center gap-2">
-                          <span className="w-2.5 h-2.5 rounded-full bg-[#0D9488]" />
-                          <span>Google Ads</span>
-                        </div>
-                        <span className="font-bold text-slate-900 dark:text-white">38.4%</span>
-                      </div>
-                      <div className="flex items-center justify-between text-slate-700 dark:text-slate-300">
-                        <div className="flex items-center gap-2">
-                          <span className="w-2.5 h-2.5 rounded-full bg-[#8B5CF6]" />
-                          <span>Meta Social</span>
-                        </div>
-                        <span className="font-bold text-slate-900 dark:text-white">27.1%</span>
-                      </div>
-                      <div className="flex items-center justify-between text-slate-700 dark:text-slate-300">
-                        <div className="flex items-center gap-2">
-                          <span className="w-2.5 h-2.5 rounded-full bg-[#F59E0B]" />
-                          <span>Organic</span>
-                        </div>
-                        <span className="font-bold text-slate-900 dark:text-white">10.5%</span>
-                      </div>
-                      <div className="flex items-center justify-between text-slate-700 dark:text-slate-300">
-                        <div className="flex items-center gap-2">
-                          <span className="w-2.5 h-2.5 rounded-full bg-[#FBBF24]" />
-                          <span>Email</span>
-                        </div>
-                        <span className="font-bold text-slate-900 dark:text-white">6.0%</span>
-                      </div>
+                    <div className="max-w-xs space-y-1">
+                      <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                        Marketing Channels: Not connected
+                      </span>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                        Multi-channel lead attribution will display here once Google Ads, Meta, and social pixels are linked.
+                      </p>
                     </div>
                   </div>
                 </div>
@@ -1936,6 +1852,7 @@ Thank you for partnering with us.
                   {searchResults.map((item) => (
                     <button
                       key={item.id}
+                      data-testid={`search-result-${item.id}`}
                       type="button"
                       onClick={() => handleSearchResultClick(item)}
                       className="w-full text-left p-3 rounded-xl hover:bg-slate-50 dark:hover:bg-dark-300/40 transition-colors flex items-center justify-between gap-3 border border-transparent hover:border-slate-200 dark:hover:border-dark-border cursor-pointer group"
