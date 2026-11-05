@@ -1150,6 +1150,7 @@ Thank you for partnering with us.
                   <CheckSquare className="w-4 h-4" />
                 </div>
                 <span>Tasks Completed</span>
+                <span className="sr-only">{completedTasks.length}/{totalVisibleTasks}</span>
               </div>
               <div className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight font-sans">
                 <span>{completedTasks.length} / {totalVisibleTasks}</span>
