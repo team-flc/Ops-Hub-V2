@@ -802,15 +802,21 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                 </div>
 
                 <ClientKanbanBoard
+                  client={client}
                   tasks={currentWeekTasks}
-                  departments={departments}
-                  eligibleAssignees={eligibleAssignees}
+                  weekNumber={currentWeekNum}
+                  weekName={weekNames[currentWeekNum]}
                   currentUserProfile={currentUserProfile}
-                  onTaskClick={(t) => setSelectedTaskDetails(t)}
-                  onStatusChange={handleKanbanStatusChange}
-                  onOpenEditModal={(t) => setEditingTask(t)}
                   isClientView={false}
-                  isClientOrganizationPaused={client.status === 'Paused'}
+                  onSelectTask={(t) => setSelectedTaskDetails(t)}
+                  onOpenEditModal={(t) => setEditingTask(t)}
+                  onOpenCreateTask={handleOpenCreateTaskFlow}
+                  onStatusChange={handleKanbanStatusChange}
+                  onStartWork={handleStartWork}
+                  onPauseTimer={handlePauseTimer}
+                  onResumeTimer={handleResumeTimer}
+                  onTasksArchived={handleTasksArchived}
+                  onShowToast={showToast}
                 />
               </div>
             )}

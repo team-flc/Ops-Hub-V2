@@ -466,7 +466,7 @@ export const FinfixClientPortalView: React.FC<FinfixClientPortalViewProps> = ({
           iconType,
           weekNumber: t.weekNumber,
           status: t.status,
-          evidenceUrl: t.evidenceUrl,
+          evidenceUrl: t.evidenceUrl || undefined,
           timestamp: t.createdAt ? formatPKTDate(t.createdAt) : 'Recently'
         };
       });
@@ -588,7 +588,7 @@ export const FinfixClientPortalView: React.FC<FinfixClientPortalViewProps> = ({
       subtitle: string;
       status?: string;
       weekNumber?: number;
-      evidenceUrl?: string;
+      evidenceUrl?: string | null;
       sectionKey?: FinfixNavTab;
       task?: ClientTask;
     }> = [];
@@ -596,8 +596,8 @@ export const FinfixClientPortalView: React.FC<FinfixClientPortalViewProps> = ({
     // 1. Match Sections
     FINFIX_NAV_ITEMS.forEach((item) => {
       const matchLabel = item.label.toLowerCase().includes(q) || item.key.toLowerCase().includes(q);
-      const isLinkedInQuery = (q.includes('linkedin') || q.includes('outreach')) && (item.key === 'linkedin' || item.key === 'social');
-      const isEnterpriseQuery = q.includes('enterprise') && (item.key === 'subscription' || item.key === 'billing' || item.key === 'settings');
+      const isLinkedInQuery = (q.includes('linkedin') || q.includes('outreach')) && (item.key === 'linkedin' || item.key === 'social_media');
+      const isEnterpriseQuery = q.includes('enterprise') && (item.key === 'subscription' || item.key === 'billing_invoices' || item.key === 'settings');
 
       if (matchLabel || isLinkedInQuery || isEnterpriseQuery) {
         results.push({
