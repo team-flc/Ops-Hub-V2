@@ -38,6 +38,8 @@ async function runVerification() {
   });
 
   const page = await browser.newPage();
+  page.on('console', msg => console.log('BROWSER LOG:', msg.text()));
+  page.on('pageerror', err => console.log('PAGE ERROR:', err.message));
 
   try {
     console.log('\n=============================================================');
@@ -126,12 +128,21 @@ async function runVerification() {
       ];
       const foundMockups = forbiddenMockups.filter(m => bodyText.includes(m));
 
+      const isCompletion10 = Boolean(c1?.innerText.includes('10%'));
+      const isTasks1_10 = Boolean(c2?.innerText.includes('1/10'));
+      const isPending0 = Boolean(c3?.innerText.includes('0'));
+      const isSubActive = Boolean(c4?.innerText.includes('Active') && c4?.innerText.includes('Basic Plan'));
+
       return {
         allFound: Boolean(c1 && c2 && c3 && c4),
         c1: c1?.innerText.replace(/\n/g, ' '),
         c2: c2?.innerText.replace(/\n/g, ' '),
         c3: c3?.innerText.replace(/\n/g, ' '),
         c4: c4?.innerText.replace(/\n/g, ' '),
+        isCompletion10,
+        isTasks1_10,
+        isPending0,
+        isSubActive,
         foundMockups
       };
     });
@@ -139,7 +150,10 @@ async function runVerification() {
     if (!statCards.allFound || statCards.foundMockups.length > 0) {
       throw new Error(`Stat cards verification failed! Forbidden mockups found: ${statCards.foundMockups}`);
     }
-    console.log('[PASS] 4 Stat cards verified with zero mockup numbers.');
+    if (!statCards.isCompletion10 || !statCards.isTasks1_10 || !statCards.isPending0 || !statCards.isSubActive) {
+      throw new Error(`Finfix Stat card numbers incorrect! Expected 10%, 1/10, 0 approvals, Active Basic Plan. Got: ${JSON.stringify(statCards)}`);
+    }
+    console.log('[PASS] 4 Stat cards verified with exact required Finfix Pro values: 10%, 1/10, 0 approvals, Active Basic Plan.');
 
     // E. Check Performance Overview & Toggles
     const perfChecks = await page.evaluate(() => {
@@ -174,6 +188,8 @@ async function runVerification() {
         hasLinkedIn: text.includes('LinkedIn Optimization'),
         hasFunnel: text.includes('Funnel Setup'),
         hasAds: text.includes('Paid Ads Setup'),
+        hasSocialDone: text.includes('Social Media Optimization') && text.includes('100%') && text.includes('Completed'),
+        hasLinkedInPending: text.includes('LinkedIn Optimization') && text.includes('0%') && text.includes('Pending'),
         text
       };
     });
@@ -181,12 +197,14 @@ async function runVerification() {
       social: projectPlans.hasSocial,
       linkedin: projectPlans.hasLinkedIn,
       funnel: projectPlans.hasFunnel,
-      ads: projectPlans.hasAds
+      ads: projectPlans.hasAds,
+      socialDone: projectPlans.hasSocialDone,
+      linkedInPending: projectPlans.hasLinkedInPending
     });
-    if (!projectPlans.found || !projectPlans.hasSocial || !projectPlans.hasLinkedIn || !projectPlans.hasFunnel || !projectPlans.hasAds) {
-      throw new Error('Project Progress plans verification failed!');
+    if (!projectPlans.found || !projectPlans.hasSocial || !projectPlans.hasLinkedIn || !projectPlans.hasFunnel || !projectPlans.hasAds || !projectPlans.hasSocialDone || !projectPlans.hasLinkedInPending) {
+      throw new Error(`Project Progress plans verification failed! Expected Week 1 100% Completed, Week 2 0% Pending. Got: ${projectPlans.text}`);
     }
-    console.log('[PASS] Project plans (Social Media, LinkedIn, Funnel, Paid Ads) verified.');
+    console.log('[PASS] Project plans verified: Social Media Optimization 100% Completed, LinkedIn Optimization 0% Pending.');
 
     // G. Check Subscription & Billing and Recent Activity
     const lowerSections = await page.evaluate(() => {
@@ -248,6 +266,7 @@ async function runVerification() {
       const c2Text = document.querySelector('[data-testid="stat-tasks-completed"]')?.innerText || '';
       const isFinfixLeaked = text.includes('Finfix Pro');
       return {
+        bodySnippet: text.slice(0, 300),
         hasMavenName: headerText.includes('Maven Professionals'),
         isFinfixLeaked,
         statTasks: c2Text.replace(/\n/g, ' '),
@@ -341,11 +360,11 @@ async function runVerification() {
     // 7. Verify Staff Workspace & Dashboard Unchanged + Session Survival
     // =========================================================================
     console.log('\n--- 7. Verifying Staff Board & Dashboard are Unchanged ---');
-    // Staff Board (without ?preview=true)
-    await page.goto(`${BASE_URL}/clients/${FINFIX_ID}`, { waitUntil: 'networkidle2' });
+    // Staff Board for Maven (which has 1 shielded internal task)
+    await page.goto(`${BASE_URL}/clients/${MAVEN_ID}`, { waitUntil: 'networkidle2' });
     await new Promise(r => setTimeout(r, 3000));
 
-    const staffBoardChecks = await page.evaluate(() => {
+    const mavenStaffChecks = await page.evaluate(() => {
       const text = document.body.innerText;
       const isStaffAuthenticated = !text.includes('Sign in to Ops Hub');
       const hasStaffKanban = Boolean(document.querySelector('[data-testid="client-week-stepper"]') || document.querySelector('button[aria-label="+ Add Task"]'));
@@ -360,11 +379,27 @@ async function runVerification() {
         hasTabSetup
       };
     });
-    console.log('Staff Board checks:', staffBoardChecks);
-    if (!staffBoardChecks.isStaffAuthenticated || !staffBoardChecks.hasStaffReconciliation || !staffBoardChecks.hasTabDashboard) {
-      throw new Error(`Staff Board check failed: ${JSON.stringify(staffBoardChecks)}`);
+    console.log('Maven Staff Board checks:', mavenStaffChecks);
+    if (!mavenStaffChecks.isStaffAuthenticated || !mavenStaffChecks.hasStaffReconciliation || !mavenStaffChecks.hasTabDashboard) {
+      throw new Error(`Maven Staff Board check failed: ${JSON.stringify(mavenStaffChecks)}`);
     }
-    console.log('[PASS] Staff board is completely unchanged, displays reconciliation banner with breakdown, and session survived.');
+    console.log('[PASS] Maven Staff board is completely unchanged, displays reconciliation banner with breakdown, and session survived.');
+
+    // Staff Board for Finfix
+    await page.goto(`${BASE_URL}/clients/${FINFIX_ID}`, { waitUntil: 'networkidle2' });
+    await new Promise(r => setTimeout(r, 2000));
+    const finfixStaffChecks = await page.evaluate(() => {
+      const text = document.body.innerText;
+      const isStaffAuthenticated = !text.includes('Sign in to Ops Hub');
+      const hasTabDashboard = Boolean(document.querySelector('[data-testid="tab-dashboard"]'));
+      const hasTabSetup = Boolean(document.querySelector('[data-testid="tab-setup"]'));
+      return { isStaffAuthenticated, hasTabDashboard, hasTabSetup };
+    });
+    console.log('Finfix Staff Board checks:', finfixStaffChecks);
+    if (!finfixStaffChecks.isStaffAuthenticated || !finfixStaffChecks.hasTabDashboard || !finfixStaffChecks.hasTabSetup) {
+      throw new Error(`Finfix Staff Board check failed: ${JSON.stringify(finfixStaffChecks)}`);
+    }
+    console.log('[PASS] Finfix Staff board verified with intact sibling tabs.');
 
     // Staff Dashboard
     await page.goto(`${BASE_URL}/dashboard`, { waitUntil: 'networkidle2' });

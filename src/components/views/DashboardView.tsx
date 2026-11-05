@@ -203,7 +203,13 @@ export const DashboardView: React.FC = () => {
           {/* Attendance Portal Link */}
           <button
             type="button"
-            onClick={() => navigate('/employee/dashboard')}
+            onClick={() => {
+              if (profile?.role === 'owner' || profile?.role === 'operational_manager') {
+                navigate('/operations/employees?tab=attendance');
+              } else {
+                navigate('/employee/dashboard');
+              }
+            }}
             className="flex items-center gap-1.5 px-4 py-2.5 rounded-2xl bg-white/10 hover:bg-white/15 text-white font-bold text-xs border border-white/15 backdrop-blur-xs transition-colors cursor-pointer"
           >
             <Clock className="w-4 h-4" />
@@ -309,6 +315,7 @@ export const DashboardView: React.FC = () => {
           dailyReports={dailyReports}
           currentUserProfile={profile}
           onRefreshData={loadDashboardData}
+          isLoading={isLoading}
         />
       )}
 
@@ -322,6 +329,7 @@ export const DashboardView: React.FC = () => {
           currentUserProfile={profile}
           onOpenReportModal={() => setIsReportModalOpen(true)}
           onRefreshData={loadDashboardData}
+          isLoading={isLoading}
         />
       )}
 
@@ -332,15 +340,16 @@ export const DashboardView: React.FC = () => {
         currentUserProfile={profile}
         onRefreshTasks={loadDashboardData}
         onSelectTask={(t) => setSelectedTaskForDetails(t)}
+        isLoading={isLoading}
       />
 
       {/* 5. Reporting & Progress Analytics Visualizations */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <TaskCompletionTrendChart tasks={tasks} />
+        <TaskCompletionTrendChart tasks={tasks} isLoading={isLoading} />
         <ApprovalTurnaroundChart tasks={tasks} isLoading={isLoading} />
       </div>
 
-      <ClientWorkloadDistributionChart tasks={tasks} clients={clients} />
+      <ClientWorkloadDistributionChart tasks={tasks} clients={clients} isLoading={isLoading} />
 
       {/* Global Modals */}
       <DailyWorkReportModal

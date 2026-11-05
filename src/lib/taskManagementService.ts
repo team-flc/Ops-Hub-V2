@@ -20,6 +20,7 @@ import {
   AWAITING_APPROVAL_STATUSES,
   isTaskAwaitingApproval
 } from '../types';
+import { sanitizeClientDeliverableTitle, sanitizeEvidenceUrl, isInternalOnlyTask } from './permissions';
 
 export function isSunday(dateInput: string | Date): boolean {
   if (!dateInput) return false;
@@ -314,7 +315,7 @@ export const taskManagementService = {
   /**
    * Fetch tasks for a client and week
    */
-  async fetchClientTasks(clientId: string, weekNumber?: number): Promise<{ data: ClientTask[]; error: string | null }> {
+  async fetchClientTasks(clientId: string, weekNumber?: number, options?: { isClientView?: boolean }): Promise<{ data: ClientTask[]; error: string | null }> {
     if (!isSupabaseConfigured || !supabase || !clientId) {
       return { data: [], error: null };
     }
@@ -446,7 +447,30 @@ export const taskManagementService = {
         };
       });
 
-      return { data: tasks, error: null };
+      let processedTasks = tasks;
+      if (options?.isClientView) {
+        processedTasks = tasks.filter((t) => !isInternalOnlyTask(t)).map((t) => ({
+          ...t,
+          title: sanitizeClientDeliverableTitle(t.title),
+          details: undefined,
+          completionNotes: undefined,
+          feedback: undefined,
+          blockedReason: undefined,
+          reopenReason: undefined,
+          archiveReason: undefined,
+          timerStartedAt: null,
+          timeSpentSeconds: undefined,
+          pausedSeconds: undefined,
+          assigneeId: undefined,
+          assigneeName: undefined,
+          assigneeAvatar: undefined,
+          assigneeRole: undefined,
+          assignee: undefined,
+          evidenceUrl: sanitizeEvidenceUrl(t.evidenceUrl)
+        }));
+      }
+
+      return { data: processedTasks, error: null };
     } catch (err: any) {
       return { data: [], error: err?.message || 'Failed to fetch client tasks.' };
     }
@@ -462,6 +486,7 @@ export const taskManagementService = {
     departmentId?: string;
     status?: string;
     includeArchived?: boolean;
+    isClientView?: boolean;
   }): Promise<{ data: ClientTask[]; error: string | null }> {
     if (!isSupabaseConfigured || !supabase) {
       return { data: [], error: null };
@@ -576,7 +601,30 @@ export const taskManagementService = {
         };
       });
 
-      return { data: tasks, error: null };
+      let processedTasks = tasks;
+      if (options?.isClientView) {
+        processedTasks = tasks.filter((t) => !isInternalOnlyTask(t)).map((t) => ({
+          ...t,
+          title: sanitizeClientDeliverableTitle(t.title),
+          details: undefined,
+          completionNotes: undefined,
+          feedback: undefined,
+          blockedReason: undefined,
+          reopenReason: undefined,
+          archiveReason: undefined,
+          timerStartedAt: null,
+          timeSpentSeconds: undefined,
+          pausedSeconds: undefined,
+          assigneeId: undefined,
+          assigneeName: undefined,
+          assigneeAvatar: undefined,
+          assigneeRole: undefined,
+          assignee: undefined,
+          evidenceUrl: sanitizeEvidenceUrl(t.evidenceUrl)
+        }));
+      }
+
+      return { data: processedTasks, error: null };
     } catch (err: any) {
       return { data: [], error: err?.message || 'Failed to fetch cross-client tasks.' };
     }
@@ -977,11 +1025,19 @@ export const taskManagementService = {
         if (session?.user?.id) {
           const { data: prof } = await supabase
             .from('profiles')
-            .select('role, designation_name')
+            .select('role, designation_id')
             .eq('id', session.user.id)
             .single();
           if (prof) {
-            const des = (prof.designation_name || '').toLowerCase().trim();
+            let des = '';
+            if (prof.designation_id) {
+              const { data: desData } = await supabase
+                .from('designations')
+                .select('name')
+                .eq('id', prof.designation_id)
+                .maybeSingle();
+              des = (desData?.name || '').toLowerCase().trim();
+            }
             if (des.includes('intern')) {
               return { data: null, error: 'Unauthorized: Interns cannot create tasks.' };
             }
@@ -995,14 +1051,15 @@ export const taskManagementService = {
               des.includes('founder') ||
               des.includes('owner') ||
               des.includes('cfo') ||
-              des.includes('chief financial officer');
+              des.includes('chief financial officer') ||
+              des.includes('decision maker');
             if (!isAllowed) {
-              return { data: null, error: 'Unauthorized: Only Team Lead, Team Manager, Owner, or CFO can create tasks.' };
+              return { data: null, error: 'Unauthorized: Only decision makers (Team Lead, Team Manager, Owner/Founder, and CFO) can create tasks.' };
             }
           }
         }
       } catch {
-        // Continue if profile query fails
+        // Fallback
       }
     }
 

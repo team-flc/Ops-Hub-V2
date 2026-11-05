@@ -16,6 +16,7 @@ interface RoleManagerDashboardProps {
   dailyReports: EmployeeWorkReport[];
   currentUserProfile: UserProfile | null;
   onRefreshData: () => void;
+  isLoading?: boolean;
 }
 
 const MemberAvatar: React.FC<{ avatarPath?: string | null; name?: string | null }> = ({ avatarPath, name }) => {
@@ -46,7 +47,8 @@ export const RoleManagerDashboard: React.FC<RoleManagerDashboardProps> = ({
   reportingMembers,
   dailyReports,
   currentUserProfile,
-  onRefreshData
+  onRefreshData,
+  isLoading = false
 }) => {
   const navigate = useSafeNavigate();
   const [actionLoadingId, setActionLoadingId] = useState<string | null>(null);
@@ -114,11 +116,16 @@ export const RoleManagerDashboard: React.FC<RoleManagerDashboardProps> = ({
               </div>
             </div>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300">
-              {teamApprovals.length} Pending
+              {isLoading ? <span className="inline-block h-3.5 w-14 bg-purple-200/50 dark:bg-purple-800/40 rounded animate-pulse" /> : `${teamApprovals.length} Pending`}
             </span>
           </div>
 
-          {teamApprovals.length === 0 ? (
+          {isLoading ? (
+            <div className="py-6 space-y-3">
+              <div className="h-12 bg-gray-100 dark:bg-dark-200 rounded-xl animate-pulse" />
+              <div className="h-12 bg-gray-100 dark:bg-dark-200 rounded-xl animate-pulse" />
+            </div>
+          ) : teamApprovals.length === 0 ? (
             <div className="py-8 text-center text-gray-400 text-xs italic">
               No deliverables currently awaiting review in your team.
             </div>
@@ -201,11 +208,16 @@ export const RoleManagerDashboard: React.FC<RoleManagerDashboardProps> = ({
               </div>
             </div>
             <span className="text-xs font-mono font-bold text-gray-400">
-              {reportingMembers.length} Staff Members
+              {isLoading ? <span className="inline-block h-3.5 w-20 bg-gray-200 dark:bg-dark-100 rounded animate-pulse" /> : `${reportingMembers.length} Staff Members`}
             </span>
           </div>
 
-          {reportingMembers.length === 0 ? (
+          {isLoading ? (
+            <div className="py-6 space-y-3">
+              <div className="h-12 bg-gray-100 dark:bg-dark-200 rounded-xl animate-pulse" />
+              <div className="h-12 bg-gray-100 dark:bg-dark-200 rounded-xl animate-pulse" />
+            </div>
+          ) : reportingMembers.length === 0 ? (
             <div className="py-8 text-center text-gray-400 text-xs italic">
               No team members directly assigned to your management reporting line yet.
             </div>

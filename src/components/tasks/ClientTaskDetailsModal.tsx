@@ -17,6 +17,7 @@ import { TaskConversationFeed } from './TaskConversationFeed';
 import { TaskMessageComposer } from './TaskMessageComposer';
 import { TaskReviewActions } from './TaskReviewActions';
 import { sanitizeClientTaskDetails } from '../../utils/helpers';
+import { sanitizeClientDeliverableTitle } from '../../lib/permissions';
 
 interface ClientTaskDetailsModalProps {
   isOpen: boolean;
@@ -290,7 +291,7 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
             </div>
 
             <h2 className="text-base sm:text-lg font-bold text-gray-900 dark:text-gray-100 leading-snug">
-              {task.title}
+              {isEffectiveClientView ? sanitizeClientDeliverableTitle(task.title) : task.title}
             </h2>
           </div>
 
@@ -378,11 +379,11 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
               </span>
             </div>
 
-            <div>
-              <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
-                Primary Assignee
-              </span>
-              {!isEffectiveClientView ? (
+            {!isEffectiveClientView && (
+              <div>
+                <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
+                  Primary Assignee
+                </span>
                 <div className="flex items-center gap-2">
                   <select
                     value={task.assigneeId || ''}
@@ -399,12 +400,8 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
                   </select>
                   {isReassigning && <Loader2 className="w-3.5 h-3.5 animate-spin text-brand-500" />}
                 </div>
-              ) : (
-                <span className="font-bold text-gray-800 dark:text-gray-200">
-                  {task.assigneeName || 'Unassigned (Draft)'}
-                </span>
-              )}
-            </div>
+              </div>
+            )}
 
             <div>
               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
@@ -426,8 +423,8 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
               </div>
             </div>
 
-            {/* Evidence URL */}
-            {task.evidenceUrl && (
+            {/* Evidence URL (Staff Only) */}
+            {!isEffectiveClientView && task.evidenceUrl && (
               <div className="sm:col-span-2 pt-2 border-t border-gray-200/50 dark:border-dark-border/50">
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
                   Evidence Deliverable URL
@@ -443,8 +440,8 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
               </div>
             )}
 
-            {/* Completion Notes */}
-            {task.completionNotes && (
+            {/* Completion Notes (Staff Only) */}
+            {!isEffectiveClientView && task.completionNotes && (
               <div className="sm:col-span-2 pt-2 border-t border-gray-200/50 dark:border-dark-border/50">
                 <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block mb-1">
                   Completion Notes
@@ -456,14 +453,14 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
             )}
           </div>
 
-          {/* Read-Only Legacy Context (task.details) */}
-          {task.details && (
+          {/* Read-Only Legacy Context (task.details - Staff Only) */}
+          {!isEffectiveClientView && task.details && (
             <div className="space-y-1">
               <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">
                 Task Instructions & SOP Deliverables
               </span>
               <div className="p-3.5 rounded-xl bg-gray-50/60 dark:bg-dark-100/50 border border-gray-200 dark:border-dark-border text-gray-700 dark:text-gray-300 leading-relaxed whitespace-pre-wrap">
-                {isClient ? sanitizeClientTaskDetails(task.details) : task.details}
+                {task.details}
               </div>
             </div>
           )}

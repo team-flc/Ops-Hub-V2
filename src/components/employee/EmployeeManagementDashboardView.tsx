@@ -8,7 +8,7 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import { useSafeNavigate } from '../../lib/safeRouterHooks';
 import { 
-  TeamMemberRecord, UserProfile, EmployeeRecord, WorkShift, 
+  TeamMemberRecord, UserProfile, EmployeeRecord, WorkShift, CompanyWorkSchedule, 
   EmployeeAttendance, CompanyAsset, EmployeePayrollRecord, 
   EmployeePerformanceRecord, EmployeeManagementTask, EmployeeFinalSettlement,
   Department, Designation, ROLE_DISPLAY_NAMES
@@ -34,6 +34,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
   const [teamMembers, setTeamMembers] = useState<TeamMemberRecord[]>([]);
   const [employeeRecords, setEmployeeRecords] = useState<EmployeeRecord[]>([]);
   const [shifts, setShifts] = useState<WorkShift[]>([]);
+  const [companySchedules, setCompanySchedules] = useState<CompanyWorkSchedule[]>([]);
   const [todayAttendanceList, setTodayAttendanceList] = useState<EmployeeAttendance[]>([]);
   const [missingCheckIns, setMissingCheckIns] = useState<Array<{ employee: UserProfile | TeamMemberRecord; shift: WorkShift; minutesLate: number }>>([]);
   const [assets, setAssets] = useState<CompanyAsset[]>([]);
@@ -76,6 +77,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
         members,
         empRecs,
         allShifts,
+        allSchedules,
         allAssets,
         payrolls,
         perfs,
@@ -88,6 +90,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
         teamManagementService.fetchTeamMembers(currentUserProfile.role, currentUserProfile.id),
         employeeOperationsService.fetchAllEmployeeRecords(),
         employeeOperationsService.fetchWorkShifts(),
+        employeeOperationsService.fetchCompanyWorkSchedules(),
         employeeOperationsService.fetchAllAssets(),
         employeeOperationsService.fetchMonthlyPayrollSummary(selectedMonth),
         employeeOperationsService.fetchPerformanceRecords(),
@@ -101,6 +104,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
       setTeamMembers(members);
       setEmployeeRecords(empRecs);
       setShifts(allShifts);
+      setCompanySchedules(allSchedules);
       setAssets(allAssets);
       setPayrollRecords(payrolls);
       setPerformanceRecords(perfs);
@@ -197,22 +201,47 @@ export const EmployeeManagementDashboardView: React.FC = () => {
     return map;
   }, [employeeRecords]);
 
-  // Partition Active Staff into Configured vs Setup Pending
+  // Inclusive staff list including currentUserProfile if owner/manager and not already present
+  const allStaffMembers = useMemo(() => {
+    const list = [...teamMembers];
+    if (currentUserProfile && !list.some(m => m.id === currentUserProfile.id)) {
+      list.unshift({
+        id: currentUserProfile.id,
+        fullName: currentUserProfile.fullName || 'Current User',
+        workEmail: currentUserProfile.workEmail || '',
+        role: currentUserProfile.role,
+        status: (currentUserProfile.status as any) || 'active',
+        departments: [],
+        clientIds: [],
+        startDate: currentUserProfile.startDate || '',
+        clientAccessCount: 0,
+        createdAt: currentUserProfile.createdAt || '',
+        updatedAt: currentUserProfile.updatedAt || ''
+      });
+    }
+    return list;
+  }, [teamMembers, currentUserProfile]);
+
+  // Partition staff into Configured Active Staff vs Setup Pending (strict parameter verification)
   const { configuredActiveStaff, setupPendingStaff } = useMemo(() => {
     const configured: TeamMemberRecord[] = [];
     const pending: TeamMemberRecord[] = [];
-    teamMembers.forEach(m => {
-      if (m.status === 'active') {
-        const rec = empRecordMap.get(m.id);
-        if (rec?.setupCompletedAt) {
-          configured.push(m);
-        } else {
-          pending.push(m);
-        }
+    allStaffMembers.forEach(m => {
+      const rec = empRecordMap.get(m.id);
+      const setupStatus = employeeOperationsService.getEmployeeSetupStatus(
+        rec || null,
+        shifts,
+        companySchedules,
+        m.role === 'owner'
+      );
+      if (m.status === 'active' && setupStatus.isComplete) {
+        configured.push(m);
+      } else if (!setupStatus.isComplete) {
+        pending.push(m);
       }
     });
     return { configuredActiveStaff: configured, setupPendingStaff: pending };
-  }, [teamMembers, empRecordMap]);
+  }, [allStaffMembers, empRecordMap, shifts, companySchedules]);
 
   // Governed Stats
   const activeStaffCount = configuredActiveStaff.length;
@@ -226,6 +255,25 @@ export const EmployeeManagementDashboardView: React.FC = () => {
 
   return (
     <div className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto space-y-6 animate-fade-in">
+      {/* View Switcher for Owner & Manager */}
+      <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-slate-100 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border w-fit">
+        <button
+          type="button"
+          className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-white dark:bg-dark-card text-brand-700 dark:text-brand-300 shadow-sm"
+        >
+          <Users className="w-4 h-4" />
+          <span>Team Attendance Roster & Operations</span>
+        </button>
+        <button
+          type="button"
+          onClick={() => navigate('/employee/dashboard')}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-gray-100 transition-colors"
+        >
+          <Clock className="w-4 h-4" />
+          <span>My Personal Punch & Attendance</span>
+        </button>
+      </div>
+
       {/* Top Operations Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-200 dark:border-dark-border">
         <div className="flex items-center gap-3">
@@ -702,7 +750,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
                     <span>Employee Setup Required ({setupPendingStaff.length} Staff Member(s))</span>
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-gray-400">
-                    The following active team members require operational onboarding (work shift assignment, baseline compensation, and shift schedule) before automated attendance audit tracking and monthly payroll generation begin.
+                    The following staff members require operational onboarding (work shift assignment, baseline compensation, and shift schedule) before automated attendance audit tracking and monthly payroll generation begin. Inactive staff remain inactive until explicitly activated.
                   </p>
                 </div>
               </div>
@@ -713,36 +761,60 @@ export const EmployeeManagementDashboardView: React.FC = () => {
                     <tr className="border-b border-slate-200 dark:border-dark-border text-slate-400 uppercase text-[10px] font-bold tracking-wider">
                       <th className="py-2.5 px-3">Employee</th>
                       <th className="py-2.5 px-3">System Role</th>
-                      <th className="py-2.5 px-3">Onboarding State</th>
+                      <th className="py-2.5 px-3">Status</th>
+                      <th className="py-2.5 px-3">Missing Parameters</th>
                       <th className="py-2.5 px-3 text-right">Action</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 dark:divide-dark-border">
-                    {setupPendingStaff.map((member) => (
-                      <tr key={member.id} className="hover:bg-white/60 dark:hover:bg-dark-card transition-colors">
-                        <td className="py-2.5 px-3">
-                          <div className="font-bold text-slate-900 dark:text-gray-100">{member.fullName}</div>
-                          <div className="text-[10px] text-slate-400">{member.workEmail}</div>
-                        </td>
-                        <td className="py-2.5 px-3 text-slate-600 dark:text-gray-400 font-medium">
-                          {ROLE_DISPLAY_NAMES[member.role] || member.role.replace('_', ' ')}
-                        </td>
-                        <td className="py-2.5 px-3">
-                          <span className="px-2.5 py-1 rounded-full text-[10px] font-bold bg-slate-200 text-slate-700 dark:bg-dark-border dark:text-gray-300">
-                            Setup Pending — Shift Unconfigured
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3 text-right">
-                          <button
-                            type="button"
-                            onClick={() => setEditingMemberForSetup(member)}
-                            className="px-3 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-[11px] transition-colors shadow-xs"
-                          >
-                            Configure Setup
-                          </button>
-                        </td>
-                      </tr>
-                    ))}
+                    {setupPendingStaff.map((member) => {
+                      const empRec = empRecordMap.get(member.id);
+                      const statusInfo = employeeOperationsService.getEmployeeSetupStatus(
+                        empRec || null,
+                        shifts,
+                        companySchedules,
+                        member.role === 'owner'
+                      );
+
+                      return (
+                        <tr key={member.id} className="hover:bg-white/60 dark:hover:bg-dark-card transition-colors">
+                          <td className="py-2.5 px-3">
+                            <div className="font-bold text-slate-900 dark:text-gray-100">{member.fullName}</div>
+                            <div className="text-[10px] text-slate-400">{member.workEmail}</div>
+                          </td>
+                          <td className="py-2.5 px-3 text-slate-600 dark:text-gray-400 font-medium">
+                            {ROLE_DISPLAY_NAMES[member.role] || member.role.replace('_', ' ')}
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold capitalize ${
+                              member.status === 'active'
+                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
+                                : 'bg-slate-200 text-slate-700 dark:bg-dark-border dark:text-gray-400'
+                            }`}>
+                              {member.status === 'active' ? 'Setup Pending' : member.status}
+                            </span>
+                          </td>
+                          <td className="py-2.5 px-3">
+                            <div className="flex flex-wrap gap-1">
+                              {statusInfo.missingParameters.map(param => (
+                                <span key={param} className="px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
+                                  Missing Parameter: {param}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                          <td className="py-2.5 px-3 text-right">
+                            <button
+                              type="button"
+                              onClick={() => setEditingMemberForSetup(member)}
+                              className="px-3 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-[11px] transition-colors shadow-xs"
+                            >
+                              Configure Setup
+                            </button>
+                          </td>
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -1289,6 +1361,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
               departments={departments}
               designations={designations}
               eligibleManagers={eligibleManagers}
+              autoCheckSetup={true}
             />
           )}
         </>

@@ -52,6 +52,7 @@ const ALL_TABS: TabConfig[] = [
   { id: 'audit', label: 'Audit Log', icon: Activity, managerOnly: true }
 ];
 
+
 export const SettingsLayout: React.FC<{ initialTab?: SettingsTab }> = ({ initialTab = 'team' }) => {
   const navigate = useSafeNavigate();
   const params = useSafeParams<{ tab?: string }>();
@@ -155,7 +156,7 @@ export const SettingsLayout: React.FC<{ initialTab?: SettingsTab }> = ({ initial
       </div>
 
       {/* Dynamic Tab Body */}
-      <div className="flex-1 overflow-y-auto">
+      <div key={normalizedTab} className="flex-1 overflow-y-auto">
         {isRestrictedForUser ? (
           <div className="p-12 text-center text-gray-500 max-w-lg mx-auto mt-16 space-y-3">
             <div className="w-12 h-12 rounded-2xl bg-rose-500/10 text-rose-500 flex items-center justify-center mx-auto border border-rose-500/20">

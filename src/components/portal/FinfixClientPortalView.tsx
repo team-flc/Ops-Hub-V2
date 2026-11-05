@@ -437,14 +437,14 @@ Thank you for partnering with us.
         {/* Top Header: Greeting, Subtitle, Search, Notifications & User Avatar */}
         <header
           data-testid="finfix-client-header"
-          className="h-18 px-6 lg:px-8 bg-white border-b border-slate-200/80 flex items-center justify-between shrink-0 z-10 shadow-xs"
+          className="h-20 px-6 lg:px-8 bg-white border-b border-slate-200/90 flex items-center justify-between shrink-0 z-10 shadow-xs"
         >
           <div className="flex items-center gap-3">
             <div>
-              <h1 className="text-xl sm:text-2xl font-black text-slate-900 tracking-tight">
+              <h1 className="text-2xl sm:text-3xl font-black text-slate-900 tracking-tight">
                 Welcome back, {clientGreetingName}!
               </h1>
-              <p className="text-xs text-slate-500 font-medium">
+              <p className="text-xs sm:text-sm text-slate-600 font-semibold mt-0.5">
                 Here's your performance at a glance.
               </p>
             </div>
@@ -454,7 +454,7 @@ Thank you for partnering with us.
             {/* Search Icon */}
             <button
               type="button"
-              className="p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
+              className="p-2.5 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
               title="Search workspace deliverables"
             >
               <Search className="w-4 h-4" />
@@ -464,7 +464,7 @@ Thank you for partnering with us.
             <div className="relative">
               <button
                 type="button"
-                className="p-2 rounded-xl text-slate-500 hover:text-slate-800 hover:bg-slate-100 transition-colors cursor-pointer"
+                className="p-2.5 rounded-xl text-slate-600 hover:text-slate-900 hover:bg-slate-100 transition-colors cursor-pointer"
                 title="Notifications"
               >
                 <Bell className="w-4 h-4" />
@@ -476,13 +476,13 @@ Thank you for partnering with us.
 
             {/* Client User Avatar */}
             <div className="flex items-center gap-2 pl-3 border-l border-slate-200">
-              <div className="w-8 h-8 rounded-full bg-[#0D9488] text-white font-bold text-xs flex items-center justify-center shadow-xs">
+              <div className="w-9 h-9 rounded-full bg-[#0D9488] text-white font-bold text-xs flex items-center justify-center shadow-xs">
                 {clientInitials}
               </div>
-              <span className="text-xs font-bold text-slate-800 hidden sm:inline">
+              <span className="text-xs font-bold text-slate-900 hidden sm:inline">
                 {clientContactName}
               </span>
-              <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+              <ChevronDown className="w-3.5 h-3.5 text-slate-500" />
             </div>
           </div>
         </header>
@@ -492,32 +492,32 @@ Thank you for partnering with us.
           {/* Client-Facing Dashboard Banner */}
           <div
             data-testid="client-portal-banner"
-            className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+            className="p-5 sm:p-6 rounded-2xl bg-white border border-slate-200/90 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4"
           >
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-teal-50 border border-teal-200/60 flex items-center justify-center text-teal-600 shrink-0">
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-xl bg-teal-50 border border-teal-200/80 flex items-center justify-center text-teal-600 shrink-0 shadow-xs">
                 <Sparkles className="w-5 h-5" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-slate-900">
+                <h3 className="text-sm sm:text-base font-bold text-slate-900">
                   Client Portal &bull; Active Workspace for {clientGreetingName}
                 </h3>
-                <p className="text-xs text-slate-500">
+                <p className="text-xs text-slate-600 font-medium">
                   Live operational delivery, milestones, transparent progress, and verified assets.
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2 text-xs">
-              <span className="px-2.5 py-1 rounded-lg bg-emerald-50 text-emerald-700 border border-emerald-200/60 font-bold flex items-center gap-1.5">
-                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />
+              <span className="px-3 py-1.5 rounded-lg bg-emerald-50 text-emerald-800 border border-emerald-300 font-bold flex items-center gap-2 shadow-xs">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
                 <span>{isArchived ? 'Archived (Read-Only)' : 'Active Operations'}</span>
               </span>
             </div>
           </div>
 
           {reportSuccessMsg && (
-            <div className="p-3.5 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-semibold flex items-center gap-2 shadow-xs">
+            <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-300 text-emerald-900 text-xs sm:text-sm font-semibold flex items-center gap-2.5 shadow-xs">
               <Check className="w-4 h-4 text-emerald-600 shrink-0" />
               <span>{reportSuccessMsg}</span>
             </div>
@@ -531,18 +531,18 @@ Thank you for partnering with us.
                 {/* Card 1: Project Completion */}
                 <div
                   data-testid="stat-project-completion"
-                  className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-3 hover:border-slate-300 transition-colors"
+                  className="p-6 sm:p-7 rounded-2xl bg-white border border-slate-200/90 shadow-sm hover:shadow-md flex flex-col justify-between space-y-4 hover:border-slate-300 transition-all"
                 >
-                  <div className="flex items-center justify-between text-xs text-slate-500 font-bold uppercase tracking-wider">
+                  <div className="flex items-center justify-between text-xs text-slate-700 font-bold uppercase tracking-wider">
                     <span>Project Completion</span>
-                    <div className="p-2 rounded-xl bg-teal-50 text-teal-600 border border-teal-200/60">
+                    <div className="p-2.5 rounded-xl bg-teal-50 text-teal-600 border border-teal-200/80 shadow-xs">
                       <Target className="w-4 h-4" />
                     </div>
                   </div>
-                  <div className="text-3xl font-black text-slate-900">
+                  <div className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight font-mono">
                     {completionPercent}%
                   </div>
-                  <div className="text-xs font-semibold text-emerald-600 flex items-center gap-1">
+                  <div className="text-xs font-bold text-emerald-700 flex items-center gap-1.5">
                     <span>▲ Across all deliverable sprints</span>
                   </div>
                 </div>
@@ -550,18 +550,18 @@ Thank you for partnering with us.
                 {/* Card 2: Tasks Completed */}
                 <div
                   data-testid="stat-tasks-completed"
-                  className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-3 hover:border-slate-300 transition-colors"
+                  className="p-6 sm:p-7 rounded-2xl bg-white border border-slate-200/90 shadow-sm hover:shadow-md flex flex-col justify-between space-y-4 hover:border-slate-300 transition-all"
                 >
-                  <div className="flex items-center justify-between text-xs text-slate-500 font-bold uppercase tracking-wider">
+                  <div className="flex items-center justify-between text-xs text-slate-700 font-bold uppercase tracking-wider">
                     <span>Tasks Completed</span>
-                    <div className="p-2 rounded-xl bg-blue-50 text-blue-600 border border-blue-200/60">
+                    <div className="p-2.5 rounded-xl bg-blue-50 text-blue-600 border border-blue-200/80 shadow-xs">
                       <CheckSquare className="w-4 h-4" />
                     </div>
                   </div>
-                  <div className="text-3xl font-black text-slate-900">
+                  <div className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight font-mono">
                     {completedTasks.length}/{totalVisibleTasks}
                   </div>
-                  <div className="text-xs font-semibold text-blue-600">
+                  <div className="text-xs font-bold text-blue-700 flex items-center gap-1.5">
                     <span>+{completedTasks.length} verified deliverables</span>
                   </div>
                 </div>
@@ -569,19 +569,19 @@ Thank you for partnering with us.
                 {/* Card 3: Pending Approvals */}
                 <div
                   data-testid="stat-pending-approvals"
-                  className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-3 hover:border-slate-300 transition-colors"
+                  className="p-6 sm:p-7 rounded-2xl bg-white border border-slate-200/90 shadow-sm hover:shadow-md flex flex-col justify-between space-y-4 hover:border-slate-300 transition-all"
                 >
-                  <div className="flex items-center justify-between text-xs text-slate-500 font-bold uppercase tracking-wider">
+                  <div className="flex items-center justify-between text-xs text-slate-700 font-bold uppercase tracking-wider">
                     <span>Pending Approvals</span>
-                    <div className="p-2 rounded-xl bg-orange-50 text-orange-600 border border-orange-200/60">
+                    <div className="p-2.5 rounded-xl bg-orange-50 text-orange-600 border border-orange-200/80 shadow-xs">
                       <Hourglass className="w-4 h-4" />
                     </div>
                   </div>
-                  <div className="text-3xl font-black text-slate-900">
+                  <div className="text-3xl sm:text-4xl font-black text-slate-900 tracking-tight font-mono">
                     {pendingApprovals.length}
                   </div>
-                  <div className="text-xs font-bold text-amber-600 flex items-center gap-1.5">
-                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                  <div className="text-xs font-bold text-amber-700 flex items-center gap-1.5">
+                    <span className="w-2 h-2 rounded-full bg-amber-500" />
                     <span>Needs your review &bull;</span>
                   </div>
                 </div>
@@ -589,18 +589,18 @@ Thank you for partnering with us.
                 {/* Card 4: Subscription */}
                 <div
                   data-testid="stat-subscription"
-                  className="p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex flex-col justify-between space-y-3 hover:border-slate-300 transition-colors"
+                  className="p-6 sm:p-7 rounded-2xl bg-white border border-slate-200/90 shadow-sm hover:shadow-md flex flex-col justify-between space-y-4 hover:border-slate-300 transition-all"
                 >
-                  <div className="flex items-center justify-between text-xs text-slate-500 font-bold uppercase tracking-wider">
+                  <div className="flex items-center justify-between text-xs text-slate-700 font-bold uppercase tracking-wider">
                     <span>Subscription</span>
-                    <div className="p-2 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200/60">
+                    <div className="p-2.5 rounded-xl bg-emerald-50 text-emerald-600 border border-emerald-200/80 shadow-xs">
                       <Crown className="w-4 h-4" />
                     </div>
                   </div>
-                  <div className="text-3xl font-black text-emerald-600 truncate">
+                  <div className="text-3xl sm:text-4xl font-black text-emerald-600 truncate tracking-tight">
                     {subscriptionStatus}
                   </div>
-                  <div className="text-xs text-slate-500 truncate">
+                  <div className="text-xs font-bold text-slate-700 truncate">
                     <span>{subscriptionPlan} &bull; Renew {nextBillingDate}</span>
                   </div>
                 </div>
@@ -611,16 +611,16 @@ Thank you for partnering with us.
                 {/* Performance Overview (7 Cols) */}
                 <div
                   data-testid="performance-overview-section"
-                  className="lg:col-span-7 p-6 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-4"
+                  className="lg:col-span-7 p-6 sm:p-7 rounded-2xl bg-white border border-slate-200/90 shadow-sm space-y-5"
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
                     <div className="flex items-center gap-2.5">
-                      <div className="p-1.5 rounded-lg bg-teal-50 text-teal-600">
+                      <div className="p-2 rounded-lg bg-teal-50 text-teal-600">
                         <TrendingUp className="w-4 h-4" />
                       </div>
                       <div>
-                        <h4 className="text-sm font-bold text-slate-900">Performance Overview</h4>
-                        <p className="text-xs text-slate-500">Traffic & Lead conversions over time</p>
+                        <h4 className="text-sm sm:text-base font-bold text-slate-900">Performance Overview</h4>
+                        <p className="text-xs text-slate-600 font-medium">Traffic & Lead conversions over time</p>
                       </div>
                     </div>
 
@@ -634,7 +634,7 @@ Thank you for partnering with us.
                           className={`px-3 py-1 rounded-lg font-bold transition-all cursor-pointer ${
                             performanceRange === r
                               ? 'bg-[#0D9488] text-white shadow-xs'
-                              : 'text-slate-500 hover:text-slate-800'
+                              : 'text-slate-600 hover:text-slate-900'
                           }`}
                         >
                           {r}
@@ -644,23 +644,23 @@ Thank you for partnering with us.
                   </div>
 
                   {/* Connected check: do not draw invented data */}
-                  <div className="p-8 rounded-xl bg-slate-50 border border-dashed border-slate-200 flex flex-col items-center justify-center text-center space-y-2 min-h-[220px]">
-                    <div className="w-10 h-10 rounded-full bg-slate-100 border border-slate-200 flex items-center justify-center text-slate-500">
-                      <BarChart3 className="w-5 h-5 text-slate-600" />
+                  <div className="p-8 sm:p-10 rounded-xl bg-slate-50 border-2 border-dashed border-slate-300 flex flex-col items-center justify-center text-center space-y-3 min-h-[230px]">
+                    <div className="w-12 h-12 rounded-full bg-slate-200 border border-slate-300 flex items-center justify-center text-slate-700 shadow-xs">
+                      <BarChart3 className="w-6 h-6 text-slate-700" />
                     </div>
-                    <div className="text-sm font-bold text-slate-800">
+                    <div className="text-sm sm:text-base font-black text-slate-900 tracking-tight">
                       Website Traffic & Leads: Not connected
                     </div>
-                    <p className="text-xs text-slate-500 max-w-sm">
+                    <p className="text-xs text-slate-600 font-medium max-w-md leading-relaxed">
                       External analytics telemetry (Google Analytics 4 & CRM Lead Tracking) is not linked to this workspace. Figures will populate once integration credentials are authorized.
                     </p>
-                    <div className="flex items-center gap-4 text-xs font-semibold text-slate-400 pt-3">
-                      <span className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-teal-500" />
+                    <div className="flex items-center gap-5 text-xs font-bold text-slate-700 pt-2">
+                      <span className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-teal-600" />
                         Website Traffic
                       </span>
-                      <span className="flex items-center gap-1.5">
-                        <span className="w-2 h-2 rounded-full bg-purple-500" />
+                      <span className="flex items-center gap-2">
+                        <span className="w-2.5 h-2.5 rounded-full bg-purple-600" />
                         Leads
                       </span>
                     </div>
@@ -670,16 +670,16 @@ Thank you for partnering with us.
                 {/* Project Progress (5 Cols) */}
                 <div
                   data-testid="project-progress-section"
-                  className="lg:col-span-5 p-6 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-4 flex flex-col justify-between"
+                  className="lg:col-span-5 p-6 sm:p-7 rounded-2xl bg-white border border-slate-200/90 shadow-sm space-y-5 flex flex-col justify-between"
                 >
                   <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                     <div className="flex items-center gap-2.5">
-                      <div className="p-1.5 rounded-lg bg-orange-50 text-orange-600">
+                      <div className="p-2 rounded-lg bg-orange-50 text-orange-600">
                         <Rocket className="w-4 h-4" />
                       </div>
                       <div>
-                        <h4 className="text-sm font-bold text-slate-900">Project Progress</h4>
-                        <p className="text-xs text-slate-500">Deliverable milestones</p>
+                        <h4 className="text-sm sm:text-base font-bold text-slate-900">Project Progress</h4>
+                        <p className="text-xs text-slate-600 font-medium">Deliverable milestones</p>
                       </div>
                     </div>
                     <button
@@ -691,7 +691,7 @@ Thank you for partnering with us.
                     </button>
                   </div>
 
-                  <div className="space-y-3.5">
+                  <div className="space-y-4">
                     {projectRows.map((proj, idx) => {
                       const barColors = ['bg-[#0D9488]', 'bg-purple-600', 'bg-orange-500', 'bg-amber-500'];
                       const pillColors = [
@@ -701,31 +701,31 @@ Thank you for partnering with us.
                         'bg-amber-500 text-white'
                       ];
                       return (
-                        <div key={proj.id} className="space-y-1.5">
-                          <div className="flex items-center justify-between text-xs">
-                            <span className="font-bold text-slate-800">{proj.name}</span>
-                            <div className="flex items-center gap-2">
-                              <span className="font-black text-slate-900 font-mono">{proj.percent}%</span>
+                        <div key={proj.id} className="space-y-2">
+                          <div className="flex items-center justify-between text-xs sm:text-sm">
+                            <span className="font-bold text-slate-900">{proj.name}</span>
+                            <div className="flex items-center gap-2.5">
+                              <span className="font-black text-slate-900 font-mono text-xs sm:text-sm">{proj.percent}%</span>
                               <span
-                                className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                className={`px-2.5 py-0.5 rounded-full text-[11px] font-bold shadow-xs ${
                                   proj.status === 'Completed'
                                     ? 'bg-emerald-600 text-white'
                                     : proj.status === 'In Progress'
                                     ? pillColors[idx]
-                                    : 'bg-slate-200 text-slate-600'
+                                    : 'bg-slate-200 text-slate-700'
                                 }`}
                               >
                                 {proj.status}
                               </span>
                             </div>
                           </div>
-                          {/* Progress Bar */}
-                          <div className="w-full h-2 rounded-full bg-slate-100 overflow-hidden">
+                          {/* Progress Bar (Thicker & Higher Contrast) */}
+                          <div className="w-full h-3 sm:h-3.5 rounded-full bg-slate-200 overflow-hidden shadow-inner">
                             <div
                               style={{ width: `${proj.percent}%` }}
                               className={`h-full rounded-full transition-all duration-500 ${
                                 proj.status === 'Completed'
-                                  ? 'bg-emerald-500'
+                                  ? 'bg-emerald-600'
                                   : proj.status === 'In Progress'
                                   ? barColors[idx]
                                   : 'bg-slate-300'
@@ -744,40 +744,40 @@ Thank you for partnering with us.
                 {/* Column 1: Subscription & Billing */}
                 <div
                   data-testid="subscription-billing-card"
-                  className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-4 flex flex-col justify-between"
+                  className="p-6 sm:p-7 rounded-2xl bg-white border border-slate-200/90 shadow-sm space-y-5 flex flex-col justify-between"
                 >
                   <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                     <div className="flex items-center gap-2.5">
-                      <div className="p-1.5 rounded-lg bg-teal-50 text-teal-600">
+                      <div className="p-2 rounded-lg bg-teal-50 text-teal-600">
                         <CreditCard className="w-4 h-4" />
                       </div>
-                      <h4 className="text-sm font-bold text-slate-900">Subscription & Billing</h4>
+                      <h4 className="text-sm sm:text-base font-bold text-slate-900">Subscription & Billing</h4>
                     </div>
                   </div>
 
-                  <div className="p-4 rounded-xl bg-[#E8F6F3] border border-teal-200/60 space-y-3">
+                  <div className="p-5 rounded-xl bg-[#E8F6F3] border border-teal-300/80 space-y-3.5 shadow-xs">
                     <div className="flex items-center justify-between">
-                      <div className="flex items-center gap-2">
-                        <Crown className="w-4 h-4 text-teal-700" />
+                      <div className="flex items-center gap-2.5">
+                        <Crown className="w-5 h-5 text-teal-700" />
                         <div>
-                          <span className="text-xs font-extrabold text-slate-900 block">{subscriptionPlan}</span>
-                          <span className="text-[10px] text-slate-500">Current Subscription</span>
+                          <span className="text-sm font-black text-slate-900 block">{subscriptionPlan}</span>
+                          <span className="text-xs text-slate-600 font-medium">Current Subscription</span>
                         </div>
                       </div>
-                      <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-100 text-emerald-800">
+                      <span className="px-2.5 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 border border-emerald-300 shadow-xs">
                         {subscriptionStatus}
                       </span>
                     </div>
 
-                    <div className="pt-2 border-t border-teal-200/50 flex items-center justify-between text-xs">
+                    <div className="pt-3 border-t border-teal-200/80 flex items-center justify-between text-xs sm:text-sm">
                       <div>
-                        <span className="text-[10px] text-slate-500 block">Next Billing Date</span>
-                        <span className="font-bold text-slate-800 font-mono text-[11px]">{nextBillingDate}</span>
+                        <span className="text-xs text-slate-600 font-medium block">Next Billing Date</span>
+                        <span className="font-bold text-slate-900 font-mono">{nextBillingDate}</span>
                       </div>
                       <div className="text-right">
-                        <span className="text-[10px] text-slate-500 block">Payment Status</span>
-                        <span className="font-bold text-emerald-700 text-[11px] flex items-center justify-end gap-1">
-                          Paid <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 inline-block" />
+                        <span className="text-xs text-slate-600 font-medium block">Payment Status</span>
+                        <span className="font-bold text-emerald-800 flex items-center justify-end gap-1.5">
+                          Paid <span className="w-2 h-2 rounded-full bg-emerald-500 inline-block" />
                         </span>
                       </div>
                     </div>
@@ -786,9 +786,9 @@ Thank you for partnering with us.
                   <button
                     type="button"
                     onClick={handleDownloadReceipt}
-                    className="w-full py-2.5 px-3 rounded-xl bg-white hover:bg-slate-50 text-slate-800 text-xs font-bold border border-slate-200 transition-colors flex items-center justify-center gap-1.5 cursor-pointer shadow-xs"
+                    className="w-full py-3 px-4 rounded-xl bg-white hover:bg-slate-50 text-slate-900 text-xs sm:text-sm font-bold border border-slate-300 transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs"
                   >
-                    <Receipt className="w-3.5 h-3.5 text-teal-600" />
+                    <Receipt className="w-4 h-4 text-teal-600" />
                     <span>Download Receipt</span>
                   </button>
                 </div>
@@ -796,14 +796,14 @@ Thank you for partnering with us.
                 {/* Column 2: Recent Activity */}
                 <div
                   data-testid="recent-activity-section"
-                  className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-4"
+                  className="p-6 sm:p-7 rounded-2xl bg-white border border-slate-200/90 shadow-sm space-y-5"
                 >
                   <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                     <div className="flex items-center gap-2.5">
-                      <div className="p-1.5 rounded-lg bg-purple-50 text-purple-600">
+                      <div className="p-2 rounded-lg bg-purple-50 text-purple-600">
                         <Clock className="w-4 h-4" />
                       </div>
-                      <h4 className="text-sm font-bold text-slate-900">Recent Activity</h4>
+                      <h4 className="text-sm sm:text-base font-bold text-slate-900">Recent Activity</h4>
                     </div>
                     <button
                       type="button"
@@ -814,40 +814,45 @@ Thank you for partnering with us.
                     </button>
                   </div>
 
-                  <div className="space-y-3">
+                  <div className="space-y-3.5">
                     {recentActivities.length > 0 ? (
                       recentActivities.map((act) => (
                         <div
                           key={act.id}
-                          className="flex items-start gap-2.5 text-xs pb-2 border-b border-slate-100 last:border-b-0 last:pb-0"
+                          className="flex items-start gap-3 text-xs pb-3 border-b border-slate-100 last:border-b-0 last:pb-0"
                         >
-                          <div className={`w-6 h-6 rounded-full flex items-center justify-center shrink-0 mt-0.5 ${
+                          <div className={`w-7 h-7 rounded-full flex items-center justify-center shrink-0 mt-0.5 shadow-xs ${
                             act.iconType === 'check'
-                              ? 'bg-emerald-50 text-emerald-600'
+                              ? 'bg-emerald-100 text-emerald-700'
                               : act.iconType === 'message'
-                              ? 'bg-purple-50 text-purple-600'
-                              : 'bg-orange-50 text-orange-600'
+                              ? 'bg-purple-100 text-purple-700'
+                              : 'bg-orange-100 text-orange-700'
                           }`}>
                             {act.iconType === 'check' ? (
-                              <CheckCircle2 className="w-3.5 h-3.5" />
+                              <CheckCircle2 className="w-4 h-4" />
                             ) : act.iconType === 'message' ? (
-                              <MessageSquare className="w-3.5 h-3.5" />
+                              <MessageSquare className="w-4 h-4" />
                             ) : (
-                              <Edit3 className="w-3.5 h-3.5" />
+                              <Edit3 className="w-4 h-4" />
                             )}
                           </div>
                           <div className="min-w-0 flex-1">
-                            <span className="font-bold text-slate-800 block truncate">{act.title}</span>
-                            <span className="text-[10px] text-slate-400">{act.action}</span>
+                            <span className="font-bold text-slate-900 block truncate text-xs sm:text-sm">{act.title}</span>
+                            <span className="text-xs text-slate-600 font-medium">{act.action}</span>
                           </div>
-                          <span className="text-[10px] text-slate-400 shrink-0 font-mono">
+                          <span className="text-xs text-slate-500 shrink-0 font-mono font-bold">
                             {act.timestamp}
                           </span>
                         </div>
                       ))
                     ) : (
-                      <div className="p-6 text-center text-xs text-slate-400">
-                        No recent activity recorded for this workspace.
+                      <div className="p-8 rounded-xl bg-slate-50 border border-slate-200 text-center space-y-2">
+                        <div className="text-xs sm:text-sm font-bold text-slate-800">
+                          No recent activity recorded for this workspace.
+                        </div>
+                        <p className="text-xs text-slate-500 font-medium">
+                          New task updates and client approvals will appear here as work progresses.
+                        </p>
                       </div>
                     )}
                   </div>
@@ -856,30 +861,30 @@ Thank you for partnering with us.
                 {/* Column 3: Marketing Channels */}
                 <div
                   data-testid="marketing-channels-section"
-                  className="p-6 rounded-2xl bg-white border border-slate-200/80 shadow-xs space-y-4 flex flex-col justify-between"
+                  className="p-6 sm:p-7 rounded-2xl bg-white border border-slate-200/90 shadow-sm space-y-5 flex flex-col justify-between"
                 >
                   <div className="flex items-center justify-between pb-3 border-b border-slate-100">
                     <div className="flex items-center gap-2.5">
-                      <div className="p-1.5 rounded-lg bg-purple-50 text-purple-600">
+                      <div className="p-2 rounded-lg bg-purple-50 text-purple-600">
                         <BarChart3 className="w-4 h-4" />
                       </div>
-                      <h4 className="text-sm font-bold text-slate-900">Marketing Channels</h4>
+                      <h4 className="text-sm sm:text-base font-bold text-slate-900">Marketing Channels</h4>
                     </div>
-                    <span className="text-[11px] font-semibold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-lg">
+                    <span className="text-xs font-bold text-slate-700 bg-slate-100 border border-slate-200 px-2.5 py-1 rounded-lg">
                       This Month &bull;
                     </span>
                   </div>
 
                   {/* Real analytics check: Not connected */}
-                  <div className="flex items-center justify-between p-3 gap-3">
-                    <div className="w-20 h-20 rounded-full border-8 border-slate-200 flex flex-col items-center justify-center shrink-0">
-                      <span className="text-[10px] font-black text-slate-500">Live</span>
-                      <span className="text-[9px] text-slate-400">Sync</span>
+                  <div className="flex items-center justify-between p-4 gap-4 bg-slate-50 rounded-xl border border-slate-200">
+                    <div className="w-22 h-22 rounded-full border-8 border-slate-300 flex flex-col items-center justify-center shrink-0 shadow-inner">
+                      <span className="text-xs font-black text-slate-800">Live</span>
+                      <span className="text-[10px] font-bold text-slate-600">Sync</span>
                     </div>
 
-                    <div className="space-y-1 text-xs">
-                      <span className="text-xs font-bold text-slate-800 block">Marketing Channels: Not connected</span>
-                      <p className="text-[10px] text-slate-400 leading-tight">
+                    <div className="space-y-1.5 text-xs flex-1">
+                      <span className="text-xs sm:text-sm font-black text-slate-900 block">Marketing Channels: Not connected</span>
+                      <p className="text-xs text-slate-600 font-medium leading-relaxed">
                         Attribution shares for Google Ads, Meta Social, Organic, and Email will appear when live analytics are connected.
                       </p>
                     </div>
@@ -890,17 +895,17 @@ Thank you for partnering with us.
               {/* Bottom Bar: Progress Message & Download Monthly Report Button */}
               <div
                 data-testid="client-portal-bottom-bar"
-                className="p-4 sm:p-5 rounded-2xl bg-white border border-slate-200/80 shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-3"
+                className="p-5 sm:p-6 rounded-2xl bg-white border border-slate-200/90 shadow-sm flex flex-col sm:flex-row sm:items-center justify-between gap-4"
               >
-                <div className="flex items-center gap-3">
-                  <div className="w-9 h-9 rounded-xl bg-teal-50 border border-teal-200/60 flex items-center justify-center text-teal-600 shrink-0">
-                    <Sparkles className="w-4 h-4" />
+                <div className="flex items-center gap-3.5">
+                  <div className="w-10 h-10 rounded-xl bg-teal-50 border border-teal-200/80 flex items-center justify-center text-teal-600 shrink-0 shadow-xs">
+                    <Sparkles className="w-5 h-5" />
                   </div>
                   <div>
-                    <h4 className="text-xs font-bold text-slate-900">
+                    <h4 className="text-xs sm:text-sm font-bold text-slate-900">
                       You're on the right track! All campaign milestones and deliverables are synced live.
                     </h4>
-                    <p className="text-[11px] text-slate-500">
+                    <p className="text-xs text-slate-600 font-medium">
                       {completedTasks.length} of {totalVisibleTasks} deliverables completed across all project sprints.
                     </p>
                   </div>
@@ -910,7 +915,7 @@ Thank you for partnering with us.
                   type="button"
                   onClick={handleDownloadReport}
                   disabled={isGeneratingReport}
-                  className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#0D9488] hover:bg-teal-700 text-white font-bold text-xs transition-colors shadow-sm cursor-pointer shrink-0"
+                  className="flex items-center justify-center gap-2 px-6 py-3 rounded-xl bg-[#0D9488] hover:bg-teal-700 text-white font-bold text-xs sm:text-sm transition-colors shadow-sm cursor-pointer shrink-0"
                 >
                   <FileDown className="w-4 h-4 text-teal-100" />
                   <span>{isGeneratingReport ? 'Generating...' : 'Download Monthly Report'}</span>

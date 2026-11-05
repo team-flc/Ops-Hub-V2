@@ -29,11 +29,20 @@ import { SubmitConcernModal } from './SubmitConcernModal';
 import { ProfileChangeRequestModal } from './ProfileChangeRequestModal';
 import { SubmitWorkReportModal } from './SubmitWorkReportModal';
 import { GoalModal } from './GoalModal';
+import { useSafeNavigate } from '../../lib/safeRouterHooks';
+import { EditTeamMemberModal } from '../team/EditTeamMemberModal';
+import { teamManagementService } from '../../lib/teamManagementService';
+import { Users } from 'lucide-react';
 
 export const EmployeeDashboardView: React.FC = () => {
   const { profile } = useAuth();
+  const navigate = useSafeNavigate();
 
   // Data States
+  const [editingMemberForSetup, setEditingMemberForSetup] = useState<any | null>(null);
+  const [departments, setDepartments] = useState<any[]>([]);
+  const [designations, setDesignations] = useState<any[]>([]);
+  const [eligibleManagers, setEligibleManagers] = useState<any[]>([]);
   const [employeeRecord, setEmployeeRecord] = useState<EmployeeRecord | null>(null);
   const [shifts, setShifts] = useState<WorkShift[]>([]);
   const [companySchedules, setCompanySchedules] = useState<CompanyWorkSchedule[]>([]);
@@ -118,6 +127,19 @@ export const EmployeeDashboardView: React.FC = () => {
       setGoals(myGoals);
       setDocuments(myDocs);
       setSalaryHikes(hikes);
+
+      if (profile.role === 'owner' || profile.role === 'operational_manager') {
+        try {
+          const [depts, desigs, managers] = await Promise.all([
+            teamManagementService.fetchDepartments(),
+            teamManagementService.fetchDesignations(),
+            teamManagementService.fetchEligibleManagers()
+          ]);
+          setDepartments(depts);
+          setDesignations(desigs);
+          setEligibleManagers(managers);
+        } catch (_) {}
+      }
     } catch (err) {
       console.error('Failed to load employee dashboard data:', err);
     } finally {
@@ -140,8 +162,37 @@ export const EmployeeDashboardView: React.FC = () => {
     }
   };
 
-  // Setup pending status
-  const isSetupPending = !employeeRecord || !employeeRecord.setupCompletedAt;
+  // Setup Status Check (strict parameter verification)
+  const setupStatus = useMemo(() => {
+    return employeeOperationsService.getEmployeeSetupStatus(
+      employeeRecord,
+      shifts,
+      companySchedules,
+      profile?.role === 'owner'
+    );
+  }, [employeeRecord, shifts, companySchedules, profile?.role]);
+
+  const isSetupPending = !setupStatus.isComplete;
+
+  // Single Source of Truth: Merge todayAttendance into attendanceHistory seamlessly
+  const combinedAttendanceRecords = useMemo(() => {
+    const records = [...attendanceHistory];
+    if (todayAttendance && todayAttendance.workDate) {
+      const idx = records.findIndex(r => r.workDate === todayAttendance.workDate);
+      if (idx >= 0) {
+        records[idx] = { ...records[idx], ...todayAttendance };
+      } else {
+        records.unshift(todayAttendance);
+      }
+    }
+    return records;
+  }, [attendanceHistory, todayAttendance]);
+
+  // Current Month Records
+  const currentMonthStr = getPKTCurrentMonthString();
+  const currentMonthRecords = useMemo(() => {
+    return combinedAttendanceRecords.filter(r => r.workDate && r.workDate.startsWith(currentMonthStr));
+  }, [combinedAttendanceRecords, currentMonthStr]);
 
   // Find user's active shift
   const activeShift = shifts.find(s => s.id === employeeRecord?.shiftId) || (isSetupPending ? null : shifts[0] || null);
@@ -150,22 +201,28 @@ export const EmployeeDashboardView: React.FC = () => {
   const startDateStr = profile?.startDate || '';
   const daysWithCompany = calculateDaysWithCompany(startDateStr);
 
-  // Monthly Metrics Calculations (Exempt / zeroed if setup is pending)
-  const presentDays = isSetupPending ? 0 : attendanceHistory.filter(a => a.status === 'present' || a.status === 'late' || a.status === 'on_time').length;
-  const lateDays = isSetupPending ? 0 : attendanceHistory.filter(a => a.status === 'late').length;
-  const totalLateDeductions = isSetupPending ? 0 : attendanceHistory.reduce((sum, a) => sum + (a.lateDeduction || 0), 0);
-  const unapprovedAbsences = isSetupPending ? 0 : attendanceHistory.filter(a => a.status === 'absent').length;
-  const totalAbsenceDeductions = isSetupPending ? 0 : attendanceHistory.reduce((sum, a) => sum + (a.absenceDeduction || 0), 0);
+  // Monthly Metrics Calculations derived strictly from Attendance History
+  const presentRecords = isSetupPending ? [] : currentMonthRecords.filter(a => a.status === 'present' || a.status === 'late' || a.status === 'on_time');
+  const lateRecords = isSetupPending ? [] : currentMonthRecords.filter(a => a.status === 'late');
+  const onTimeRecords = isSetupPending ? [] : currentMonthRecords.filter(a => a.status === 'on_time' || (a.status === 'present' && !a.minutesLate));
+  const absentRecords = isSetupPending ? [] : currentMonthRecords.filter(a => a.status === 'absent');
+
+  const presentDays = presentRecords.length;
+  const lateDays = lateRecords.length;
+  const onTimeDays = onTimeRecords.length;
+  const unapprovedAbsences = absentRecords.length;
+  const totalLateDeductions = isSetupPending ? 0 : lateRecords.reduce((sum, a) => sum + (a.lateDeduction || 0), 0);
+  const totalAbsenceDeductions = isSetupPending ? 0 : absentRecords.reduce((sum, a) => sum + (a.absenceDeduction || 0), 0);
 
   // Next Salary Payout Countdown (15th payout date in PKT)
   const { daysRemaining: daysUntilPayout } = calculatePKTSalaryCountdown();
 
-  // Current Accrued Earnings Calculation in PKT
+  // Current Accrued Earnings Calculation in PKT (Strict single source)
   const baseSalary = isSetupPending ? 0 : Number(employeeRecord?.salary || 0);
   const { day: currentDay } = getPKTDateTimeParts();
   const totalDaysInMonth = getDaysInPKTMonth();
-  const rawAccrued = (!isSetupPending && totalDaysInMonth > 0) ? (baseSalary / totalDaysInMonth) * currentDay : 0;
-  const netAccrued = isSetupPending ? 0 : Math.max(0, Math.round(rawAccrued - totalLateDeductions - totalAbsenceDeductions));
+  const rawAccrued = (!isSetupPending && baseSalary > 0 && totalDaysInMonth > 0) ? (baseSalary / totalDaysInMonth) * currentDay : 0;
+  const netAccrued = (!isSetupPending && baseSalary > 0) ? Math.max(0, Math.round(rawAccrued - totalLateDeductions - totalAbsenceDeductions)) : 0;
 
   // Configured Shift Duration in Hours
   const shiftDurationHours = useMemo(() => {
@@ -183,13 +240,12 @@ export const EmployeeDashboardView: React.FC = () => {
     }
   }, [activeShift, employeeRecord]);
 
-  // Graph 1: Weekly Attendance Trend Data (Mon to Sat for current week)
+  // Graph 1: Weekly Attendance Trend Data (Mon to Sat for current week) - STRICT SINGLE SOURCE
   const weeklyAttendanceData = useMemo(() => {
     const todayPKT = getPKTTodayDateString();
     const { year, month, day, dayOfWeek } = getPKTDateTimeParts();
 
     // DayOfWeek in PKT: 0=Sun, 1=Mon, ..., 6=Sat
-    // Calculate Monday date of current week
     const currentDayIndex = dayOfWeek === 0 ? 7 : dayOfWeek; // Mon=1, Sun=7
     const daysFromMonday = currentDayIndex - 1;
 
@@ -201,16 +257,51 @@ export const EmployeeDashboardView: React.FC = () => {
       const isPastOrToday = dateStr <= todayPKT;
       const isToday = dateStr === todayPKT;
 
-      const record = attendanceHistory.find(a => a.workDate === dateStr);
-      let status: 'present' | 'late' | 'absent' | 'off' | 'future' = 'future';
+      if (isSetupPending) {
+        return {
+          label,
+          dateStr,
+          isToday,
+          isPastOrToday,
+          status: 'setup_pending' as const,
+          offReason: 'Setup Pending',
+          hours: 0
+        };
+      }
+
+      const record = combinedAttendanceRecords.find(a => a.workDate === dateStr);
+      let status: 'present' | 'late' | 'absent' | 'off' | 'future' | 'pending_checkin' | 'setup_pending' = 'future';
+      let offReason = '';
       let hours = 0;
 
       if (record) {
-        status = (record.status === 'on_time' || record.status === 'present') ? 'present' : (record.status === 'late' ? 'late' : 'absent');
-        hours = record.totalHours || 0;
-      } else if (isPastOrToday) {
-        status = isToday ? (todayAttendance ? ((todayAttendance.status === 'on_time' || todayAttendance.status === 'present') ? 'present' : (todayAttendance.status === 'late' ? 'late' : 'absent')) : 'off') : 'absent';
-        hours = todayAttendance?.totalHours || 0;
+        if (record.status === 'on_time' || record.status === 'present') {
+          status = 'present';
+        } else if (record.status === 'late') {
+          status = 'late';
+        } else if (record.status === 'absent') {
+          status = 'absent';
+        } else if (record.status === 'off') {
+          status = 'off';
+          offReason = record.correctionReason || 'Weekly Off';
+        }
+        hours = record.totalHours || (status === 'present' || status === 'late' ? 8 : 0);
+      } else if (isToday) {
+        const isWorkDay = employeeOperationsService.isWorkingDay(d, companySchedules);
+        if (!isWorkDay) {
+          status = 'off';
+          offReason = employeeOperationsService.getOffDayReason(d, companySchedules);
+        } else {
+          status = 'pending_checkin';
+        }
+      } else if (dateStr < todayPKT) {
+        const isWorkDay = employeeOperationsService.isWorkingDay(d, companySchedules);
+        if (!isWorkDay) {
+          status = 'off';
+          offReason = employeeOperationsService.getOffDayReason(d, companySchedules);
+        } else {
+          status = 'future';
+        }
       }
 
       return {
@@ -219,27 +310,27 @@ export const EmployeeDashboardView: React.FC = () => {
         isToday,
         isPastOrToday,
         status,
+        offReason,
         hours
       };
     });
-  }, [attendanceHistory, todayAttendance]);
+  }, [combinedAttendanceRecords, isSetupPending, companySchedules]);
 
-  // Graph 2: Monthly Composition Data
+  // Graph 2: Monthly Composition Data - STRICTLY RECONCILED WITH ATTENDANCE HISTORY
   const monthlyComposition = useMemo(() => {
     const { year, month } = getPKTDateTimeParts();
     const totalWorkingDays = employeeOperationsService.calculateMonthScheduledWorkingDays(year, month, companySchedules);
-    const onTimeDays = Math.max(0, presentDays - lateDays);
-    const absent = unapprovedAbsences;
-    const remainingDays = Math.max(0, totalWorkingDays - (onTimeDays + lateDays + absent));
+    const remainingDays = Math.max(0, totalWorkingDays - (onTimeDays + lateDays + unapprovedAbsences));
 
     return {
       onTimeDays,
       lateDays,
-      absent,
+      absent: unapprovedAbsences,
       remainingDays,
-      totalWorkingDays
+      totalWorkingDays,
+      isSetupPending
     };
-  }, [presentDays, lateDays, unapprovedAbsences, companySchedules]);
+  }, [onTimeDays, lateDays, unapprovedAbsences, companySchedules, isSetupPending]);
 
   // Graph 3: Punctuality Trend (Last 10 attendance records)
   const punctualityTrend = useMemo(() => {
@@ -279,6 +370,27 @@ export const EmployeeDashboardView: React.FC = () => {
 
   return (
     <div className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto space-y-6 animate-fade-in">
+      {/* View Switcher for Owner & Manager */}
+      {(profile?.role === 'owner' || profile?.role === 'operational_manager') && (
+        <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-slate-100 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border w-fit">
+          <button
+            type="button"
+            onClick={() => navigate('/operations/employees?tab=attendance')}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-gray-100 transition-colors"
+          >
+            <Users className="w-4 h-4" />
+            <span>Team Attendance Roster & Operations</span>
+          </button>
+          <button
+            type="button"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-white dark:bg-dark-card text-brand-700 dark:text-brand-300 shadow-sm"
+          >
+            <Clock className="w-4 h-4" />
+            <span>My Personal Punch & Attendance</span>
+          </button>
+        </div>
+      )}
+
       {/* 1. Summary Header Card */}
       <div className="p-6 sm:p-7 rounded-3xl bg-gradient-to-r from-brand-600 via-indigo-600 to-indigo-700 text-white shadow-xl flex flex-col md:flex-row md:items-center justify-between gap-6 relative overflow-hidden">
         <div className="flex items-center gap-4 z-10">
@@ -355,16 +467,46 @@ export const EmployeeDashboardView: React.FC = () => {
 
       {/* Setup Pending Security Banner */}
       {isSetupPending && (
-        <div className="p-4 sm:p-5 rounded-3xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 flex items-start gap-3.5 text-amber-800 dark:text-amber-200">
-          <Lock className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
-          <div className="space-y-1 text-xs">
-            <h3 className="font-bold text-sm text-amber-900 dark:text-amber-100">
-              Employee Setup Pending — Shift & Governance Unconfigured
-            </h3>
-            <p className="text-amber-700 dark:text-amber-300 leading-relaxed">
-              Your profile is registered, but management (Owner or Operational Manager) has not yet finalized your designated shift, work schedule, and base monthly salary parameters. Screen recording, punch controls, and attendance deduction calculations are paused until configuration is complete.
-            </p>
+        <div className="p-4 sm:p-5 rounded-3xl bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900/50 flex flex-col md:flex-row md:items-center justify-between gap-4 text-amber-800 dark:text-amber-200">
+          <div className="flex items-start gap-3.5">
+            <Lock className="w-5 h-5 text-amber-600 dark:text-amber-400 mt-0.5 shrink-0" />
+            <div className="space-y-1.5 text-xs">
+              <h3 className="font-bold text-sm text-amber-900 dark:text-amber-100 flex items-center gap-2 flex-wrap">
+                <span>Employee Setup Pending — Shift & Governance Unconfigured</span>
+                {setupStatus.missingParameters.map(param => (
+                  <span key={param} className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-300">
+                    Missing Parameter: {param}
+                  </span>
+                ))}
+              </h3>
+              <p className="text-amber-700 dark:text-amber-300 leading-relaxed">
+                Management has not finalized your designated shift, work schedule, and base monthly salary parameters. Screen recording, punch controls, and attendance deduction calculations are paused until configuration is complete.
+              </p>
+            </div>
           </div>
+          {(profile?.role === 'owner' || profile?.role === 'operational_manager') && (
+            <button
+              type="button"
+              onClick={() => {
+                if (profile) {
+                  setEditingMemberForSetup({
+                    id: profile.id,
+                    fullName: profile.fullName || 'Current User',
+                    workEmail: profile.workEmail || '',
+                    role: profile.role,
+                    status: (profile.status as any) || 'active',
+                    departmentIds: [],
+                    clientIds: [],
+                    createdAt: profile.createdAt || '',
+                    updatedAt: profile.updatedAt || ''
+                  });
+                }
+              }}
+              className="px-4 py-2 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs transition-colors shrink-0 shadow-xs"
+            >
+              Configure & Activate My Setup
+            </button>
+          )}
         </div>
       )}
 
@@ -377,9 +519,15 @@ export const EmployeeDashboardView: React.FC = () => {
             <Calendar className="w-4 h-4 text-brand-500" />
           </div>
           <div className="text-xl sm:text-2xl font-black text-slate-900 dark:text-gray-100 font-mono">
-            {presentDays} <span className="text-xs font-semibold text-slate-400">days</span>
+            {isSetupPending ? (
+              <span className="text-sm font-bold text-amber-600 dark:text-amber-400">Setup Pending</span>
+            ) : (
+              <>{presentDays} <span className="text-xs font-semibold text-slate-400">days</span></>
+            )}
           </div>
-          <p className="text-[10px] text-slate-500 dark:text-gray-400">{formatWorkingScheduleDescription(companySchedules)} cycle</p>
+          <p className="text-[10px] text-slate-500 dark:text-gray-400">
+            {isSetupPending ? 'Requires configuration' : `${formatWorkingScheduleDescription(companySchedules)} cycle`}
+          </p>
         </div>
 
         {/* Late Check-Ins */}
@@ -389,10 +537,14 @@ export const EmployeeDashboardView: React.FC = () => {
             <Clock className="w-4 h-4 text-amber-500" />
           </div>
           <div className="text-xl sm:text-2xl font-black text-amber-600 font-mono">
-            {lateDays} <span className="text-xs font-semibold text-slate-400">days</span>
+            {isSetupPending ? (
+              <span className="text-sm font-bold text-amber-600 dark:text-amber-400">Setup Pending</span>
+            ) : (
+              <>{lateDays} <span className="text-xs font-semibold text-slate-400">days</span></>
+            )}
           </div>
           <p className="text-[10px] text-rose-500 font-semibold font-mono">
-            -PKR {totalLateDeductions.toLocaleString()} (PKR 500/late)
+            {isSetupPending ? '--' : `-PKR ${totalLateDeductions.toLocaleString()} (PKR 500/late)`}
           </p>
         </div>
 
@@ -403,10 +555,14 @@ export const EmployeeDashboardView: React.FC = () => {
             <AlertCircle className="w-4 h-4 text-rose-500" />
           </div>
           <div className="text-xl sm:text-2xl font-black text-rose-600 font-mono">
-            {unapprovedAbsences} <span className="text-xs font-semibold text-slate-400">days</span>
+            {isSetupPending ? (
+              <span className="text-sm font-bold text-amber-600 dark:text-amber-400">Setup Pending</span>
+            ) : (
+              <>{unapprovedAbsences} <span className="text-xs font-semibold text-slate-400">days</span></>
+            )}
           </div>
           <p className="text-[10px] text-rose-500 font-semibold font-mono">
-            -PKR {totalAbsenceDeductions.toLocaleString()} (1-day rate cut)
+            {isSetupPending ? '--' : `-PKR ${totalAbsenceDeductions.toLocaleString()} (1-day rate cut)`}
           </p>
         </div>
 
@@ -429,10 +585,18 @@ export const EmployeeDashboardView: React.FC = () => {
             <TrendingUp className="w-4 h-4 text-indigo-500" />
           </div>
           <div className="text-xl sm:text-2xl font-black text-indigo-600 dark:text-indigo-400 font-mono">
-            PKR {netAccrued.toLocaleString()}
+            {isSetupPending || !baseSalary || baseSalary <= 0 ? (
+              <span className="text-xs sm:text-sm font-bold text-amber-600 dark:text-amber-400">Missing Parameter</span>
+            ) : (
+              `PKR ${netAccrued.toLocaleString()}`
+            )}
           </div>
           <p className="text-[10px] text-slate-500 dark:text-gray-400">
-            Base: PKR {baseSalary.toLocaleString()}
+            {isSetupPending || !baseSalary || baseSalary <= 0 ? (
+              <span className="text-amber-600 dark:text-amber-400 font-medium">Base: Missing Parameter</span>
+            ) : (
+              `Base: PKR ${baseSalary.toLocaleString()}`
+            )}
           </p>
         </div>
       </div>
@@ -451,12 +615,35 @@ export const EmployeeDashboardView: React.FC = () => {
 
           <div className="h-32 flex items-end justify-between gap-1.5 pt-4">
             {weeklyAttendanceData.map((d) => {
-              const heightPct = d.hours > 0 ? Math.min(100, Math.round((d.hours / shiftDurationHours) * 100)) : (d.status === 'present' || d.status === 'late' ? 85 : 15);
+              let heightPct = 15;
               let barColor = 'bg-slate-100 dark:bg-dark-sidebar';
-              if (d.status === 'present') barColor = 'bg-emerald-500';
-              else if (d.status === 'late') barColor = 'bg-amber-500';
-              else if (d.status === 'absent') barColor = 'bg-rose-500';
-              else if (d.isToday) barColor = 'bg-brand-500';
+              let displayLabel: string = d.status;
+
+              if (d.status === 'setup_pending') {
+                heightPct = 20;
+                barColor = 'bg-amber-200/50 dark:bg-amber-900/30 border border-amber-300/40';
+                displayLabel = 'Setup Pending';
+              } else if (d.status === 'present') {
+                heightPct = d.hours > 0 ? Math.min(100, Math.round((d.hours / shiftDurationHours) * 100)) : 85;
+                barColor = 'bg-emerald-500';
+                displayLabel = d.hours > 0 ? `${d.hours}h` : 'On-time';
+              } else if (d.status === 'late') {
+                heightPct = d.hours > 0 ? Math.min(100, Math.round((d.hours / shiftDurationHours) * 100)) : 85;
+                barColor = 'bg-amber-500';
+                displayLabel = 'Late';
+              } else if (d.status === 'absent') {
+                heightPct = 20;
+                barColor = 'bg-rose-500';
+                displayLabel = 'Absent';
+              } else if (d.status === 'off') {
+                heightPct = 15;
+                barColor = 'bg-slate-200 dark:bg-dark-border';
+                displayLabel = `Off (${d.offReason || 'Weekly Off'})`;
+              } else if (d.isToday) {
+                heightPct = 30;
+                barColor = 'bg-brand-500';
+                displayLabel = 'Today';
+              }
 
               return (
                 <div key={d.label} className="flex-1 flex flex-col items-center gap-1.5 h-full justify-end group relative">
@@ -467,9 +654,9 @@ export const EmployeeDashboardView: React.FC = () => {
                   <span className={`text-[10px] font-bold ${d.isToday ? 'text-brand-600 dark:text-brand-400' : 'text-slate-400'}`}>
                     {d.label}
                   </span>
-                  {/* Tooltip */}
-                  <div className="absolute -top-8 bg-slate-900 text-white text-[10px] py-0.5 px-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-20">
-                    {d.hours > 0 ? `${d.hours}h` : d.status}
+                  {/* Tooltip with explicit Off reason */}
+                  <div className="absolute -top-8 bg-slate-900 text-white text-[10px] py-0.5 px-1.5 rounded opacity-0 group-hover:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-20 shadow-md">
+                    {displayLabel}
                   </div>
                 </div>
               );
@@ -493,42 +680,51 @@ export const EmployeeDashboardView: React.FC = () => {
           </div>
 
           <div className="space-y-2 pt-1">
-            <div className="h-4 rounded-full bg-slate-100 dark:bg-dark-sidebar flex overflow-hidden">
-              <div
-                style={{ width: `${monthlyComposition.totalWorkingDays > 0 ? (monthlyComposition.onTimeDays / monthlyComposition.totalWorkingDays) * 100 : 0}%` }}
-                className="bg-emerald-500 h-full"
-                title={`On-time: ${monthlyComposition.onTimeDays}d`}
-              />
-              <div
-                style={{ width: `${monthlyComposition.totalWorkingDays > 0 ? (monthlyComposition.lateDays / monthlyComposition.totalWorkingDays) * 100 : 0}%` }}
-                className="bg-amber-500 h-full"
-                title={`Late: ${monthlyComposition.lateDays}d`}
-              />
-              <div
-                style={{ width: `${monthlyComposition.totalWorkingDays > 0 ? (monthlyComposition.absent / monthlyComposition.totalWorkingDays) * 100 : 0}%` }}
-                className="bg-rose-500 h-full"
-                title={`Absent: ${monthlyComposition.absent}d`}
-              />
-            </div>
+            {isSetupPending ? (
+              <div className="p-4 rounded-2xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30 text-center space-y-1">
+                <span className="text-xs font-bold text-amber-800 dark:text-amber-300">Setup Pending</span>
+                <p className="text-[10px] text-slate-500 dark:text-gray-400">Monthly attendance composition activates upon profile configuration</p>
+              </div>
+            ) : (
+              <>
+                <div className="h-4 rounded-full bg-slate-100 dark:bg-dark-sidebar flex overflow-hidden">
+                  <div
+                    style={{ width: `${monthlyComposition.totalWorkingDays > 0 ? (monthlyComposition.onTimeDays / monthlyComposition.totalWorkingDays) * 100 : 0}%` }}
+                    className="bg-emerald-500 h-full transition-all"
+                    title={`On-time: ${monthlyComposition.onTimeDays}d`}
+                  />
+                  <div
+                    style={{ width: `${monthlyComposition.totalWorkingDays > 0 ? (monthlyComposition.lateDays / monthlyComposition.totalWorkingDays) * 100 : 0}%` }}
+                    className="bg-amber-500 h-full transition-all"
+                    title={`Late: ${monthlyComposition.lateDays}d`}
+                  />
+                  <div
+                    style={{ width: `${monthlyComposition.totalWorkingDays > 0 ? (monthlyComposition.absent / monthlyComposition.totalWorkingDays) * 100 : 0}%` }}
+                    className="bg-rose-500 h-full transition-all"
+                    title={`Absent: ${monthlyComposition.absent}d`}
+                  />
+                </div>
 
-            <div className="grid grid-cols-2 gap-2 text-[11px] pt-1.5">
-              <div className="p-2 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30">
-                <span className="text-slate-400 block text-[10px]">On-Time</span>
-                <span className="font-bold text-emerald-700 dark:text-emerald-300">{monthlyComposition.onTimeDays} Days</span>
-              </div>
-              <div className="p-2 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30">
-                <span className="text-slate-400 block text-[10px]">Late</span>
-                <span className="font-bold text-amber-700 dark:text-amber-300">{monthlyComposition.lateDays} Days</span>
-              </div>
-              <div className="p-2 rounded-xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30">
-                <span className="text-slate-400 block text-[10px]">Absences</span>
-                <span className="font-bold text-rose-700 dark:text-rose-300">{monthlyComposition.absent} Days</span>
-              </div>
-              <div className="p-2 rounded-xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border">
-                <span className="text-slate-400 block text-[10px]">Upcoming</span>
-                <span className="font-bold text-slate-700 dark:text-gray-300">{monthlyComposition.remainingDays} Days</span>
-              </div>
-            </div>
+                <div className="grid grid-cols-2 gap-2 text-[11px] pt-1.5">
+                  <div className="p-2 rounded-xl bg-emerald-50/50 dark:bg-emerald-950/20 border border-emerald-100 dark:border-emerald-900/30">
+                    <span className="text-slate-400 block text-[10px]">On-Time</span>
+                    <span className="font-bold text-emerald-700 dark:text-emerald-300">{monthlyComposition.onTimeDays} Days</span>
+                  </div>
+                  <div className="p-2 rounded-xl bg-amber-50/50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-900/30">
+                    <span className="text-slate-400 block text-[10px]">Late</span>
+                    <span className="font-bold text-amber-700 dark:text-amber-300">{monthlyComposition.lateDays} Days</span>
+                  </div>
+                  <div className="p-2 rounded-xl bg-rose-50/50 dark:bg-rose-950/20 border border-rose-100 dark:border-rose-900/30">
+                    <span className="text-slate-400 block text-[10px]">Absences</span>
+                    <span className="font-bold text-rose-700 dark:text-rose-300">{monthlyComposition.absent} Days</span>
+                  </div>
+                  <div className="p-2 rounded-xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border">
+                    <span className="text-slate-400 block text-[10px]">Upcoming</span>
+                    <span className="font-bold text-slate-700 dark:text-gray-300">{monthlyComposition.remainingDays} Days</span>
+                  </div>
+                </div>
+              </>
+            )}
           </div>
         </div>
 
@@ -580,34 +776,40 @@ export const EmployeeDashboardView: React.FC = () => {
           </div>
 
           <div className="h-32 flex items-end justify-between gap-2 pt-4">
-            {last6Payrolls.map((p, i) => {
-              const maxVal = Math.max(100000, baseSalary || 50000);
-              const grossPct = Math.min(100, Math.round((p.gross / maxVal) * 90));
-              const netPct = Math.min(100, Math.round((p.net / maxVal) * 90));
+            {isSetupPending || !baseSalary || baseSalary <= 0 ? (
+              <div className="w-full text-center text-slate-400 text-xs py-8 italic">
+                No finalized payroll history (Setup Pending / Missing Salary Parameter)
+              </div>
+            ) : (
+              last6Payrolls.map((p, i) => {
+                const maxVal = Math.max(100000, baseSalary || 50000);
+                const grossPct = Math.min(100, Math.round((p.gross / maxVal) * 90));
+                const netPct = Math.min(100, Math.round((p.net / maxVal) * 90));
 
-              return (
-                <div key={i} className="flex-1 flex flex-col items-center gap-1 h-full justify-end group relative">
-                  <div className="flex items-end gap-0.5 w-full justify-center h-full">
-                    <div
-                      className="w-1/2 bg-indigo-200 dark:bg-indigo-900/50 rounded-t-sm"
-                      style={{ height: `${grossPct}%` }}
-                      title={`Gross: PKR ${p.gross.toLocaleString()}`}
-                    />
-                    <div
-                      className="w-1/2 bg-indigo-600 dark:bg-indigo-400 rounded-t-sm"
-                      style={{ height: `${netPct}%` }}
-                      title={`Net: PKR ${p.net.toLocaleString()}`}
-                    />
+                return (
+                  <div key={i} className="flex-1 flex flex-col items-center gap-1 h-full justify-end group relative">
+                    <div className="flex items-end gap-0.5 w-full justify-center h-full">
+                      <div
+                        className="w-1/2 bg-indigo-200 dark:bg-indigo-900/50 rounded-t-sm"
+                        style={{ height: `${grossPct}%` }}
+                        title={`Gross: PKR ${p.gross.toLocaleString()}`}
+                      />
+                      <div
+                        className="w-1/2 bg-indigo-600 dark:bg-indigo-400 rounded-t-sm"
+                        style={{ height: `${netPct}%` }}
+                        title={`Net: PKR ${p.net.toLocaleString()}`}
+                      />
+                    </div>
+                    <span className="text-[9px] font-mono text-slate-400 truncate w-full text-center">
+                      {p.period ? p.period.slice(5) : '--'}
+                    </span>
+                    <div className="absolute -top-7 bg-slate-900 text-white text-[9px] py-0.5 px-1.5 rounded opacity-0 group-hover:opacity-100 pointer-events-none z-20 whitespace-nowrap">
+                      Net: PKR {p.net.toLocaleString()}
+                    </div>
                   </div>
-                  <span className="text-[9px] font-mono text-slate-400 truncate w-full text-center">
-                    {p.period ? p.period.slice(5) : '--'}
-                  </span>
-                  <div className="absolute -top-7 bg-slate-900 text-white text-[9px] py-0.5 px-1.5 rounded opacity-0 group-hover:opacity-100 pointer-events-none z-20 whitespace-nowrap">
-                    Net: PKR {p.net.toLocaleString()}
-                  </div>
-                </div>
-              );
-            })}
+                );
+              })
+            )}
           </div>
           <div className="flex items-center justify-center gap-3 text-[10px] text-slate-500 pt-1">
             <span className="flex items-center gap-1"><span className="w-2 h-2 bg-indigo-200 dark:bg-indigo-900/50 rounded-xs" /> Gross</span>
@@ -742,6 +944,25 @@ export const EmployeeDashboardView: React.FC = () => {
               todayAttendance={todayAttendance}
               onAttendanceUpdated={loadEmployeeData}
               onOpenSOPModal={() => setIsSOPModalOpen(true)}
+              onConfigureSetup={
+                (profile?.role === 'owner' || profile?.role === 'operational_manager')
+                  ? () => {
+                      if (profile) {
+                        setEditingMemberForSetup({
+                          id: profile.id,
+                          fullName: profile.fullName || 'Current User',
+                          workEmail: profile.workEmail || '',
+                          role: profile.role,
+                          status: (profile.status as any) || 'active',
+                          departmentIds: [],
+                          clientIds: [],
+                          createdAt: profile.createdAt || '',
+                          updatedAt: profile.updatedAt || ''
+                        });
+                      }
+                    }
+                  : undefined
+              }
             />
 
             {/* Attendance Log Table */}
@@ -771,7 +992,9 @@ export const EmployeeDashboardView: React.FC = () => {
                     {attendanceHistory.length === 0 ? (
                       <tr>
                         <td colSpan={7} className="py-6 text-center text-slate-400 italic">
-                          No attendance logs recorded yet.
+                          {isSetupPending
+                            ? 'Setup Pending — Attendance tracking activates once configuration is finalized.'
+                            : 'No attendance logs recorded yet.'}
                         </td>
                       </tr>
                     ) : (
@@ -788,13 +1011,15 @@ export const EmployeeDashboardView: React.FC = () => {
                           </td>
                           <td className="py-2.5 px-3">
                             <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold capitalize ${
-                              att.status === 'present'
+                              att.status === 'present' || att.status === 'on_time'
                                 ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
                                 : att.status === 'late'
                                 ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300'
+                                : att.status === 'off'
+                                ? 'bg-slate-100 text-slate-700 dark:bg-dark-border dark:text-gray-300'
                                 : 'bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-300'
                             }`}>
-                              {att.status} {att.status === 'late' && att.minutesLate ? `(+${att.minutesLate}m)` : ''}
+                              {att.status === 'off' ? `Off (${att.correctionReason || 'Weekly Off'})` : att.status} {att.status === 'late' && att.minutesLate ? `(+ ${att.minutesLate}m)` : ''}
                             </span>
                           </td>
                           <td className="py-2.5 px-3 font-mono text-slate-700 dark:text-gray-300">
@@ -898,12 +1123,12 @@ export const EmployeeDashboardView: React.FC = () => {
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between">
                   <span className="text-slate-500">Monthly Base Salary:</span>
-                  <span className="font-mono font-bold text-slate-900 dark:text-gray-100">PKR {baseSalary.toLocaleString()}</span>
+                  <span className="font-mono font-bold text-slate-900 dark:text-gray-100">{isSetupPending || !baseSalary || baseSalary <= 0 ? <span className="text-amber-600">Missing Parameter (Base Salary)</span> : `PKR ${baseSalary.toLocaleString()}`}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Daily Salary Rate (PKT):</span>
                   <span className="font-mono font-semibold text-slate-700 dark:text-gray-300">
-                    PKR {totalDaysInMonth > 0 ? Math.round(baseSalary / totalDaysInMonth).toLocaleString() : 0} / day
+                    {isSetupPending || !baseSalary || baseSalary <= 0 ? 'Missing Parameter' : `PKR ${totalDaysInMonth > 0 ? Math.round(baseSalary / totalDaysInMonth).toLocaleString() : 0} / day`}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -1625,6 +1850,24 @@ export const EmployeeDashboardView: React.FC = () => {
             </div>
           </div>
         </div>
+      )}
+
+      {/* EditTeamMemberModal for Owner / Manager Setup Configuration */}
+      {editingMemberForSetup && (
+        <EditTeamMemberModal
+          isOpen={!!editingMemberForSetup}
+          onClose={() => setEditingMemberForSetup(null)}
+          onSuccess={() => {
+            setEditingMemberForSetup(null);
+            loadEmployeeData();
+          }}
+          member={editingMemberForSetup}
+          currentUserProfile={profile}
+          departments={departments}
+          designations={designations}
+          eligibleManagers={eligibleManagers}
+          autoCheckSetup={true}
+        />
       )}
 
       {/* Modals */}

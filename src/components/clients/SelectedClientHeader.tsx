@@ -205,18 +205,22 @@ export const SelectedClientHeader: React.FC<SelectedClientHeaderProps> = ({
         </div>
 
         <div className="flex flex-wrap items-center gap-4 text-xs text-gray-500">
-          <div className="flex items-center gap-1.5">
-            <User className="w-3.5 h-3.5 text-gray-400" />
-            <span>Owner: <strong className="text-gray-700 dark:text-gray-300 font-semibold">{client.clientName}</strong></span>
-          </div>
+          {!isEffectiveClientView && (
+            <>
+              <div className="flex items-center gap-1.5">
+                <User className="w-3.5 h-3.5 text-gray-400" />
+                <span>Owner: <strong className="text-gray-700 dark:text-gray-300 font-semibold">{client.clientName}</strong></span>
+              </div>
 
-          <span className="text-gray-300 dark:text-gray-600">•</span>
+              <span className="text-gray-300 dark:text-gray-600">•</span>
 
-          <div>
-            <span>Manager: <strong className="text-gray-700 dark:text-gray-300 font-semibold">{client.operationalManagerName}</strong></span>
-          </div>
+              <div>
+                <span>Manager: <strong className="text-gray-700 dark:text-gray-300 font-semibold">{client.operationalManagerName}</strong></span>
+              </div>
 
-          <span className="text-gray-300 dark:text-gray-600">•</span>
+              <span className="text-gray-300 dark:text-gray-600">•</span>
+            </>
+          )}
 
           <div className="flex items-center gap-1">
             <span>Started: <strong className="text-gray-700 dark:text-gray-300 font-semibold">{client.activationDate ? formatOnboardingDate(client.activationDate) : 'Not set'}</strong></span>
@@ -262,6 +266,7 @@ export const SelectedClientHeader: React.FC<SelectedClientHeaderProps> = ({
           </>
         )}
 
+        {!isEffectiveClientView && (
         <div className="relative" ref={popoverRef}>
           <button
             type="button"
@@ -371,6 +376,7 @@ export const SelectedClientHeader: React.FC<SelectedClientHeaderProps> = ({
             </div>
           )}
         </div>
+        )}
       </div>
 
       {/* Client Link Sharing & Recipient Governance Modal */}

@@ -17,6 +17,7 @@ import { CaseStudiesModal } from '../clients/CaseStudiesModal';
 import { PocEmailModal } from '../clients/PocEmailModal';
 import { clientManagementService, formatWhatsAppUrl } from '../../lib/clientManagementService';
 import { resolveSelectedClientId, setStoredSelectedClientId } from '../../lib/clientPersistence';
+import { CLIENT_PERMITTED_LINK_KEYS, isInternalOrSensitiveUrl } from '../../lib/permissions';
 
 // Custom SVG Brand Icons for Client Workspace Links
 const LinkedInIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" }) => (
@@ -73,6 +74,11 @@ export const Sidebar: React.FC = () => {
   const isClient = profile?.role === 'client';
   const isClientPreview = typeof window !== 'undefined' && location.search.includes('preview=true');
   const isClientView = isClient || isClientPreview;
+
+  // Never render staff sidebar in client view or client preview
+  if (isClientView) {
+    return null;
+  }
 
   const loadClientData = useCallback(async () => {
     setIsClientsLoading(true);
@@ -334,7 +340,11 @@ export const Sidebar: React.FC = () => {
     }
   ];
 
-  const activeWorkspaceLinks = workspaceLinks.filter((l) => Boolean(l.url && l.url.trim()));
+  const displayedWorkspaceLinks = isClientView
+    ? workspaceLinks.filter((l) => CLIENT_PERMITTED_LINK_KEYS.has(l.key) && !isInternalOrSensitiveUrl(l.url))
+    : workspaceLinks;
+
+  const activeWorkspaceLinks = displayedWorkspaceLinks.filter((l) => Boolean(l.url && l.url.trim()));
 
   const mobileSidebarOpen = useOpsStore((state) => state.mobileSidebarOpen);
   const setMobileSidebarOpen = useOpsStore((state) => state.setMobileSidebarOpen);
@@ -388,7 +398,7 @@ export const Sidebar: React.FC = () => {
           {/* Collapsed Workspace Links Icons with Tooltips */}
           {selectedClient && (
             <div className="flex flex-col items-center gap-1.5 py-2 border-y border-gray-100 dark:border-dark-border/60 w-full flex-1 overflow-y-auto scrollbar-none">
-              {workspaceLinks.map((link) => {
+              {displayedWorkspaceLinks.map((link) => {
                 const hasUrl = Boolean(link.url && link.url.trim());
                 if (hasUrl) {
                   return (
@@ -424,23 +434,25 @@ export const Sidebar: React.FC = () => {
         </div>
 
         <div className="flex flex-col items-center gap-3 flex-shrink-0">
-          {/* Settings icon for All Staff */}
-          <button
-            type="button"
-            onClick={() => {
-              navigate('/settings');
-              setViewMode('settings');
-              setMobileSidebarOpen(false);
-            }}
-            className={`p-2.5 rounded-xl transition-colors touch-target flex items-center justify-center cursor-pointer ${
-              isSettingsActive
-                ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
-                : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-100'
-            }`}
-            title="Settings"
-          >
-            <Building2 className="w-5 h-5" />
-          </button>
+          {/* Settings icon for All Staff (Hidden for clients) */}
+          {!isClientView && (
+            <button
+              type="button"
+              onClick={() => {
+                navigate('/settings');
+                setViewMode('settings');
+                setMobileSidebarOpen(false);
+              }}
+              className={`p-2.5 rounded-xl transition-colors touch-target flex items-center justify-center cursor-pointer ${
+                isSettingsActive
+                  ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
+                  : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-100'
+              }`}
+              title="Settings"
+            >
+              <Building2 className="w-5 h-5" />
+            </button>
+          )}
 
           <button
             type="button"
@@ -531,7 +543,7 @@ export const Sidebar: React.FC = () => {
                 <span className="text-[9px] font-mono text-gray-400 font-semibold">{activeWorkspaceLinks.length} active</span>
               </div>
               <div className="space-y-0.5 pr-1 scrollbar-thin scrollbar-thumb-gray-200 dark:scrollbar-thumb-dark-100">
-                {workspaceLinks.map((link) => {
+                {displayedWorkspaceLinks.map((link) => {
                   const hasContent = Boolean(link.url && link.url.trim());
                   if (hasContent) {
                     if ((link as any).isTextAction) {

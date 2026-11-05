@@ -669,6 +669,7 @@ describe('Phase 3A: Operational Task Management Core Unit & Security Tests', () 
       id: 'tm-1',
       fullName: 'Hamza Specialist',
       role: 'team_member',
+      designationName: 'Team Lead Paid Ads',
       status: 'active',
       createdAt: '',
       updatedAt: ''

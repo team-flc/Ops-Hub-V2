@@ -56,8 +56,7 @@ function isFinancialOrInternalTitle(title: string = ''): boolean {
     t.includes('zain se') ||
     t.includes('login/hosting') ||
     t.includes('approve karo') ||
-    t.includes('asset bank ke baad') ||
-    t.includes('sales navigator')
+    t.includes('asset bank ke baad')
   ) {
     return true;
   }

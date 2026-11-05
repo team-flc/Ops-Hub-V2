@@ -204,11 +204,20 @@ export const RoleOwnerDashboard: React.FC<RoleOwnerDashboardProps> = ({
             </div>
             <span className="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-black bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300">
               <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-              <span>{activeTimerTasks.length} Live</span>
+              {isLoading ? (
+                <span className="inline-block h-3.5 w-10 bg-blue-200/50 dark:bg-blue-800/40 rounded animate-pulse" />
+              ) : (
+                <span>{activeTimerTasks.length} Live</span>
+              )}
             </span>
           </div>
 
-          {activeTimerTasks.length === 0 ? (
+          {isLoading ? (
+            <div className="py-6 space-y-3">
+              <div className="h-12 bg-gray-100 dark:bg-dark-200 rounded-xl animate-pulse" />
+              <div className="h-12 bg-gray-100 dark:bg-dark-200 rounded-xl animate-pulse" />
+            </div>
+          ) : activeTimerTasks.length === 0 ? (
             <div className="py-8 text-center text-gray-400 text-xs italic">
               No active timers currently running across teams.
             </div>

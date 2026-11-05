@@ -648,11 +648,19 @@ export const clientManagementService = {
       if (session?.user?.id) {
         const { data: prof } = await supabase
           .from('profiles')
-          .select('role, designation_name')
+          .select('role, designation_id')
           .eq('id', session.user.id)
           .single();
         if (prof) {
-          const des = (prof.designation_name || '').toLowerCase().trim();
+          let des = '';
+          if (prof.designation_id) {
+            const { data: desData } = await supabase
+              .from('designations')
+              .select('name')
+              .eq('id', prof.designation_id)
+              .maybeSingle();
+            des = (desData?.name || '').toLowerCase().trim();
+          }
           if (des.includes('intern')) {
             return { error: 'Unauthorized: Interns cannot register clients.' };
           }
@@ -670,7 +678,7 @@ export const clientManagementService = {
         }
       }
     } catch {
-      // Continue if session query fails
+      // Session fallback
     }
 
     const reqLinkedInCount = Math.max(1, input.requiredLinkedinProfileCount || 3);

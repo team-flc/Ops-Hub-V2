@@ -432,7 +432,11 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
     }
 
     try {
-      const redirectTo = `${window.location.origin}/update-password`;
+      const origin = typeof window !== 'undefined' && window.location.origin.includes('faseehlall.com')
+        ? window.location.origin
+        : 'https://ops.faseehlall.com';
+      const redirectTo = `${origin}/update-password`;
+
       const { error: directError } = await supabase.auth.resetPasswordForEmail(cleanEmail, {
         redirectTo
       });
@@ -440,8 +444,8 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       try {
         const { data: prof } = await supabase
           .from('profiles')
-          .select('work_email, contact_email')
-          .or(`contact_email.ilike.${cleanEmail},work_email.ilike.${cleanEmail}`)
+          .select('work_email')
+          .ilike('work_email', cleanEmail)
           .limit(1)
           .maybeSingle();
 
@@ -454,7 +458,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       if (directError) {
-        console.warn('Reset password error (masked):', directError.message);
+        console.warn('Reset password delivery notice (masked for security):', directError.message);
       }
       return {};
     } catch {

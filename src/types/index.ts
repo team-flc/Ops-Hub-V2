@@ -436,6 +436,7 @@ export interface ClientRecord {
   industry?: string | null;
   logoUrl?: string | null;
   package: ClientPackage;
+  subscriptionTier?: string;
   operationalManagerId: string;
   operationalManagerName?: string;
   activationDate: string;
@@ -984,7 +985,7 @@ export interface EmployeeRecord {
   updatedBy?: string | null;
 }
 
-export type AttendanceStatus = 'on_time' | 'present' | 'late' | 'absent' | 'incomplete' | 'early_checkout' | 'corrected';
+export type AttendanceStatus = 'on_time' | 'present' | 'late' | 'absent' | 'incomplete' | 'early_checkout' | 'corrected' | 'off';
 export type AttendanceEvidenceType = 'screen_capture' | 'manual_upload';
 
 export interface EmployeeAttendance {

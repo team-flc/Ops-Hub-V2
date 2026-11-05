@@ -1,6 +1,7 @@
 import React from 'react';
 import { MessageSquare, Link as LinkIcon, ExternalLink, History, Edit3 } from 'lucide-react';
 import { TaskMessage, ClientTaskEvent } from '../../types';
+import { isInternalOrSensitiveUrl } from '../../lib/permissions';
 
 interface TaskConversationFeedProps {
   feed: Array<{ type: 'message' | 'event'; data: TaskMessage | ClientTaskEvent; timestamp: string; id?: string }>;
@@ -97,22 +98,24 @@ export const TaskConversationFeed: React.FC<TaskConversationFeedProps> = ({
                 {msg.links && msg.links.length > 0 && (
                   <div className="mt-2.5 pt-2 border-t border-gray-100 dark:border-dark-border space-y-1">
                     <span className="text-[10px] font-bold text-gray-400 block uppercase tracking-wider">
-                      Attached Links ({msg.links.length}/5):
+                      Attached Links ({msg.links.filter((l) => !isClient || !isInternalOrSensitiveUrl(l.url)).length}/5):
                     </span>
                     <div className="flex flex-wrap gap-1.5">
-                      {msg.links.map((link, lIdx) => (
-                        <a
-                          key={lIdx}
-                          href={link.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-gray-100 dark:bg-dark-100 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950/40 text-xs font-semibold text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-dark-border transition-colors max-w-full sm:max-w-xs truncate"
-                        >
-                          <LinkIcon className="w-3 h-3 flex-shrink-0" />
-                          <span className="truncate">{link.title || link.url}</span>
-                          <ExternalLink className="w-2.5 h-2.5 flex-shrink-0 opacity-60" />
-                        </a>
-                      ))}
+                      {msg.links
+                        .filter((link) => !isClient || !isInternalOrSensitiveUrl(link.url))
+                        .map((link, lIdx) => (
+                          <a
+                            key={lIdx}
+                            href={link.url}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-gray-100 dark:bg-dark-100 hover:bg-brand-50 hover:text-brand-600 dark:hover:bg-brand-950/40 text-xs font-semibold text-gray-700 dark:text-gray-300 border border-gray-200 dark:border-dark-border transition-colors max-w-full sm:max-w-xs truncate"
+                          >
+                            <LinkIcon className="w-3 h-3 flex-shrink-0" />
+                            <span className="truncate">{link.title || link.url}</span>
+                            <ExternalLink className="w-2.5 h-2.5 flex-shrink-0 opacity-60" />
+                          </a>
+                        ))}
                     </div>
                   </div>
                 )}
@@ -120,7 +123,9 @@ export const TaskConversationFeed: React.FC<TaskConversationFeedProps> = ({
             );
           }
 
-          // Lifecycle / Audit Event
+          // Lifecycle / Audit Event (Staff only)
+          if (isClient) return null;
+
           const evt = item.data as ClientTaskEvent;
           const isEditEvent = evt.eventType === 'field_updated';
           return (
@@ -171,38 +176,40 @@ export const TaskConversationFeed: React.FC<TaskConversationFeedProps> = ({
         {feedEndRef && <div ref={feedEndRef} />}
       </div>
 
-      {/* Immutable Audit History Snapshot */}
-      <div className="pt-3 border-t border-gray-100 dark:border-dark-border">
-        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5 mb-2">
-          <History className="w-3.5 h-3.5 text-brand-500" />
-          <span>Immutable Task Audit History</span>
-        </span>
-        <div className="space-y-2 border-l-2 border-gray-200 dark:border-dark-border pl-3 ml-1.5">
-          {events.length === 0 && !isLoadingFeed && (
-            <p className="text-gray-400 text-xs italic">No previous events recorded.</p>
-          )}
-          {events.slice(0, 10).map((evt) => (
-            <div key={evt.id} className="text-[11px] text-gray-600 dark:text-gray-400 space-y-0.5">
-              <div className="flex items-center justify-between gap-1">
-                <div>
-                  <span className="font-bold text-gray-900 dark:text-gray-100">{evt.actorName || 'Staff'}:</span>{' '}
-                  <span className="capitalize font-semibold text-gray-700 dark:text-gray-300">
-                    {evt.eventType === 'field_updated' ? 'Task Edited' : evt.eventType.replace(/_/g, ' ')}
+      {/* Immutable Audit History Snapshot (Staff only) */}
+      {!isClient && (
+        <div className="pt-3 border-t border-gray-100 dark:border-dark-border">
+          <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider flex items-center gap-1.5 mb-2">
+            <History className="w-3.5 h-3.5 text-brand-500" />
+            <span>Immutable Task Audit History</span>
+          </span>
+          <div className="space-y-2 border-l-2 border-gray-200 dark:border-dark-border pl-3 ml-1.5">
+            {events.length === 0 && !isLoadingFeed && (
+              <p className="text-gray-400 text-xs italic">No previous events recorded.</p>
+            )}
+            {events.slice(0, 10).map((evt) => (
+              <div key={evt.id} className="text-[11px] text-gray-600 dark:text-gray-400 space-y-0.5">
+                <div className="flex items-center justify-between gap-1">
+                  <div>
+                    <span className="font-bold text-gray-900 dark:text-gray-100">{evt.actorName || 'Staff'}:</span>{' '}
+                    <span className="capitalize font-semibold text-gray-700 dark:text-gray-300">
+                      {evt.eventType === 'field_updated' ? 'Task Edited' : evt.eventType.replace(/_/g, ' ')}
+                    </span>
+                  </div>
+                  <span className="text-[10px] text-gray-400 flex-shrink-0">
+                    {formatDatetime(evt.createdAt)}
                   </span>
                 </div>
-                <span className="text-[10px] text-gray-400 flex-shrink-0">
-                  {formatDatetime(evt.createdAt)}
-                </span>
+                {evt.notes && (
+                  <p className="text-[10px] text-gray-600 dark:text-gray-400 italic pl-2 border-l border-brand-200 dark:border-brand-900/60 break-words">
+                    {evt.notes}
+                  </p>
+                )}
               </div>
-              {evt.notes && (
-                <p className="text-[10px] text-gray-600 dark:text-gray-400 italic pl-2 border-l border-brand-200 dark:border-brand-900/60 break-words">
-                  {evt.notes}
-                </p>
-              )}
-            </div>
-          ))}
+            ))}
+          </div>
         </div>
-      </div>
+      )}
     </div>
   );
 };

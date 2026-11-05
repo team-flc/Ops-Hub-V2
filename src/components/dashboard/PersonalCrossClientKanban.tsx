@@ -17,6 +17,7 @@ interface PersonalCrossClientKanbanProps {
   currentUserProfile: UserProfile | null;
   onRefreshTasks: () => void;
   onSelectTask?: (task: ClientTask) => void;
+  isLoading?: boolean;
 }
 
 const AssigneeAvatar: React.FC<{ avatarPath?: string | null; name?: string | null }> = ({ avatarPath, name }) => {
@@ -248,7 +249,7 @@ export const PersonalKanbanCard: React.FC<PersonalKanbanCardProps> = ({
                 : 'bg-slate-100 text-slate-700 dark:bg-dark-100 dark:text-slate-300 border border-slate-200 dark:border-dark-border'
             }`}
           >
-            {task.status}
+            {isInProgress ? 'In Flight' : task.status}
           </span>
           <span
             className={`px-1.5 py-0.5 rounded font-black ${
@@ -435,7 +436,8 @@ export const PersonalCrossClientKanban: React.FC<PersonalCrossClientKanbanProps>
   clients,
   currentUserProfile,
   onRefreshTasks,
-  onSelectTask
+  onSelectTask,
+  isLoading = false
 }) => {
   const navigate = useSafeNavigate();
   const isOwner = currentUserProfile?.role === 'owner';
@@ -664,7 +666,11 @@ export const PersonalCrossClientKanban: React.FC<PersonalCrossClientKanbanProps>
               <span>Cross-Client Operations Kanban</span>
             </h2>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-brand-500/10 text-brand-600 dark:text-brand-400">
-              {filteredTasks.length} Tasks
+              {isLoading ? (
+                <span className="inline-block w-12 h-3.5 bg-brand-500/20 rounded animate-pulse" />
+              ) : (
+                `${filteredTasks.length} Tasks`
+              )}
             </span>
           </div>
           <p className="text-xs text-gray-400 mt-0.5">
@@ -811,13 +817,36 @@ export const PersonalCrossClientKanban: React.FC<PersonalCrossClientKanbanProps>
                   {col.title}
                 </span>
                 <span className={`text-[11px] font-black px-2 py-0.5 rounded-full ${col.badgeBg}`}>
-                  {colTasks.length}
+                  {isLoading ? (
+                    <span className="inline-block w-4 h-3 bg-gray-300/60 dark:bg-dark-100 rounded animate-pulse" />
+                  ) : (
+                    colTasks.length
+                  )}
                 </span>
               </div>
 
               {/* Task Cards Container */}
               <div className="flex-1 space-y-3 overflow-y-auto max-h-[560px] pr-1">
-                {colTasks.length === 0 ? (
+                {isLoading ? (
+                  <div className="space-y-3">
+                    {[1, 2].map((i) => (
+                      <div
+                        key={i}
+                        className="bg-white dark:bg-dark-card rounded-2xl border border-gray-200/80 dark:border-dark-border p-3.5 space-y-2.5 animate-pulse"
+                      >
+                        <div className="flex justify-between items-center">
+                          <div className="h-3 w-20 bg-gray-200 dark:bg-dark-100 rounded" />
+                          <div className="h-3 w-10 bg-gray-200 dark:bg-dark-100 rounded" />
+                        </div>
+                        <div className="h-4 w-3/4 bg-gray-200 dark:bg-dark-100 rounded" />
+                        <div className="flex justify-between items-center pt-1">
+                          <div className="h-3 w-16 bg-gray-200 dark:bg-dark-100 rounded" />
+                          <div className="h-5 w-14 bg-gray-200 dark:bg-dark-100 rounded-lg" />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : colTasks.length === 0 ? (
                   <div className="h-32 flex flex-col items-center justify-center text-center text-gray-400 text-xs italic border-2 border-dashed border-gray-200 dark:border-dark-border rounded-xl">
                     <span>No tasks in {col.title}</span>
                   </div>

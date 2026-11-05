@@ -119,7 +119,6 @@ export function sanitizeClientTaskDetails(details?: string | null): string {
         !l.includes('kahan se aaya') &&
         !l.includes('invoice') &&
         !l.includes('pkr') &&
-        !l.includes('sales navigator') &&
         !l.includes('zain se') &&
         !l.includes('internal note')
       );

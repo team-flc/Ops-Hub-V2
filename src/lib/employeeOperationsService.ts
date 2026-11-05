@@ -142,6 +142,49 @@ export const employeeOperationsService = {
     return workingDays.includes(dayOfWeek) || workingDays.includes(normalizedDay);
   },
 
+  getOffDayReason(date: Date, schedules: CompanyWorkSchedule[] = []): string {
+    const isWork = this.isWorkingDay(date, schedules);
+    if (!isWork) {
+      const dayOfWeek = date.getDay();
+      if (dayOfWeek === 0) return 'Weekly Off';
+      return 'Weekly Off';
+    }
+    return 'Weekly Off';
+  },
+
+  getEmployeeSetupStatus(
+    empRec: EmployeeRecord | null,
+    shifts: WorkShift[] = [],
+    schedules: CompanyWorkSchedule[] = [],
+    isOwner: boolean = false
+  ): {
+    isComplete: boolean;
+    missingParameters: string[];
+    shiftConfigured: boolean;
+    scheduleConfigured: boolean;
+    salaryConfigured: boolean;
+  } {
+    const shiftConfigured = Boolean(empRec?.shiftId && shifts.some(s => s.id === empRec.shiftId));
+    const scheduleConfigured = schedules.length > 0 || Boolean(empRec?.customCheckInTime);
+    const salaryConfigured = Boolean(empRec && Number(empRec.salary) > 0);
+    const hasCompletedAt = Boolean(empRec?.setupCompletedAt);
+
+    const missingParameters: string[] = [];
+    if (!shiftConfigured) missingParameters.push('Shift');
+    if (!scheduleConfigured) missingParameters.push('Work Schedule');
+    if (!salaryConfigured) missingParameters.push('Base Salary');
+
+    const isComplete = hasCompletedAt && shiftConfigured && scheduleConfigured && salaryConfigured;
+
+    return {
+      isComplete,
+      missingParameters,
+      shiftConfigured,
+      scheduleConfigured,
+      salaryConfigured
+    };
+  },
+
   calculateMonthScheduledWorkingDays(year: number, month: number, schedules: CompanyWorkSchedule[] = []): number {
     const daysInMonth = this.getDaysInMonth(year, month);
     let workingDaysCount = 0;
@@ -719,7 +762,13 @@ export const employeeOperationsService = {
         checkInTime: a.check_in_time,
         checkOutTime: a.check_out_time,
         status: a.status,
-        minutesLate: a.minutes_late,
+        minutesLate: a.minutes_late || 0,
+        screenCaptureUrl: a.check_in_screenshot_path || a.screen_capture_url || null,
+        totalHours: a.total_hours !== undefined && a.total_hours !== null 
+          ? Number(a.total_hours) 
+          : (a.check_in_time && a.check_out_time 
+              ? Math.round(((new Date(a.check_out_time).getTime() - new Date(a.check_in_time).getTime()) / 3600000) * 10) / 10 
+              : 0),
         lateDeduction: Number(a.late_deduction || 0),
         absenceDeduction: Number(a.absence_deduction || 0),
         checkInScreenshotPath: a.check_in_screenshot_path,

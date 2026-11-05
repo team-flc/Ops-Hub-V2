@@ -15,6 +15,7 @@ interface RoleTeamMemberDashboardProps {
   currentUserProfile: UserProfile | null;
   onOpenReportModal: () => void;
   onRefreshData: () => void;
+  isLoading?: boolean;
 }
 
 function formatDuration(secs: number): string {
@@ -32,7 +33,8 @@ export const RoleTeamMemberDashboard: React.FC<RoleTeamMemberDashboardProps> = (
   todayReport,
   currentUserProfile,
   onOpenReportModal,
-  onRefreshData
+  onRefreshData,
+  isLoading = false
 }) => {
   const navigate = useSafeNavigate();
 
@@ -168,7 +170,7 @@ export const RoleTeamMemberDashboard: React.FC<RoleTeamMemberDashboardProps> = (
                 <p className="text-[10px] text-gray-400">Resolution & logged time</p>
               </div>
             </div>
-            <span className="text-xs font-black text-emerald-500">{completionRate}% Done</span>
+            <span className="text-xs font-black text-emerald-500">{isLoading ? <span className="inline-block w-12 h-3 bg-emerald-500/20 rounded animate-pulse" /> : `${completionRate}% Done`}</span>
           </div>
 
           {activeTimerTask ? (
@@ -183,19 +185,25 @@ export const RoleTeamMemberDashboard: React.FC<RoleTeamMemberDashboardProps> = (
             </div>
           ) : (
             <div className="text-xs text-gray-500">
-              <span className="font-bold text-gray-800 dark:text-gray-200">{formatDuration(totalLoggedSeconds)}</span> logged across {myTasks.length} assigned tasks.
+              {isLoading ? (
+                <span className="inline-block w-36 h-3 bg-gray-200 dark:bg-dark-100 rounded animate-pulse" />
+              ) : (
+                <>
+                  <span className="font-bold text-gray-800 dark:text-gray-200">{formatDuration(totalLoggedSeconds)}</span> logged across {myTasks.length} assigned tasks.
+                </>
+              )}
             </div>
           )}
 
           <div className="grid grid-cols-3 gap-2 text-center text-[10px] font-bold">
             <div className="p-1.5 rounded-xl bg-gray-50 dark:bg-dark-200 text-gray-700 dark:text-gray-300">
-              <span>{myInProgress} In Flight</span>
+              <span>{isLoading ? <span className="inline-block w-8 h-2.5 bg-gray-300 dark:bg-dark-100 rounded animate-pulse" /> : `${myInProgress} In Flight`}</span>
             </div>
             <div className="p-1.5 rounded-xl bg-gray-50 dark:bg-dark-200 text-purple-600 dark:text-purple-400">
-              <span>{myApproval} Review</span>
+              <span>{isLoading ? <span className="inline-block w-8 h-2.5 bg-purple-300 dark:bg-purple-900/40 rounded animate-pulse" /> : `${myApproval} Review`}</span>
             </div>
             <div className="p-1.5 rounded-xl bg-gray-50 dark:bg-dark-200 text-emerald-600 dark:text-emerald-400">
-              <span>{myCompleted} Done</span>
+              <span>{isLoading ? <span className="inline-block w-8 h-2.5 bg-emerald-300 dark:bg-emerald-900/40 rounded animate-pulse" /> : `${myCompleted} Done`}</span>
             </div>
           </div>
         </div>

@@ -14,6 +14,7 @@ interface EmployeeAttendanceControlProps {
   todayAttendance: EmployeeAttendance | null;
   onAttendanceUpdated: () => void;
   onOpenSOPModal?: () => void;
+  onConfigureSetup?: () => void;
 }
 
 export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps> = ({
@@ -21,7 +22,8 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
   shift,
   todayAttendance,
   onAttendanceUpdated,
-  onOpenSOPModal
+  onOpenSOPModal,
+  onConfigureSetup
 }) => {
   // Current Pakistan Standard Time Ticker (PKT / UTC+5)
   const [currentPKT, setCurrentPKT] = useState<string>('');
@@ -233,6 +235,10 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
   };
 
   const isSetupPending = !employeeRecord || !employeeRecord.setupCompletedAt;
+  const missingParams: string[] = [];
+  if (!employeeRecord?.shiftId) missingParams.push('Shift');
+  if (!employeeRecord?.salary || employeeRecord.salary <= 0) missingParams.push('Base Salary');
+  if (missingParams.length === 0 && isSetupPending) missingParams.push('Work Schedule');
   const isCheckedIn = Boolean(todayAttendance && todayAttendance.checkInTime);
   const isCheckedOut = Boolean(todayAttendance && todayAttendance.checkOutTime);
 
@@ -274,7 +280,7 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
           <span className="font-mono text-sm sm:text-base font-bold tracking-wider">
             {currentPKT || '--:--:-- --'}
           </span>
-          <span className="text-[10px] text-slate-400 font-semibold uppercase">PKT</span>
+          <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Live System Clock (PKT)</span>
         </div>
       </div>
 
@@ -300,14 +306,28 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
             <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/20 text-amber-600 flex items-center justify-center shrink-0 mt-0.5">
               <AlertTriangle className="w-5 h-5" />
             </div>
-            <div className="space-y-1">
-              <h3 className="text-sm font-bold text-slate-900 dark:text-gray-100">
-                Setup Pending — Shift & Attendance Controls Locked
+            <div className="space-y-1 flex-1">
+              <h3 className="text-sm font-bold text-slate-900 dark:text-gray-100 flex items-center gap-2 flex-wrap">
+                <span>Setup Pending — Shift & Attendance Controls Locked</span>
+                {missingParams.map(param => (
+                  <span key={param} className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300 border border-rose-300">
+                    Missing Parameter: {param}
+                  </span>
+                ))}
               </h3>
               <p className="text-xs text-amber-800 dark:text-amber-300">
-                Management (Owner or Operational Manager) must complete your employment profile, shift assignment, and payroll configuration before attendance can be recorded.
+                Management must finalize shift assignment, schedule, and base monthly salary before punch controls and attendance deduction tracking activate.
               </p>
             </div>
+            {onConfigureSetup && (
+              <button
+                type="button"
+                onClick={onConfigureSetup}
+                className="px-3.5 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-xs transition-colors shrink-0 shadow-xs"
+              >
+                Configure Setup
+              </button>
+            )}
           </div>
           <div className="p-4 rounded-xl bg-white/80 dark:bg-dark-card border border-amber-100 dark:border-amber-900/30 text-xs text-slate-600 dark:text-gray-400 space-y-2">
             <p className="font-bold text-slate-800 dark:text-gray-200">
@@ -364,7 +384,7 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
           <div className="p-4 rounded-2xl bg-blue-50/70 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <span className="text-[11px] font-semibold text-blue-700 dark:text-blue-300 uppercase tracking-wider block">
-                Active Session
+                Active Recorded Session
               </span>
               <div className="text-sm font-bold text-slate-900 dark:text-gray-100 mt-0.5">
                 Checked in at {new Date(todayAttendance!.checkInTime!).toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi', hour: '2-digit', minute: '2-digit' })} PKT

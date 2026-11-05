@@ -17,6 +17,7 @@ import { twoFactorService, TwoFactorStatus } from '../../lib/twoFactorService';
 
 interface EditTeamMemberModalProps {
   isOpen: boolean;
+  autoCheckSetup?: boolean;
   onClose: () => void;
   onSuccess: () => void;
   member: TeamMemberRecord | null;
@@ -34,7 +35,8 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
   currentUserProfile,
   departments,
   designations,
-  eligibleManagers
+  eligibleManagers,
+  autoCheckSetup
 }) => {
   const clients = useOpsStore((state) => state.clients);
 
@@ -150,7 +152,7 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
           setCustomCheckOutTime(employeeRec.customCheckOutTime || '');
           setJobDescription(employeeRec.jobDescription || '');
           setEmploymentStatus(employeeRec.employmentStatus || 'active');
-          setSetupCompleted(Boolean(employeeRec.setupCompletedAt));
+          setSetupCompleted(autoCheckSetup ? true : Boolean(employeeRec.setupCompletedAt));
           setExistingSetupCompletedAt(employeeRec.setupCompletedAt || null);
         } else if (fetchedShifts.length > 0) {
           setSelectedShiftId(fetchedShifts[0].id);
@@ -315,8 +317,13 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
 
     // Strict validation for Setup Complete status
     if (setupCompleted) {
-      if (!selectedDesignationId || selectedDeptIds.length === 0 || !selectedShiftId || !salary || Number(salary) <= 0) {
-        setErrorMessage('To mark Employee Operations Setup as Completed, you must configure a Designation, at least one Department, an Assigned Shift, and a valid Base Monthly Salary (> 0 PKR).');
+      const isOwnerRole = member.role === 'owner' || (member as any).systemRole === 'owner';
+      if (!isOwnerRole && (!selectedDesignationId || selectedDeptIds.length === 0)) {
+        setErrorMessage('To mark Employee Operations Setup as Completed, you must configure a Designation and at least one Department.');
+        return;
+      }
+      if (!selectedShiftId || !salary || Number(salary) <= 0) {
+        setErrorMessage('To mark Employee Operations Setup as Completed, you must configure an Assigned Shift and a valid Base Monthly Salary (> 0 PKR).');
         return;
       }
     }

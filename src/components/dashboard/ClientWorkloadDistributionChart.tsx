@@ -5,6 +5,7 @@ import { ClientTask, ClientRecord } from '../../types';
 interface ClientWorkloadDistributionChartProps {
   tasks: ClientTask[];
   clients: ClientRecord[];
+  isLoading?: boolean;
 }
 
 function formatMinutesToHours(minutes: number): string {
@@ -16,7 +17,8 @@ function formatMinutesToHours(minutes: number): string {
 
 export const ClientWorkloadDistributionChart: React.FC<ClientWorkloadDistributionChartProps> = ({
   tasks,
-  clients
+  clients,
+  isLoading = false
 }) => {
   // Aggregate tasks & hours per client
   const activeClients = clients.filter((c) => c.status !== 'Archived');
@@ -58,11 +60,40 @@ export const ClientWorkloadDistributionChart: React.FC<ClientWorkloadDistributio
           </p>
         </div>
         <span className="text-xs font-mono font-bold text-gray-400">
-          {clientMetrics.length} Active Workspaces
+          {isLoading ? (
+            <span className="inline-block w-28 h-3.5 bg-gray-200 dark:bg-dark-100 rounded animate-pulse" />
+          ) : (
+            `${clientMetrics.length} Active Workspaces`
+          )}
         </span>
       </div>
 
-      {clientMetrics.length === 0 ? (
+      {isLoading ? (
+        <div className="space-y-3 pr-1">
+          {[1, 2, 3].map((i) => (
+            <div
+              key={i}
+              className="p-3.5 rounded-2xl bg-gray-50 dark:bg-dark-200 border border-gray-100 dark:border-dark-border space-y-2.5 animate-pulse"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className="w-3.5 h-3.5 rounded bg-gray-200 dark:bg-dark-100" />
+                  <div className="h-3.5 w-32 bg-gray-200 dark:bg-dark-100 rounded" />
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="h-3 w-24 bg-gray-200 dark:bg-dark-100 rounded" />
+                  <div className="h-3 w-12 bg-gray-200 dark:bg-dark-100 rounded" />
+                </div>
+              </div>
+              <div className="w-full h-2 rounded-full bg-gray-200 dark:bg-dark-100" />
+              <div className="flex items-center gap-2 pt-0.5">
+                <div className="h-2.5 w-16 bg-gray-200 dark:bg-dark-100 rounded" />
+                <div className="h-2.5 w-16 bg-gray-200 dark:bg-dark-100 rounded" />
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : clientMetrics.length === 0 ? (
         <div className="py-8 text-center text-gray-400 italic text-xs">
           No client task data available yet.
         </div>
