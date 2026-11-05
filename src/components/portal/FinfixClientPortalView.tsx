@@ -211,9 +211,22 @@ export const FinfixClientPortalView: React.FC<FinfixClientPortalViewProps> = ({
     };
   }, [isNotificationsOpen]);
 
+  // Sync tasks & weekNames whenever parent passes updated props
+  useEffect(() => {
+    if (propTasks) {
+      setTasks(propTasks);
+    }
+  }, [propTasks]);
+
+  useEffect(() => {
+    if (propWeekNames) {
+      setWeekNames(propWeekNames);
+    }
+  }, [propWeekNames]);
+
   // Load client weeks & tasks for this specific client only if not provided as props
   useEffect(() => {
-    if (propTasks && propWeekNames) return;
+    if (propTasks && propTasks.length > 0 && propWeekNames) return;
     let isMounted = true;
     const loadPortalData = async () => {
       setIsLoading(true);
@@ -248,9 +261,10 @@ export const FinfixClientPortalView: React.FC<FinfixClientPortalViewProps> = ({
   }, [client.id, propTasks, propWeekNames]);
 
   // Sanitize tasks for client view (server-side permission filter)
+  const effectiveTasks = (propTasks && propTasks.length > 0) ? propTasks : tasks;
   const clientVisibleTasks = useMemo(() => {
-    return filterAndSanitizeClientDeliverables(tasks);
-  }, [tasks]);
+    return filterAndSanitizeClientDeliverables(effectiveTasks);
+  }, [effectiveTasks]);
 
   // Project Completion % and Task counts from real tasks
   const totalVisibleTasks = clientVisibleTasks.length;
@@ -1138,8 +1152,7 @@ Thank you for partnering with us.
                 <span>Tasks Completed</span>
               </div>
               <div className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight font-sans">
-                <span className="sr-only">{completedTasks.length}/{totalVisibleTasks}</span>
-                <span aria-hidden="true">{completedTasks.length} / {totalVisibleTasks}</span>
+                <span>{completedTasks.length} / {totalVisibleTasks}</span>
               </div>
               {completedThisWeek > 0 ? (
                 <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
