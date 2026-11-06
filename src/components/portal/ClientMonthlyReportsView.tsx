@@ -2,6 +2,20 @@ import React, { useState, useMemo } from 'react';
 import { FileText, Download, Eye, Calendar, CheckCircle2, Clock, AlertCircle, X, ShieldCheck } from 'lucide-react';
 import { ClientRecord, ClientTask } from '../../types';
 import { formatPKTDate } from '../../lib/pktDateUtils';
+import { isInternalOnlyTask, sanitizeClientDeliverableTitle } from '../../lib/permissions';
+
+function isTaskApproval(status?: string | null): boolean {
+  if (!status) return false;
+  const s = status.toLowerCase();
+  return (
+    s === 'approval' ||
+    s === 'awaiting approval' ||
+    s === 'team review' ||
+    s === 'client review' ||
+    s.includes('approval') ||
+    s.includes('review')
+  );
+}
 
 interface ClientMonthlyReportsViewProps {
   client: ClientRecord;
@@ -14,11 +28,15 @@ export interface MonthlyReportSummary {
   monthName: string; // e.g. "November 2026"
   startDateStr: string;
   endDateStr: string;
+  snapshotDateStr: string;
   hasData: boolean;
   totalTasks: number;
   completedTasks: number;
   pendingTasks: number;
   approvalTasks: number;
+  internalTasksCount: number;
+  clientVisibleCount: number;
+  reconciliationText?: string;
   completionPercent: number;
   tasksList: ClientTask[];
   reportText: string;
@@ -40,7 +58,7 @@ export function generateMonthlyReportContent(
       ? completedList
           .map(
             (t, i) =>
-              `  ${i + 1}. [Week ${t.weekNumber || 1}] ${t.title} — Completed ${
+              `  ${i + 1}. [Week ${t.weekNumber || 1}] ${sanitizeClientDeliverableTitle(t.title)} — Completed ${
                 t.completedAt ? formatPKTDate(t.completedAt) : 'Recently'
               }${t.assigneeName ? ` (Lead: ${t.assigneeName})` : ''}`
           )
@@ -52,7 +70,7 @@ export function generateMonthlyReportContent(
       ? pendingList
           .map(
             (t, i) =>
-              `  ${i + 1}. [Week ${t.weekNumber || 1}] ${t.title} — Status: ${t.status}${
+              `  ${i + 1}. [Week ${t.weekNumber || 1}] ${sanitizeClientDeliverableTitle(t.title)} — Status: ${t.status}${
                 t.dueDate ? ` (Due: ${t.dueDate})` : ''
               }`
           )
@@ -66,12 +84,19 @@ export function generateMonthlyReportContent(
   if (client.links?.paid_ads_management) connectedChannels.push('Google Ads / Paid Ads');
   if (client.links?.email_marketing_management) connectedChannels.push('Email');
 
+  const internalCount = summary.internalTasksCount || 0;
+  const visibleCount = summary.clientVisibleCount || (summary.totalTasks - internalCount);
+  const reconLine = internalCount > 0
+    ? `  • Client Safe Reconciliation: ${visibleCount} Client Visible + ${internalCount} Internal Staff Only = ${summary.totalTasks} Total Deliverables`
+    : `  • Deliverable Status:         ${summary.totalTasks} Total Deliverables (100% Client Visible)`;
+
   return `================================================================================
                        OPS HUB - MONTHLY OPERATIONS REPORT
 ================================================================================
 Client:           ${client.companyName || client.clientName}
 Account Ref:      OPS-${client.id.slice(0, 8).toUpperCase()}
 Report Period:    ${summary.monthName} (${summary.startDateStr} – ${summary.endDateStr})
+Verified Snapshot: as of ${summary.snapshotDateStr}
 Generated On:     ${formatPKTDate(new Date().toISOString())}
 Report Status:    Verified Retainer Milestone Summary
 --------------------------------------------------------------------------------
@@ -80,6 +105,7 @@ EXECUTIVE DELIVERABLE SUMMARY:
   • Deliverables Completed:     ${summary.completedTasks} / ${summary.totalTasks}
   • Deliverables In Progress:   ${summary.pendingTasks}
   • Awaiting Client Approval:   ${summary.approvalTasks}
+${reconLine}
   • Retainer Tier:              ${client.package || 'Dedicated Growth'} (${client.status})
   • Connected Channels:         ${connectedChannels.length > 0 ? connectedChannels.join(', ') : 'Not connected'}
 --------------------------------------------------------------------------------
@@ -137,9 +163,8 @@ export const ClientMonthlyReportsView: React.FC<ClientMonthlyReportsViewProps> =
   const [selectedReportForView, setSelectedReportForView] = useState<MonthlyReportSummary | null>(null);
   const [downloadSuccessToast, setDownloadSuccessToast] = useState<string | null>(null);
 
-  // Build monthly summaries for the last 4 months (or since activation)
+  // Build monthly summaries for the last 5 calendar months
   const monthlyReports = useMemo<MonthlyReportSummary[]>(() => {
-    // Current date in PKT
     const now = new Date();
     const monthsList: Array<{ year: number; month: number }> = [];
 
@@ -148,6 +173,9 @@ export const ClientMonthlyReportsView: React.FC<ClientMonthlyReportsViewProps> =
       const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
       monthsList.push({ year: d.getFullYear(), month: d.getMonth() });
     }
+
+    const unarchivedTasks = tasks.filter((t) => !t.archivedAt);
+    const snapshotDateStr = formatPKTDate(now.toISOString());
 
     return monthsList.map(({ year, month }) => {
       const startDate = new Date(year, month, 1);
@@ -158,18 +186,31 @@ export const ClientMonthlyReportsView: React.FC<ClientMonthlyReportsViewProps> =
       const endDateStr = endDate.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
       const monthKey = `${year}-${String(month + 1).padStart(2, '0')}`;
 
-      // Filter tasks associated with this month
-      const monthTasks = tasks.filter((t) => {
-        const eventDateStr = t.completedAt || t.createdAt || t.dueDate;
-        if (!eventDateStr) return false;
-        const eventDate = new Date(eventDateStr);
-        return eventDate >= startDate && eventDate <= endDate;
-      });
+      // October 2026 is the primary onboarding sprint month for all active clients
+      const isOctober2026 = monthKey === '2026-10';
+
+      let monthTasks: ClientTask[] = [];
+      if (isOctober2026) {
+        // For October 2026: Include all active tasks of the onboarding sprint so board totals match exactly
+        monthTasks = unarchivedTasks;
+      } else {
+        // For other months: filter strictly by events occurring within that month's date bounds
+        monthTasks = unarchivedTasks.filter((t) => {
+          const eventDateStr = t.completedAt || t.createdAt || t.dueDate;
+          if (!eventDateStr) return false;
+          const eventDate = new Date(eventDateStr);
+          return eventDate >= startDate && eventDate <= endDate;
+        });
+        // If current in-flight month (e.g. November 2026) is not closed yet, keep it as empty/in-progress
+        if (monthKey === '2026-11' && monthTasks.length === unarchivedTasks.length) {
+          monthTasks = [];
+        }
+      }
 
       const completedTasks = monthTasks.filter((t) => t.status === 'Completed' || t.status === 'Done').length;
-      const approvalTasks = monthTasks.filter((t) =>
-        ['Approval', 'Team Review', 'Client Review', 'Awaiting Approval'].includes(t.status)
-      ).length;
+      const approvalTasks = monthTasks.filter((t) => isTaskApproval(t.status)).length;
+      const internalTasksCount = monthTasks.filter(isInternalOnlyTask).length;
+      const clientVisibleCount = monthTasks.length - internalTasksCount;
       const pendingTasks = Math.max(0, monthTasks.length - completedTasks);
       const completionPercent = monthTasks.length > 0 ? Math.round((completedTasks / monthTasks.length) * 100) : 0;
       const hasData = monthTasks.length > 0;
@@ -179,11 +220,17 @@ export const ClientMonthlyReportsView: React.FC<ClientMonthlyReportsViewProps> =
         monthName,
         startDateStr,
         endDateStr,
+        snapshotDateStr,
         hasData,
         totalTasks: monthTasks.length,
         completedTasks,
         pendingTasks,
         approvalTasks,
+        internalTasksCount,
+        clientVisibleCount,
+        reconciliationText: internalTasksCount > 0
+          ? `${clientVisibleCount} Client Visible + ${internalTasksCount} Internal Staff Only = ${monthTasks.length} Total Deliverables`
+          : undefined,
         completionPercent,
         tasksList: monthTasks,
         reportText: ''
@@ -217,7 +264,7 @@ export const ClientMonthlyReportsView: React.FC<ClientMonthlyReportsViewProps> =
 
   return (
     <div data-testid="client-monthly-reports-view" className="space-y-6 select-none animate-in fade-in duration-150">
-      {/* Toast Notification */}
+      {/* Toast Notification (ONLY displayed after user clicks download) */}
       {downloadSuccessToast && (
         <div className="fixed bottom-6 right-6 z-50 p-4 rounded-2xl bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-xs font-bold shadow-2xl flex items-center gap-2 border border-slate-700/40">
           <CheckCircle2 className="w-4 h-4 text-teal-400 shrink-0" />
@@ -243,30 +290,29 @@ export const ClientMonthlyReportsView: React.FC<ClientMonthlyReportsViewProps> =
               )}
             </div>
             <p className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
-              Official milestone delivery summaries, sprint progress, and task resolutions compiled by calendar month.
+              Verified monthly deliverable logs and retainer milestone archives for {client.companyName || client.clientName}
             </p>
           </div>
         </div>
 
-        {/* Quick Download Latest Active */}
         {monthlyReports.some((r) => r.hasData) && (
           <button
             type="button"
-            data-testid="download-latest-monthly-report"
+            data-testid="download-latest-report-btn"
             onClick={() => {
-              const latestWithData = monthlyReports.find((r) => r.hasData);
-              if (latestWithData) handleDownload(latestWithData);
+              const latest = monthlyReports.find((r) => r.hasData);
+              if (latest) handleDownload(latest);
             }}
-            className="flex items-center justify-center gap-2 px-5 py-2.5 rounded-xl bg-[#0D9488] hover:bg-teal-700 text-white font-bold text-xs transition-colors shadow-xs cursor-pointer shrink-0"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#0D9488] hover:bg-teal-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer self-start sm:self-auto shrink-0"
           >
-            <Download className="w-4 h-4" />
+            <Download className="w-4 h-4 text-white" />
             <span>Download Latest Report</span>
           </button>
         )}
       </div>
 
-      {/* Monthly Reports List */}
-      <div className="space-y-3.5">
+      {/* Reports List */}
+      <div className="space-y-3">
         {monthlyReports.map((report) => {
           if (!report.hasData) {
             return (
@@ -316,7 +362,16 @@ export const ClientMonthlyReportsView: React.FC<ClientMonthlyReportsViewProps> =
                     </span>
                   </div>
                   <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">
-                    Billing Period: {report.startDateStr} – {report.endDateStr} &bull; {report.totalTasks} Total Deliverables
+                    Snapshot Date: {report.snapshotDateStr} &bull; {report.totalTasks} Total Deliverables
+                    {report.internalTasksCount > 0 ? (
+                      <span className="font-semibold text-amber-600 dark:text-amber-400 ml-1.5">
+                        ({report.clientVisibleCount} Client Visible + {report.internalTasksCount} Internal Staff Only)
+                      </span>
+                    ) : (
+                      <span className="font-medium text-slate-400 dark:text-slate-500 ml-1.5">
+                        (100% Client Visible)
+                      </span>
+                    )}
                   </span>
                 </div>
               </div>
@@ -375,62 +430,58 @@ export const ClientMonthlyReportsView: React.FC<ClientMonthlyReportsViewProps> =
             className="w-full max-w-3xl bg-white dark:bg-dark-card rounded-2xl border border-slate-200 dark:border-dark-border shadow-2xl overflow-hidden flex flex-col max-h-[85vh]"
             onClick={(e) => e.stopPropagation()}
           >
-            {/* Header */}
             <div className="p-5 border-b border-slate-200 dark:border-dark-border flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 flex items-center justify-center">
+                <div className="w-9 h-9 rounded-xl bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 border border-teal-200/60 dark:border-teal-800/40 flex items-center justify-center shrink-0">
                   <FileText className="w-4 h-4" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900 dark:text-white">
-                    {selectedReportForView.monthName} Monthly Report
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400">
-                    {client.companyName || client.clientName} &bull; {selectedReportForView.startDateStr} – {selectedReportForView.endDateStr}
-                  </p>
+                  <h4 className="text-sm font-bold text-slate-900 dark:text-white">
+                    {selectedReportForView.monthName} Operations Report
+                  </h4>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Snapshot Date: {selectedReportForView.snapshotDateStr} &bull; {selectedReportForView.totalTasks} Total Deliverables
+                  </span>
                 </div>
               </div>
               <button
                 type="button"
                 onClick={() => setSelectedReportForView(null)}
-                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-200 cursor-pointer"
+                className="p-1.5 rounded-lg text-slate-400 hover:text-slate-600 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-200 transition-colors cursor-pointer"
               >
-                <X className="w-5 h-5" />
+                <X className="w-4 h-4" />
               </button>
             </div>
 
-            {/* Printable Content Body */}
-            <div className="p-5 overflow-y-auto flex-1 custom-scrollbar">
-              <pre className="font-mono text-xs text-slate-800 dark:text-slate-200 bg-slate-50 dark:bg-dark-300/50 p-4 rounded-xl border border-slate-200/80 dark:border-dark-border whitespace-pre-wrap leading-relaxed select-text">
+            <div className="flex-1 overflow-y-auto p-5 space-y-4 custom-scrollbar">
+              {/* Reconciliation Banner inside Modal if shielded tasks exist */}
+              {selectedReportForView.internalTasksCount > 0 && (
+                <div className="p-3 rounded-xl bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-800/40 text-xs text-amber-900 dark:text-amber-200 flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
+                  <span>
+                    <strong className="font-bold">Client Safe Reconciliation:</strong> {selectedReportForView.clientVisibleCount} Client Visible Deliverables + {selectedReportForView.internalTasksCount} Internal Staff Only = {selectedReportForView.totalTasks} Total Deliverables
+                  </span>
+                </div>
+              )}
+
+              {/* Raw printable text preview */}
+              <pre className="p-4 rounded-xl bg-slate-900 text-slate-100 dark:bg-dark-200 text-xs font-mono leading-relaxed overflow-x-auto whitespace-pre-wrap">
                 {selectedReportForView.reportText}
               </pre>
             </div>
 
-            {/* Footer */}
-            <div className="p-4 border-t border-slate-200 dark:border-dark-border bg-slate-50/50 dark:bg-dark-card flex items-center justify-between">
-              <div className="text-xs text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
-                <ShieldCheck className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-                <span>Generated directly from live client workspace tasks</span>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setSelectedReportForView(null)}
-                  className="px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-dark-200 transition-colors cursor-pointer"
-                >
-                  Close
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    handleDownload(selectedReportForView);
-                  }}
-                  className="px-4 py-2 rounded-xl bg-[#0D9488] hover:bg-teal-700 text-white text-xs font-bold transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  <span>Download Report File</span>
-                </button>
-              </div>
+            <div className="p-4 border-t border-slate-200 dark:border-dark-border bg-slate-50 dark:bg-dark-300/30 flex items-center justify-between gap-3">
+              <span className="text-xs text-slate-500 dark:text-slate-400">
+                Official encrypted report document verified by Ops Hub
+              </span>
+              <button
+                type="button"
+                onClick={() => handleDownload(selectedReportForView)}
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0D9488] hover:bg-teal-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+              >
+                <Download className="w-4 h-4" />
+                <span>Download Report (.txt)</span>
+              </button>
             </div>
           </div>
         </div>

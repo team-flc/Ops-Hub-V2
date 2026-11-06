@@ -174,7 +174,7 @@ describe('Client Dashboard 7 Failures & Unified Layout Test Suite', () => {
     fireEvent.click(reportBtn);
 
     await waitFor(() => {
-      expect(downloadedFiles.some((f) => f.includes('finfix_pro_monthly_report.txt'))).toBe(true);
+      expect(downloadedFiles.some((f) => (f.includes('finfix_pro') && f.includes('monthly_report.txt')))).toBe(true);
     });
 
     vi.restoreAllMocks();

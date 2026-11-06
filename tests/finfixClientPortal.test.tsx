@@ -213,7 +213,7 @@ describe('Finfix Pro Client Portal & Security Leak Fix Suite', () => {
     // Wait for async task loading to populate
     await waitFor(() => {
       const tasksCard = screen.getByTestId('stat-tasks-completed');
-      expect(tasksCard.textContent).toContain('0/9');
+      expect(tasksCard.textContent).toContain('0/10');
     });
 
     const completionCard = screen.getByTestId('stat-project-completion');

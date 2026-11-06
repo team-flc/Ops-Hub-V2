@@ -42,11 +42,18 @@ import {
   X,
   Layers,
   Info,
-  Megaphone
+  Megaphone,
+  ShieldCheck,
+  PieChart
 } from 'lucide-react';
 import { ClientRecord, ClientTask, UserProfile, DEFAULT_WEEK_NAMES } from '../../types';
 import { taskManagementService } from '../../lib/taskManagementService';
-import { filterAndSanitizeClientDeliverables } from '../../lib/permissions';
+import {
+  filterAndSanitizeClientDeliverables,
+  isInternalOnlyTask,
+  getInternalTaskReason,
+  sanitizeClientDeliverableTitle
+} from '../../lib/permissions';
 import { isTaskAwaitingApproval, formatPKTDate } from '../../lib/pktDateUtils';
 import {
   ClientMonthlyReportsView,
@@ -178,6 +185,7 @@ export const FinfixClientPortalView: React.FC<FinfixClientPortalViewProps> = ({
 
   // Recent Activity Modal State
   const [isRecentActivityModalOpen, setIsRecentActivityModalOpen] = useState(false);
+  const [showShieldedBreakdown, setShowShieldedBreakdown] = useState(false);
 
   // Sync prop tasks when updated from parent
   useEffect(() => {
@@ -240,7 +248,7 @@ export const FinfixClientPortalView: React.FC<FinfixClientPortalViewProps> = ({
         const [tasksRes, weeksRes] = await Promise.all([
           taskManagementService.fetchCrossClientTasks({
             clientId: client.id,
-            isClientView: true
+            isClientView: false
           }),
           taskManagementService.fetchClientWeeks(client.id)
         ]);
@@ -266,35 +274,52 @@ export const FinfixClientPortalView: React.FC<FinfixClientPortalViewProps> = ({
     };
   }, [client.id, propTasks, propWeekNames]);
 
-  // Sanitize tasks for client view (server-side permission filter)
+  // Tasks source of truth
   const effectiveTasks = (propTasks && propTasks.length > 0) ? propTasks : tasks;
-  const clientVisibleTasks = useMemo(() => {
-    return filterAndSanitizeClientDeliverables(effectiveTasks);
+
+  // Non-archived tasks
+  const activeTasks = useMemo(() => {
+    return effectiveTasks.filter((t) => !t.archivedAt);
   }, [effectiveTasks]);
+  const totalAllTasks = activeTasks.length;
 
-  // Project Completion % and Task counts from real tasks
-  const totalVisibleTasks = clientVisibleTasks.length;
-  const completedTasks = useMemo(() => {
-    return clientVisibleTasks.filter((t) => t.status === 'Completed' || t.status === 'Done');
-  }, [clientVisibleTasks]);
+  // Shielded internal tasks
+  const internalTasksList = useMemo(() => {
+    return activeTasks.filter(isInternalOnlyTask);
+  }, [activeTasks]);
+  const totalInternalTasks = internalTasksList.length;
 
-  const completionPercent = totalVisibleTasks > 0
-    ? Math.round((completedTasks.length / totalVisibleTasks) * 100)
+  // Sanitized client deliverables
+  const clientVisibleTasks = useMemo(() => {
+    return filterAndSanitizeClientDeliverables(activeTasks);
+  }, [activeTasks]);
+  const totalClientVisibleTasks = clientVisibleTasks.length;
+  const totalVisibleTasks = totalClientVisibleTasks;
+
+  // Completed and Approval metrics across all active tasks
+  const completedAllTasks = useMemo(() => {
+    return activeTasks.filter((t) => t.status === 'Completed' || t.status === 'Done');
+  }, [activeTasks]);
+  const completedTasks = completedAllTasks;
+
+  const allPendingApprovals = useMemo(() => {
+    return activeTasks.filter((t) => isApprovalStatus(t.status));
+  }, [activeTasks]);
+  const pendingApprovals = allPendingApprovals;
+
+  const completionPercent = totalAllTasks > 0
+    ? Math.round((completedAllTasks.length / totalAllTasks) * 100)
     : 0;
-
-  const pendingApprovals = useMemo(() => {
-    return clientVisibleTasks.filter((t) => isApprovalStatus(t.status));
-  }, [clientVisibleTasks]);
 
   const completedThisWeek = useMemo(() => {
     const now = Date.now();
     const sevenDaysMs = 7 * 24 * 60 * 60 * 1000;
-    return completedTasks.filter((t) => {
+    return completedAllTasks.filter((t) => {
       if (!t.completedAt) return false;
       const compTime = new Date(t.completedAt).getTime();
       return !isNaN(compTime) && now - compTime <= sevenDaysMs;
     }).length;
-  }, [completedTasks]);
+  }, [completedAllTasks]);
 
   const clientMonthlyRate = (client as any).monthlyRate || (client as any).monthly_rate;
   const hasClientPrice = Boolean(clientMonthlyRate && Number(clientMonthlyRate) > 0);
@@ -332,7 +357,7 @@ export const FinfixClientPortalView: React.FC<FinfixClientPortalViewProps> = ({
     }
   }, [client.activationDate, client.createdAt]);
 
-  // Real Project progress rows for each sprint
+  // Real Project progress rows for each sprint with strict dominant status rule
   const projectRows = useMemo(() => {
     const projects = [
       { id: 1, name: 'Social Media Optimization', defaultWeek: 1 },
@@ -342,17 +367,25 @@ export const FinfixClientPortalView: React.FC<FinfixClientPortalViewProps> = ({
     ];
 
     return projects.map((proj) => {
-      const projTasks = clientVisibleTasks.filter((t) => Number(t.weekNumber) === proj.defaultWeek);
+      const projTasks = activeTasks.filter((t) => Number(t.weekNumber) === proj.defaultWeek);
       const total = projTasks.length;
-      const done = projTasks.filter((t) => t.status === 'Completed' || t.status === 'Done').length;
-      const inFlight = projTasks.filter((t) => t.status === 'In Progress' || isTaskAwaitingApproval(t.status)).length;
+      const doneTasks = projTasks.filter((t) => t.status === 'Completed' || t.status === 'Done');
+      const inProgressTasks = projTasks.filter((t) => t.status === 'In Progress');
+      const approvalTasks = projTasks.filter((t) => isApprovalStatus(t.status));
+      const done = doneTasks.length;
       const pct = total > 0 ? Math.round((done / total) * 100) : 0;
 
-      let status: 'Completed' | 'In Progress' | 'Pending' = 'Pending';
-      if (total > 0 && done === total) {
+      let status: 'Completed' | 'In Progress' | 'In Review' | 'Pending' = 'Pending';
+      if (total === 0) {
+        status = 'Pending';
+      } else if (done === total) {
         status = 'Completed';
-      } else if (inFlight > 0 || done > 0) {
+      } else if (inProgressTasks.length > 0) {
         status = 'In Progress';
+      } else if (approvalTasks.length > 0) {
+        status = 'In Review';
+      } else {
+        status = 'Pending';
       }
 
       return {
@@ -366,102 +399,9 @@ export const FinfixClientPortalView: React.FC<FinfixClientPortalViewProps> = ({
         status
       };
     });
-  }, [clientVisibleTasks, weekNames]);
+  }, [activeTasks, weekNames]);
 
-  // Dynamic Chart Data for Performance Overview (Bezier Curves, Points & Tooltip)
-  const chartData = useMemo(() => {
-    switch (performanceRange) {
-      case '7D':
-        return {
-          dates: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
-          trafficPoints: [
-            { x: 55, y: 135 },
-            { x: 125, y: 120 },
-            { x: 195, y: 130 },
-            { x: 265, y: 100 },
-            { x: 335, y: 85 },
-            { x: 405, y: 70 },
-            { x: 475, y: 40 }
-          ],
-          leadsPoints: [
-            { x: 55, y: 155 },
-            { x: 125, y: 145 },
-            { x: 195, y: 150 },
-            { x: 265, y: 130 },
-            { x: 335, y: 120 },
-            { x: 405, y: 110 },
-            { x: 475, y: 95 }
-          ],
-          trafficPath: 'M 55,135 C 90,135 90,120 125,120 C 160,120 160,130 195,130 C 230,130 230,100 265,100 C 300,100 300,85 335,85 C 370,85 370,70 405,70 C 440,70 440,40 475,40',
-          trafficAreaPath: 'M 55,135 C 90,135 90,120 125,120 C 160,120 160,130 195,130 C 230,130 230,100 265,100 C 300,100 300,85 335,85 C 370,85 370,70 405,70 C 440,70 440,40 475,40 L 475,185 L 55,185 Z',
-          leadsPath: 'M 55,155 C 90,155 90,145 125,145 C 160,145 160,150 195,150 C 230,150 230,130 265,130 C 300,130 300,120 335,120 C 370,120 370,110 405,110 C 440,110 440,95 475,95',
-          tooltip: { x: 350, y: 15, text: '3,850 Visitors', badge: '(+24%)' }
-        };
-      case '90D':
-        return {
-          dates: ['Month 1', 'Month 2', 'Month 3'],
-          trafficPoints: [
-            { x: 90, y: 140 },
-            { x: 270, y: 95 },
-            { x: 450, y: 35 }
-          ],
-          leadsPoints: [
-            { x: 90, y: 160 },
-            { x: 270, y: 130 },
-            { x: 450, y: 85 }
-          ],
-          trafficPath: 'M 90,140 C 180,140 180,95 270,95 C 360,95 360,35 450,35',
-          trafficAreaPath: 'M 90,140 C 180,140 180,95 270,95 C 360,95 360,35 450,35 L 450,185 L 90,185 Z',
-          leadsPath: 'M 90,160 C 180,160 180,130 270,130 C 360,130 360,85 450,85',
-          tooltip: { x: 340, y: 15, text: '11,400 Visitors', badge: '(+38%)' }
-        };
-      case '1Y':
-        return {
-          dates: ['Q1', 'Q2', 'Q3', 'Q4'],
-          trafficPoints: [
-            { x: 75, y: 145 },
-            { x: 205, y: 115 },
-            { x: 335, y: 80 },
-            { x: 465, y: 30 }
-          ],
-          leadsPoints: [
-            { x: 75, y: 165 },
-            { x: 205, y: 140 },
-            { x: 335, y: 110 },
-            { x: 465, y: 75 }
-          ],
-          trafficPath: 'M 75,145 C 140,145 140,115 205,115 C 270,115 270,80 335,80 C 400,80 400,30 465,30',
-          trafficAreaPath: 'M 75,145 C 140,145 140,115 205,115 C 270,115 270,80 335,80 C 400,80 400,30 465,30 L 465,185 L 75,185 Z',
-          leadsPath: 'M 75,165 C 140,165 140,140 205,140 C 270,140 270,110 335,110 C 400,110 400,75 465,75',
-          tooltip: { x: 350, y: 10, text: '42,000 Visitors', badge: '(+52%)' }
-        };
-      case '30D':
-      default:
-        return {
-          dates: ['Sep 1', 'Sep 7', 'Sep 14', 'Sep 21', 'Sep 28'],
-          trafficPoints: [
-            { x: 55, y: 148 },
-            { x: 155, y: 124 },
-            { x: 255, y: 126 },
-            { x: 355, y: 112 },
-            { x: 455, y: 65 }
-          ],
-          leadsPoints: [
-            { x: 55, y: 160 },
-            { x: 155, y: 140 },
-            { x: 255, y: 142 },
-            { x: 355, y: 125 },
-            { x: 455, y: 110 }
-          ],
-          trafficPath: 'M 55,148 C 105,148 105,124 155,124 C 205,124 205,126 255,126 C 305,126 305,112 355,112 C 405,112 405,65 455,65',
-          trafficAreaPath: 'M 55,148 C 105,148 105,124 155,124 C 205,124 205,126 255,126 C 305,126 305,112 355,112 C 405,112 405,65 455,65 L 455,185 L 55,185 Z',
-          leadsPath: 'M 55,160 C 105,160 105,140 155,140 C 205,140 205,142 255,142 C 305,142 305,125 355,125 C 405,125 405,110 455,110',
-          tooltip: { x: 300, y: 45, text: '3,850 Visitors', badge: '(+24%)' }
-        };
-    }
-  }, [performanceRange]);
-
-  // Unified task event timestamp helper (Fix 5: Eliminates modal vs card date mismatch)
+  // Unified task event timestamp helper (Eliminates modal vs card date mismatch)
   const getTaskEventTimestamp = (t: ClientTask): { iso: string; formatted: string } => {
     const isDone = t.status === 'Completed' || t.status === 'Done';
     const raw = isDone && t.completedAt ? t.completedAt : t.createdAt || t.updatedAt || '';
@@ -471,9 +411,10 @@ export const FinfixClientPortalView: React.FC<FinfixClientPortalViewProps> = ({
     };
   };
 
-  // Real Recent Activity from client tasks
-  const allRecentActivities = useMemo(() => {
+  // Unified Recent Activity (Identical labels and dates between dashboard list and modal)
+  const unifiedRecentActivities = useMemo(() => {
     if (clientVisibleTasks.length === 0) return [];
+
     return [...clientVisibleTasks]
       .sort((a, b) => {
         const timeA = new Date(getTaskEventTimestamp(a).iso || 0).getTime();
@@ -481,50 +422,9 @@ export const FinfixClientPortalView: React.FC<FinfixClientPortalViewProps> = ({
         return timeB - timeA;
       })
       .map((t) => {
-        let action = 'Deliverable Updated';
-        let iconType: 'check' | 'message' | 'dollar' | 'edit' = 'edit';
-        if (t.status === 'Completed' || t.status === 'Done') {
-          action = 'Deliverable Completed';
-          iconType = 'check';
-        } else if (isTaskAwaitingApproval(t.status)) {
-          action = 'Submitted for Client Review';
-          iconType = 'message';
-        } else if (t.status === 'In Progress') {
-          action = 'Work in Progress';
-          iconType = 'edit';
-        }
-        return {
-          id: t.id,
-          title: t.title,
-          action,
-          iconType,
-          weekNumber: t.weekNumber,
-          status: t.status,
-          evidenceUrl: t.evidenceUrl || undefined,
-          timestamp: getTaskEventTimestamp(t).formatted
-        };
-      });
-  }, [clientVisibleTasks]);
-
-  const recentActivitiesPreview = useMemo(() => {
-    const list: Array<{
-      id: string;
-      title: string;
-      subtitle: string;
-      iconType: 'check' | 'message' | 'dollar' | 'edit';
-      timestamp: string;
-    }> = [];
-
-    if (clientVisibleTasks.length > 0) {
-      const sorted = [...clientVisibleTasks].sort((a, b) => {
-        const timeA = new Date(getTaskEventTimestamp(a).iso || 0).getTime();
-        const timeB = new Date(getTaskEventTimestamp(b).iso || 0).getTime();
-        return timeB - timeA;
-      });
-
-      sorted.slice(0, 4).forEach((t) => {
         let action = 'Deliverable Planned';
         let iconType: 'check' | 'message' | 'dollar' | 'edit' = 'edit';
+
         if (t.status === 'Completed' || t.status === 'Done') {
           action = 'Task Completed';
           iconType = 'check';
@@ -534,82 +434,45 @@ export const FinfixClientPortalView: React.FC<FinfixClientPortalViewProps> = ({
         } else if (t.status === 'In Progress') {
           action = 'Work in Progress';
           iconType = 'edit';
+        } else {
+          action = 'Deliverable Planned';
+          iconType = 'edit';
         }
 
-        list.push({
-          id: `act-${t.id}`,
-          title: action,
-          subtitle: t.title,
-          iconType,
-          timestamp: getTaskEventTimestamp(t).formatted
-        });
-      });
-    }
+        const { formatted, iso } = getTaskEventTimestamp(t);
+        const title = sanitizeClientDeliverableTitle(t.title);
 
-    return list;
+        return {
+          id: t.id,
+          title,
+          action,
+          iconType: iconType as 'check' | 'message' | 'dollar' | 'edit',
+          weekNumber: t.weekNumber,
+          status: t.status,
+          evidenceUrl: t.evidenceUrl || undefined,
+          timestamp: formatted,
+          iso
+        };
+      });
   }, [clientVisibleTasks]);
 
-  // Source Connections Detection (Fix 3)
-  const hasWebsiteSource = Boolean(client.links?.website);
-  const hasMetaSource = Boolean(client.links?.facebook || client.links?.instagram);
-  const hasLinkedInSource = Boolean(
-    client.links?.linkedin_management ||
-    client.links?.linkedin_company_page ||
-    (client.linkedinProfiles && client.linkedinProfiles.length > 0)
-  );
-  const hasGoogleAdsSource = Boolean(client.links?.paid_ads_management);
-  const hasSeoSource = Boolean(client.links?.seo_management);
-  const hasEmailSource = Boolean(client.links?.email_marketing_management);
-  const isMarketingSourceConnected = hasWebsiteSource && hasMetaSource;
-  const isPerformanceSourceConnected = hasWebsiteSource && (hasMetaSource || Boolean(client.links?.gohighlevel) || hasGoogleAdsSource || hasSeoSource);
+  const recentActivitiesPreview = useMemo(() => {
+    return unifiedRecentActivities.slice(0, 4).map((act) => ({
+      id: `act-${act.id}`,
+      title: act.action,
+      subtitle: act.title,
+      iconType: act.iconType,
+      timestamp: act.timestamp
+    }));
+  }, [unifiedRecentActivities]);
 
-  // Dynamic Marketing Channels Slices (Active channels only, sums to 100.0%)
-  const marketingChannelsData = useMemo(() => {
-    if (!isMarketingSourceConnected) return null;
+  const allRecentActivities = useMemo(() => {
+    return unifiedRecentActivities;
+  }, [unifiedRecentActivities]);
 
-    const baseChannels = [
-      { key: 'google', label: 'Google Ads', color: '#0D9488', weight: hasGoogleAdsSource ? 38.4 : 0 },
-      { key: 'meta', label: 'Meta Social', color: '#8B5CF6', weight: hasMetaSource ? 27.1 : 0 },
-      { key: 'organic', label: 'Organic Search', color: '#F59E0B', weight: (hasWebsiteSource || hasSeoSource) ? 18.5 : 0 },
-      { key: 'linkedin', label: 'LinkedIn', color: '#3B82F6', weight: hasLinkedInSource ? 10.0 : 0 },
-      { key: 'email', label: 'Email', color: '#EC4899', weight: hasEmailSource ? 6.0 : 0 }
-    ].filter((c) => c.weight > 0);
-
-    const totalWeight = baseChannels.reduce((sum, c) => sum + c.weight, 0);
-    if (totalWeight === 0) return null;
-
-    let accumulatedPct = 0;
-    const channels = baseChannels.map((c) => {
-      const pct = Number(((c.weight / totalWeight) * 100).toFixed(1));
-      accumulatedPct += pct;
-      return { ...c, percent: pct };
-    });
-
-    const diff = Number((100 - accumulatedPct).toFixed(1));
-    if (diff !== 0 && channels.length > 0) {
-      channels[0].percent = Number((channels[0].percent + diff).toFixed(1));
-    }
-
-    const totalLeadsCount = Math.max(120, completedTasks.length * 280 + totalVisibleTasks * 85 + 420);
-    const formattedTotalLeads = totalLeadsCount >= 1000
-      ? `${(totalLeadsCount / 1000).toFixed(1)}K`
-      : `${totalLeadsCount}`;
-
-    return {
-      channels,
-      totalLeadsText: formattedTotalLeads
-    };
-  }, [
-    isMarketingSourceConnected,
-    hasGoogleAdsSource,
-    hasMetaSource,
-    hasWebsiteSource,
-    hasSeoSource,
-    hasLinkedInSource,
-    hasEmailSource,
-    completedTasks.length,
-    totalVisibleTasks
-  ]);
+  // Live telemetry streaming flags (clean Not connected standby across all workspaces)
+  const isPerformanceSourceConnected = false;
+  const isMarketingSourceConnected = false;
 
   // Real Progress Status Line (Fix 2: Eliminates demo text)
   const realProgressStatusLine = useMemo(() => {
@@ -778,13 +641,19 @@ export const FinfixClientPortalView: React.FC<FinfixClientPortalViewProps> = ({
       monthName: new Date().toLocaleDateString('en-US', { month: 'long', year: 'numeric' }),
       startDateStr: formatPKTDate(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString()),
       endDateStr: formatPKTDate(new Date().toISOString()),
-      hasData: totalVisibleTasks > 0,
-      totalTasks: totalVisibleTasks,
-      completedTasks: completedTasks.length,
-      pendingTasks: totalVisibleTasks - completedTasks.length - pendingApprovals.length,
-      approvalTasks: pendingApprovals.length,
+      snapshotDateStr: formatPKTDate(new Date().toISOString()),
+      hasData: totalAllTasks > 0,
+      totalTasks: totalAllTasks,
+      completedTasks: completedAllTasks.length,
+      pendingTasks: Math.max(0, totalAllTasks - completedAllTasks.length - allPendingApprovals.length),
+      approvalTasks: allPendingApprovals.length,
+      internalTasksCount: totalInternalTasks,
+      clientVisibleCount: totalClientVisibleTasks,
+      reconciliationText: totalInternalTasks > 0
+        ? `${totalClientVisibleTasks} Client Visible + ${totalInternalTasks} Internal Staff Only = ${totalAllTasks} Total Deliverables`
+        : undefined,
       completionPercent,
-      tasksList: clientVisibleTasks,
+      tasksList: activeTasks,
       reportText: ''
     };
 
@@ -847,16 +716,15 @@ Thank you for partnering with Ops Hub.
 
   const handleNavClick = (tabKey: FinfixNavTab) => {
     setActiveTab(tabKey);
-    if (tabKey === 'dashboard') {
-      if (onMainTabChange) onMainTabChange('dashboard');
-      if (onNavigateToTab) onNavigateToTab('dashboard');
-    } else if (tabKey === 'projects' || tabKey === 'deliverables') {
+    if (tabKey === 'projects' || tabKey === 'deliverables') {
       if (onMainTabChange && renderSetupView) {
         onMainTabChange('setup');
       }
       if (onNavigateToTab) onNavigateToTab('setup');
-    } else if (tabKey === 'reports') {
-      handleDownloadReport();
+    } else {
+      // For all other 13 tabs: return activeMainTab to 'dashboard' so renderSetupView does not trap the view
+      if (onMainTabChange) onMainTabChange('dashboard');
+      if (onNavigateToTab) onNavigateToTab('dashboard');
     }
   };
 
@@ -1175,6 +1043,50 @@ Thank you for partnering with Ops Hub.
             </div>
           )}
 
+          {/* Reconciliation Banner (When internal staff tasks exist) */}
+          {totalInternalTasks > 0 && (
+            <div
+              data-testid="portal-reconciliation-banner"
+              className="p-4 rounded-2xl bg-amber-50/70 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800/40 text-xs text-amber-900 dark:text-amber-200 space-y-2 shadow-xs"
+            >
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600 dark:text-emerald-400 shrink-0" />
+                  <span>
+                    <strong className="font-bold">Client Safe Reconciliation:</strong> {totalClientVisibleTasks} Client Visible Deliverables + {totalInternalTasks} Internal Staff Only = {totalAllTasks} Total Tasks
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setShowShieldedBreakdown(!showShieldedBreakdown)}
+                  className="text-[11px] font-bold text-amber-700 dark:text-amber-300 hover:underline cursor-pointer flex items-center gap-1"
+                >
+                  <span>{showShieldedBreakdown ? 'Hide Breakdown ▲' : `View ${totalInternalTasks} Shielded Tasks & Reasons ▼`}</span>
+                </button>
+              </div>
+              {showShieldedBreakdown && (
+                <div className="pt-2 border-t border-amber-200/60 dark:border-amber-800/40 text-[11px] space-y-1.5">
+                  <span className="font-bold text-amber-800 dark:text-amber-300 block uppercase tracking-wider text-[10px]">
+                    Shielded from Client Portal (With Classification Reason):
+                  </span>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-1">
+                    {internalTasksList.map((t) => (
+                      <div key={t.id} className="p-2 rounded-lg bg-white/80 dark:bg-dark-200 border border-amber-200 dark:border-dark-border flex items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <span className="font-semibold text-gray-800 dark:text-gray-200 block truncate">{sanitizeClientDeliverableTitle(t.title)}</span>
+                          <span className="text-[10px] text-gray-500">Week {t.weekNumber || 1} &bull; {t.status}</span>
+                        </div>
+                        <span className="shrink-0 px-2 py-0.5 rounded text-[10px] bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300 font-bold border border-amber-300/40">
+                          {getInternalTaskReason(t) || 'Internal Only'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Row of 4 White Stat Cards (Unified for all tabs) */}
           <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
             {/* Card 1: Project Completion */}
@@ -1191,13 +1103,13 @@ Thank you for partnering with Ops Hub.
               <div className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight font-sans">
                 {completionPercent}%
               </div>
-              {totalVisibleTasks > 0 && completedTasks.length > 0 ? (
+              {totalAllTasks > 0 && completedAllTasks.length > 0 ? (
                 <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
-                  <span>{completedTasks.length} of {totalVisibleTasks} completed</span>
+                  <span>{completedAllTasks.length} of {totalAllTasks} completed</span>
                 </div>
               ) : (
                 <div className="text-xs text-slate-400 dark:text-slate-500 font-medium">
-                  {totalVisibleTasks === 0 ? 'No deliverables active' : 'Awaiting completion'}
+                  {totalAllTasks === 0 ? 'No deliverables active' : 'Awaiting completion'}
                 </div>
               )}
             </div>
@@ -1212,10 +1124,10 @@ Thank you for partnering with Ops Hub.
                   <CheckSquare className="w-4 h-4" />
                 </div>
                 <span>Tasks Completed</span>
-                <span className="sr-only">{completedTasks.length}/{totalVisibleTasks}</span>
+                <span className="sr-only">{completedAllTasks.length}/{totalAllTasks}</span>
               </div>
               <div className="text-3xl sm:text-4xl font-extrabold text-slate-900 dark:text-white tracking-tight font-sans">
-                <span>{completedTasks.length} / {totalVisibleTasks}</span>
+                <span>{completedAllTasks.length} / {totalAllTasks}</span>
               </div>
               {completedThisWeek > 0 ? (
                 <div className="text-xs font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1.5">
@@ -1316,129 +1228,82 @@ Thank you for partnering with Ops Hub.
                       </div>
                     </div>
 
-                    {/* Range Toggles */}
-                    <div className="flex items-center bg-slate-100 dark:bg-dark-200 border border-slate-200 dark:border-dark-border p-0.5 rounded-xl text-xs font-bold">
-                      {(['7D', '30D', '90D', '1Y'] as const).map((r) => (
-                        <button
-                          key={r}
-                          type="button"
-                          onClick={() => setPerformanceRange(r)}
-                          className={`px-3 py-1 rounded-lg transition-all cursor-pointer ${
-                            performanceRange === r
-                              ? 'bg-[#0D9488] text-white shadow-xs font-extrabold'
-                              : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
-                          }`}
-                        >
-                          {r}
-                        </button>
-                      ))}
+                    {/* Range Toggles (Disabled when not connected, with clear note) */}
+                    <div className="flex items-center gap-2">
+                      <div
+                        className="flex items-center bg-slate-100 dark:bg-dark-200 border border-slate-200 dark:border-dark-border p-0.5 rounded-xl text-xs font-bold"
+                        title="Not connected: Connect analytics to view performance telemetry"
+                      >
+                        {(['7D', '30D', '90D', '1Y'] as const).map((r) => (
+                          <button
+                            key={r}
+                            type="button"
+                            disabled={!isPerformanceSourceConnected}
+                            onClick={() => isPerformanceSourceConnected && setPerformanceRange(r)}
+                            className={`px-3 py-1 rounded-lg transition-all ${
+                              !isPerformanceSourceConnected
+                                ? 'opacity-40 cursor-not-allowed text-slate-400 dark:text-slate-500'
+                                : performanceRange === r
+                                ? 'bg-[#0D9488] text-white shadow-xs font-extrabold cursor-pointer'
+                                : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer'
+                            }`}
+                          >
+                            {r}
+                          </button>
+                        ))}
+                      </div>
+                      <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider hidden sm:inline">
+                        Not connected
+                      </span>
                     </div>
                   </div>
 
                   {/* Accessible check for automated tests */}
                   <span className="sr-only">Website Traffic & Leads: Not connected</span>
 
-                  {/* Performance Overview Body: Real Data if connected, otherwise clean Not connected */}
-                  {isPerformanceSourceConnected ? (
-                    <div className="relative w-full h-64 flex flex-col justify-between pt-2">
-                      <svg viewBox="0 0 520 200" className="w-full h-44 overflow-visible">
-                        <defs>
-                          <linearGradient id="trafficGradient" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="0%" stopColor="#0D9488" stopOpacity="0.25" />
-                            <stop offset="100%" stopColor="#0D9488" stopOpacity="0.0" />
-                          </linearGradient>
-                        </defs>
-
-                        {/* Grid Lines */}
-                        <line x1="45" y1="35" x2="495" y2="35" stroke="currentColor" className="text-slate-100 dark:text-dark-border" strokeDasharray="3 3" />
-                        <line x1="45" y1="85" x2="495" y2="85" stroke="currentColor" className="text-slate-100 dark:text-dark-border" strokeDasharray="3 3" />
-                        <line x1="45" y1="135" x2="495" y2="135" stroke="currentColor" className="text-slate-100 dark:text-dark-border" strokeDasharray="3 3" />
-                        <line x1="45" y1="185" x2="495" y2="185" stroke="currentColor" className="text-slate-200 dark:text-dark-border" />
-
-                        {/* Y Axis Labels */}
-                        <text x="35" y="38" textAnchor="end" className="text-[10px] font-mono fill-slate-400">4k</text>
-                        <text x="35" y="88" textAnchor="end" className="text-[10px] font-mono fill-slate-400">3k</text>
-                        <text x="35" y="138" textAnchor="end" className="text-[10px] font-mono fill-slate-400">2k</text>
-                        <text x="35" y="188" textAnchor="end" className="text-[10px] font-mono fill-slate-400">0</text>
-
-                        {/* Area & Curves */}
-                        <path d={chartData.trafficAreaPath} fill="url(#trafficGradient)" />
-                        <path d={chartData.trafficPath} fill="none" stroke="#0D9488" strokeWidth="2.5" strokeLinecap="round" />
-                        <path d={chartData.leadsPath} fill="none" stroke="#8B5CF6" strokeWidth="2.5" strokeLinecap="round" />
-
-                        {/* Data Points */}
-                        {chartData.trafficPoints.map((pt, i) => (
-                          <circle key={`tp-${i}`} cx={pt.x} cy={pt.y} r="3.5" fill="#0D9488" className="transition-all" />
-                        ))}
-                        {chartData.leadsPoints.map((pt, i) => (
-                          <circle key={`lp-${i}`} cx={pt.x} cy={pt.y} r="3.5" fill="#8B5CF6" className="transition-all" />
-                        ))}
-                      </svg>
-
-                      {/* X Axis Dates */}
-                      <div className="flex items-center justify-between px-10 text-[11px] font-mono text-slate-400 pt-1 border-t border-slate-100 dark:border-dark-border">
-                        {chartData.dates.map((d, i) => (
-                          <span key={i}>{d}</span>
-                        ))}
-                      </div>
-
-                      {/* Chart Legend */}
-                      <div className="flex items-center justify-center gap-6 pt-2 text-xs font-bold text-slate-600 dark:text-slate-300">
-                        <div className="flex items-center gap-2">
-                          <span className="w-2.5 h-2.5 rounded-full bg-[#0D9488]" />
-                          <span>Website Traffic</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="w-2.5 h-2.5 rounded-full bg-[#8B5CF6]" />
-                          <span>Leads</span>
-                        </div>
-                      </div>
+                  <div className="relative w-full h-64 flex flex-col items-center justify-center p-6 text-center rounded-xl bg-slate-50/70 dark:bg-dark-300/30 border border-dashed border-slate-200 dark:border-dark-border space-y-2.5 my-auto">
+                    <div className="w-10 h-10 rounded-full bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 flex items-center justify-center">
+                      <TrendingUp className="w-5 h-5" />
                     </div>
-                  ) : (
-                    <>
-                      <div className="relative w-full h-64 flex flex-col items-center justify-center p-6 text-center rounded-xl bg-slate-50/70 dark:bg-dark-300/30 border border-dashed border-slate-200 dark:border-dark-border space-y-2.5 my-auto">
-                        <div className="w-10 h-10 rounded-full bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 flex items-center justify-center">
-                          <TrendingUp className="w-5 h-5" />
-                        </div>
-                        <div className="space-y-1">
-                          <h5 className="text-sm font-bold text-slate-800 dark:text-white">Website Traffic & Leads: Not connected</h5>
-                          <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm leading-relaxed">
-                            No analytics integration connected. Connect Google Analytics or LeadConnector in Settings to stream live traffic and conversion data.
-                          </p>
-                        </div>
-                        <div className="flex items-center gap-2 pt-1 text-[11px] font-bold text-slate-400 dark:text-slate-500">
-                          <span className="w-2 h-2 rounded-full bg-slate-300 dark:bg-slate-600" />
-                          <span>Telemetry: Standby</span>
-                        </div>
-                        {!hasWebsiteSource && (
-                          <div className="pt-2">
-                            <button
-                              type="button"
-                              onClick={() => {
-                                if (onMainTabChange && canViewDetailsTab) onMainTabChange('details');
-                                else alert('To connect Website, add your domain in Client Details.');
-                              }}
-                              className="px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white text-xs font-bold transition-colors cursor-pointer"
-                            >
-                              + Connect Website
-                            </button>
-                          </div>
-                        )}
-                      </div>
+                    <div className="space-y-1">
+                      <h5 className="text-sm font-bold text-slate-800 dark:text-white">Website Traffic & Leads: Not connected</h5>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm leading-relaxed">
+                        No analytics integration connected. Connect Google Analytics or LeadConnector in Settings to stream live traffic and conversion data.
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2 pt-1 text-[11px] font-bold text-slate-400 dark:text-slate-500">
+                      <span className="w-2 h-2 rounded-full bg-slate-300 dark:bg-slate-600" />
+                      <span>Telemetry: Standby</span>
+                    </div>
+                    <div className="pt-2 flex items-center gap-2 flex-wrap justify-center">
+                      <button
+                        type="button"
+                        onClick={() => handleNavClick('settings')}
+                        className="px-3 py-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 dark:bg-teal-950/40 dark:hover:bg-teal-900/50 text-teal-700 dark:text-teal-300 text-xs font-bold border border-teal-200 dark:border-teal-800 transition-colors cursor-pointer"
+                      >
+                        + Connect Google Analytics
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleNavClick('settings')}
+                        className="px-3 py-1.5 rounded-lg bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-900/50 text-purple-700 dark:text-purple-300 text-xs font-bold border border-purple-200 dark:border-purple-800 transition-colors cursor-pointer"
+                      >
+                        + Connect LeadConnector
+                      </button>
+                    </div>
+                  </div>
 
-                      {/* Chart Legend */}
-                      <div className="flex items-center justify-center gap-6 pt-1 text-xs font-bold text-slate-400 dark:text-slate-500">
-                        <div className="flex items-center gap-2">
-                          <span className="w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-slate-600" />
-                          <span>Website Traffic (Not connected)</span>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-slate-600" />
-                          <span>Leads (Not connected)</span>
-                        </div>
-                      </div>
-                    </>
-                  )}
+                  {/* Standby legend */}
+                  <div className="flex items-center justify-center gap-6 pt-2 text-xs font-bold text-slate-400 dark:text-slate-500 border-t border-slate-100 dark:border-dark-border">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-slate-600" />
+                      <span>Website Traffic (Not connected)</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="w-2.5 h-2.5 rounded-full bg-slate-300 dark:bg-slate-600" />
+                      <span>Leads (Not connected)</span>
+                    </div>
+                  </div>
                 </div>
 
                 {/* Project Progress (5 Cols) */}
@@ -1494,6 +1359,8 @@ Thank you for partnering with Ops Hub.
                                     ? 'bg-emerald-600 text-white'
                                     : proj.status === 'In Progress'
                                     ? color.pill
+                                    : proj.status === 'In Review'
+                                    ? 'bg-purple-600 text-white'
                                     : 'bg-amber-500 text-white'
                                 }`}
                               >
@@ -1510,6 +1377,8 @@ Thank you for partnering with Ops Hub.
                                   ? 'bg-emerald-600'
                                   : proj.status === 'In Progress'
                                   ? color.bar
+                                  : proj.status === 'In Review'
+                                  ? 'bg-purple-600'
                                   : 'bg-amber-500'
                               }`}
                             />
@@ -1670,121 +1539,56 @@ Thank you for partnering with Ops Hub.
                 {/* Column 3: Marketing Channels */}
                 <div
                   data-testid="marketing-channels-section"
-                  className="p-6 sm:p-7 rounded-2xl bg-white dark:bg-dark-card border border-slate-200/90 dark:border-dark-border shadow-xs space-y-4 flex flex-col justify-between"
+                  className="p-6 sm:p-7 rounded-2xl bg-white dark:bg-dark-card border border-slate-200/90 dark:border-dark-border shadow-xs flex flex-col justify-between space-y-4"
                 >
                   <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-dark-border">
                     <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-full bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
-                        <BarChart3 className="w-4 h-4" />
+                      <div className="w-8 h-8 rounded-full bg-purple-100 dark:bg-purple-950/50 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+                        <PieChart className="w-4 h-4" />
                       </div>
-                      <h4 className="text-base font-bold text-slate-900 dark:text-white">Marketing Channels</h4>
+                      <div>
+                        <h4 className="text-base font-bold text-slate-900 dark:text-white">Marketing Channels</h4>
+                      </div>
                     </div>
-                    <button
-                      type="button"
-                      className="text-xs font-semibold text-slate-700 dark:text-slate-300 bg-slate-100 dark:bg-dark-200 border border-slate-200 dark:border-dark-border px-2.5 py-1 rounded-lg flex items-center gap-1 cursor-pointer"
-                    >
-                      <span>This Month</span>
-                      <ChevronDown className="w-3 h-3 text-slate-500" />
-                    </button>
+                    <span className="text-[11px] font-bold text-slate-400 dark:text-slate-500 bg-slate-100 dark:bg-dark-200 px-2 py-0.5 rounded-lg">
+                      Standby
+                    </span>
                   </div>
 
                   {/* Accessible check for automated tests */}
                   <span className="sr-only">Marketing Channels: Not connected</span>
 
-                  {/* Real Marketing Donut or Standby Not Connected Card */}
-                  {isMarketingSourceConnected && marketingChannelsData ? (
-                    <div className="flex flex-col sm:flex-row items-center justify-center gap-5 py-3">
-                      {/* Donut SVG */}
-                      <div className="relative w-32 h-32 shrink-0">
-                        <svg viewBox="0 0 100 100" className="w-full h-full -rotate-90">
-                          {(() => {
-                            let accumulatedAngle = 0;
-                            const circumference = 226.195;
-                            return marketingChannelsData.channels.map((ch) => {
-                              const dash = (ch.percent / 100) * circumference;
-                              const offset = accumulatedAngle;
-                              accumulatedAngle += dash;
-                              return (
-                                <circle
-                                  key={ch.key}
-                                  cx="50"
-                                  cy="50"
-                                  r="36"
-                                  fill="none"
-                                  stroke={ch.color}
-                                  strokeWidth="14"
-                                  strokeDasharray={`${dash} ${circumference}`}
-                                  strokeDashoffset={`-${offset}`}
-                                  className="transition-all duration-500"
-                                />
-                              );
-                            });
-                          })()}
-                        </svg>
-                        <div className="absolute inset-0 flex flex-col items-center justify-center text-center pointer-events-none">
-                          <span className="text-sm font-black text-slate-900 dark:text-white leading-tight">
-                            {marketingChannelsData.totalLeadsText}
-                          </span>
-                          <span className="text-[9px] font-bold text-slate-400 uppercase tracking-wider">
-                            Total Leads
-                          </span>
-                        </div>
-                      </div>
-
-                      {/* Legend */}
-                      <div className="flex-1 space-y-1.5 w-full">
-                        {marketingChannelsData.channels.map((ch) => (
-                          <div key={ch.key} className="flex items-center justify-between text-xs">
-                            <div className="flex items-center gap-2">
-                              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ backgroundColor: ch.color }} />
-                              <span className="font-semibold text-slate-700 dark:text-slate-300">{ch.label}</span>
-                            </div>
-                            <span className="font-mono font-bold text-slate-900 dark:text-white">{ch.percent}%</span>
-                          </div>
-                        ))}
-                      </div>
+                  <div className="relative w-full h-64 flex flex-col items-center justify-center p-6 text-center rounded-xl bg-slate-50/70 dark:bg-dark-300/30 border border-dashed border-slate-200 dark:border-dark-border space-y-2.5 my-auto">
+                    <div className="w-10 h-10 rounded-full bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center">
+                      <PieChart className="w-5 h-5" />
                     </div>
-                  ) : (
-                    <div className="relative w-full h-44 flex flex-col items-center justify-center p-5 text-center rounded-xl bg-slate-50/70 dark:bg-dark-300/30 border border-dashed border-slate-200 dark:border-dark-border space-y-2 my-auto">
-                      <div className="w-9 h-9 rounded-full bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 flex items-center justify-center">
-                        <BarChart3 className="w-4 h-4 text-teal-500" />
-                      </div>
-                      <div className="max-w-xs space-y-1">
-                        <span className="text-xs font-bold text-slate-900 dark:text-white block">
-                          Marketing Channels: Not connected
-                        </span>
-                        <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                          Multi-channel lead attribution will display here once Google Ads, Meta, and social pixels are linked.
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2 pt-1">
-                        {!hasWebsiteSource && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (onMainTabChange && canViewDetailsTab) onMainTabChange('details');
-                              else alert('To connect Website, add your domain in Client Details.');
-                            }}
-                            className="px-2.5 py-1 rounded-lg bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 text-[10px] font-bold hover:bg-teal-100 transition-colors cursor-pointer"
-                          >
-                            + Connect Website
-                          </button>
-                        )}
-                        {!hasMetaSource && (
-                          <button
-                            type="button"
-                            onClick={() => {
-                              if (onMainTabChange && canViewDetailsTab) onMainTabChange('details');
-                              else alert('To connect Meta, link your Facebook/Instagram in Client Details.');
-                            }}
-                            className="px-2.5 py-1 rounded-lg bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800 text-[10px] font-bold hover:bg-purple-100 transition-colors cursor-pointer"
-                          >
-                            + Connect Meta
-                          </button>
-                        )}
-                      </div>
+                    <div className="space-y-1">
+                      <h5 className="text-sm font-bold text-slate-800 dark:text-white">Marketing Channels: Not connected</h5>
+                      <p className="text-xs text-slate-500 dark:text-slate-400 max-w-xs leading-relaxed">
+                        No marketing channels connected. Connect Website or Meta in Settings to track channel traffic and conversions.
+                      </p>
                     </div>
-                  )}
+                    <div className="flex items-center gap-2 pt-1 text-[11px] font-bold text-slate-400 dark:text-slate-500">
+                      <span className="w-2 h-2 rounded-full bg-slate-300 dark:bg-slate-600" />
+                      <span>Status: Standby</span>
+                    </div>
+                    <div className="pt-2 flex items-center gap-2 flex-wrap justify-center">
+                      <button
+                        type="button"
+                        onClick={() => handleNavClick('settings')}
+                        className="px-3 py-1.5 rounded-lg bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-900/50 text-purple-700 dark:text-purple-300 text-xs font-bold border border-purple-200 dark:border-purple-800 transition-colors cursor-pointer"
+                      >
+                        + Connect Website
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => handleNavClick('settings')}
+                        className="px-3 py-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 dark:bg-teal-950/40 dark:hover:bg-teal-900/50 text-teal-700 dark:text-teal-300 text-xs font-bold border border-teal-200 dark:border-teal-800 transition-colors cursor-pointer"
+                      >
+                        + Connect Meta
+                      </button>
+                    </div>
+                  </div>
                 </div>
               </div>
 
@@ -2000,28 +1804,322 @@ Thank you for partnering with Ops Hub.
             </div>
           )}
 
-          {/* OTHER TABS */}
+          {/* VIEW: REPORTS (Item 9 & 10 Fix) */}
           {!isCustomMainTab && activeTab === 'reports' && (
             <div data-testid="client-reports-view" className="space-y-4 animate-in fade-in duration-150">
               <ClientMonthlyReportsView
                 client={client}
-                tasks={clientVisibleTasks}
+                tasks={effectiveTasks}
                 isStaffView={false}
               />
             </div>
           )}
 
-          {!isCustomMainTab && !['dashboard', 'projects', 'approvals', 'team', 'reports'].includes(activeTab) && (
-            <div data-testid={`client-${activeTab}-view`} className="p-8 rounded-2xl bg-white dark:bg-dark-card border border-slate-200/80 dark:border-dark-border text-center space-y-3 shadow-xs animate-in fade-in duration-150">
-              <div className="w-12 h-12 rounded-2xl bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 flex items-center justify-center mx-auto border border-teal-200 dark:border-teal-800/40">
-                <Sparkles className="w-6 h-6" />
+          {/* VIEW: ANALYTICS (Item 11 Fix) */}
+          {!isCustomMainTab && activeTab === 'analytics' && (
+            <div data-testid="client-analytics-view" className="space-y-6 animate-in fade-in duration-150">
+              <div className="p-6 rounded-2xl bg-white dark:bg-dark-card border border-slate-200/90 dark:border-dark-border shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-dark-border">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 border border-teal-200/60 dark:border-teal-800/40 flex items-center justify-center shrink-0">
+                      <BarChart3 className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-slate-900 dark:text-white">Website Traffic & Conversion Analytics</h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Live visitor telemetry and lead tracking for {clientGreetingName}</p>
+                    </div>
+                  </div>
+                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-slate-100 dark:bg-dark-200 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-dark-border self-start sm:self-auto">
+                    Telemetry: Standby
+                  </span>
+                </div>
+
+                <div className="p-8 text-center rounded-xl bg-slate-50/70 dark:bg-dark-300/30 border border-dashed border-slate-200 dark:border-dark-border space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 flex items-center justify-center mx-auto border border-teal-200/60 dark:border-teal-800/40">
+                    <TrendingUp className="w-6 h-6" />
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-bold text-slate-800 dark:text-white">Google Analytics & LeadConnector: Not connected</h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
+                      No live telemetry stream is paired with this workspace. Connect your Google Analytics (GA4) property or LeadConnector account in Settings to view visitor trends, session duration, and live lead conversions.
+                    </p>
+                  </div>
+                  <div className="pt-2 flex items-center gap-3 justify-center flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => handleNavClick('settings')}
+                      className="px-4 py-2 rounded-xl bg-[#0D9488] hover:bg-teal-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                    >
+                      + Connect Google Analytics
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleNavClick('settings')}
+                      className="px-4 py-2 rounded-xl bg-purple-600 hover:bg-purple-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                    >
+                      + Connect LeadConnector
+                    </button>
+                  </div>
+                </div>
               </div>
-              <h4 className="text-sm font-bold text-slate-900 dark:text-white capitalize">
-                {activeTab.replace(/_/g, ' ')}
-              </h4>
-              <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto">
-                Live deliverable telemetry for {activeTab.replace(/_/g, ' ')} is synced with your active retainer package.
-              </p>
+            </div>
+          )}
+
+          {/* VIEW: WEBSITE & SEO (Item 11 Fix) */}
+          {!isCustomMainTab && activeTab === 'website_seo' && (
+            <div data-testid="client-website_seo-view" className="space-y-6 animate-in fade-in duration-150">
+              <div className="p-6 rounded-2xl bg-white dark:bg-dark-card border border-slate-200/90 dark:border-dark-border shadow-xs space-y-4">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-dark-border">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 border border-blue-200/60 dark:border-blue-800/40 flex items-center justify-center shrink-0">
+                      <Globe className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-slate-900 dark:text-white">Website Health & Search Engine Optimization</h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Domain telemetry, indexed pages, and SEO performance</p>
+                    </div>
+                  </div>
+                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-slate-100 dark:bg-dark-200 text-slate-600 dark:text-slate-400 border border-slate-200 dark:border-dark-border self-start sm:self-auto">
+                    Status: Standby
+                  </span>
+                </div>
+
+                <div className="p-8 text-center rounded-xl bg-slate-50/70 dark:bg-dark-300/30 border border-dashed border-slate-200 dark:border-dark-border space-y-3">
+                  <div className="w-12 h-12 rounded-2xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center mx-auto border border-blue-200/60 dark:border-blue-800/40">
+                    <Globe className="w-6 h-6" />
+                  </div>
+                  <div className="space-y-1">
+                    <h4 className="text-sm font-bold text-slate-800 dark:text-white">Website & SEO Telemetry: Not connected</h4>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 max-w-md mx-auto leading-relaxed">
+                      No live SEO telemetry streaming is active. Connect your website domain and Google Search Console in Settings to monitor keyword rankings, indexed pages, and organic impressions.
+                    </p>
+                  </div>
+                  <div className="pt-2 flex items-center gap-3 justify-center flex-wrap">
+                    <button
+                      type="button"
+                      onClick={() => handleNavClick('settings')}
+                      className="px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                    >
+                      + Connect Domain
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => handleNavClick('settings')}
+                      className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                    >
+                      + Connect Google Search Console
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* VIEW: SUBSCRIPTION & BILLING (Item 7 Fix) */}
+          {!isCustomMainTab && (activeTab === 'subscription' || activeTab === 'billing_invoices') && (
+            <div data-testid={`client-${activeTab}-view`} className="space-y-6 animate-in fade-in duration-150">
+              <div className="p-6 rounded-2xl bg-white dark:bg-dark-card border border-slate-200/90 dark:border-dark-border shadow-xs space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-dark-border">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-emerald-50 dark:bg-emerald-950/40 text-emerald-600 dark:text-emerald-400 border border-emerald-200/60 dark:border-emerald-800/40 flex items-center justify-center shrink-0">
+                      <Receipt className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-slate-900 dark:text-white">Subscription & Invoices</h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Official retainer agreement, billing cycle, and payment receipts</p>
+                    </div>
+                  </div>
+                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-emerald-100 text-emerald-800 dark:bg-emerald-950/50 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/40 self-start sm:self-auto">
+                    {subscriptionStatus}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="p-4 rounded-xl bg-slate-50 dark:bg-dark-300/40 border border-slate-200/80 dark:border-dark-border space-y-1">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Current Package</span>
+                    <h5 className="text-sm font-extrabold text-slate-900 dark:text-white">{subscriptionPlan}</h5>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">Monthly Retainer</span>
+                  </div>
+                  <div className="p-4 rounded-xl bg-slate-50 dark:bg-dark-300/40 border border-slate-200/80 dark:border-dark-border space-y-1">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Subscription Rate</span>
+                    <h5 className="text-sm font-extrabold text-slate-900 dark:text-white">{formattedClientRate}</h5>
+                    <span className="text-xs text-slate-500 dark:text-slate-400">Fixed rate schedule</span>
+                  </div>
+                  <div className="p-4 rounded-xl bg-slate-50 dark:bg-dark-300/40 border border-slate-200/80 dark:border-dark-border space-y-1">
+                    <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">Next Billing Date</span>
+                    <h5 className="text-sm font-extrabold text-slate-900 dark:text-white">{nextBillingDate}</h5>
+                    <span className="text-xs text-emerald-600 dark:text-emerald-400 font-bold">Auto-renewal enabled</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={handleDownloadReceipt}
+                    className="px-4 py-2.5 rounded-xl bg-white dark:bg-dark-200 border border-slate-200 dark:border-dark-border text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-dark-100 text-xs font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer"
+                  >
+                    <FileDown className="w-4 h-4 text-slate-500" />
+                    <span>Download Receipt</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleDownloadReport}
+                    className="px-4 py-2.5 rounded-xl bg-[#0D9488] hover:bg-teal-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer"
+                  >
+                    <FileText className="w-4 h-4 text-white" />
+                    <span>Download Monthly Report</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* VIEW: SETTINGS (Item 11 Fix) */}
+          {!isCustomMainTab && activeTab === 'settings' && (
+            <div data-testid="client-settings-view" className="space-y-6 animate-in fade-in duration-150">
+              <div className="p-6 rounded-2xl bg-white dark:bg-dark-card border border-slate-200/90 dark:border-dark-border shadow-xs space-y-6">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-dark-border">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-slate-100 dark:bg-dark-200 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-dark-border flex items-center justify-center shrink-0">
+                      <Settings className="w-5 h-5" />
+                    </div>
+                    <div>
+                      <h3 className="text-base font-bold text-slate-900 dark:text-white">Workspace Settings & Integrations</h3>
+                      <p className="text-xs text-slate-500 dark:text-slate-400">Configure telemetry feeds, analytics tokens, and workspace preferences</p>
+                    </div>
+                  </div>
+                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 border border-teal-200/60 dark:border-teal-800/40 self-start sm:self-auto">
+                    Active Workspace
+                  </span>
+                </div>
+
+                <div className="space-y-4">
+                  <h4 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">External Telemetry Feeds</h4>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="p-4 rounded-xl bg-slate-50 dark:bg-dark-300/40 border border-slate-200/80 dark:border-dark-border space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-800 dark:text-white">Google Analytics (GA4)</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">Not connected</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">Stream website page views, traffic channels, and user bounce rate.</p>
+                      <button
+                        type="button"
+                        onClick={() => alert('To connect Google Analytics, enter your GA4 Measurement ID in Operations Hub integration settings.')}
+                        className="w-full mt-1 px-3 py-1.5 rounded-lg bg-white dark:bg-dark-200 border border-slate-200 dark:border-dark-border text-xs font-bold text-teal-600 dark:text-teal-400 hover:bg-slate-100 transition-colors cursor-pointer"
+                      >
+                        Configure GA4 Feed
+                      </button>
+                    </div>
+
+                    <div className="p-4 rounded-xl bg-slate-50 dark:bg-dark-300/40 border border-slate-200/80 dark:border-dark-border space-y-2">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-800 dark:text-white">LeadConnector (GoHighLevel)</span>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase">Not connected</span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400">Stream live CRM contact records, incoming leads, and pipeline conversions.</p>
+                      <button
+                        type="button"
+                        onClick={() => alert('To connect LeadConnector, pair your agency API key in Client Integration Settings.')}
+                        className="w-full mt-1 px-3 py-1.5 rounded-lg bg-white dark:bg-dark-200 border border-slate-200 dark:border-dark-border text-xs font-bold text-purple-600 dark:text-purple-400 hover:bg-slate-100 transition-colors cursor-pointer"
+                      >
+                        Configure LeadConnector Feed
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* VIEW: SOCIAL MEDIA */}
+          {!isCustomMainTab && activeTab === 'social_media' && (
+            <div data-testid="client-social_media-view" className="space-y-6 animate-in fade-in duration-150">
+              <div className="p-6 rounded-2xl bg-white dark:bg-dark-card border border-slate-200/90 dark:border-dark-border shadow-xs space-y-4">
+                <div className="flex items-center gap-3 pb-4 border-b border-slate-100 dark:border-dark-border">
+                  <div className="w-10 h-10 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center shrink-0">
+                    <MessageSquare className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">Social Media Management</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Cross-channel content calendar and sprint deliverables</p>
+                  </div>
+                </div>
+                <div className="p-6 text-center rounded-xl bg-slate-50/70 dark:bg-dark-300/30 border border-dashed border-slate-200 dark:border-dark-border space-y-2">
+                  <h4 className="text-sm font-bold text-slate-800 dark:text-white">Social Channels: Standby</h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+                    Manage active campaigns and schedule social media creatives in your sprint deliverables.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* VIEW: LINKEDIN */}
+          {!isCustomMainTab && activeTab === 'linkedin' && (
+            <div data-testid="client-linkedin-view" className="space-y-6 animate-in fade-in duration-150">
+              <div className="p-6 rounded-2xl bg-white dark:bg-dark-card border border-slate-200/90 dark:border-dark-border shadow-xs space-y-4">
+                <div className="flex items-center gap-3 pb-4 border-b border-slate-100 dark:border-dark-border">
+                  <div className="w-10 h-10 rounded-xl bg-blue-50 dark:bg-blue-950/40 text-blue-600 dark:text-blue-400 flex items-center justify-center shrink-0">
+                    <LinkedInIcon className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">LinkedIn Growth & Optimization</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Executive profile optimization and outreach campaigns</p>
+                  </div>
+                </div>
+                <div className="p-6 text-center rounded-xl bg-slate-50/70 dark:bg-dark-300/30 border border-dashed border-slate-200 dark:border-dark-border space-y-2">
+                  <h4 className="text-sm font-bold text-slate-800 dark:text-white">LinkedIn Pipeline: Active</h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+                    Profiles managed: {client.requiredLinkedinProfileCount || 1} assigned specialist profile(s).
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* VIEW: PAID ADS */}
+          {!isCustomMainTab && activeTab === 'paid_ads' && (
+            <div data-testid="client-paid_ads-view" className="space-y-6 animate-in fade-in duration-150">
+              <div className="p-6 rounded-2xl bg-white dark:bg-dark-card border border-slate-200/90 dark:border-dark-border shadow-xs space-y-4">
+                <div className="flex items-center gap-3 pb-4 border-b border-slate-100 dark:border-dark-border">
+                  <div className="w-10 h-10 rounded-xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center shrink-0">
+                    <Megaphone className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">Paid Advertising Campaigns</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">PPC ads, budget allocation, and creative management</p>
+                  </div>
+                </div>
+                <div className="p-6 text-center rounded-xl bg-slate-50/70 dark:bg-dark-300/30 border border-dashed border-slate-200 dark:border-dark-border space-y-2">
+                  <h4 className="text-sm font-bold text-slate-800 dark:text-white">Ad Accounts: Standby</h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+                    Connect Google Ads or Meta Ads in Settings to view spend and return on ad spend (ROAS).
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* VIEW: FUNNEL */}
+          {!isCustomMainTab && activeTab === 'funnel' && (
+            <div data-testid="client-funnel-view" className="space-y-6 animate-in fade-in duration-150">
+              <div className="p-6 rounded-2xl bg-white dark:bg-dark-card border border-slate-200/90 dark:border-dark-border shadow-xs space-y-4">
+                <div className="flex items-center gap-3 pb-4 border-b border-slate-100 dark:border-dark-border">
+                  <div className="w-10 h-10 rounded-xl bg-orange-50 dark:bg-orange-950/40 text-orange-600 dark:text-orange-400 flex items-center justify-center shrink-0">
+                    <Filter className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h3 className="text-base font-bold text-slate-900 dark:text-white">Funnel & Conversion Architecture</h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400">Landing pages, lead magnets, and customer conversion paths</p>
+                  </div>
+                </div>
+                <div className="p-6 text-center rounded-xl bg-slate-50/70 dark:bg-dark-300/30 border border-dashed border-slate-200 dark:border-dark-border space-y-2">
+                  <h4 className="text-sm font-bold text-slate-800 dark:text-white">Funnel Telemetry: Standby</h4>
+                  <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+                    Landing page conversion telemetry is tracked through your sprint deliverable reviews.
+                  </p>
+                </div>
+              </div>
             </div>
           )}
         </main>

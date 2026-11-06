@@ -223,7 +223,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
     try {
       const res = await taskManagementService.fetchCrossClientTasks({
         clientId: client.id,
-        isClientView: isEffectiveClientView
+        isClientView: false
       });
       if (!res.error && res.data) {
         setAllTasks(res.data);
@@ -499,7 +499,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
         currentUserProfile={currentUserProfile}
         isPreview={isPreview}
         onClientUpdated={onClientUpdated}
-        tasks={visibleTasks}
+        tasks={allTasks}
         weekNames={weekNames}
         activeMainTab={activeTab}
         onMainTabChange={(t) => setActiveTab(t)}
