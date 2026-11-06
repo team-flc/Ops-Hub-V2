@@ -24,9 +24,9 @@ export const ClientWorkloadDistributionChart: React.FC<ClientWorkloadDistributio
   const activeClients = clients.filter((c) => c.status !== 'Archived');
   const clientMetrics = activeClients.map((c) => {
     const clientTasks = tasks.filter((t) => t.clientId === c.id);
-    const completedTasks = clientTasks.filter((t) => t.status === 'Completed').length;
-    const inProgressTasks = clientTasks.filter((t) => ['In Progress', 'Team Review', 'Client Review'].includes(t.status)).length;
-    const overdueTasks = clientTasks.filter((t) => t.isOverdue && t.status !== 'Completed').length;
+    const completedTasks = clientTasks.filter((t) => t.status === 'Completed' || t.status === 'Done').length;
+    const inProgressTasks = clientTasks.filter((t) => ['In Progress', 'Approval', 'Team Review', 'Client Review'].includes(t.status)).length;
+    const overdueTasks = clientTasks.filter((t) => t.isOverdue && t.status !== 'Completed' && t.status !== 'Done').length;
     const totalSeconds = clientTasks.reduce((acc, t) => acc + (t.timeSpentSeconds || 0), 0);
     const totalMinutes = Math.round(totalSeconds / 60);
 

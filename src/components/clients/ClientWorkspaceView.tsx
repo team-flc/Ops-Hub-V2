@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { Calendar, Info, Plus, Sparkles, Loader2, Layers, AlertTriangle, ShieldCheck, LayoutDashboard } from 'lucide-react';
+import { Calendar, Info, Plus, Sparkles, Loader2, Layers, AlertTriangle, ShieldCheck, LayoutDashboard, FileText } from 'lucide-react';
 import { 
   ClientRecord, 
   ClientTask, 
@@ -19,6 +19,7 @@ import { TaskTemplate } from '../../types';
 import { taskManagementService } from '../../lib/taskManagementService';
 import { sanitizeClientDeliverableTitle, isInternalOnlyTask, getInternalTaskReason, filterAndSanitizeClientDeliverables } from '../../lib/permissions';
 import { FinfixClientPortalView } from '../portal/FinfixClientPortalView';
+import { ClientMonthlyReportsView } from '../portal/ClientMonthlyReportsView';
 export { filterAndSanitizeClientDeliverables };
 
 const TaskTemplatePickerModal = React.lazy(() =>
@@ -42,7 +43,7 @@ interface ClientWorkspaceViewProps {
   isClientView?: boolean;
 }
 
-type MainTab = 'dashboard' | 'setup' | 'workplans' | 'details';
+type MainTab = 'dashboard' | 'setup' | 'workplans' | 'details' | 'reports';
 type WeekTab = 'week1' | 'week2' | 'week3' | 'week4';
 
 function isFinancialOrInternalTitle(title: string = ''): boolean {
@@ -700,6 +701,20 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                 <Info className="w-3.5 h-3.5" />
                 <span>Client Details</span>
               </button>
+
+              <button
+                type="button"
+                data-testid="tab-reports"
+                onClick={() => setActiveTab('reports')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'reports'
+                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs'
+                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-200'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Monthly Reports</span>
+              </button>
             </div>
           </div>
 
@@ -844,6 +859,16 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                 eligibleManagers={eligibleManagers}
                 onClientUpdated={onClientUpdated}
               />
+            )}
+
+            {activeTab === 'reports' && (
+              <div data-testid="staff-reports-view" className="space-y-6">
+                <ClientMonthlyReportsView
+                  client={client}
+                  tasks={allTasks}
+                  isStaffView={true}
+                />
+              </div>
             )}
           </div>
         </div>
