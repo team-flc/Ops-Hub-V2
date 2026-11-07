@@ -2,6 +2,7 @@ import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { ClientRecord, ClientTask, UserProfile } from '../src/types';
+import { useOpsStore } from '../src/store/opsStore';
 import { Sidebar } from '../src/components/layout/Sidebar';
 import { SelectedClientHeader } from '../src/components/clients/SelectedClientHeader';
 import { ClientKanbanCard } from '../src/components/tasks/ClientKanbanCard';
@@ -91,15 +92,14 @@ describe('Client Preview Field & Layout Security Suite', () => {
     }))
   ];
 
-  it('Check 1: Sidebar returns null in preview mode - no staff sidebar or sensitive links rendered', () => {
-    // When in preview mode, Sidebar returns null
+  it('Check 1: Sidebar renders full staff Workspace Links in preview mode with client switcher locked', () => {
+    useOpsStore.getState().setClients([mavenClient]);
+    useOpsStore.getState().setSelectedClientId(mavenClient.id);
     const { container } = render(<Sidebar />);
-    expect(container.firstChild).toBeNull();
-    expect(container.textContent).not.toContain('Workspace Links');
-    expect(container.textContent).not.toContain('Google Drive');
-    expect(container.textContent).not.toContain('Slack');
-    expect(container.textContent).not.toContain('WhatsApp');
-    expect(container.textContent).not.toContain('Muhammad Atif Naseer');
+    expect(container.firstChild).not.toBeNull();
+    expect(container.textContent).toContain('Workspace Links');
+    expect(screen.getByTestId('sidebar-link-google-drive')).toBeInTheDocument();
+    expect(screen.getByTestId('sidebar-link-slack-channel')).toBeInTheDocument();
   });
 
   it('Check 2: Maven Week 3 follows count rule 2.3 with exactly 9 client-visible tasks and 1 internal task filtered out', () => {

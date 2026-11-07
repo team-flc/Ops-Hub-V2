@@ -43,7 +43,7 @@ interface ClientWorkspaceViewProps {
   isClientView?: boolean;
 }
 
-type MainTab = 'dashboard' | 'setup' | 'workplans' | 'details' | 'reports';
+type MainTab = 'setup' | 'workplans' | 'details' | 'reports';
 type WeekTab = 'week1' | 'week2' | 'week3' | 'week4';
 
 function isFinancialOrInternalTitle(title: string = ''): boolean {
@@ -98,7 +98,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
   const isEffectiveClientView = Boolean(isClientView || isClient || isPreview);
 
   const isArchived = client.status === 'Archived';
-  const [activeTab, setActiveTab] = useState<MainTab>(isArchived ? 'setup' : (isEffectiveClientView ? 'dashboard' : 'setup'));
+  const [activeTab, setActiveTab] = useState<MainTab>('setup');
   const [showShieldedBreakdown, setShowShieldedBreakdown] = useState(false);
   const [activeWeek, setActiveWeek] = useState<WeekTab>('week1');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -114,7 +114,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
   useEffect(() => {
     setActiveWeek('week1');
     setIsLoadingTasks(true);
-    setActiveTab(client.status === 'Archived' ? 'setup' : (isEffectiveClientView ? 'dashboard' : 'setup'));
+    setActiveTab('setup');
   }, [client.id, client.status, isEffectiveClientView]);
 
   // Departments & Eligible Assignees
@@ -240,9 +240,14 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
   }, [loadTasks]);
 
   const visibleTasks = useMemo(() => {
-    if (!isEffectiveClientView) return allTasks;
-    return filterAndSanitizeClientDeliverables(allTasks);
-  }, [allTasks, isEffectiveClientView]);
+    let result = allTasks;
+    if (isEffectiveClientView) {
+      result = filterAndSanitizeClientDeliverables(allTasks);
+    } else if (currentUserProfile?.role === 'team_member') {
+      result = allTasks.filter((t) => t.assigneeId === currentUserProfile.id);
+    }
+    return result;
+  }, [allTasks, isEffectiveClientView, currentUserProfile?.role, currentUserProfile?.id]);
 
   const tasksByWeek: Record<1 | 2 | 3 | 4, ClientTask[]> = useMemo(() => {
     return {
@@ -490,184 +495,14 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
         </div>
       )}
 
-      {/* ROLE-BASED MUTUALLY EXCLUSIVE VIEW: Client Portal vs Staff Workspace */}
-      {isEffectiveClientView ? (
-        /* CLIENT VIEW: Dark Navy Client Sidebar only, Client Header, Client Dashboard */
-        <FinfixClientPortalView
-        key={`portal-${client.id}`}
-        client={client}
-        currentUserProfile={currentUserProfile}
-        isPreview={isPreview}
-        onClientUpdated={onClientUpdated}
-        tasks={allTasks}
-        weekNames={weekNames}
-        activeMainTab={activeTab}
-        onMainTabChange={(t) => setActiveTab(t)}
-        canViewDetailsTab={!isEffectiveClientView}
-        isLoading={isLoadingTasks}
-        renderSetupView={() => (
-          <div className="space-y-6">
-            {/* 1. Restyled Compact Week Stepper with Rename controls */}
-            <ClientWeekStepper
-              client={client}
-              activeWeekNum={currentWeekNum}
-              onSelectWeek={(wk) => setActiveWeek(`week${wk}` as WeekTab)}
-              weekNames={weekNames}
-              onRenameWeek={handleRenameWeek}
-              tasksByWeek={tasksByWeek}
-              currentUserProfile={currentUserProfile}
-              isClientView={isEffectiveClientView}
-              isLoading={isLoadingTasks}
-            />
-
-            {/* 2. Week Action Bar & Kanban Board */}
-            <div className="space-y-4">
-              {!isEffectiveClientView && totalInternalTasks > 0 && (
-                <div
-                  data-testid="staff-client-reconciliation"
-                  className="px-4 py-3 rounded-xl bg-white dark:bg-dark-card border border-slate-200 dark:border-dark-border text-xs text-slate-700 dark:text-slate-300 space-y-2 shadow-xs"
-                >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <ShieldCheck className="w-4 h-4 text-emerald-500 shrink-0" />
-                      <span>
-                        <strong className="font-bold">Client Safe Reconciliation:</strong> {totalClientVisibleTasks} Client Visible Deliverables + {totalInternalTasks} Internal Staff Only = {totalStaffTasks} Total Tasks
-                      </span>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setShowShieldedBreakdown(!showShieldedBreakdown)}
-                      className="text-[11px] font-bold text-brand-600 dark:text-brand-400 hover:underline cursor-pointer flex items-center gap-1"
-                    >
-                      <span>{showShieldedBreakdown ? 'Hide Breakdown ▲' : `View ${totalInternalTasks} Shielded Tasks & Reasons ▼`}</span>
-                    </button>
-                  </div>
-                  {showShieldedBreakdown && (
-                    <div className="pt-2 border-t border-slate-200 dark:border-dark-border text-[11px] space-y-1.5">
-                      <span className="font-bold text-gray-500 dark:text-gray-400 block uppercase tracking-wider text-[10px]">
-                        Shielded from Client Portal (With Classification Reason):
-                      </span>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-1.5 max-h-48 overflow-y-auto pr-1">
-                        {internalTasksList.map((t) => (
-                          <div key={t.id} className="p-2 rounded-lg bg-slate-50 dark:bg-dark-200 border border-slate-200 dark:border-dark-border flex items-start justify-between gap-2">
-                            <div className="min-w-0 flex-1">
-                              <span className="font-semibold text-gray-800 dark:text-gray-200 block truncate">{t.title}</span>
-                              <span className="text-[10px] text-gray-400">Week {t.weekNumber || 1} &bull; {t.status}</span>
-                            </div>
-                            <span className="shrink-0 px-2 py-0.5 rounded text-[10px] bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 font-bold border border-amber-300/40">
-                              {getInternalTaskReason(t) || 'Internal Only'}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                  {!showShieldedBreakdown && (
-                    <div className="text-[11px] text-gray-500 dark:text-gray-400">
-                      Internal notes, invoices, operational reminders & credentials are automatically shielded from Client Portal
-                    </div>
-                  )}
-                </div>
-              )}
-
-              {/* Header Action Bar */}
-              <div className="flex items-center justify-between">
-                {isLoadingTasks ? (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                      Week {currentWeekNum}: {weekNames[currentWeekNum]}
-                    </span>
-                    <span className="text-xs font-semibold text-brand-600 dark:text-brand-400 flex items-center gap-1.5 animate-pulse">
-                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
-                      Loading...
-                    </span>
-                  </div>
-                ) : (
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                      Week {currentWeekNum}: {weekNames[currentWeekNum]} ({currentWeekTasks.length} {currentWeekTasks.length === 1 ? 'Task' : 'Tasks'}{!isEffectiveClientView && currentWeekInternalCount > 0 ? ` — ${currentWeekClientVisibleCount} Client Visible, ${currentWeekInternalCount} Internal Staff Only` : ''})
-                    </span>
-                  </div>
-                )}
-
-                {canAddTask && (
-                  client.status === 'Paused' ? (
-                    <span 
-                      className="px-3.5 py-2 min-h-[44px] rounded-xl bg-gray-100 dark:bg-dark-200 border border-gray-300 dark:border-dark-border text-gray-500 dark:text-gray-400 text-xs font-bold flex items-center gap-1.5 opacity-80 cursor-not-allowed"
-                      title="Task creation is blocked while client organization is paused."
-                    >
-                      <AlertTriangle className="w-3.5 h-3.5 text-brand-500" />
-                      <span>Tasks Paused</span>
-                    </span>
-                  ) : (
-                    <button
-                      type="button"
-                      aria-label="+ Add Task"
-                      onClick={handleOpenCreateTaskFlow}
-                      className="flex items-center gap-1.5 px-4 py-2 min-h-[44px] bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-xs font-bold shadow-md shadow-brand-900/20 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
-                    >
-                      <Plus className="w-4 h-4" />
-                      <span>Add Task</span>
-                    </button>
-                  )
-                )}
-              </div>
-
-              {/* Responsive 4-Column Kanban Task Board */}
-              <ClientKanbanBoard
-                client={client}
-                tasks={currentWeekTasks}
-                weekNumber={currentWeekNum}
-                weekName={weekNames[currentWeekNum]}
-                currentUserProfile={currentUserProfile}
-                isClientView={isEffectiveClientView}
-                onSelectTask={(t) => setSelectedTaskDetails(t)}
-                onOpenEditModal={(t) => setEditingTask(t)}
-                onOpenCreateTask={handleOpenCreateTaskFlow}
-                onStatusChange={handleKanbanStatusChange}
-                onStartWork={handleStartWork}
-                onPauseTimer={handlePauseTimer}
-                onResumeTimer={handleResumeTimer}
-                onTasksArchived={handleTasksArchived}
-                onShowToast={showToast}
-                isLoading={isLoadingTasks}
-              />
-            </div>
-          </div>
-        )}
-        renderWorkPlansView={() => (
-          <React.Suspense
-            fallback={
-              <div className="p-12 flex items-center justify-center text-gray-400 text-xs">
-                <span className="animate-pulse">Loading 90-Day Work Plans...</span>
-              </div>
-            }
-          >
-            <ClientWorkPlanView
-              client={client}
-              currentUserProfile={currentUserProfile}
-              departments={departments}
-              onSelectWeek={(wk) => {
-                if (wk >= 1 && wk <= 4) {
-                  setActiveWeek(`week${wk}` as WeekTab);
-                  setActiveTab('setup');
-                }
-              }}
-            />
-          </React.Suspense>
-        )}
-        renderDetailsView={() => (
-          <ClientDetailsTab
+      <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-gray-50/50 dark:bg-dark-400">
+          {/* 1. Client Header (Identical for Staff & Client, read-only for Client) */}
+          <SelectedClientHeader
             client={client}
             currentUserProfile={currentUserProfile}
-            eligibleManagers={eligibleManagers}
+            isClientView={isEffectiveClientView}
             onClientUpdated={onClientUpdated}
           />
-        )}
-      />
-      ) : (
-        /* STAFF VIEW: Single Staff Navigation (Sidebar.tsx in App.tsx), Staff Header, Staff Tabs, Staff Kanban */
-        <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden bg-gray-50/50 dark:bg-dark-400">
           {/* 1. Staff Header */}
           <SelectedClientHeader client={client} currentUserProfile={currentUserProfile} isClientView={false} />
 
@@ -679,9 +514,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                 data-testid="tab-setup"
                 onClick={() => setActiveTab('setup')}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === 'setup'
-                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-200'
+                  activeTab === 'setup' ? 'bg-brand-500 text-white shadow-xs font-bold' : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-200'
                 }`}
               >
                 <Calendar className="w-3.5 h-3.5" />
@@ -693,9 +526,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                 data-testid="tab-workplans"
                 onClick={() => setActiveTab('workplans')}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === 'workplans'
-                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-200'
+                  activeTab === 'workplans' ? 'bg-brand-500 text-white shadow-xs font-bold' : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-200'
                 }`}
               >
                 <Layers className="w-3.5 h-3.5" />
@@ -707,9 +538,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                 data-testid="tab-details"
                 onClick={() => setActiveTab('details')}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === 'details'
-                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-200'
+                  activeTab === 'details' ? 'bg-brand-500 text-white shadow-xs font-bold' : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-200'
                 }`}
               >
                 <Info className="w-3.5 h-3.5" />
@@ -721,9 +550,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                 data-testid="tab-reports"
                 onClick={() => setActiveTab('reports')}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === 'reports'
-                    ? 'bg-slate-900 text-white dark:bg-white dark:text-slate-900 shadow-xs'
-                    : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-200'
+                  activeTab === 'reports' ? 'bg-brand-500 text-white shadow-xs font-bold' : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-200'
                 }`}
               >
                 <FileText className="w-3.5 h-3.5" />
@@ -745,12 +572,12 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                   onRenameWeek={handleRenameWeek}
                   tasksByWeek={tasksByWeek}
                   currentUserProfile={currentUserProfile}
-                  isClientView={false}
+                  isClientView={isEffectiveClientView}
                   isLoading={isLoadingTasks}
                 />
 
-                {/* Staff Reconciliation Bar */}
-                {totalInternalTasks > 0 && (
+                {/* Staff Reconciliation Bar (Hidden for Client) */}
+                {!isEffectiveClientView && totalInternalTasks > 0 && (
                   <div
                     data-testid="staff-client-reconciliation"
                     className="px-4 py-3 rounded-xl bg-white dark:bg-dark-card border border-slate-200 dark:border-dark-border text-xs text-slate-700 dark:text-slate-300 space-y-2 shadow-xs"
@@ -813,7 +640,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                   ) : (
                     <div className="flex items-center gap-2">
                       <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                        Week {currentWeekNum}: {weekNames[currentWeekNum]} ({currentWeekTasks.length} {currentWeekTasks.length === 1 ? 'Task' : 'Tasks'}{currentWeekInternalCount > 0 ? ` — ${currentWeekClientVisibleCount} Client Visible, ${currentWeekInternalCount} Internal Staff Only` : ''})
+                        Week {currentWeekNum}: {weekNames[currentWeekNum]} ({currentWeekTasks.length} {currentWeekTasks.length === 1 ? 'Task' : 'Tasks'}{!isEffectiveClientView && currentWeekInternalCount > 0 ? ` — ${currentWeekClientVisibleCount} Client Visible, ${currentWeekInternalCount} Internal Staff Only` : ''})
                       </span>
                     </div>
                   )}
@@ -848,7 +675,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                   weekNumber={currentWeekNum}
                   weekName={weekNames[currentWeekNum]}
                   currentUserProfile={currentUserProfile}
-                  isClientView={false}
+                  isClientView={isEffectiveClientView}
                   onSelectTask={(t) => setSelectedTaskDetails(t)}
                   onOpenEditModal={(t) => setEditingTask(t)}
                   onOpenCreateTask={handleOpenCreateTaskFlow}
@@ -869,6 +696,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                   client={client}
                   currentUserProfile={currentUserProfile}
                   departments={departments}
+                  isClientView={isEffectiveClientView}
                   onSelectWeek={(wk) => {
                     if (wk >= 1 && wk <= 4) {
                       setActiveWeek(`week${wk}` as WeekTab);
@@ -885,6 +713,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                 currentUserProfile={currentUserProfile}
                 eligibleManagers={eligibleManagers}
                 onClientUpdated={onClientUpdated}
+                isClientView={isEffectiveClientView}
               />
             )}
 
@@ -892,14 +721,13 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
               <div data-testid="staff-reports-view" className="space-y-6">
                 <ClientMonthlyReportsView
                   client={client}
-                  tasks={allTasks}
-                  isStaffView={true}
+                  tasks={isEffectiveClientView ? visibleTasks : allTasks}
+                  isStaffView={!isEffectiveClientView}
                 />
               </div>
             )}
           </div>
         </div>
-      )}
 
       {/* Task Creation Entry Flow Modals */}
       {isModeModalOpen && (

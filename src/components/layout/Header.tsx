@@ -45,7 +45,7 @@ export const Header: React.FC = () => {
   const isProfile = viewMode === 'profile';
   const isTeamManagement = viewMode === 'directory';
 
-  let sectionName = isClientPreview ? 'Client Experience Portal' : 'Client Workspace';
+  let sectionName = 'Client Workspace';
   if (isSettings) {
     sectionName = 'Settings & Governance';
   } else if (isProfile) {
@@ -64,7 +64,6 @@ export const Header: React.FC = () => {
       {/* Contextual Breadcrumb & Current Workspace Title */}
       <div className="flex items-center gap-1.5 sm:gap-2 text-xs min-w-0 pr-2">
         {/* Mobile Hamburger Menu Toggle */}
-        {!isClientPreview && (
         <button
           type="button"
           onClick={toggleMobileSidebar}
@@ -74,7 +73,6 @@ export const Header: React.FC = () => {
         >
           <Menu className="w-5 h-5" />
         </button>
-        )}
 
         <button
           type="button"

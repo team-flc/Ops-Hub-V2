@@ -1,9 +1,10 @@
 import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, cleanup } from '@testing-library/react';
 import { FinfixClientPortalView } from '../src/components/portal/FinfixClientPortalView';
 import { ClientMonthlyReportsView, generateMonthlyReportContent, triggerDownload } from '../src/components/portal/ClientMonthlyReportsView';
 import { ClientRecord, ClientTask, UserProfile } from '../src/types';
+import { isInternalOnlyTask } from '../src/lib/permissions';
 
 vi.mock('../src/lib/taskManagementService', () => ({
   taskManagementService: {
@@ -347,26 +348,41 @@ describe('12 Remaining Mistakes Verification Suite Across All 28 Clients', () =>
   });
 
   it('Item 9 & 10: Monthly report totals match board totals with snapshot date, and NO download toast on tab open', () => {
-    const { container } = render(
+    // Staff view tests reconciliation
+    const { container: staffContainer } = render(
       <ClientMonthlyReportsView
         client={cloudZClient}
         tasks={cloudZTasks}
-        isStaffView={false}
+        isStaffView={true}
       />
     );
 
     const reportCards = screen.getAllByTestId('monthly-report-card');
     expect(reportCards.length).toBeGreaterThan(0);
 
-    // Total deliverables on report card must match staff total (6 Total Deliverables)
-    expect(container.textContent).toContain('6 Total Deliverables');
-    expect(container.textContent).toContain('4 Client Visible + 2 Internal Staff Only');
-    expect(container.textContent).toContain('Snapshot Date:');
-    expect(container.textContent).toContain('50% Done');
-    expect(container.textContent).toContain('3 Completed');
+    // Total deliverables on staff report card must match staff total (6 Total Deliverables)
+    expect(staffContainer.textContent).toContain('6 Total Deliverables');
+    expect(staffContainer.textContent).toContain('4 Client Visible + 2 Internal Staff Only');
+    expect(staffContainer.textContent).toContain('Snapshot Date:');
+    expect(staffContainer.textContent).toContain('50% Done');
+    expect(staffContainer.textContent).toContain('3 Completed');
 
     // Opening the Reports view must NOT show any download toast
-    expect(container.textContent).not.toContain('Monthly report downloaded successfully');
+    expect(staffContainer.textContent).not.toContain('Monthly report downloaded successfully');
+
+    cleanup();
+
+    // Client view tests visible deliverables only
+    const { container: clientContainer } = render(
+      <ClientMonthlyReportsView
+        client={cloudZClient}
+        tasks={cloudZTasks.filter(t => !isInternalOnlyTask(t))}
+        isStaffView={false}
+      />
+    );
+    expect(clientContainer.textContent).toContain('4 Total Deliverables');
+    expect(clientContainer.textContent).toContain('(100% Client Visible)');
+    expect(clientContainer.textContent).not.toContain('Internal Staff Only');
   });
 
   it('Item 11: Analytics and Website & SEO pages show clean Not connected cards, zero placeholder telemetry text', () => {

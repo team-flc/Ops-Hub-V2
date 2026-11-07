@@ -253,26 +253,20 @@ describe('Client Dashboard 7 Failures & Unified Layout Test Suite', () => {
       />
     );
 
-    // Initial Dashboard tab has sidebar and stat cards
-    expect(screen.getByTestId('finfix-client-sidebar')).toBeDefined();
-    expect(screen.getByTestId('stat-project-completion')).toBeDefined();
-    expect(screen.getByTestId('stat-tasks-completed')).toBeDefined();
+    // In unified client view, 4 workspace tabs are present and no separate dashboard tab exists
+    expect(screen.getByTestId('tab-setup')).toBeDefined();
+    expect(screen.getByTestId('tab-workplans')).toBeDefined();
+    expect(screen.getByTestId('tab-details')).toBeDefined();
+    expect(screen.getByTestId('tab-reports')).toBeDefined();
+    expect(screen.queryByTestId('tab-dashboard')).toBeNull();
 
-    // Switch to 30-Day Setup
-    const setupTabBtn = screen.getByTestId('tab-setup');
-    fireEvent.click(setupTabBtn);
-
-    // Sidebar and stat cards remain persistent!
-    expect(screen.getByTestId('finfix-client-sidebar')).toBeDefined();
-    expect(screen.getByTestId('stat-project-completion')).toBeDefined();
+    // Stepper is defined
     expect(screen.getByTestId('client-week-stepper')).toBeDefined();
 
     // Switch to 90-Day Work Plans
     const workplansTabBtn = screen.getByTestId('tab-workplans');
     fireEvent.click(workplansTabBtn);
 
-    // Sidebar and stat cards remain persistent!
-    expect(screen.getByTestId('finfix-client-sidebar')).toBeDefined();
-    expect(screen.getByTestId('stat-project-completion')).toBeDefined();
+    expect(screen.getByTestId('tab-workplans')).toBeDefined();
   });
 });

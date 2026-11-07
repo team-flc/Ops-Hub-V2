@@ -20,13 +20,15 @@ interface ClientWorkPlanViewProps {
   currentUserProfile?: UserProfile | null;
   departments: Department[];
   onSelectWeek?: (weekNumber: number) => void;
+  isClientView?: boolean;
 }
 
 export const ClientWorkPlanView: React.FC<ClientWorkPlanViewProps> = ({
   client,
   currentUserProfile,
   departments,
-  onSelectWeek: _onSelectWeek
+  onSelectWeek: _onSelectWeek,
+  isClientView = false
 }) => {
   const [plans, setPlans] = useState<ClientWorkPlan[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -38,7 +40,9 @@ export const ClientWorkPlanView: React.FC<ClientWorkPlanViewProps> = ({
   const [selectedPlanForEdit, setSelectedPlanForEdit] = useState<ClientWorkPlan | null>(null);
   const [actionSuccessMessage, setActionSuccessMessage] = useState<string | null>(null);
 
-  const isOwnerOrManager = currentUserProfile?.role === 'owner' || currentUserProfile?.role === 'operational_manager';
+  const isPreview = typeof window !== 'undefined' && window.location.search.includes('preview=true');
+  const isEffectiveClientView = Boolean(isClientView || currentUserProfile?.role === 'client' || isPreview);
+  const isOwnerOrManager = !isEffectiveClientView && (currentUserProfile?.role === 'owner' || currentUserProfile?.role === 'operational_manager');
 
   const totalTasksAcrossPlans = React.useMemo(() => {
     return plans.reduce((acc, plan) => {

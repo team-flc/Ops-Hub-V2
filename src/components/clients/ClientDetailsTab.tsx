@@ -40,6 +40,7 @@ interface ClientDetailsTabProps {
   currentUserProfile?: UserProfile | null;
   eligibleManagers: UserProfile[];
   onClientUpdated: (updated: ClientRecord) => void;
+  isClientView?: boolean;
 }
 
 const PACKAGES: ClientPackage[] = ['Basic', 'Intermediate', 'Advanced'];
@@ -55,7 +56,8 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
   client,
   currentUserProfile,
   eligibleManagers,
-  onClientUpdated
+  onClientUpdated,
+  isClientView = false
 }) => {
   const [companyName, setCompanyName] = useState(client.companyName);
   const [clientName, setClientName] = useState(client.clientName);
@@ -425,15 +427,18 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     setShowDiscardModal(false);
   };
 
+  const isPreview = typeof window !== 'undefined' && window.location.search.includes('preview=true');
+  const isEffectiveClientView = Boolean(isClientView || currentUserProfile?.role === 'client' || isPreview);
   const isTeamMember = currentUserProfile?.role === 'team_member';
-  const isManagerOrOwner = currentUserProfile?.role === 'owner' || currentUserProfile?.role === 'operational_manager';
+  const isManagerOrOwner = !isEffectiveClientView && (currentUserProfile?.role === 'owner' || currentUserProfile?.role === 'operational_manager');
   const readiness = calculateLinkedInReadiness(requiredLinkedInCount, profiles);
   const displayLogoUrl = useSignedUrl('client-logos', logoUrl);
 
-  const isBioLocked = isTeamMember && Boolean(client.businessBio?.trim());
-  const isIndustryLocked = isTeamMember && Boolean(client.industry?.trim());
+  const isBioLocked = isEffectiveClientView || (isTeamMember && Boolean(client.businessBio?.trim()));
+  const isIndustryLocked = isEffectiveClientView || (isTeamMember && Boolean(client.industry?.trim()));
 
   const isLinkLocked = (linkKey: ClientLinkType | string) => {
+    if (isEffectiveClientView) return true;
     if (!isTeamMember) return false;
     let existing: string | undefined;
     if (linkKey === 'important_docs' || linkKey === 'important_documents') {
@@ -888,7 +893,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
               <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">
                 Client Details & Configuration
               </h3>
-              {isDirty && (
+              {!isEffectiveClientView && isDirty && (
                 <span
                   data-testid="unsaved-changes-indicator"
                   className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 animate-fade-in"
@@ -903,7 +908,8 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center gap-2.5 shrink-0">
+          {!isEffectiveClientView && (
+            <div className="flex items-center gap-2.5 shrink-0">
             <AutosaveBadge status={autosaveStatus} error={autosaveError} />
 
             {isDirty && (
@@ -935,6 +941,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
               )}
             </button>
           </div>
+          )}
         </div>
 
         {/* Client Brand Identity & Logo */}
@@ -956,9 +963,8 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                   {companyName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'CL'}
                 </div>
               )}
-              {!isTeamMember && (
-                <label
-                  htmlFor="client-logo-upload"
+              {!isEffectiveClientView && !isTeamMember && (
+                <label htmlFor="client-logo-upload"
                   className="absolute inset-0 bg-black/60 backdrop-blur-[1px] rounded-2xl opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white cursor-pointer transition-all duration-200 text-center p-1"
                 >
                   {isUploadingLogo ? (
@@ -1026,7 +1032,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 type="text"
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
-                disabled={isTeamMember}
+                disabled={isEffectiveClientView || isTeamMember}
                 required
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
@@ -1049,7 +1055,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 type="text"
                 value={clientName}
                 onChange={(e) => setClientName(e.target.value)}
-                disabled={isTeamMember}
+                disabled={isEffectiveClientView || isTeamMember}
                 required
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
@@ -1096,7 +1102,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 id="detail-package"
                 value={pkg}
                 onChange={(e) => setPkg(e.target.value as ClientPackage)}
-                disabled={isTeamMember}
+                disabled={isEffectiveClientView || isTeamMember}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {PACKAGES.map((p) => (
@@ -1121,7 +1127,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 id="detail-manager"
                 value={managerId}
                 onChange={(e) => setManagerId(e.target.value)}
-                disabled={isTeamMember}
+                disabled={isEffectiveClientView || isTeamMember}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {eligibleManagers.map((m) => (
@@ -1153,7 +1159,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 type="date"
                 value={activationDate}
                 onChange={(e) => setActivationDate(e.target.value)}
-                disabled={isTeamMember}
+                disabled={isEffectiveClientView || isTeamMember}
                 required
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
@@ -1178,7 +1184,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 id="detail-status"
                 value={status}
                 onChange={(e) => setStatus(e.target.value as ClientStatus)}
-                disabled={isTeamMember}
+                disabled={isEffectiveClientView || isTeamMember}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {STATUSES.map((s) => (
@@ -1207,7 +1213,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 max="20"
                 value={requiredLinkedInCount}
                 onChange={(e) => setRequiredLinkedInCount(Math.max(1, parseInt(e.target.value) || 1))}
-                disabled={isTeamMember}
+                disabled={isEffectiveClientView || isTeamMember}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
@@ -1246,7 +1252,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 id="detail-pause-reason"
                 value={pauseReason}
                 onChange={(e) => setPauseReason(e.target.value as ClientPauseReason)}
-                disabled={isTeamMember}
+                disabled={isEffectiveClientView || isTeamMember}
                 className="w-full px-3.5 py-2 rounded-xl border border-amber-300 dark:border-amber-700/50 bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none disabled:opacity-60"
               >
                 {PAUSE_REASONS.map((r) => (
@@ -2017,6 +2023,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                     </a>
                   </div>
 
+                  {!isEffectiveClientView && (
                   <button
                     type="button"
                     onClick={() => handleArchiveProfile(p.id)}
@@ -2026,6 +2033,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                     <Trash2 className="w-3.5 h-3.5" />
                     <span>Archive</span>
                   </button>
+                  )}
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -2034,9 +2042,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                       Label
                     </label>
                     <input
-                      type="text"
-                      value={p.profileLabel}
-                      onChange={(e) => handleUpdateProfile(p.id, { profileLabel: e.target.value })}
+                      type="text" value={p.profileLabel} disabled={isEffectiveClientView} onChange={(e) => handleUpdateProfile(p.id, { profileLabel: e.target.value })}
                       className="w-full px-3 py-1.5 rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none"
                     />
                   </div>
@@ -2046,9 +2052,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                       LinkedIn URL
                     </label>
                     <input
-                      type="url"
-                      value={p.profileUrl}
-                      onChange={(e) => handleUpdateProfile(p.id, { profileUrl: e.target.value })}
+                      type="url" value={p.profileUrl} disabled={isEffectiveClientView} onChange={(e) => handleUpdateProfile(p.id, { profileUrl: e.target.value })}
                       className="w-full px-3 py-1.5 rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none"
                     />
                   </div>
@@ -2058,9 +2062,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 <div className="pt-2 border-t border-gray-100 dark:border-dark-border/60 flex flex-wrap items-center gap-4">
                   <label className="flex items-center gap-2 cursor-pointer select-none">
                     <input
-                      type="checkbox"
-                      checked={p.salesNavigatorActive}
-                      onChange={(e) => {
+                      type="checkbox" checked={p.salesNavigatorActive} disabled={isEffectiveClientView} onChange={(e) => {
                         const checked = e.target.checked;
                         handleUpdateProfile(p.id, {
                           salesNavigatorActive: checked,
@@ -2091,9 +2093,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 <div className="pt-2 flex items-center gap-4">
                   <label className="flex items-center gap-2 cursor-pointer select-none">
                     <input
-                      type="checkbox"
-                      checked={p.linkedinVerified || false}
-                      onChange={(e) => handleUpdateProfile(p.id, { linkedinVerified: e.target.checked })}
+                      type="checkbox" checked={p.linkedinVerified || false} disabled={isEffectiveClientView} onChange={(e) => handleUpdateProfile(p.id, { linkedinVerified: e.target.checked })}
                       className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
                     />
                     <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
@@ -2145,6 +2145,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
         </div>
 
         {/* Add New Profile Drawer */}
+        {!isEffectiveClientView && (
         <div className="p-4 rounded-xl border border-blue-500/20 bg-blue-500/5 space-y-3">
           <div className="text-xs font-bold text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
             <Plus className="w-4 h-4" />
@@ -2266,6 +2267,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
             </button>
           </div>
         </div>
+        )}
       </div>
 
       {/* Archive Client Danger Zone (Owner & Operational Manager Only) */}

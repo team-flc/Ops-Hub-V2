@@ -199,6 +199,8 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
         navigate(`/clients/${profile.organizationId}`, { replace: true });
       } else if (!params.clientId && location.pathname.startsWith('/clients')) {
         navigate(`/clients/${profile.organizationId}`, { replace: true });
+      } else if (location.pathname === '/' || location.pathname.startsWith('/dashboard') || location.pathname.startsWith('/settings') || location.pathname.startsWith('/team') || location.pathname.startsWith('/operations')) {
+        navigate(`/clients/${profile.organizationId}`, { replace: true });
       }
     }
   }, [profile?.role, profile?.organizationId, params.clientId, location.pathname, navigate]);
@@ -222,6 +224,21 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
   }, [location.pathname, params.clientId, selectedClient?.id, clients.length, navigate]);
 
   const renderActiveView = () => {
+    if (profile?.role === 'client') {
+      const clientRecord = clients.find((c) => c.id === profile.organizationId) || selectedClient;
+      if (clientRecord) {
+        return (
+          <ClientWorkspaceView
+            key={clientRecord.id}
+            client={clientRecord}
+            currentUserProfile={profile}
+            eligibleManagers={eligibleManagers}
+            onClientUpdated={updateClientRecord}
+            isClientView={true}
+          />
+        );
+      }
+    }
     if (location.pathname.startsWith('/settings') || viewMode === 'settings') {
       const tabParam = params.tab || location.pathname.split('/settings/')[1];
       const defaultTab = isManagerOrOwner ? (initialSettingsTab || 'team') : 'dashboard';
@@ -311,8 +328,8 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
 
   return (
     <div className="flex h-[100dvh] w-full max-w-full overflow-hidden bg-gray-50 dark:bg-dark-400 text-gray-900 dark:text-gray-100 font-sans antialiased">
-      {/* Left Sidebar (Hidden in Client Preview Mode & Client View) */}
-      {!isClientPreview && !isClient && <Sidebar />}
+      {/* Left Sidebar (Identical for Staff & Client) */}
+      <Sidebar />
 
       {/* Main Workspace Area */}
       <div className="flex-1 flex flex-col min-w-0 h-full overflow-hidden">
@@ -337,8 +354,8 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
           </div>
         )}
 
-        {/* Top Header (Staff navigation only, hidden in Client View & Preview Mode) */}
-        {!isClientView && <Header />}
+        {/* Top Header (Identical for Staff & Client) */}
+        <Header />
 
         {/* Dynamic Views Content Container */}
         <main className="flex-1 overflow-y-auto bg-gray-50/50 dark:bg-dark-400">

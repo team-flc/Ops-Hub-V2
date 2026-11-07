@@ -465,8 +465,8 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
             </div>
           )}
 
-          {/* WORKFLOW STATUS MANAGEMENT BAR (Extracted Component, disabled in preview) */}
-          {!isPreview && (
+          {/* WORKFLOW STATUS MANAGEMENT BAR (Hidden in client view and preview) */}
+          {(!isClientView && !isPreview) && (
             <TaskReviewActions
               task={task}
               activeUser={activeUser}
@@ -498,8 +498,8 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
           />
         </div>
 
-        {/* COMPOSER AT BOTTOM OF DRAWER (Hidden in preview mode) */}
-        {!isPreview && (
+        {/* COMPOSER AT BOTTOM OF DRAWER (Hidden in client view and preview) */}
+        {(!isClientView && !isPreview) && (
           <TaskMessageComposer
             taskId={task.id}
             clientId={task.clientId}

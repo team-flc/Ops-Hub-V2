@@ -174,7 +174,8 @@ export const ClientMonthlyReportsView: React.FC<ClientMonthlyReportsViewProps> =
       monthsList.push({ year: d.getFullYear(), month: d.getMonth() });
     }
 
-    const unarchivedTasks = tasks.filter((t) => !t.archivedAt);
+    const effectiveBaseTasks = isStaffView ? tasks : tasks.filter((t) => !isInternalOnlyTask(t));
+    const unarchivedTasks = effectiveBaseTasks.filter((t) => !t.archivedAt);
     const snapshotDateStr = formatPKTDate(now.toISOString());
 
     return monthsList.map(({ year, month }) => {
@@ -209,8 +210,8 @@ export const ClientMonthlyReportsView: React.FC<ClientMonthlyReportsViewProps> =
 
       const completedTasks = monthTasks.filter((t) => t.status === 'Completed' || t.status === 'Done').length;
       const approvalTasks = monthTasks.filter((t) => isTaskApproval(t.status)).length;
-      const internalTasksCount = monthTasks.filter(isInternalOnlyTask).length;
-      const clientVisibleCount = monthTasks.length - internalTasksCount;
+      const internalTasksCount = isStaffView ? monthTasks.filter(isInternalOnlyTask).length : 0;
+      const clientVisibleCount = isStaffView ? (monthTasks.length - internalTasksCount) : monthTasks.length;
       const pendingTasks = Math.max(0, monthTasks.length - completedTasks);
       const completionPercent = monthTasks.length > 0 ? Math.round((completedTasks / monthTasks.length) * 100) : 0;
       const hasData = monthTasks.length > 0;
@@ -228,7 +229,7 @@ export const ClientMonthlyReportsView: React.FC<ClientMonthlyReportsViewProps> =
         approvalTasks,
         internalTasksCount,
         clientVisibleCount,
-        reconciliationText: internalTasksCount > 0
+        reconciliationText: isStaffView && internalTasksCount > 0
           ? `${clientVisibleCount} Client Visible + ${internalTasksCount} Internal Staff Only = ${monthTasks.length} Total Deliverables`
           : undefined,
         completionPercent,
@@ -363,7 +364,7 @@ export const ClientMonthlyReportsView: React.FC<ClientMonthlyReportsViewProps> =
                   </div>
                   <span className="text-xs text-slate-500 dark:text-slate-400 block mt-0.5">
                     Snapshot Date: {report.snapshotDateStr} &bull; {report.totalTasks} Total Deliverables
-                    {report.internalTasksCount > 0 ? (
+                    {isStaffView && report.internalTasksCount > 0 ? (
                       <span className="font-semibold text-amber-600 dark:text-amber-400 ml-1.5">
                         ({report.clientVisibleCount} Client Visible + {report.internalTasksCount} Internal Staff Only)
                       </span>

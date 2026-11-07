@@ -85,10 +85,7 @@ export const Sidebar: React.FC = () => {
   const isClientPreview = typeof window !== 'undefined' && location.search.includes('preview=true');
   const isClientView = isClient || isClientPreview;
 
-  // Never render staff sidebar in client view or client preview
-  if (isClientView) {
-    return null;
-  }
+  // Sidebar rendered identically for staff and client
 
   const loadClientData = useCallback(async () => {
     setIsClientsLoading(true);
@@ -350,9 +347,7 @@ export const Sidebar: React.FC = () => {
     }
   ];
 
-  const displayedWorkspaceLinks = isClientView
-    ? workspaceLinks.filter((l) => CLIENT_PERMITTED_LINK_KEYS.has(l.key) && !isInternalOrSensitiveUrl(l.url))
-    : workspaceLinks;
+  const displayedWorkspaceLinks = workspaceLinks;
 
   const activeWorkspaceLinks = displayedWorkspaceLinks.filter((l) => Boolean(l.url && l.url.trim()));
 
@@ -452,25 +447,27 @@ export const Sidebar: React.FC = () => {
         </div>
 
         <div className="flex flex-col items-center gap-3 flex-shrink-0">
-          {/* Settings icon for All Staff (Hidden for clients) */}
-          {!isClientView && (
-            <button
-              type="button"
-              onClick={() => {
-                navigate('/settings');
-                setViewMode('settings');
-                setMobileSidebarOpen(false);
-              }}
-              className={`p-2.5 rounded-xl transition-colors touch-target flex items-center justify-center cursor-pointer ${
-                isSettingsActive
-                  ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
-                  : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-100'
-              }`}
-              title="Settings"
-            >
-              <Building2 className="w-5 h-5" />
-            </button>
-          )}
+          {/* Settings icon at bottom (Staff opens settings, Client view read-only) */}
+          <button
+            type="button"
+            onClick={() => {
+              if (isClientView) return;
+              navigate('/settings');
+              setViewMode('settings');
+              setMobileSidebarOpen(false);
+            }}
+            disabled={isClientView}
+            className={`p-2.5 rounded-xl transition-colors touch-target flex items-center justify-center ${
+              isClientView
+                ? 'text-gray-400 cursor-default opacity-60'
+                : isSettingsActive
+                ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25 cursor-pointer'
+                : 'text-gray-400 hover:bg-gray-100 dark:hover:bg-dark-100 cursor-pointer'
+            }`}
+            title={isClientView ? 'Settings (Management Only)' : 'Settings'}
+          >
+            <Building2 className="w-5 h-5" />
+          </button>
 
           <button
             type="button"
@@ -709,27 +706,30 @@ export const Sidebar: React.FC = () => {
           )}
         </div>
 
-        {/* Bottom Section: Settings Action for All Staff (Hidden for clients) */}
-        {!isClientView && (
-          <div className="p-3 border-t border-gray-100 dark:border-dark-border/60 bg-gray-50/50 dark:bg-dark-300/30 flex-shrink-0 pb-safe md:pb-3">
-            <button
-              type="button"
-              onClick={() => {
-                navigate('/settings');
-                setViewMode('settings');
-                setMobileSidebarOpen(false);
-              }}
-              className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer touch-target ${
-                isSettingsActive
-                  ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25'
-                  : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-dark-100'
-              }`}
-            >
-              <Building2 className="w-4 h-4 shrink-0" />
-              <span className="truncate">Settings</span>
-            </button>
-          </div>
-        )}
+        {/* Bottom Section: Settings Action at bottom (Staff opens settings, Client view read-only) */}
+        <div className="p-3 border-t border-gray-100 dark:border-dark-border/60 bg-gray-50/50 dark:bg-dark-300/30 flex-shrink-0 pb-safe md:pb-3">
+          <button
+            type="button"
+            onClick={() => {
+              if (isClientView) return;
+              navigate('/settings');
+              setViewMode('settings');
+              setMobileSidebarOpen(false);
+            }}
+            disabled={isClientView}
+            className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-bold transition-colors touch-target ${
+              isClientView
+                ? 'text-gray-400 cursor-default opacity-60'
+                : isSettingsActive
+                ? 'bg-brand-500 text-white shadow-md shadow-brand-500/25 cursor-pointer'
+                : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-dark-100 cursor-pointer'
+            }`}
+            title={isClientView ? 'Settings (Management Only)' : 'Settings'}
+          >
+            <Building2 className="w-4 h-4 shrink-0" />
+            <span className="truncate">Settings</span>
+          </button>
+        </div>
       </aside>
 
       {/* Portalled Modals: mounted direct to document.body to prevent CSS transform containment */}
