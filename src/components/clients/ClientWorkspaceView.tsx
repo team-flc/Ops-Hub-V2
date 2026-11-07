@@ -537,7 +537,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                     <button
                       type="button"
                       onClick={() => setShowShieldedBreakdown(!showShieldedBreakdown)}
-                      className="text-[11px] font-bold text-teal-600 dark:text-teal-400 hover:underline cursor-pointer flex items-center gap-1"
+                      className="text-[11px] font-bold text-brand-600 dark:text-brand-400 hover:underline cursor-pointer flex items-center gap-1"
                     >
                       <span>{showShieldedBreakdown ? 'Hide Breakdown ▲' : `View ${totalInternalTasks} Shielded Tasks & Reasons ▼`}</span>
                     </button>
@@ -577,7 +577,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                     <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                       Week {currentWeekNum}: {weekNames[currentWeekNum]}
                     </span>
-                    <span className="text-xs font-semibold text-teal-600 dark:text-teal-400 flex items-center gap-1.5 animate-pulse">
+                    <span className="text-xs font-semibold text-brand-600 dark:text-brand-400 flex items-center gap-1.5 animate-pulse">
                       <Loader2 className="w-3.5 h-3.5 animate-spin" />
                       Loading...
                     </span>
@@ -604,7 +604,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                       type="button"
                       aria-label="+ Add Task"
                       onClick={handleOpenCreateTaskFlow}
-                      className="flex items-center gap-1.5 px-4 py-2 min-h-[44px] bg-[#0D9488] hover:bg-teal-700 text-white rounded-xl text-xs font-bold shadow-md shadow-teal-900/20 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
+                      className="flex items-center gap-1.5 px-4 py-2 min-h-[44px] bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-xs font-bold shadow-md shadow-brand-900/20 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
                     >
                       <Plus className="w-4 h-4" />
                       <span>Add Task</span>
@@ -765,7 +765,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                       <button
                         type="button"
                         onClick={() => setShowShieldedBreakdown(!showShieldedBreakdown)}
-                        className="text-[11px] font-bold text-teal-600 dark:text-teal-400 hover:underline cursor-pointer flex items-center gap-1"
+                        className="text-[11px] font-bold text-brand-600 dark:text-brand-400 hover:underline cursor-pointer flex items-center gap-1"
                       >
                         <span>{showShieldedBreakdown ? 'Hide Breakdown ▲' : `View ${totalInternalTasks} Shielded Tasks & Reasons ▼`}</span>
                       </button>
@@ -805,7 +805,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                       <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
                         Week {currentWeekNum}: {weekNames[currentWeekNum]}
                       </span>
-                      <span className="text-xs font-semibold text-teal-600 dark:text-teal-400 flex items-center gap-1.5 animate-pulse">
+                      <span className="text-xs font-semibold text-brand-600 dark:text-brand-400 flex items-center gap-1.5 animate-pulse">
                         <Loader2 className="w-3.5 h-3.5 animate-spin" />
                         Loading...
                       </span>

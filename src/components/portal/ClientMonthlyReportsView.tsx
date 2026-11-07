@@ -267,7 +267,7 @@ export const ClientMonthlyReportsView: React.FC<ClientMonthlyReportsViewProps> =
       {/* Toast Notification (ONLY displayed after user clicks download) */}
       {downloadSuccessToast && (
         <div className="fixed bottom-6 right-6 z-50 p-4 rounded-2xl bg-slate-900 text-white dark:bg-white dark:text-slate-900 text-xs font-bold shadow-2xl flex items-center gap-2 border border-slate-700/40">
-          <CheckCircle2 className="w-4 h-4 text-teal-400 shrink-0" />
+          <CheckCircle2 className="w-4 h-4 text-emerald-500 shrink-0" />
           <span>{downloadSuccessToast}</span>
         </div>
       )}
@@ -275,8 +275,8 @@ export const ClientMonthlyReportsView: React.FC<ClientMonthlyReportsViewProps> =
       {/* Header Banner */}
       <div className="p-6 rounded-2xl bg-white dark:bg-dark-card border border-slate-200/90 dark:border-dark-border shadow-xs flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div className="flex items-center gap-3.5">
-          <div className="w-11 h-11 rounded-2xl bg-teal-50 dark:bg-teal-950/40 border border-teal-200/80 dark:border-teal-800/40 flex items-center justify-center text-teal-600 dark:text-teal-400 shrink-0 shadow-xs">
-            <FileText className="w-5 h-5 text-teal-500" />
+          <div className="w-11 h-11 rounded-2xl bg-brand-50 dark:bg-brand-950/40 border border-brand-200/80 dark:border-brand-800/40 flex items-center justify-center text-brand-600 dark:text-brand-400 shrink-0 shadow-xs">
+            <FileText className="w-5 h-5 text-brand-500" />
           </div>
           <div>
             <div className="flex items-center gap-2">
@@ -303,7 +303,7 @@ export const ClientMonthlyReportsView: React.FC<ClientMonthlyReportsViewProps> =
               const latest = monthlyReports.find((r) => r.hasData);
               if (latest) handleDownload(latest);
             }}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#0D9488] hover:bg-teal-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer self-start sm:self-auto shrink-0"
+            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold transition-all shadow-xs cursor-pointer self-start sm:self-auto shrink-0"
           >
             <Download className="w-4 h-4 text-white" />
             <span>Download Latest Report</span>
@@ -349,7 +349,7 @@ export const ClientMonthlyReportsView: React.FC<ClientMonthlyReportsViewProps> =
               className="p-5 sm:p-6 rounded-2xl bg-white dark:bg-dark-card border border-slate-200/90 dark:border-dark-border shadow-xs hover:border-slate-300 dark:hover:border-dark-border/80 transition-all flex flex-col md:flex-row md:items-center justify-between gap-4"
             >
               <div className="flex items-start sm:items-center gap-3.5 min-w-0">
-                <div className="w-10 h-10 rounded-xl bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 border border-teal-200/60 dark:border-teal-800/40 flex items-center justify-center shrink-0">
+                <div className="w-10 h-10 rounded-xl bg-brand-50 dark:bg-brand-950/40 text-brand-600 dark:text-brand-400 border border-brand-200/60 dark:border-brand-800/40 flex items-center justify-center shrink-0">
                   <FileText className="w-5 h-5" />
                 </div>
                 <div className="min-w-0 flex-1">
@@ -406,7 +406,7 @@ export const ClientMonthlyReportsView: React.FC<ClientMonthlyReportsViewProps> =
                     type="button"
                     data-testid={`download-report-${report.monthKey}`}
                     onClick={() => handleDownload(report)}
-                    className="px-3 py-1.5 rounded-xl bg-[#0D9488] hover:bg-teal-700 text-white text-xs font-bold transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+                    className="px-3 py-1.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
                     title="Download report text file"
                   >
                     <Download className="w-3.5 h-3.5" />
@@ -432,7 +432,7 @@ export const ClientMonthlyReportsView: React.FC<ClientMonthlyReportsViewProps> =
           >
             <div className="p-5 border-b border-slate-200 dark:border-dark-border flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <div className="w-9 h-9 rounded-xl bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 border border-teal-200/60 dark:border-teal-800/40 flex items-center justify-center shrink-0">
+                <div className="w-9 h-9 rounded-xl bg-brand-50 dark:bg-brand-950/40 text-brand-600 dark:text-brand-400 border border-brand-200/60 dark:border-brand-800/40 flex items-center justify-center shrink-0">
                   <FileText className="w-4 h-4" />
                 </div>
                 <div>
@@ -477,7 +477,7 @@ export const ClientMonthlyReportsView: React.FC<ClientMonthlyReportsViewProps> =
               <button
                 type="button"
                 onClick={() => handleDownload(selectedReportForView)}
-                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-[#0D9488] hover:bg-teal-700 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold transition-all shadow-xs cursor-pointer"
               >
                 <Download className="w-4 h-4" />
                 <span>Download Report (.txt)</span>

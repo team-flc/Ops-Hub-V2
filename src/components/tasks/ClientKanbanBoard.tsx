@@ -201,7 +201,7 @@ export const ClientKanbanBoard: React.FC<ClientKanbanBoardProps> = ({
               onDrop={(e) => handleDrop(e, col.id)}
               className={`flex flex-col bg-white dark:bg-dark-card rounded-2xl border transition-all min-h-[360px] shadow-xs ${
                 isDragOver
-                  ? 'border-[#0D9488] ring-2 ring-teal-500/20 bg-teal-500/5'
+                  ? 'border-brand-500 ring-2 ring-brand-500/20 bg-brand-500/5'
                   : 'border-slate-200/90 dark:border-dark-border'
               }`}
             >

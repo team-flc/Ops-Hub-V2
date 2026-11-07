@@ -134,7 +134,7 @@ export const ClientWorkPlanView: React.FC<ClientWorkPlanViewProps> = ({
       <div className="bg-white dark:bg-dark-card rounded-2xl border border-slate-200/90 dark:border-dark-border p-5 sm:p-6 shadow-xs space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div className="flex items-center gap-3.5">
-            <div className="p-3 rounded-xl bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 border border-teal-200/80 dark:border-teal-800/40 shadow-xs">
+            <div className="p-3 rounded-xl bg-brand-50 dark:bg-brand-950/40 text-brand-600 dark:text-brand-400 border border-brand-200/80 dark:border-brand-800/40 shadow-xs">
               <Calendar className="w-5 h-5" />
             </div>
             <div>
@@ -142,7 +142,7 @@ export const ClientWorkPlanView: React.FC<ClientWorkPlanViewProps> = ({
                 <h2 className="text-base sm:text-lg font-black text-slate-900 dark:text-white tracking-tight">
                   90-Calendar-Day Operational Work Plans
                 </h2>
-                <span className="px-2.5 py-0.5 rounded-full bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 font-mono text-xs font-black border border-teal-200/80 dark:border-teal-800/40">
+                <span className="px-2.5 py-0.5 rounded-full bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300 font-mono text-xs font-black border border-brand-200/80 dark:border-brand-800/40">
                   13 Weeks
                 </span>
                 <span className="px-2.5 py-0.5 rounded-full bg-slate-100 dark:bg-dark-200 text-slate-700 dark:text-slate-300 font-mono text-xs font-black border border-slate-200 dark:border-dark-border">
@@ -165,7 +165,7 @@ export const ClientWorkPlanView: React.FC<ClientWorkPlanViewProps> = ({
                 onClick={handleOpenNewBuilder}
                 disabled={client.status === 'Paused' || isUnavailable}
                 title={isUnavailable ? 'Phase 3D backend is not enabled in this environment yet. Preview is read-only.' : undefined}
-                className="flex items-center gap-1.5 px-4 py-2.5 min-h-[44px] bg-[#0D9488] hover:bg-teal-700 disabled:bg-slate-300 dark:disabled:bg-dark-100 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold shadow-md shadow-teal-900/20 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
+                className="flex items-center gap-1.5 px-4 py-2.5 min-h-[44px] bg-brand-500 hover:bg-brand-600 disabled:bg-slate-300 dark:disabled:bg-dark-100 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold shadow-md shadow-brand-900/20 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
                 <span>Build 90-Day Plan</span>
@@ -362,7 +362,7 @@ export const ClientWorkPlanView: React.FC<ClientWorkPlanViewProps> = ({
       ) : (
         /* Empty State (Modern Dashboard Card Format) */
         <div className="bg-white dark:bg-dark-card rounded-2xl border border-slate-200/90 dark:border-dark-border p-12 shadow-sm min-h-[260px] flex flex-col items-center justify-center text-center space-y-4">
-          <div className="w-12 h-12 rounded-2xl bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 flex items-center justify-center border border-teal-200/80 dark:border-teal-800/40 shadow-xs">
+          <div className="w-12 h-12 rounded-2xl bg-brand-50 dark:bg-brand-950/40 text-brand-600 dark:text-brand-400 flex items-center justify-center border border-brand-200/80 dark:border-brand-800/40 shadow-xs">
             <Calendar className="w-6 h-6" />
           </div>
           <div className="max-w-md space-y-1.5">
@@ -380,7 +380,7 @@ export const ClientWorkPlanView: React.FC<ClientWorkPlanViewProps> = ({
               onClick={handleOpenNewBuilder}
               disabled={client.status === 'Paused' || isUnavailable}
               title={isUnavailable ? 'Phase 3D backend is not enabled in this environment yet. Preview is read-only.' : undefined}
-              className="flex items-center gap-1.5 px-4 py-2.5 min-h-[44px] bg-[#0D9488] hover:bg-teal-700 disabled:bg-slate-300 dark:disabled:bg-dark-100 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold shadow-md shadow-teal-900/20 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
+              className="flex items-center gap-1.5 px-4 py-2.5 min-h-[44px] bg-brand-500 hover:bg-brand-600 disabled:bg-slate-300 dark:disabled:bg-dark-100 disabled:cursor-not-allowed text-white rounded-xl text-xs font-bold shadow-md shadow-brand-900/20 hover:scale-[1.02] active:scale-[0.98] transition-all cursor-pointer"
             >
               <Plus className="w-4 h-4" />
               <span>Create First 90-Day Work Plan</span>

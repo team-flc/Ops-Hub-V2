@@ -555,10 +555,10 @@ export const Sidebar: React.FC = () => {
 
           {/* Client Workspace Links (Problem 4: 1366x768 Laptop Optimization with Jump Pills & Visible Scrollbar) */}
           {selectedClient && (
-            <div className="flex-1 p-3 overflow-y-auto min-h-0 custom-scrollbar scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-dark-100 hover:scrollbar-thumb-teal-500">
+            <div className="flex-1 p-3 overflow-y-auto min-h-0 custom-scrollbar scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-dark-100 hover:scrollbar-thumb-brand-500">
               <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1.5 px-1 flex items-center justify-between">
                 <span>Workspace Links</span>
-                <span className="text-[9px] font-mono text-teal-600 dark:text-teal-400 font-semibold">{activeWorkspaceLinks.length} active</span>
+                <span className="text-[9px] font-mono text-brand-600 dark:text-brand-400 font-semibold">{activeWorkspaceLinks.length} active</span>
               </div>
 
               {/* Quick Jump Category Pills for 768px Laptop Screens */}
@@ -571,7 +571,7 @@ export const Sidebar: React.FC = () => {
                       const el = document.getElementById(`workspace-cat-${cat.id}`);
                       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }}
-                    className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-dark-200 hover:bg-teal-50 dark:hover:bg-teal-950/40 text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-teal-400 font-semibold transition-colors shrink-0 cursor-pointer"
+                    className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-dark-200 hover:bg-brand-50 dark:hover:bg-brand-950/40 text-slate-600 dark:text-slate-300 hover:text-brand-600 dark:hover:text-brand-400 font-semibold transition-colors shrink-0 cursor-pointer"
                   >
                     {cat.label.split(' ')[0]}
                   </button>
@@ -698,7 +698,7 @@ export const Sidebar: React.FC = () => {
                       const el = document.getElementById('workspace-cat-contact');
                       if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
                     }}
-                    className="text-[9px] font-bold text-teal-600 dark:text-teal-400 hover:underline flex items-center justify-center gap-1 mx-auto cursor-pointer"
+                    className="text-[9px] font-bold text-brand-600 dark:text-brand-400 hover:underline flex items-center justify-center gap-1 mx-auto cursor-pointer"
                   >
                     <span>Slack, WhatsApp & POC below</span>
                     <ArrowDown className="w-2.5 h-2.5 animate-bounce" />

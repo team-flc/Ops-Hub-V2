@@ -27,8 +27,7 @@ import {
   Check,
   FileDown,
   Calendar,
-  Zap,
-  Bell,
+    Bell,
   ChevronDown,
   Rocket,
   Crown,
@@ -47,6 +46,7 @@ import {
   PieChart
 } from 'lucide-react';
 import { ClientRecord, ClientTask, UserProfile, DEFAULT_WEEK_NAMES } from '../../types';
+import { useSignedUrl } from '../../lib/storageService';
 import { taskManagementService } from '../../lib/taskManagementService';
 import {
   filterAndSanitizeClientDeliverables,
@@ -708,6 +708,8 @@ Thank you for partnering with Ops Hub.
     }
   };
 
+  const rawLogo = client.logoUrl || (client as any).logo_url;
+  const clientDisplayLogoUrl = useSignedUrl('client-logos', rawLogo);
   const clientGreetingName = client.companyName || client.clientName || 'Partner';
   const clientContactName = client.clientName || client.companyName || 'Client Partner';
   const clientInitials = useMemo(() => {
@@ -735,24 +737,46 @@ Thank you for partnering with Ops Hub.
 
   return (
     <div className="flex h-full min-h-[calc(100vh-160px)] w-full overflow-hidden bg-[#F4F7FB] dark:bg-dark-400 text-slate-800 dark:text-slate-100 font-sans antialiased">
-      {/* 1. Dark Navy Sidebar (15 Items in Strict Order, Teal Accents) */}
+      {/* 1. Dark Navy Sidebar (15 Items in Strict Order, Faseeh Lall & Co Red Branding) */}
       <aside
         data-testid="finfix-client-sidebar"
         className="w-64 flex-shrink-0 flex flex-col justify-between bg-[#0B111E] dark:bg-[#070b14] border-r border-slate-800/80 dark:border-dark-border z-20 select-none shadow-xl"
       >
         <div className="flex flex-col h-full min-h-0">
           {/* Logo & Client Workspace Header */}
-          <div className="p-5 border-b border-slate-800/80 dark:border-dark-border flex items-center gap-3">
-            <div className="w-9 h-9 rounded-xl bg-teal-500/15 border border-teal-500/30 flex items-center justify-center text-teal-400 font-black shadow-inner">
-              <Zap className="w-5 h-5 text-teal-400" />
+          <div className="p-4 border-b border-slate-800/80 dark:border-dark-border space-y-2.5">
+            <div className="flex items-center">
+              <img
+                src="/logo.png"
+                alt="FASEEH LALL & CO."
+                className="h-7 w-auto object-contain"
+                data-testid="faseeh-lall-brand-logo"
+              />
             </div>
-            <div className="min-w-0 flex-1">
-              <h2 className="text-sm font-extrabold text-white truncate leading-tight tracking-tight">
-                {client.companyName || client.clientName}
-              </h2>
-              <span className="text-[10px] uppercase font-bold tracking-wider text-teal-400/90 block truncate">
-                Client Workspace
-              </span>
+            <div className="flex items-center gap-2.5 pt-2 border-t border-slate-800/70">
+              {clientDisplayLogoUrl ? (
+                <img
+                  src={clientDisplayLogoUrl}
+                  alt={client.companyName || client.clientName}
+                  data-testid="client-secondary-logo"
+                  className="w-8 h-8 rounded-lg object-contain border border-slate-700/80 p-0.5 bg-white shrink-0 shadow-xs"
+                />
+              ) : (
+                <div
+                  data-testid="client-initials-avatar"
+                  className="w-8 h-8 rounded-lg bg-brand-500 text-white font-black text-xs flex items-center justify-center shrink-0 shadow-xs"
+                >
+                  {clientInitials}
+                </div>
+              )}
+              <div className="min-w-0 flex-1">
+                <h2 className="text-xs font-extrabold text-white truncate leading-tight tracking-tight">
+                  {client.companyName || client.clientName}
+                </h2>
+                <span className="text-[10px] uppercase font-bold tracking-wider text-brand-400 block truncate">
+                  Client Workspace
+                </span>
+              </div>
             </div>
           </div>
 
@@ -772,7 +796,7 @@ Thank you for partnering with Ops Hub.
                   onClick={() => handleNavClick(item.key)}
                   className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
                     isSelected
-                      ? 'bg-[#0D9488] text-white font-bold shadow-md shadow-teal-900/30'
+                      ? 'bg-brand-500 text-white font-bold shadow-md shadow-brand-900/40'
                       : 'text-slate-400 hover:text-slate-200 hover:bg-slate-900/60'
                   }`}
                 >
@@ -884,10 +908,10 @@ Thank you for partnering with Ops Hub.
                 >
                   <div className="p-4 border-b border-slate-100 dark:border-dark-border flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <Bell className="w-4 h-4 text-teal-600" />
+                      <Bell className="w-4 h-4 text-brand-600" />
                       <h4 className="text-xs font-bold text-slate-900 dark:text-white">Workspace Notifications</h4>
                     </div>
-                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300">
+                    <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300">
                       {clientNotifications.length} Total
                     </span>
                   </div>
@@ -902,7 +926,7 @@ Thank you for partnering with Ops Hub.
                           className="w-full text-left p-3.5 hover:bg-slate-50 dark:hover:bg-dark-300/40 transition-colors flex items-start gap-3 cursor-pointer"
                         >
                           <div className={`w-2 h-2 rounded-full mt-1.5 shrink-0 ${
-                            notif.type === 'approval' ? 'bg-amber-500' : notif.type === 'progress' ? 'bg-teal-500' : 'bg-emerald-500'
+                            notif.type === 'approval' ? 'bg-amber-500' : notif.type === 'progress' ? 'bg-blue-500' : 'bg-emerald-500'
                           }`} />
                           <div className="min-w-0 flex-1">
                             <h5 className="text-xs font-bold text-slate-900 dark:text-white truncate">
@@ -929,9 +953,21 @@ Thank you for partnering with Ops Hub.
 
             {/* Client User Avatar */}
             <div className="flex items-center gap-2 pl-3 border-l border-slate-200 dark:border-dark-border">
-              <div className="w-9 h-9 rounded-full bg-[#0D9488] text-white font-bold text-xs flex items-center justify-center shadow-xs">
-                {clientInitials}
-              </div>
+              {clientDisplayLogoUrl ? (
+                <img
+                  src={clientDisplayLogoUrl}
+                  alt={client.companyName || client.clientName}
+                  data-testid="header-client-logo"
+                  className="w-9 h-9 rounded-full object-contain border border-slate-200 dark:border-dark-border p-0.5 bg-white shadow-xs"
+                />
+              ) : (
+                <div
+                  data-testid="header-client-avatar"
+                  className="w-9 h-9 rounded-full bg-brand-500 text-white font-bold text-xs flex items-center justify-center shadow-xs"
+                >
+                  {clientInitials}
+                </div>
+              )}
               <span className="text-xs font-bold text-slate-900 dark:text-white hidden sm:inline">
                 {clientContactName}
               </span>
@@ -952,7 +988,7 @@ Thank you for partnering with Ops Hub.
                   onClick={() => onMainTabChange('dashboard')}
                   className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     activeMainTab === 'dashboard'
-                      ? 'bg-[#0D9488] text-white shadow-xs'
+                      ? 'bg-brand-500 text-white shadow-xs'
                       : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-200'
                   }`}
                 >
@@ -967,7 +1003,7 @@ Thank you for partnering with Ops Hub.
                 onClick={() => onMainTabChange('setup')}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   activeMainTab === 'setup'
-                    ? 'bg-[#0D9488] text-white shadow-xs'
+                    ? 'bg-brand-500 text-white shadow-xs'
                     : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-200'
                 }`}
               >
@@ -981,7 +1017,7 @@ Thank you for partnering with Ops Hub.
                 onClick={() => onMainTabChange('workplans')}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                   activeMainTab === 'workplans'
-                    ? 'bg-[#0D9488] text-white shadow-xs'
+                    ? 'bg-brand-500 text-white shadow-xs'
                     : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-200'
                 }`}
               >
@@ -996,7 +1032,7 @@ Thank you for partnering with Ops Hub.
                   onClick={() => onMainTabChange('details')}
                   className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
                     activeMainTab === 'details'
-                      ? 'bg-[#0D9488] text-white shadow-xs'
+                      ? 'bg-brand-500 text-white shadow-xs'
                       : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-200'
                   }`}
                 >
@@ -1017,7 +1053,7 @@ Thank you for partnering with Ops Hub.
             }
           >
             <div className="flex items-center gap-3.5">
-              <div className="w-11 h-11 rounded-xl bg-teal-50 dark:bg-teal-950/40 border border-teal-200/80 dark:border-teal-800/40 flex items-center justify-center text-teal-600 dark:text-teal-400 shrink-0 shadow-xs">
+              <div className="w-11 h-11 rounded-xl bg-brand-50 dark:bg-brand-950/40 border border-brand-200/80 dark:border-brand-800/40 flex items-center justify-center text-brand-600 dark:text-brand-400 shrink-0 shadow-xs">
                 <Sparkles className="w-5 h-5" />
               </div>
               <div>
@@ -1097,7 +1133,7 @@ Thank you for partnering with Ops Hub.
               className="p-6 rounded-2xl bg-white dark:bg-dark-card border border-slate-200/80 dark:border-dark-border shadow-xs hover:shadow-md flex flex-col justify-between space-y-4 hover:border-slate-300 dark:hover:border-dark-border/80 transition-all"
             >
               <div className="flex items-center gap-2.5 text-xs text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider">
-                <div className="w-8 h-8 rounded-full bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 border border-teal-200/60 dark:border-teal-800/40 flex items-center justify-center shrink-0">
+                <div className="w-8 h-8 rounded-full bg-brand-50 dark:bg-brand-950/40 text-brand-600 dark:text-brand-400 border border-brand-200/60 dark:border-brand-800/40 flex items-center justify-center shrink-0">
                   <Target className="w-4 h-4" />
                 </div>
                 <span>Project Completion</span>
@@ -1222,7 +1258,7 @@ Thank you for partnering with Ops Hub.
                 >
                   <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-100 dark:border-dark-border">
                     <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-xl bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 flex items-center justify-center shrink-0 border border-teal-200/60 dark:border-teal-800/40">
+                      <div className="w-8 h-8 rounded-xl bg-brand-50 dark:bg-brand-950/40 text-brand-600 dark:text-brand-400 flex items-center justify-center shrink-0 border border-brand-200/60 dark:border-brand-800/40">
                         <TrendingUp className="w-4 h-4" />
                       </div>
                       <div>
@@ -1246,7 +1282,7 @@ Thank you for partnering with Ops Hub.
                               !isPerformanceSourceConnected
                                 ? 'opacity-40 cursor-not-allowed text-slate-400 dark:text-slate-500'
                                 : performanceRange === r
-                                ? 'bg-[#0D9488] text-white shadow-xs font-extrabold cursor-pointer'
+                                ? 'bg-brand-500 text-white shadow-xs font-extrabold cursor-pointer'
                                 : 'text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white cursor-pointer'
                             }`}
                           >
@@ -1264,7 +1300,7 @@ Thank you for partnering with Ops Hub.
                   <span className="sr-only">Website Traffic & Leads: Not connected</span>
 
                   <div className="relative w-full h-64 flex flex-col items-center justify-center p-6 text-center rounded-xl bg-slate-50/70 dark:bg-dark-300/30 border border-dashed border-slate-200 dark:border-dark-border space-y-2.5 my-auto">
-                    <div className="w-10 h-10 rounded-full bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 flex items-center justify-center">
+                    <div className="w-10 h-10 rounded-full bg-brand-50 dark:bg-brand-950/40 text-brand-600 dark:text-brand-400 flex items-center justify-center">
                       <TrendingUp className="w-5 h-5" />
                     </div>
                     <div className="space-y-1">
@@ -1281,7 +1317,7 @@ Thank you for partnering with Ops Hub.
                       <button
                         type="button"
                         onClick={() => handleNavClick('settings')}
-                        className="px-3 py-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 dark:bg-teal-950/40 dark:hover:bg-teal-900/50 text-teal-700 dark:text-teal-300 text-xs font-bold border border-teal-200 dark:border-teal-800 transition-colors cursor-pointer"
+                        className="px-3 py-1.5 rounded-lg bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/40 dark:hover:bg-brand-900/50 text-brand-700 dark:text-brand-300 text-xs font-bold border border-brand-200 dark:border-brand-800 transition-colors cursor-pointer"
                       >
                         + Connect Google Analytics
                       </button>
@@ -1331,7 +1367,7 @@ Thank you for partnering with Ops Hub.
                           setActiveTab('projects');
                         }
                       }}
-                      className="text-xs font-bold text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 flex items-center gap-1 transition-colors cursor-pointer"
+                      className="text-xs font-bold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 flex items-center gap-1 transition-colors cursor-pointer"
                     >
                       <span>View All &rarr;</span>
                     </button>
@@ -1340,7 +1376,7 @@ Thank you for partnering with Ops Hub.
                   <div className="space-y-4 pt-1">
                     {projectRows.map((proj, idx) => {
                       const colors = [
-                        { bar: 'bg-[#0D9488]', pill: 'bg-[#0D9488] text-white' },
+                        { bar: 'bg-brand-500', pill: 'bg-blue-600 text-white' },
                         { bar: 'bg-[#8B5CF6]', pill: 'bg-[#8B5CF6] text-white' },
                         { bar: 'bg-[#F59E0B]', pill: 'bg-[#F59E0B] text-white' },
                         { bar: 'bg-slate-300 dark:bg-dark-border', pill: 'bg-slate-200 dark:bg-dark-200 text-slate-600 dark:text-slate-300' }
@@ -1377,11 +1413,9 @@ Thank you for partnering with Ops Hub.
                               className={`h-full rounded-full transition-all duration-500 ${
                                 proj.status === 'Completed'
                                   ? 'bg-emerald-600'
-                                  : proj.status === 'In Progress'
-                                  ? color.bar
-                                  : proj.status === 'In Review'
-                                  ? 'bg-purple-600'
-                                  : 'bg-amber-500'
+                                  : proj.percent > 0
+                                  ? 'bg-brand-500'
+                                  : 'bg-slate-300 dark:bg-dark-border'
                               }`}
                             />
                           </div>
@@ -1401,14 +1435,14 @@ Thank you for partnering with Ops Hub.
                 >
                   <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-dark-border">
                     <div className="flex items-center gap-2.5">
-                      <div className="w-8 h-8 rounded-xl bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 flex items-center justify-center shrink-0 border border-teal-200/60 dark:border-teal-800/40">
+                      <div className="w-8 h-8 rounded-xl bg-brand-50 dark:bg-brand-950/40 text-brand-600 dark:text-brand-400 flex items-center justify-center shrink-0 border border-brand-200/60 dark:border-brand-800/40">
                         <CreditCard className="w-4 h-4" />
                       </div>
                       <h4 className="text-base font-bold text-slate-900 dark:text-white">Subscription & Billing</h4>
                     </div>
                   </div>
 
-                  <div className="p-4.5 rounded-2xl bg-[#E8F6F3] dark:bg-teal-950/20 border border-teal-200/90 dark:border-teal-800/40 space-y-3 shadow-xs">
+                  <div className="p-4.5 rounded-2xl bg-slate-50 dark:bg-dark-300/40 border border-slate-200/90 dark:border-dark-border space-y-3 shadow-xs">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2.5">
                         <div className="w-7 h-7 rounded-full bg-emerald-100 dark:bg-emerald-950/40 flex items-center justify-center text-emerald-700 dark:text-emerald-400">
@@ -1435,16 +1469,16 @@ Thank you for partnering with Ops Hub.
                       </div>
                     </div>
 
-                    <div className="pt-2.5 border-t border-teal-200/70 dark:border-teal-800/40 flex items-center justify-between text-xs">
+                    <div className="pt-2.5 border-t border-slate-200/70 dark:border-dark-border/60 flex items-center justify-between text-xs">
                       <div className="flex items-center gap-2">
-                        <Calendar className="w-3.5 h-3.5 text-teal-700 dark:text-teal-400" />
+                        <Calendar className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                         <div>
                           <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium block">Next Billing Date</span>
                           <span className="font-bold text-slate-900 dark:text-white font-mono">{nextBillingDate}</span>
                         </div>
                       </div>
                       <div className="flex items-center gap-2 text-right">
-                        <CreditCard className="w-3.5 h-3.5 text-teal-700 dark:text-teal-400" />
+                        <CreditCard className="w-3.5 h-3.5 text-slate-500 dark:text-slate-400" />
                         <div>
                           <span className="text-[10px] text-slate-500 dark:text-slate-400 font-medium block">Payment Status</span>
                           <span className="font-bold text-emerald-700 dark:text-emerald-400 flex items-center justify-end gap-1">
@@ -1460,7 +1494,7 @@ Thank you for partnering with Ops Hub.
                     onClick={handleDownloadReceipt}
                     className="w-full py-2.5 px-4 rounded-xl bg-white hover:bg-slate-50 dark:bg-dark-200 dark:hover:bg-dark-100 text-slate-800 dark:text-white text-xs sm:text-sm font-bold border border-slate-200 dark:border-dark-border transition-colors flex items-center justify-center gap-2 cursor-pointer shadow-xs"
                   >
-                    <Receipt className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                    <Receipt className="w-4 h-4 text-brand-600 dark:text-brand-400" />
                     <span>Download Receipt</span>
                   </button>
                 </div>
@@ -1481,7 +1515,7 @@ Thank you for partnering with Ops Hub.
                       type="button"
                       data-testid="recent-activity-view-all"
                       onClick={() => setIsRecentActivityModalOpen(true)}
-                      className="text-xs font-bold text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 flex items-center gap-1 transition-colors cursor-pointer"
+                      className="text-xs font-bold text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 flex items-center gap-1 transition-colors cursor-pointer"
                     >
                       <span>View All &rarr;</span>
                     </button>
@@ -1585,7 +1619,7 @@ Thank you for partnering with Ops Hub.
                       <button
                         type="button"
                         onClick={() => handleNavClick('settings')}
-                        className="px-3 py-1.5 rounded-lg bg-teal-50 hover:bg-teal-100 dark:bg-teal-950/40 dark:hover:bg-teal-900/50 text-teal-700 dark:text-teal-300 text-xs font-bold border border-teal-200 dark:border-teal-800 transition-colors cursor-pointer"
+                        className="px-3 py-1.5 rounded-lg bg-brand-50 hover:bg-brand-100 dark:bg-brand-950/40 dark:hover:bg-brand-900/50 text-brand-700 dark:text-brand-300 text-xs font-bold border border-brand-200 dark:border-brand-800 transition-colors cursor-pointer"
                       >
                         + Connect Meta
                       </button>
@@ -1602,8 +1636,8 @@ Thank you for partnering with Ops Hub.
                 <div className="flex items-center gap-3.5">
                   {realProgressStatusLine && (
                     <>
-                      <div className="w-10 h-10 rounded-xl bg-teal-50 dark:bg-teal-950/40 border border-teal-200/80 dark:border-teal-800/40 flex items-center justify-center text-teal-600 dark:text-teal-400 shrink-0 shadow-xs">
-                        <Sparkles className="w-5 h-5 text-teal-500" />
+                      <div className="w-10 h-10 rounded-xl bg-brand-50 dark:bg-brand-950/40 border border-brand-200/80 dark:border-brand-800/40 flex items-center justify-center text-brand-600 dark:text-brand-400 shrink-0 shadow-xs">
+                        <Sparkles className="w-5 h-5 text-brand-500" />
                       </div>
                       <div>
                         <h4 className="text-sm font-bold text-slate-900 dark:text-white">
@@ -1618,7 +1652,7 @@ Thank you for partnering with Ops Hub.
                   type="button"
                   onClick={handleDownloadReport}
                   disabled={isGeneratingReport}
-                  className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-[#0D9488] hover:bg-teal-700 text-white font-bold text-xs sm:text-sm transition-colors shadow-xs cursor-pointer shrink-0 ml-auto sm:ml-0"
+                  className="flex items-center justify-center gap-2 px-6 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs sm:text-sm transition-colors shadow-xs cursor-pointer shrink-0 ml-auto sm:ml-0"
                 >
                   <FileDown className="w-4 h-4 text-white" />
                   <span>{isGeneratingReport ? 'Generating...' : 'Download Monthly Report'}</span>
@@ -1644,7 +1678,7 @@ Thank you for partnering with Ops Hub.
                         onClick={() => setActiveProjectWeek(wk)}
                         className={`p-3 rounded-xl border text-left transition-all cursor-pointer ${
                           isActive
-                            ? 'bg-teal-50/50 dark:bg-teal-950/20 border-teal-500/50 text-teal-950 dark:text-teal-200 shadow-xs'
+                            ? 'bg-brand-50/50 dark:bg-brand-950/20 border-brand-500/50 text-brand-950 dark:text-brand-200 shadow-xs'
                             : 'bg-slate-50 dark:bg-dark-200/50 border-slate-200 dark:border-dark-border hover:bg-slate-100/80 dark:hover:bg-dark-200 text-slate-600 dark:text-slate-400'
                         }`}
                       >
@@ -1691,7 +1725,7 @@ Thank you for partnering with Ops Hub.
                                   : isTaskAwaitingApproval(t.status)
                                   ? 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300 border border-purple-200 dark:border-purple-800'
                                   : t.status === 'In Progress'
-                                  ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800'
+                                  ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800'
                                   : 'bg-slate-200 dark:bg-dark-100 text-slate-600 dark:text-slate-300'
                               }`}
                             >
@@ -1712,7 +1746,7 @@ Thank you for partnering with Ops Hub.
                               href={t.evidenceUrl}
                               target="_blank"
                               rel="noopener noreferrer"
-                              className="text-[11px] text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 flex items-center gap-1 font-bold"
+                              className="text-[11px] text-brand-600 dark:text-brand-400 hover:text-brand-700 dark:hover:text-brand-300 flex items-center gap-1 font-bold"
                             >
                               <span>View Deliverable</span>
                               <ExternalLink className="w-3 h-3" />
@@ -1755,7 +1789,7 @@ Thank you for partnering with Ops Hub.
                           <button
                             type="button"
                             onClick={() => alert('Deliverable approved successfully.')}
-                            className="px-3 py-1.5 rounded-lg bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs transition-colors cursor-pointer shadow-xs"
+                            className="px-3 py-1.5 rounded-lg bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs transition-colors cursor-pointer shadow-xs"
                           >
                             Approve Deliverable
                           </button>
@@ -1783,7 +1817,7 @@ Thank you for partnering with Ops Hub.
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
                   <div className="p-4 rounded-xl bg-slate-50 dark:bg-dark-300/40 border border-slate-200/80 dark:border-dark-border flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-full bg-teal-50 dark:bg-teal-950/40 border border-teal-200 dark:border-teal-800 flex items-center justify-center font-bold text-teal-600 dark:text-teal-400">
+                    <div className="w-10 h-10 rounded-full bg-brand-50 dark:bg-brand-950/40 border border-brand-200 dark:border-brand-800 flex items-center justify-center font-bold text-brand-600 dark:text-brand-400">
                       FL
                     </div>
                     <div>
@@ -1823,7 +1857,7 @@ Thank you for partnering with Ops Hub.
               <div className="p-6 rounded-2xl bg-white dark:bg-dark-card border border-slate-200/90 dark:border-dark-border shadow-xs space-y-4">
                 <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-4 border-b border-slate-100 dark:border-dark-border">
                   <div className="flex items-center gap-3">
-                    <div className="w-10 h-10 rounded-xl bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 border border-teal-200/60 dark:border-teal-800/40 flex items-center justify-center shrink-0">
+                    <div className="w-10 h-10 rounded-xl bg-brand-50 dark:bg-brand-950/40 text-brand-600 dark:text-brand-400 border border-brand-200/60 dark:border-brand-800/40 flex items-center justify-center shrink-0">
                       <BarChart3 className="w-5 h-5" />
                     </div>
                     <div>
@@ -1837,7 +1871,7 @@ Thank you for partnering with Ops Hub.
                 </div>
 
                 <div className="p-8 text-center rounded-xl bg-slate-50/70 dark:bg-dark-300/30 border border-dashed border-slate-200 dark:border-dark-border space-y-3">
-                  <div className="w-12 h-12 rounded-2xl bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 flex items-center justify-center mx-auto border border-teal-200/60 dark:border-teal-800/40">
+                  <div className="w-12 h-12 rounded-2xl bg-brand-50 dark:bg-brand-950/40 text-brand-600 dark:text-brand-400 flex items-center justify-center mx-auto border border-brand-200/60 dark:border-brand-800/40">
                     <TrendingUp className="w-6 h-6" />
                   </div>
                   <div className="space-y-1">
@@ -1850,7 +1884,7 @@ Thank you for partnering with Ops Hub.
                     <button
                       type="button"
                       onClick={() => handleNavClick('settings')}
-                      className="px-4 py-2 rounded-xl bg-[#0D9488] hover:bg-teal-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                      className="px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
                     >
                       + Connect Google Analytics
                     </button>
@@ -1907,7 +1941,7 @@ Thank you for partnering with Ops Hub.
                     <button
                       type="button"
                       onClick={() => handleNavClick('settings')}
-                      className="px-4 py-2 rounded-xl bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
+                      className="px-4 py-2 rounded-xl bg-brand-500 hover:bg-brand-600 text-white font-bold text-xs shadow-xs transition-colors cursor-pointer"
                     >
                       + Connect Google Search Console
                     </button>
@@ -1966,7 +2000,7 @@ Thank you for partnering with Ops Hub.
                   <button
                     type="button"
                     onClick={handleDownloadReport}
-                    className="px-4 py-2.5 rounded-xl bg-[#0D9488] hover:bg-teal-700 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer"
+                    className="px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold transition-all shadow-xs flex items-center gap-2 cursor-pointer"
                   >
                     <FileText className="w-4 h-4 text-white" />
                     <span>Download Monthly Report</span>
@@ -1990,7 +2024,7 @@ Thank you for partnering with Ops Hub.
                       <p className="text-xs text-slate-500 dark:text-slate-400">Configure telemetry feeds, analytics tokens, and workspace preferences</p>
                     </div>
                   </div>
-                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 border border-teal-200/60 dark:border-teal-800/40 self-start sm:self-auto">
+                  <span className="px-3 py-1 rounded-full text-xs font-bold bg-brand-50 dark:bg-brand-950/40 text-brand-700 dark:text-brand-300 border border-brand-200/60 dark:border-brand-800/40 self-start sm:self-auto">
                     Active Workspace
                   </span>
                 </div>
@@ -2007,7 +2041,7 @@ Thank you for partnering with Ops Hub.
                       <button
                         type="button"
                         onClick={() => alert('To connect Google Analytics, enter your GA4 Measurement ID in Operations Hub integration settings.')}
-                        className="w-full mt-1 px-3 py-1.5 rounded-lg bg-white dark:bg-dark-200 border border-slate-200 dark:border-dark-border text-xs font-bold text-teal-600 dark:text-teal-400 hover:bg-slate-100 transition-colors cursor-pointer"
+                        className="w-full mt-1 px-3 py-1.5 rounded-lg bg-white dark:bg-dark-200 border border-slate-200 dark:border-dark-border text-xs font-bold text-brand-600 dark:text-brand-400 hover:bg-slate-100 transition-colors cursor-pointer"
                       >
                         Configure GA4 Feed
                       </button>
@@ -2200,7 +2234,7 @@ Thank you for partnering with Ops Hub.
                                   : isApprovalStatus(item.status)
                                   ? 'bg-purple-50 dark:bg-purple-950/40 text-purple-700 dark:text-purple-300'
                                   : item.status === 'In Progress'
-                                  ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300'
+                                  ? 'bg-blue-50 dark:bg-blue-950/40 text-blue-700 dark:text-blue-300'
                                   : 'bg-slate-100 dark:bg-dark-200 text-slate-600 dark:text-slate-400'
                               }`}
                             >
@@ -2208,7 +2242,7 @@ Thank you for partnering with Ops Hub.
                             </span>
                           )}
                         </div>
-                        <h5 className="text-xs font-bold text-slate-900 dark:text-white truncate group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors">
+                        <h5 className="text-xs font-bold text-slate-900 dark:text-white truncate group-hover:text-brand-600 dark:group-hover:text-brand-400 transition-colors">
                           {item.title}
                         </h5>
                         <p className="text-[10px] text-slate-400 dark:text-slate-500 mt-0.5 truncate">
@@ -2217,12 +2251,12 @@ Thank you for partnering with Ops Hub.
                       </div>
 
                       {item.evidenceUrl ? (
-                        <span className="shrink-0 text-xs text-teal-600 dark:text-teal-400 flex items-center gap-1 font-bold">
+                        <span className="shrink-0 text-xs text-brand-600 dark:text-brand-400 flex items-center gap-1 font-bold">
                           <span>Deliverable</span>
                           <ExternalLink className="w-3.5 h-3.5" />
                         </span>
                       ) : (
-                        <span className="shrink-0 text-xs text-slate-400 group-hover:text-teal-600 font-bold transition-colors">
+                        <span className="shrink-0 text-xs text-slate-400 group-hover:text-brand-600 font-bold transition-colors">
                           Open &rarr;
                         </span>
                       )}
@@ -2320,7 +2354,7 @@ Thank you for partnering with Ops Hub.
                           href={act.evidenceUrl}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-[11px] text-teal-600 dark:text-teal-400 hover:underline flex items-center justify-end gap-1 mt-1 font-bold"
+                          className="text-[11px] text-brand-600 dark:text-brand-400 hover:underline flex items-center justify-end gap-1 mt-1 font-bold"
                         >
                           <span>Deliverable</span>
                           <ExternalLink className="w-3 h-3" />

@@ -87,7 +87,7 @@ export const ClientWeekStepper: React.FC<ClientWeekStepperProps> = ({
               data-testid={`week-step-${weekNum}`}
               className={`group relative p-3.5 rounded-xl border transition-all flex flex-col justify-between gap-2.5 select-none ${
                 isActive
-                  ? 'bg-teal-50/70 dark:bg-teal-950/20 border-[#0D9488] ring-2 ring-teal-500/20 shadow-xs'
+                  ? 'bg-brand-50/70 dark:bg-brand-950/20 border-brand-500 ring-2 ring-brand-500/20 shadow-xs'
                   : 'bg-white dark:bg-dark-200/40 border-slate-200 dark:border-dark-border hover:bg-slate-50 dark:hover:bg-dark-200'
               }`}
             >
@@ -101,7 +101,7 @@ export const ClientWeekStepper: React.FC<ClientWeekStepperProps> = ({
                   <span
                     className={`text-[11px] font-black uppercase tracking-wider px-2.5 py-0.5 rounded-md shadow-2xs ${
                       isActive
-                        ? 'bg-[#0D9488] text-white'
+                        ? 'bg-brand-500 text-white'
                         : 'bg-slate-100 dark:bg-dark-100 text-slate-700 dark:text-slate-300'
                     }`}
                   >
@@ -118,7 +118,7 @@ export const ClientWeekStepper: React.FC<ClientWeekStepperProps> = ({
                     type="button"
                     data-testid={`rename-week-btn-${weekNum}`}
                     onClick={(e) => handleStartEditing(weekNum, e)}
-                    className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 rounded-md text-slate-400 hover:text-teal-600 dark:hover:text-teal-400 hover:bg-white dark:hover:bg-dark-card transition-all cursor-pointer"
+                    className="opacity-0 group-hover:opacity-100 focus:opacity-100 p-1 rounded-md text-slate-400 hover:text-brand-600 dark:hover:text-brand-400 hover:bg-white dark:hover:bg-dark-card transition-all cursor-pointer"
                     title="Rename week (client-specific)"
                   >
                     <Edit2 className="w-3 h-3" />
@@ -141,7 +141,7 @@ export const ClientWeekStepper: React.FC<ClientWeekStepperProps> = ({
                     autoFocus
                     maxLength={100}
                     disabled={isSaving}
-                    className="w-full text-xs font-bold px-2 py-1 rounded-lg border border-teal-500 bg-white dark:bg-dark-card text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-teal-500"
+                    className="w-full text-xs font-bold px-2 py-1 rounded-lg border border-brand-500 bg-white dark:bg-dark-card text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-1 focus:ring-brand-500"
                     placeholder="Week Name"
                   />
                   <button
@@ -149,7 +149,7 @@ export const ClientWeekStepper: React.FC<ClientWeekStepperProps> = ({
                     data-testid={`save-week-name-${weekNum}`}
                     onClick={(e) => handleSaveRename(weekNum, e)}
                     disabled={isSaving || !editNameValue.trim()}
-                    className="p-1 rounded-md bg-teal-600 text-white hover:bg-teal-700 disabled:opacity-50 cursor-pointer"
+                    className="p-1 rounded-md bg-brand-500 text-white hover:bg-brand-600 disabled:opacity-50 cursor-pointer"
                     title="Save"
                   >
                     <Check className="w-3.5 h-3.5" />
@@ -172,7 +172,7 @@ export const ClientWeekStepper: React.FC<ClientWeekStepperProps> = ({
                   <h4
                     className={`text-xs font-bold truncate ${
                       isActive
-                        ? 'text-teal-950 dark:text-teal-200'
+                        ? 'text-brand-950 dark:text-brand-200'
                         : 'text-slate-800 dark:text-slate-200'
                     }`}
                     title={name}
@@ -219,7 +219,7 @@ export const ClientWeekStepper: React.FC<ClientWeekStepperProps> = ({
                 ) : (
                   <div
                     className={`h-full rounded-full transition-all duration-300 ${
-                      percent === 100 ? 'bg-emerald-500' : 'bg-[#0D9488]'
+                      percent === 100 ? 'bg-emerald-500' : 'bg-brand-500'
                     }`}
                     style={{ width: `${percent}%` }}
                   />
