@@ -275,7 +275,7 @@ describe('Finfix Pro Client Portal & Security Leak Fix Suite', () => {
     await waitFor(() => {
       const projSection = screen.getByTestId('project-progress-section');
       expect(projSection.textContent).toContain('Funnel Setup');
-      expect(projSection.textContent).toContain('In Progress');
+      expect(projSection.textContent).toContain('In Review');
     });
 
     const projSection = screen.getByTestId('project-progress-section');
