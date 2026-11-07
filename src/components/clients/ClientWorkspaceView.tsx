@@ -108,12 +108,12 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
 
   // Phase 3A Tasks State
   const [allTasks, setAllTasks] = useState<ClientTask[]>([]);
-  const [isLoadingTasks, setIsLoadingTasks] = useState(false);
+  const [isLoadingTasks, setIsLoadingTasks] = useState(true);
 
   // Immediately reset week and tasks when selected client changes
   useEffect(() => {
     setActiveWeek('week1');
-    setAllTasks([]);
+    setIsLoadingTasks(true);
     setActiveTab(client.status === 'Archived' ? 'setup' : (isEffectiveClientView ? 'dashboard' : 'setup'));
   }, [client.id, client.status, isEffectiveClientView]);
 
@@ -504,6 +504,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
         activeMainTab={activeTab}
         onMainTabChange={(t) => setActiveTab(t)}
         canViewDetailsTab={!isEffectiveClientView}
+        isLoading={isLoadingTasks}
         renderSetupView={() => (
           <div className="space-y-6">
             {/* 1. Restyled Compact Week Stepper with Rename controls */}
@@ -516,6 +517,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
               tasksByWeek={tasksByWeek}
               currentUserProfile={currentUserProfile}
               isClientView={isEffectiveClientView}
+              isLoading={isLoadingTasks}
             />
 
             {/* 2. Week Action Bar & Kanban Board */}
@@ -570,12 +572,23 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
 
               {/* Header Action Bar */}
               <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                    Week {currentWeekNum}: {weekNames[currentWeekNum]} ({currentWeekTasks.length} {currentWeekTasks.length === 1 ? 'Task' : 'Tasks'}{!isEffectiveClientView && currentWeekInternalCount > 0 ? ` — ${currentWeekClientVisibleCount} Client Visible, ${currentWeekInternalCount} Internal Staff Only` : ''})
-                  </span>
-                  {isLoadingTasks && <Loader2 className="w-3.5 h-3.5 animate-spin text-teal-600" />}
-                </div>
+                {isLoadingTasks ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                      Week {currentWeekNum}: {weekNames[currentWeekNum]}
+                    </span>
+                    <span className="text-xs font-semibold text-teal-600 dark:text-teal-400 flex items-center gap-1.5 animate-pulse">
+                      <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                      Loading...
+                    </span>
+                  </div>
+                ) : (
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                      Week {currentWeekNum}: {weekNames[currentWeekNum]} ({currentWeekTasks.length} {currentWeekTasks.length === 1 ? 'Task' : 'Tasks'}{!isEffectiveClientView && currentWeekInternalCount > 0 ? ` — ${currentWeekClientVisibleCount} Client Visible, ${currentWeekInternalCount} Internal Staff Only` : ''})
+                    </span>
+                  </div>
+                )}
 
                 {canAddTask && (
                   client.status === 'Paused' ? (
@@ -617,6 +630,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                 onResumeTimer={handleResumeTimer}
                 onTasksArchived={handleTasksArchived}
                 onShowToast={showToast}
+                isLoading={isLoadingTasks}
               />
             </div>
           </div>
@@ -732,6 +746,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                   tasksByWeek={tasksByWeek}
                   currentUserProfile={currentUserProfile}
                   isClientView={false}
+                  isLoading={isLoadingTasks}
                 />
 
                 {/* Staff Reconciliation Bar */}
@@ -785,12 +800,23 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
 
                 {/* Week Action Bar & Kanban Board */}
                 <div className="flex items-center justify-between">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
-                      Week {currentWeekNum}: {weekNames[currentWeekNum]} ({currentWeekTasks.length} {currentWeekTasks.length === 1 ? 'Task' : 'Tasks'}{currentWeekInternalCount > 0 ? ` — ${currentWeekClientVisibleCount} Client Visible, ${currentWeekInternalCount} Internal Staff Only` : ''})
-                    </span>
-                    {isLoadingTasks && <Loader2 className="w-3.5 h-3.5 animate-spin text-teal-600" />}
-                  </div>
+                  {isLoadingTasks ? (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                        Week {currentWeekNum}: {weekNames[currentWeekNum]}
+                      </span>
+                      <span className="text-xs font-semibold text-teal-600 dark:text-teal-400 flex items-center gap-1.5 animate-pulse">
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                        Loading...
+                      </span>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-slate-300">
+                        Week {currentWeekNum}: {weekNames[currentWeekNum]} ({currentWeekTasks.length} {currentWeekTasks.length === 1 ? 'Task' : 'Tasks'}{currentWeekInternalCount > 0 ? ` — ${currentWeekClientVisibleCount} Client Visible, ${currentWeekInternalCount} Internal Staff Only` : ''})
+                      </span>
+                    </div>
+                  )}
 
                   <div className="flex items-center gap-2">
                     {client.status === 'Paused' ? (
@@ -832,6 +858,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                   onResumeTimer={handleResumeTimer}
                   onTasksArchived={handleTasksArchived}
                   onShowToast={showToast}
+                  isLoading={isLoadingTasks}
                 />
               </div>
             )}

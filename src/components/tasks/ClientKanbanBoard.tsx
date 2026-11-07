@@ -24,6 +24,7 @@ interface ClientKanbanBoardProps {
   onResumeTimer: (task: ClientTask) => Promise<void> | void;
   onTasksArchived?: (archivedTaskIds: string[]) => void;
   onShowToast: (msg: string) => void;
+  isLoading?: boolean;
 }
 
 type KanbanColumnId = 'Pending' | 'In Progress' | 'Approval' | 'Done';
@@ -52,7 +53,8 @@ export const ClientKanbanBoard: React.FC<ClientKanbanBoardProps> = ({
   onPauseTimer,
   onResumeTimer,
   onTasksArchived,
-  onShowToast
+  onShowToast,
+  isLoading = false
 }) => {
   const [dragOverColumn, setDragOverColumn] = useState<KanbanColumnId | null>(null);
   const [approvalModalTask, setApprovalModalTask] = useState<ClientTask | null>(null);
@@ -212,9 +214,13 @@ export const ClientKanbanBoard: React.FC<ClientKanbanBoardProps> = ({
                   <h3 className="text-xs sm:text-sm font-bold text-slate-800 dark:text-slate-100 truncate">
                     {col.label}
                   </h3>
-                  <span className={`text-xs font-mono font-black px-2 py-0.5 rounded-full ${col.badgeBg} shadow-2xs`}>
-                    {colTasks.length}
-                  </span>
+                  {isLoading ? (
+                    <span className="w-5 h-4 rounded-full bg-slate-200 dark:bg-dark-200 animate-pulse inline-block" />
+                  ) : (
+                    <span className={`text-xs font-mono font-black px-2 py-0.5 rounded-full ${col.badgeBg} shadow-2xs`}>
+                      {colTasks.length}
+                    </span>
+                  )}
                 </div>
 
                 {/* Top-right Archive All Icon (Management Only) */}
@@ -243,7 +249,12 @@ export const ClientKanbanBoard: React.FC<ClientKanbanBoardProps> = ({
 
               {/* Task Cards List */}
               <div className="p-2.5 space-y-2.5 flex-1">
-                {colTasks.length > 0 ? (
+                {isLoading ? (
+                  <div className="space-y-2.5 p-1">
+                    <div className="h-20 bg-slate-100 dark:bg-dark-200/60 rounded-xl animate-pulse" />
+                    <div className="h-20 bg-slate-100 dark:bg-dark-200/60 rounded-xl animate-pulse" />
+                  </div>
+                ) : colTasks.length > 0 ? (
                   colTasks.map((task) => (
                     <ClientKanbanCard
                       key={task.id}

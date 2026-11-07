@@ -2,6 +2,7 @@ import React, { useState, useEffect, useCallback } from 'react';
 import { useSafeNavigate, useSafeLocation } from '../../lib/safeRouterHooks';
 import { useOpsStore } from '../../store/opsStore';
 import { 
+  ArrowDown,
   Building2, ChevronsLeft, ChevronsRight, Briefcase, X,
   Globe, HardDrive, MessageCircle, ExternalLink, Clock, Users, UserCheck,
   Image, Video, PlaySquare, Sparkles, LayoutGrid, Palette, PhoneCall,
@@ -43,6 +44,15 @@ const SlackIcon: React.FC<{ className?: string }> = ({ className = "w-4 h-4" }) 
     <path d="M5.042 15.165a2.528 2.528 0 0 1-2.52 2.523A2.528 2.528 0 0 1 0 15.165a2.527 2.527 0 0 1 2.522-2.52h2.52v2.52zM6.313 15.165a2.527 2.527 0 0 1 2.521-2.52 2.527 2.527 0 0 1 2.521 2.52v6.313A2.528 2.528 0 0 1 8.834 24a2.528 2.528 0 0 1-2.521-2.522v-6.313zM8.834 5.042a2.528 2.528 0 0 1-2.521-2.52A2.528 2.528 0 0 1 8.834 0a2.528 2.528 0 0 1 2.521 2.522v2.52H8.834zM8.834 6.313a2.528 2.528 0 0 1 2.521 2.521 2.528 2.528 0 0 1-2.521 2.521H2.522A2.528 2.528 0 0 1 0 8.834a2.528 2.528 0 0 1 2.522-2.521h6.312zM18.956 8.834a2.528 2.528 0 0 1 2.522-2.521A2.528 2.528 0 0 1 24 8.834a2.528 2.528 0 0 1-2.522 2.521h-2.522V8.834zM17.688 8.834a2.528 2.528 0 0 1-2.523 2.521 2.527 2.527 0 0 1-2.52-2.521V2.522A2.527 2.527 0 0 1 15.165 0a2.528 2.528 0 0 1 2.523 2.522v6.312zM15.165 18.956a2.528 2.528 0 0 1 2.523 2.522A2.528 2.528 0 0 1 15.165 24a2.527 2.527 0 0 1-2.52-2.522v-2.522h2.52zM15.165 17.688a2.527 2.527 0 0 1-2.52-2.523 2.526 2.526 0 0 1 2.52-2.52h6.313A2.527 2.527 0 0 1 24 15.165a2.528 2.528 0 0 1-2.522 2.523h-6.313z" />
   </svg>
 );
+
+
+const WORKSPACE_CATEGORIES = [
+  { id: 'core', label: 'Core & Docs', keys: ['website', 'flc_landing_page', 'brand_identity', 'google_drive', 'important_docs', 'proposal_contract', 'master_business_doc'] },
+  { id: 'media', label: 'Creatives & Media', keys: ['static_creatives', 'videos', 'variations', 'grid', 'vsl', 'testimonials', 'reviews', 'case_studies'] },
+  { id: 'ops', label: 'Marketing & Ops', keys: ['requirement_docs', 'gohighlevel', 'social_media_management', 'linkedin_management', 'seo_management', 'email_marketing_management', 'paid_ads_management'] },
+  { id: 'social', label: 'Social Channels', keys: ['linkedin_company_page', 'facebook', 'instagram'] },
+  { id: 'contact', label: 'Communication & POC', keys: ['slack_channel', 'whatsapp_group', 'poc_number', 'poc_email'] }
+];
 
 export const Sidebar: React.FC = () => {
   const navigate = useSafeNavigate();
@@ -398,7 +408,15 @@ export const Sidebar: React.FC = () => {
           {/* Collapsed Workspace Links Icons with Tooltips */}
           {selectedClient && (
             <div className="flex flex-col items-center gap-1.5 py-2 border-y border-gray-100 dark:border-dark-border/60 w-full flex-1 overflow-y-auto scrollbar-none">
-              {displayedWorkspaceLinks.map((link) => {
+              {displayedWorkspaceLinks.map((link, linkIdx) => {
+                  // Determine if this link starts a new category
+                  const currentCategory = WORKSPACE_CATEGORIES.find((cat) => cat.keys.includes(link.key));
+                  const prevLink = linkIdx > 0 ? displayedWorkspaceLinks[linkIdx - 1] : null;
+                  const prevCategory = prevLink ? WORKSPACE_CATEGORIES.find((cat) => cat.keys.includes(prevLink.key)) : null;
+                  const isNewCategory = currentCategory && (!prevCategory || prevCategory.id !== currentCategory.id);
+                  const activeInCategory = currentCategory
+                    ? displayedWorkspaceLinks.filter((l) => currentCategory.keys.includes(l.key) && Boolean(l.url && l.url.trim())).length
+                    : 0;
                 const hasUrl = Boolean(link.url && link.url.trim());
                 if (hasUrl) {
                   return (
@@ -535,19 +553,57 @@ export const Sidebar: React.FC = () => {
             />
           </div>
 
-          {/* Client Workspace Links */}
+          {/* Client Workspace Links (Problem 4: 1366x768 Laptop Optimization with Jump Pills & Visible Scrollbar) */}
           {selectedClient && (
-            <div className="flex-1 p-3 overflow-y-auto min-h-0">
-              <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-2 px-1 flex items-center justify-between">
+            <div className="flex-1 p-3 overflow-y-auto min-h-0 custom-scrollbar scrollbar-thin scrollbar-thumb-slate-300 dark:scrollbar-thumb-dark-100 hover:scrollbar-thumb-teal-500">
+              <div className="text-[10px] font-bold uppercase tracking-wider text-gray-400 dark:text-gray-500 mb-1.5 px-1 flex items-center justify-between">
                 <span>Workspace Links</span>
-                <span className="text-[9px] font-mono text-gray-400 font-semibold">{activeWorkspaceLinks.length} active</span>
+                <span className="text-[9px] font-mono text-teal-600 dark:text-teal-400 font-semibold">{activeWorkspaceLinks.length} active</span>
               </div>
-              <div className="space-y-0.5 pr-1 scrollbar-thin scrollbar-thumb-gray-200 dark:scrollbar-thumb-dark-100">
-                {displayedWorkspaceLinks.map((link) => {
+
+              {/* Quick Jump Category Pills for 768px Laptop Screens */}
+              <div className="flex items-center gap-1 overflow-x-auto pb-1.5 mb-2 no-scrollbar text-[9px] border-b border-gray-100 dark:border-dark-border/60">
+                {WORKSPACE_CATEGORIES.map((cat) => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => {
+                      const el = document.getElementById(`workspace-cat-${cat.id}`);
+                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }}
+                    className="px-1.5 py-0.5 rounded bg-slate-100 dark:bg-dark-200 hover:bg-teal-50 dark:hover:bg-teal-950/40 text-slate-600 dark:text-slate-300 hover:text-teal-600 dark:hover:text-teal-400 font-semibold transition-colors shrink-0 cursor-pointer"
+                  >
+                    {cat.label.split(' ')[0]}
+                  </button>
+                ))}
+              </div>
+
+              <div className="space-y-0.5 pr-1">
+                {displayedWorkspaceLinks.map((link, linkIdx) => {
+                  const currentCategory = WORKSPACE_CATEGORIES.find((cat) => cat.keys.includes(link.key));
+                  const prevLink = linkIdx > 0 ? displayedWorkspaceLinks[linkIdx - 1] : null;
+                  const prevCategory = prevLink ? WORKSPACE_CATEGORIES.find((cat) => cat.keys.includes(prevLink.key)) : null;
+                  const isNewCategory = currentCategory && (!prevCategory || prevCategory.id !== currentCategory.id);
+                  const activeInCategory = currentCategory
+                    ? displayedWorkspaceLinks.filter((l) => currentCategory.keys.includes(l.key) && Boolean(l.url && l.url.trim())).length
+                    : 0;
                   const hasContent = Boolean(link.url && link.url.trim());
+                  const categoryHeaderElement = isNewCategory && currentCategory ? (
+                    <div
+                      id={`workspace-cat-${currentCategory.id}`}
+                      data-testid={`workspace-cat-${currentCategory.id}`}
+                      className="pt-2.5 pb-1 px-1 flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-slate-400 dark:text-slate-500 border-t border-slate-100 dark:border-dark-border/40 first:border-0 first:pt-0"
+                    >
+                      <span>{currentCategory.label}</span>
+                      <span className="text-[9px] font-mono font-normal text-slate-400">({activeInCategory} linked)</span>
+                    </div>
+                  ) : null;
+
                   if (hasContent) {
                     if ((link as any).isTextAction) {
                       return (
+                        <React.Fragment key={link.key}>
+                          {categoryHeaderElement}
                         <button
                           key={link.key}
                           type="button"
@@ -565,14 +621,16 @@ export const Sidebar: React.FC = () => {
                           </div>
                           <BookOpen className="w-3 h-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                         </button>
+                        </React.Fragment>
                       );
                     }
                     if ((link as any).isEmailDialogAction) {
                       return (
-                        <button
-                          key={link.key}
-                          type="button"
-                          onClick={() => setIsPocEmailModalOpen(true)}
+                        <React.Fragment key={link.key}>
+                          {categoryHeaderElement}
+                          <button
+                            type="button"
+                            onClick={() => setIsPocEmailModalOpen(true)}
                           data-testid="sidebar-link-poc-email"
                           className="w-full flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-700 dark:text-gray-200 hover:text-gray-900 dark:hover:white hover:bg-gray-100 dark:hover:bg-dark-100 transition-colors group cursor-pointer text-left"
                           title={`Open ${link.label}`}
@@ -586,12 +644,14 @@ export const Sidebar: React.FC = () => {
                           </div>
                           <Mail className="w-3 h-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                         </button>
+                        </React.Fragment>
                       );
                     }
                     return (
-                      <a
-                        key={link.key}
-                        href={link.url}
+                      <React.Fragment key={link.key}>
+                        {categoryHeaderElement}
+                        <a
+                          href={link.url}
                         target="_blank"
                         rel="noopener noreferrer"
                         data-testid={`sidebar-link-${link.key.replace(/_/g, '-')}`}
@@ -606,13 +666,15 @@ export const Sidebar: React.FC = () => {
                           <span className="truncate">{link.label}</span>
                         </div>
                         <ExternalLink className="w-3 h-3 text-gray-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-                      </a>
+                        </a>
+                      </React.Fragment>
                     );
                   }
                   return (
-                    <div
-                      key={link.key}
-                      data-testid={`sidebar-link-${link.key.replace(/_/g, '-')}-disabled`}
+                    <React.Fragment key={link.key}>
+                      {categoryHeaderElement}
+                      <div
+                        data-testid={`sidebar-link-${link.key.replace(/_/g, '-')}-disabled`}
                       className="flex items-center justify-between px-2.5 py-1.5 rounded-lg text-xs font-medium text-gray-500 dark:text-gray-400 cursor-not-allowed select-none transition-colors"
                       title="Link not added"
                       aria-label={`${link.label} (Link not added)`}
@@ -625,8 +687,23 @@ export const Sidebar: React.FC = () => {
                         <span className="truncate">{link.label}</span>
                       </div>
                     </div>
+                    </React.Fragment>
                   );
                 })}
+                {/* Scroll cue indicating communication links below */}
+                <div className="pt-2 pb-0.5 text-center">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const el = document.getElementById('workspace-cat-contact');
+                      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                    }}
+                    className="text-[9px] font-bold text-teal-600 dark:text-teal-400 hover:underline flex items-center justify-center gap-1 mx-auto cursor-pointer"
+                  >
+                    <span>Slack, WhatsApp & POC below</span>
+                    <ArrowDown className="w-2.5 h-2.5 animate-bounce" />
+                  </button>
+                </div>
               </div>
             </div>
           )}

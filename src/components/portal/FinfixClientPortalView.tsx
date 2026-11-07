@@ -123,6 +123,7 @@ export interface FinfixClientPortalViewProps {
   renderWorkPlansView?: () => React.ReactNode;
   renderDetailsView?: () => React.ReactNode;
   canViewDetailsTab?: boolean;
+  isLoading?: boolean;
 }
 
 function isApprovalStatus(status?: string | null): boolean {
@@ -144,7 +145,8 @@ export const FinfixClientPortalView: React.FC<FinfixClientPortalViewProps> = ({
   renderSetupView,
   renderWorkPlansView,
   renderDetailsView,
-  canViewDetailsTab = false
+  canViewDetailsTab = false,
+  isLoading: propIsLoading = false
 }) => {
   const [activeTab, setActiveTab] = useState<FinfixNavTab>('dashboard');
   const [tasks, setTasks] = useState<ClientTask[]>(propTasks || []);
@@ -380,10 +382,10 @@ export const FinfixClientPortalView: React.FC<FinfixClientPortalViewProps> = ({
         status = 'Pending';
       } else if (done === total) {
         status = 'Completed';
-      } else if (inProgressTasks.length > 0) {
-        status = 'In Progress';
-      } else if (approvalTasks.length > 0) {
+      } else if (approvalTasks.length >= inProgressTasks.length && approvalTasks.length > 0) {
         status = 'In Review';
+      } else if (inProgressTasks.length > approvalTasks.length) {
+        status = 'In Progress';
       } else {
         status = 'Pending';
       }
@@ -474,16 +476,16 @@ export const FinfixClientPortalView: React.FC<FinfixClientPortalViewProps> = ({
   const isPerformanceSourceConnected = false;
   const isMarketingSourceConnected = false;
 
-  // Real Progress Status Line (Fix 2: Eliminates demo text)
+  // Real Progress Status Line (Fix 2 & Problem 3 Fix: Exact total and reconciliation in brackets)
   const realProgressStatusLine = useMemo(() => {
-    if (totalVisibleTasks === 0 || completedTasks.length === 0) {
-      return null;
+    if (totalAllTasks === 0) {
+      return '0% completed · No active deliverables on file';
     }
-    if (completedThisWeek > 0) {
-      return `${completionPercent}% completed · +${completedThisWeek} completed this week`;
-    }
-    return `${completionPercent}% completed · ${completedTasks.length} of ${totalVisibleTasks} deliverables completed`;
-  }, [totalVisibleTasks, completedTasks.length, completedThisWeek, completionPercent]);
+    const reconSnippet = totalInternalTasks > 0
+      ? ` (${totalClientVisibleTasks} visible + ${totalInternalTasks} internal)`
+      : '';
+    return `${completionPercent}% completed · ${completedTasks.length} of ${totalAllTasks} deliverables completed${reconSnippet}`;
+  }, [totalAllTasks, completedTasks.length, totalInternalTasks, totalClientVisibleTasks, completionPercent]);
 
 
   // Real Client Notifications derived strictly from client tasks

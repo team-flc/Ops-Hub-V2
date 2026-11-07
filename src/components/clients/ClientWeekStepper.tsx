@@ -11,6 +11,7 @@ interface ClientWeekStepperProps {
   tasksByWeek: Record<1 | 2 | 3 | 4, ClientTask[]>;
   currentUserProfile?: UserProfile | null;
   isClientView?: boolean;
+  isLoading?: boolean;
 }
 
 export const ClientWeekStepper: React.FC<ClientWeekStepperProps> = ({
@@ -21,7 +22,8 @@ export const ClientWeekStepper: React.FC<ClientWeekStepperProps> = ({
   onRenameWeek,
   tasksByWeek,
   currentUserProfile,
-  isClientView = false
+  isClientView = false,
+  isLoading = false
 }) => {
   const [editingWeek, setEditingWeek] = useState<1 | 2 | 3 | 4 | null>(null);
   const [editNameValue, setEditNameValue] = useState('');
@@ -181,30 +183,47 @@ export const ClientWeekStepper: React.FC<ClientWeekStepperProps> = ({
               )}
 
               {/* Progress & Task Count Pill */}
-              <div 
-                onClick={() => onSelectWeek(weekNum)}
-                className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 pt-1.5 border-t border-slate-200/60 dark:border-dark-border/60 cursor-pointer"
-              >
-                <span className="font-semibold flex items-center gap-1">
-                  <Clock className="w-3 h-3 text-slate-400" />
-                  {totalTasks} {totalTasks === 1 ? 'task' : 'tasks'}
-                </span>
-                <span className="font-bold text-slate-700 dark:text-slate-300">
-                  {doneTasks}/{totalTasks} ({percent}%)
-                </span>
-              </div>
+              {isLoading ? (
+                <div 
+                  data-testid={`week-step-loading-${weekNum}`}
+                  className="flex items-center justify-between text-[10px] text-slate-400 pt-1.5 border-t border-slate-200/60 dark:border-dark-border/60"
+                >
+                  <span className="flex items-center gap-1">
+                    <Clock className="w-3 h-3 text-slate-300 dark:text-slate-600" />
+                    <span className="h-2.5 w-14 bg-slate-200 dark:bg-dark-100 rounded animate-pulse inline-block" />
+                  </span>
+                  <span className="h-2.5 w-10 bg-slate-200 dark:bg-dark-100 rounded animate-pulse inline-block" />
+                </div>
+              ) : (
+                <div 
+                  onClick={() => onSelectWeek(weekNum)}
+                  className="flex items-center justify-between text-[10px] text-slate-500 dark:text-slate-400 pt-1.5 border-t border-slate-200/60 dark:border-dark-border/60 cursor-pointer"
+                >
+                  <span className="font-semibold flex items-center gap-1">
+                    <Clock className="w-3 h-3 text-slate-400" />
+                    {totalTasks} {totalTasks === 1 ? 'task' : 'tasks'}
+                  </span>
+                  <span className="font-bold text-slate-700 dark:text-slate-300">
+                    {doneTasks}/{totalTasks} ({percent}%)
+                  </span>
+                </div>
+              )}
 
               {/* Mini progress bar (Thicker & Teal) */}
               <div 
                 onClick={() => onSelectWeek(weekNum)}
                 className="w-full bg-slate-100 dark:bg-dark-100 h-2 rounded-full overflow-hidden cursor-pointer"
               >
-                <div
-                  className={`h-full rounded-full transition-all duration-300 ${
-                    percent === 100 ? 'bg-emerald-500' : 'bg-[#0D9488]'
-                  }`}
-                  style={{ width: `${percent}%` }}
-                />
+                {isLoading ? (
+                  <div className="h-full bg-slate-200 dark:bg-dark-200 animate-pulse w-full rounded-full" />
+                ) : (
+                  <div
+                    className={`h-full rounded-full transition-all duration-300 ${
+                      percent === 100 ? 'bg-emerald-500' : 'bg-[#0D9488]'
+                    }`}
+                    style={{ width: `${percent}%` }}
+                  />
+                )}
               </div>
             </div>
           );
