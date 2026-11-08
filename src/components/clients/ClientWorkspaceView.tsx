@@ -503,8 +503,6 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
             isClientView={isEffectiveClientView}
             onClientUpdated={onClientUpdated}
           />
-          {/* 1. Staff Header */}
-          <SelectedClientHeader client={client} currentUserProfile={currentUserProfile} isClientView={false} />
 
           {/* 2. Staff Workspace Navigation Tabs */}
           <div className="px-4 sm:px-6 pt-3 pb-2 border-b border-slate-200 dark:border-dark-border bg-white dark:bg-dark-card flex items-center justify-between shrink-0">
@@ -645,28 +643,30 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                     </div>
                   )}
 
-                  <div className="flex items-center gap-2">
-                    {client.status === 'Paused' ? (
-                      <span 
-                        className="px-3 py-1.5 rounded-xl bg-gray-100 dark:bg-dark-200 border border-gray-300 dark:border-dark-border text-gray-500 dark:text-gray-400 text-xs font-bold flex items-center gap-1.5 opacity-80 cursor-not-allowed"
-                        title="Task creation is blocked while client organization is paused."
-                      >
-                        <AlertTriangle className="w-3.5 h-3.5 text-brand-500" />
-                        <span>Tasks Paused</span>
-                      </span>
-                    ) : (
-                      <button
-                        type="button"
-                        data-testid="add-task-btn"
-                        aria-label="+ Add Task"
-                        onClick={handleOpenCreateTaskFlow}
-                        className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-black text-white dark:bg-white dark:hover:bg-slate-100 dark:text-slate-900 text-xs font-bold transition-all shadow-xs cursor-pointer"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>Add Task</span>
-                      </button>
-                    )}
-                  </div>
+                  {!isEffectiveClientView && (
+                    <div className="flex items-center gap-2">
+                      {client.status === 'Paused' ? (
+                        <span 
+                          className="px-3 py-1.5 rounded-xl bg-gray-100 dark:bg-dark-200 border border-gray-300 dark:border-dark-border text-gray-500 dark:text-gray-400 text-xs font-bold flex items-center gap-1.5 opacity-80 cursor-not-allowed"
+                          title="Task creation is blocked while client organization is paused."
+                        >
+                          <AlertTriangle className="w-3.5 h-3.5 text-brand-500" />
+                          <span>Tasks Paused</span>
+                        </span>
+                      ) : (
+                        <button
+                          type="button"
+                          data-testid="add-task-btn"
+                          aria-label="+ Add Task"
+                          onClick={handleOpenCreateTaskFlow}
+                          className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-slate-900 hover:bg-black text-white dark:bg-white dark:hover:bg-slate-100 dark:text-slate-900 text-xs font-bold transition-all shadow-xs cursor-pointer"
+                        >
+                          <Plus className="w-3.5 h-3.5" />
+                          <span>Add Task</span>
+                        </button>
+                      )}
+                    </div>
+                  )}
                 </div>
 
                 <ClientKanbanBoard
