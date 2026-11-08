@@ -2082,6 +2082,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                       <input
                         type="date"
                         value={p.salesNavigatorActivatedOn || ''}
+                        disabled={isEffectiveClientView}
                         onChange={(e) => handleUpdateProfile(p.id, { salesNavigatorActivatedOn: e.target.value })}
                         className="px-2.5 py-1 text-xs rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-gray-900 dark:text-gray-100 focus:outline-none"
                       />
@@ -2108,6 +2109,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                     <input
                       type="checkbox"
                       checked={p.hasGmailAccount || false}
+                      disabled={isEffectiveClientView}
                       onChange={(e) => {
                         const checked = e.target.checked;
                         handleUpdateProfile(p.id, {
@@ -2128,6 +2130,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                       <input
                         type="email"
                         value={p.gmailAddress || ''}
+                        disabled={isEffectiveClientView}
                         onChange={(e) => {
                           const val = e.target.value;
                           setProfiles(profiles.map(pr => pr.id === p.id ? { ...pr, gmailAddress: val } : pr));
