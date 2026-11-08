@@ -44,13 +44,14 @@ export interface MonthlyReportSummary {
 
 export function generateMonthlyReportContent(
   client: ClientRecord,
-  summary: MonthlyReportSummary
+  summary: MonthlyReportSummary,
+  isStaffView: boolean = false
 ): string {
   const completedList = summary.tasksList.filter(
-    (t) => t.status === 'Completed' || t.status === 'Done'
+    (t) => (t.status === 'Completed' || t.status === 'Done') && (!isStaffView ? !isInternalOnlyTask(t) : true)
   );
   const pendingList = summary.tasksList.filter(
-    (t) => t.status !== 'Completed' && t.status !== 'Done'
+    (t) => t.status !== 'Completed' && t.status !== 'Done' && (!isStaffView ? !isInternalOnlyTask(t) : true)
   );
 
   const completedSection =
@@ -60,7 +61,7 @@ export function generateMonthlyReportContent(
             (t, i) =>
               `  ${i + 1}. [Week ${t.weekNumber || 1}] ${sanitizeClientDeliverableTitle(t.title)} — Completed ${
                 t.completedAt ? formatPKTDate(t.completedAt) : 'Recently'
-              }${t.assigneeName ? ` (Lead: ${t.assigneeName})` : ''}`
+              }${isStaffView && t.assigneeName ? ` (Lead: ${t.assigneeName})` : ''}`
           )
           .join('\n')
       : '  None completed in this period.';
@@ -86,9 +87,9 @@ export function generateMonthlyReportContent(
 
   const internalCount = summary.internalTasksCount || 0;
   const visibleCount = summary.clientVisibleCount || (summary.totalTasks - internalCount);
-  const reconLine = internalCount > 0
+  const reconLine = isStaffView && internalCount > 0
     ? `  • Client Safe Reconciliation: ${visibleCount} Client Visible + ${internalCount} Internal Staff Only = ${summary.totalTasks} Total Deliverables`
-    : `  • Deliverable Status:         ${summary.totalTasks} Total Deliverables (100% Client Visible)`;
+    : `  • Deliverable Status:         ${summary.totalTasks} Total Deliverables`;
 
   return `================================================================================
                        OPS HUB - MONTHLY OPERATIONS REPORT
@@ -237,24 +238,19 @@ export const ClientMonthlyReportsView: React.FC<ClientMonthlyReportsViewProps> =
         reportText: ''
       };
 
-      summaryObj.reportText = generateMonthlyReportContent(client, summaryObj);
+      summaryObj.reportText = generateMonthlyReportContent(client, summaryObj, isStaffView);
       return summaryObj;
     });
-  }, [client, tasks]);
+  }, [client, tasks, isStaffView]);
 
   const handleDownload = (summary: MonthlyReportSummary) => {
-    if (!summary.hasData) {
-      setDownloadSuccessToast(`No monthly report available for ${summary.monthName}`);
-      setTimeout(() => setDownloadSuccessToast(null), 3500);
-      return;
-    }
-
     const clientSlug = (client.companyName || client.clientName || 'client')
       .toLowerCase()
       .replace(/[^\w]/g, '_');
     const fileName = `${clientSlug}_${summary.monthKey}_monthly_report.txt`;
+    const reportText = summary.reportText || generateMonthlyReportContent(client, summary, isStaffView);
 
-    const success = triggerDownload(fileName, summary.reportText);
+    const success = triggerDownload(fileName, reportText);
     if (success) {
       setDownloadSuccessToast(`Monthly report downloaded successfully: ${fileName}`);
     } else {
@@ -296,20 +292,18 @@ export const ClientMonthlyReportsView: React.FC<ClientMonthlyReportsViewProps> =
           </div>
         </div>
 
-        {monthlyReports.some((r) => r.hasData) && (
-          <button
-            type="button"
-            data-testid="download-latest-report-btn"
-            onClick={() => {
-              const latest = monthlyReports.find((r) => r.hasData);
-              if (latest) handleDownload(latest);
-            }}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold transition-all shadow-xs cursor-pointer self-start sm:self-auto shrink-0"
-          >
-            <Download className="w-4 h-4 text-white" />
-            <span>Download Latest Report</span>
-          </button>
-        )}
+        <button
+          type="button"
+          data-testid="download-latest-report-btn"
+          onClick={() => {
+            const latest = monthlyReports.find((r) => r.hasData) || monthlyReports[0];
+            if (latest) handleDownload(latest);
+          }}
+          className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold transition-all shadow-xs cursor-pointer self-start sm:self-auto shrink-0"
+        >
+          <Download className="w-4 h-4 text-white" />
+          <span>Download Latest Report</span>
+        </button>
       </div>
 
       {/* Reports List */}
@@ -391,29 +385,31 @@ export const ClientMonthlyReportsView: React.FC<ClientMonthlyReportsViewProps> =
                   </div>
                 )}
 
-                {/* Actions */}
-                <div className="flex items-center gap-2 ml-auto sm:ml-0">
-                  <button
-                    type="button"
-                    data-testid={`view-report-${report.monthKey}`}
-                    onClick={() => setSelectedReportForView(report)}
-                    className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-dark-200 dark:hover:bg-dark-100 text-slate-700 dark:text-slate-200 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
-                    title="View report details"
-                  >
-                    <Eye className="w-3.5 h-3.5" />
-                    <span className="hidden sm:inline">View</span>
-                  </button>
-                  <button
-                    type="button"
-                    data-testid={`download-report-${report.monthKey}`}
-                    onClick={() => handleDownload(report)}
-                    className="px-3 py-1.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
-                    title="Download report text file"
-                  >
-                    <Download className="w-3.5 h-3.5" />
-                    <span>Download</span>
-                  </button>
-                </div>
+                {/* Actions: ONLY visible and usable for Staff. In client view, Download Latest Report is the ONLY usable button */}
+                {isStaffView && (
+                  <div className="flex items-center gap-2 ml-auto sm:ml-0">
+                    <button
+                      type="button"
+                      data-testid={`view-report-${report.monthKey}`}
+                      onClick={() => setSelectedReportForView(report)}
+                      className="p-2 sm:px-3 sm:py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-dark-200 dark:hover:bg-dark-100 text-slate-700 dark:text-slate-200 text-xs font-bold transition-colors flex items-center gap-1.5 cursor-pointer"
+                      title="View report details"
+                    >
+                      <Eye className="w-3.5 h-3.5" />
+                      <span className="hidden sm:inline">View</span>
+                    </button>
+                    <button
+                      type="button"
+                      data-testid={`download-report-${report.monthKey}`}
+                      onClick={() => handleDownload(report)}
+                      className="px-3 py-1.5 rounded-xl bg-brand-500 hover:bg-brand-600 text-white text-xs font-bold transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+                      title="Download report text file"
+                    >
+                      <Download className="w-3.5 h-3.5" />
+                      <span>Download</span>
+                    </button>
+                  </div>
+                )}
               </div>
             </div>
           );

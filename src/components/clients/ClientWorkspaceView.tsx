@@ -98,7 +98,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
   const isEffectiveClientView = Boolean(isClientView || isClient || isPreview);
 
   const isArchived = client.status === 'Archived';
-  const [activeTab, setActiveTab] = useState<MainTab>(isEffectiveClientView ? 'details' : 'setup');
+  const [activeTab, setActiveTab] = useState<MainTab>('setup');
   const [showShieldedBreakdown, setShowShieldedBreakdown] = useState(false);
   const [activeWeek, setActiveWeek] = useState<WeekTab>('week1');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -114,8 +114,15 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
   useEffect(() => {
     setActiveWeek('week1');
     setIsLoadingTasks(true);
-    setActiveTab(isEffectiveClientView ? 'details' : 'setup');
-  }, [client.id, client.status, isEffectiveClientView]);
+    setActiveTab('setup');
+  }, [client.id, client.status]);
+
+  // Ensure client view NEVER lands on details
+  useEffect(() => {
+    if (isEffectiveClientView && activeTab === 'details') {
+      setActiveTab('setup');
+    }
+  }, [isEffectiveClientView, activeTab]);
 
   // Departments & Eligible Assignees
   const [departments, setDepartments] = useState<Department[]>([]);
@@ -509,18 +516,6 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
             <div className="flex items-center gap-2">
               <button
                 type="button"
-                data-testid="tab-details"
-                onClick={() => setActiveTab('details')}
-                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                  activeTab === 'details' ? 'bg-brand-500 text-white shadow-xs font-bold' : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-200'
-                }`}
-              >
-                <Info className="w-3.5 h-3.5" />
-                <span>Client Details</span>
-              </button>
-
-              <button
-                type="button"
                 data-testid="tab-setup"
                 onClick={() => setActiveTab('setup')}
                 className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
@@ -543,17 +538,29 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                 <span>90-Day Work Plans</span>
               </button>
 
+              <button
+                type="button"
+                data-testid="tab-reports"
+                onClick={() => setActiveTab('reports')}
+                className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                  activeTab === 'reports' ? 'bg-brand-500 text-white shadow-xs font-bold' : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-200'
+                }`}
+              >
+                <FileText className="w-3.5 h-3.5" />
+                <span>Monthly Reports</span>
+              </button>
+
               {!isEffectiveClientView && (
                 <button
                   type="button"
-                  data-testid="tab-reports"
-                  onClick={() => setActiveTab('reports')}
+                  data-testid="tab-details"
+                  onClick={() => setActiveTab('details')}
                   className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
-                    activeTab === 'reports' ? 'bg-brand-500 text-white shadow-xs font-bold' : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-200'
+                    activeTab === 'details' ? 'bg-brand-500 text-white shadow-xs font-bold' : 'text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white hover:bg-slate-100 dark:hover:bg-dark-200'
                   }`}
                 >
-                  <FileText className="w-3.5 h-3.5" />
-                  <span>Monthly Reports</span>
+                  <Info className="w-3.5 h-3.5" />
+                  <span>Client Details</span>
                 </button>
               )}
             </div>
@@ -709,7 +716,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
               </React.Suspense>
             )}
 
-            {activeTab === 'details' && (
+            {!isEffectiveClientView && activeTab === 'details' && (
               <ClientDetailsTab
                 client={client}
                 currentUserProfile={currentUserProfile}

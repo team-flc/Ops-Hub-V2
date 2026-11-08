@@ -253,21 +253,25 @@ describe('Client Dashboard 7 Failures & Unified Layout Test Suite', () => {
       />
     );
 
-    // In reverted client view, starting workspace tabs are present and no separate dashboard or reports tab exists
-    expect(screen.getByTestId('tab-details')).toBeDefined();
+    // In reverted client view, EXACTLY 3 tabs exist: 30-Day Setup, 90-Day Work Plans, Monthly Reports
+    // Client Details and separate Dashboard do NOT exist in client view
     expect(screen.getByTestId('tab-setup')).toBeDefined();
     expect(screen.getByTestId('tab-workplans')).toBeDefined();
-    expect(screen.queryByTestId('tab-reports')).toBeNull();
+    expect(screen.getByTestId('tab-reports')).toBeDefined();
+    expect(screen.queryByTestId('tab-details')).toBeNull();
     expect(screen.queryByTestId('tab-dashboard')).toBeNull();
 
-    // Switch to 30-Day Setup to verify stepper
-    fireEvent.click(screen.getByTestId('tab-setup'));
+    // Default tab is 30-Day Setup: Stepper is immediately defined
     expect(screen.getByTestId('client-week-stepper')).toBeDefined();
 
     // Switch to 90-Day Work Plans
     const workplansTabBtn = screen.getByTestId('tab-workplans');
     fireEvent.click(workplansTabBtn);
-
     expect(screen.getByTestId('tab-workplans')).toBeDefined();
+
+    // Switch to Monthly Reports
+    const reportsTabBtn = screen.getByTestId('tab-reports');
+    fireEvent.click(reportsTabBtn);
+    expect(screen.getByTestId('download-latest-report-btn')).toBeDefined();
   });
 });
