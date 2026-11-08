@@ -983,7 +983,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 accept="image/jpeg,image/png,image/webp"
                 onChange={handleLogoUpload}
                 className="hidden"
-                disabled={isTeamMember || isUploadingLogo || isSaving}
+                disabled={isEffectiveClientView || isTeamMember || isUploadingLogo || isSaving}
               />
             </div>
             <div className="flex-1 space-y-1 text-center sm:text-left">
