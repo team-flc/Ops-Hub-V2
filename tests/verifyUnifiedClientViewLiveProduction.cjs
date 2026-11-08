@@ -10,7 +10,7 @@ async function sleep(ms) {
 }
 
 (async () => {
-  console.log('=== Starting Automated Verification of Unified Client View on ops.faseehlall.com ===');
+  console.log('=== Starting Automated Verification of Reverted Client View on ops.faseehlall.com ===');
   const browser = await puppeteer.launch({
     executablePath: CHROME_PATH,
     headless: 'new',
@@ -29,19 +29,19 @@ async function sleep(ms) {
   ];
 
   const results = {
-    check_1_identical_tabs: true,
+    check_1_tab_order_and_initial_client_details: true,
     check_2_no_separate_dashboard_or_telemetry: true,
     check_3_full_staff_sidebar_rendered: true,
-    check_4_client_read_only_controls_hidden: true,
-    check_5_internal_materials_shielded: true,
-    check_6_client_details_tab_read_only: true,
-    check_7_workplans_tab_read_only: true,
-    check_8_monthly_reports_client_visible_only: true,
+    check_4_client_details_tab_read_only: true,
+    check_5_setup_tab_read_only_and_columns: true,
+    check_6_workplans_tab_read_only: true,
+    check_7_internal_materials_shielded: true,
+    check_8_monthly_reports_hidden_for_client: true,
     clientDetails: {}
   };
 
   try {
-    // 1. Log in
+    // 1. Log in as QA Owner
     console.log('1. Logging in as QA Owner...');
     await page.goto('https://ops.faseehlall.com/login', { waitUntil: 'networkidle2' });
     await page.waitForSelector('input[type="email"]', { timeout: 15000 });
@@ -50,7 +50,7 @@ async function sleep(ms) {
     await page.click('button[type="submit"]');
 
     await page.waitForNavigation({ waitUntil: 'networkidle2', timeout: 30000 }).catch(() => {});
-    await sleep(2500);
+    await sleep(3500);
 
     // Verify bundle hash
     const bundleHash = await page.evaluate(() => {
@@ -61,22 +61,41 @@ async function sleep(ms) {
 
     // Loop through clients
     for (const client of testClients) {
-      console.log(`\n--- Verifying Client: ${client.name} (${client.id}) ---`);
-      // Preview mode simulates exact client view
+      console.log(`\n======================================================`);
+      console.log(`--- Verifying Client: ${client.name} (${client.id}) ---`);
+      console.log(`======================================================`);
+      
+      // Preview mode simulates client view
       await page.goto(`https://ops.faseehlall.com/clients/${client.id}?preview=true`, { waitUntil: 'networkidle2' });
-      await sleep(2000);
+      await sleep(3500);
 
-      const clientData = await page.evaluate((clientId) => {
+      // Check initial landing: must land on Client Details first!
+      const initialLandingData = await page.evaluate(() => {
         const bodyText = document.body.innerText;
 
-        // Check tabs
-        const hasSetupTab = bodyText.includes('30-Day Setup');
-        const hasWorkPlansTab = bodyText.includes('90-Day Work Plans');
-        const hasDetailsTab = bodyText.includes('Client Details');
-        const hasReportsTab = bodyText.includes('Monthly Reports');
+        // Check tab buttons and order
+        const tabButtons = Array.from(document.querySelectorAll('button[data-testid^="tab-"]')).map(b => ({
+          testid: b.getAttribute('data-testid'),
+          text: b.textContent?.trim(),
+          classes: b.className
+        }));
+
+        const isDetailsActive = tabButtons.some(b => b.testid === 'tab-details' && b.classes.includes('bg-brand-500'));
+        const hasSetupTab = tabButtons.some(b => b.testid === 'tab-setup');
+        const hasWorkPlansTab = tabButtons.some(b => b.testid === 'tab-workplans');
+        const hasReportsTab = tabButtons.some(b => b.testid === 'tab-reports') || bodyText.includes('Monthly Reports');
         const hasOldDashboardTab = Array.from(document.querySelectorAll('button')).some(b => b.textContent?.trim() === 'Dashboard');
 
-        // Check prototype artifacts
+        // Check order of tabs: details -> setup -> workplans
+        const tabOrder = tabButtons.map(b => b.testid);
+        const isOrderCorrect =
+          tabOrder.indexOf('tab-details') !== -1 &&
+          tabOrder.indexOf('tab-setup') !== -1 &&
+          tabOrder.indexOf('tab-workplans') !== -1 &&
+          tabOrder.indexOf('tab-details') < tabOrder.indexOf('tab-setup') &&
+          tabOrder.indexOf('tab-setup') < tabOrder.indexOf('tab-workplans');
+
+        // Check prototype artifacts (none must exist)
         const hasPerformanceOverview = bodyText.includes('Performance Overview');
         const hasMarketingChannels = bodyText.includes('Marketing Channels');
         const hasConnectGoogleAnalytics = bodyText.includes('Connect Google Analytics');
@@ -87,25 +106,35 @@ async function sleep(ms) {
         const sidebarText = sidebar ? sidebar.innerText : '';
         const hasSlack = sidebarText.includes('Slack');
         const hasWhatsApp = sidebarText.includes('WhatsApp');
-        const hasWorkspaceLinks = sidebarText.includes('WORKSPACE LINKS') || sidebarText.includes('Core & Docs');
+        const hasWorkspaceLinks = sidebarText.includes('WORKSPACE LINKS') || sidebarText.includes('Core & Docs') || sidebarText.includes('Website');
 
-        // Check + Add Task button
-        const addTaskBtn = document.querySelector('button[data-testid="add-task-btn"]') ||
-          Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('Add Task'));
-        const isAddTaskVisible = addTaskBtn ? (addTaskBtn.offsetParent !== null) : false;
+        // Check Client Details fields
+        const hasCompanyName = bodyText.includes('Company Name');
+        const hasOwner = bodyText.includes('Owner') || bodyText.includes('Client Owner');
+        const hasIndustry = bodyText.includes('Industry');
+        const hasServicePackage = bodyText.includes('Service Package');
+        const hasOperationalManager = bodyText.includes('Operational Manager');
+        const hasProjectStartDate = bodyText.includes('Project Start Date');
+        const hasLifecycleStatus = bodyText.includes('Lifecycle Status') || bodyText.includes('Status');
 
-        // Check Internal Task leaks
-        const hasZohoVariations = bodyText.includes('120 Zoho variations for Mushahid Awan');
-        const hasInternalInvoice = bodyText.toLowerCase().includes('invoice #') && bodyText.includes('internal');
-        const hasReconciliationBanner = bodyText.includes('tasks visible to client') || bodyText.includes('hidden from client');
+        // Check disabled inputs in Client Details
+        const formInputs = Array.from(document.querySelectorAll('main input, form input'));
+        const areAllFormInputsDisabled = formInputs.length > 0
+          ? formInputs.every(input => input.disabled)
+          : true;
 
-        // Check Week buttons
-        const week1Btn = Array.from(document.querySelectorAll('button')).some(b => b.textContent?.includes('Week 1'));
+        const hasSaveChanges = bodyText.includes('Save Changes');
+        const hasDiscardChanges = bodyText.includes('Discard Changes');
+        const hasAddProfile = bodyText.includes('Add Profile');
+        const hasArchiveZone = bodyText.includes('Archive Client Workspace');
 
         return {
+          tabButtons,
+          tabOrder,
+          isOrderCorrect,
+          isDetailsActive,
           hasSetupTab,
           hasWorkPlansTab,
-          hasDetailsTab,
           hasReportsTab,
           hasOldDashboardTab,
           hasPerformanceOverview,
@@ -115,137 +144,175 @@ async function sleep(ms) {
           hasSlack,
           hasWhatsApp,
           hasWorkspaceLinks,
-          isAddTaskVisible,
-          hasZohoVariations,
-          hasInternalInvoice,
-          hasReconciliationBanner,
-          week1Btn
-        };
-      }, client.id);
-
-      // Take screenshot of main workspace
-      const screenshotPath = path.join(ARTIFACT_DIR, `verify_unified_${client.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_workspace.png`);
-      await page.screenshot({ path: screenshotPath, fullPage: false });
-      console.log(`Saved screenshot: ${screenshotPath}`);
-
-      // Now click Client Details tab to verify read-only controls
-      const detailsBtn = await page.$('button[data-tab="details"]');
-      if (detailsBtn) {
-        await detailsBtn.click();
-        await sleep(1000);
-      } else {
-        // try finding button by text
-        await page.evaluate(() => {
-          const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('Client Details'));
-          if (btn) btn.click();
-        });
-        await sleep(1000);
-      }
-
-      const detailsData = await page.evaluate(() => {
-        const bodyText = document.body.innerText;
-        const hasSaveChanges = bodyText.includes('Save Changes');
-        const hasDiscardChanges = bodyText.includes('Discard Changes');
-        const hasAddProfile = bodyText.includes('Add Profile');
-        const hasArchiveZone = bodyText.includes('Archive Client Workspace');
-        
-        // Check input disabled state
-        const companyInput = document.querySelector('input[name="company_name"]') || document.querySelector('input[disabled]');
-        const anyInput = document.querySelector('input');
-        const isInputDisabled = anyInput ? anyInput.disabled : true;
-
-        return {
+          hasCompanyName,
+          hasOwner,
+          hasIndustry,
+          hasServicePackage,
+          hasOperationalManager,
+          hasProjectStartDate,
+          hasLifecycleStatus,
+          formInputCount: formInputs.length,
+          areAllFormInputsDisabled,
           hasSaveChanges,
           hasDiscardChanges,
           hasAddProfile,
-          hasArchiveZone,
-          isInputDisabled
+          hasArchiveZone
         };
       });
 
-      // Now click 90-Day Work Plans tab
+      console.log(`[${client.name}] Initial Landing (Client Details) Check:`, initialLandingData);
+
+      // Screenshot 1: Client Details
+      const detailsScreenshotPath = path.join(ARTIFACT_DIR, `verify_reverted_${client.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_details.png`);
+      await page.screenshot({ path: detailsScreenshotPath, fullPage: false });
+      console.log(`Saved details screenshot: ${detailsScreenshotPath}`);
+
+      // 2. Click 30-Day Setup tab to verify weeks & board
       await page.evaluate(() => {
-        const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('90-Day Work Plans'));
+        const btn = document.querySelector('button[data-testid="tab-setup"]');
         if (btn) btn.click();
       });
-      await sleep(1000);
+      await sleep(2000);
+
+      const setupData = await page.evaluate(() => {
+        const bodyText = document.body.innerText;
+
+        // Check weeks
+        const hasWeek1 = bodyText.includes('Week 1') || bodyText.includes('Social Media Optimization');
+        const hasWeek2 = bodyText.includes('Week 2') || bodyText.includes('LinkedIn Optimization');
+        const hasWeek3 = bodyText.includes('Week 3') || bodyText.includes('Funnel Setup');
+        const hasWeek4 = bodyText.includes('Week 4') || bodyText.includes('Paid Ads Setup');
+
+        // Check columns
+        const hasPendingCol = bodyText.includes('Pending');
+        const hasInProgressCol = bodyText.includes('In Progress');
+        const hasApprovalCol = bodyText.includes('Approval');
+        const hasDoneCol = bodyText.includes('Done');
+
+        // Check Add Task button (must NOT be visible)
+        const addTaskButtons = Array.from(document.querySelectorAll('button')).filter(b => {
+          const txt = (b.textContent || '').trim().toLowerCase();
+          const label = (b.getAttribute('aria-label') || '').toLowerCase();
+          const testid = b.getAttribute('data-testid') || '';
+          return (
+            txt === 'add task' ||
+            txt === '+ add task' ||
+            label.includes('add task') ||
+            testid === 'add-task-btn'
+          );
+        });
+        const isAddTaskVisible = addTaskButtons.some(b => b.offsetParent !== null);
+
+        // Check Internal Task leaks
+        const hasZohoVariations = bodyText.includes('120 Zoho variations for Mushahid Awan');
+        const hasInternalInvoice = bodyText.toLowerCase().includes('invoice #') && bodyText.includes('internal');
+        const hasReconciliationBanner = bodyText.includes('tasks visible to client') || bodyText.includes('hidden from client');
+
+        return {
+          hasWeek1,
+          hasWeek2,
+          hasWeek3,
+          hasWeek4,
+          hasPendingCol,
+          hasInProgressCol,
+          hasApprovalCol,
+          hasDoneCol,
+          isAddTaskVisible,
+          hasZohoVariations,
+          hasInternalInvoice,
+          hasReconciliationBanner
+        };
+      });
+
+      console.log(`[${client.name}] 30-Day Setup Check:`, setupData);
+
+      // Screenshot 2: 30-Day Setup
+      const setupScreenshotPath = path.join(ARTIFACT_DIR, `verify_reverted_${client.name.toLowerCase().replace(/[^a-z0-9]/g, '_')}_setup.png`);
+      await page.screenshot({ path: setupScreenshotPath, fullPage: false });
+      console.log(`Saved setup screenshot: ${setupScreenshotPath}`);
+
+      // 3. Click 90-Day Work Plans tab
+      await page.evaluate(() => {
+        const btn = document.querySelector('button[data-testid="tab-workplans"]');
+        if (btn) btn.click();
+      });
+      await sleep(2000);
 
       const workPlansData = await page.evaluate(() => {
         const bodyText = document.body.innerText;
+        const has13Weeks = bodyText.includes('13 Weeks');
+        const has0Plans = bodyText.includes('0 Plans');
+        const has0Tasks = bodyText.includes('0 Tasks');
+        const hasNoPlansDefined = bodyText.includes('No 90-Day Work Plans Defined');
         const hasBuild90DayPlan = bodyText.includes('Build 90-Day Plan');
         const hasCreateFirstPlan = bodyText.includes('Create First 90-Day Work Plan');
         return {
+          has13Weeks,
+          has0Plans,
+          has0Tasks,
+          hasNoPlansDefined,
           hasBuild90DayPlan,
           hasCreateFirstPlan
         };
       });
 
-      // Now click Monthly Reports tab
-      await page.evaluate(() => {
-        const btn = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('Monthly Reports'));
-        if (btn) btn.click();
-      });
-      await sleep(1000);
-
-      const reportsData = await page.evaluate(() => {
-        const bodyText = document.body.innerText;
-        const hasInternalStaffOnly = bodyText.includes('Internal Staff Only');
-        const hasVisibleBadge = bodyText.includes('Client Visible') || bodyText.includes('Total Deliverables');
-        return {
-          hasInternalStaffOnly,
-          hasVisibleBadge
-        };
-      });
+      console.log(`[${client.name}] 90-Day Work Plans Check:`, workPlansData);
 
       // Evaluate client results
       const clientPass =
-        clientData.hasSetupTab &&
-        clientData.hasWorkPlansTab &&
-        clientData.hasDetailsTab &&
-        clientData.hasReportsTab &&
-        !clientData.hasOldDashboardTab &&
-        !clientData.hasPerformanceOverview &&
-        !clientData.hasMarketingChannels &&
-        !clientData.isAddTaskVisible &&
-        !clientData.hasZohoVariations &&
-        !clientData.hasReconciliationBanner &&
-        !detailsData.hasSaveChanges &&
-        !detailsData.hasDiscardChanges &&
-        !detailsData.hasAddProfile &&
-        !detailsData.hasArchiveZone &&
+        initialLandingData.isOrderCorrect &&
+        initialLandingData.isDetailsActive &&
+        initialLandingData.hasSetupTab &&
+        initialLandingData.hasWorkPlansTab &&
+        !initialLandingData.hasReportsTab &&
+        !initialLandingData.hasOldDashboardTab &&
+        !initialLandingData.hasPerformanceOverview &&
+        !initialLandingData.hasMarketingChannels &&
+        initialLandingData.hasWorkspaceLinks &&
+        initialLandingData.hasCompanyName &&
+        !initialLandingData.hasSaveChanges &&
+        !initialLandingData.hasDiscardChanges &&
+        !initialLandingData.hasAddProfile &&
+        !initialLandingData.hasArchiveZone &&
+        initialLandingData.areAllFormInputsDisabled &&
+        setupData.hasWeek1 &&
+        setupData.hasPendingCol &&
+        setupData.hasDoneCol &&
+        !setupData.isAddTaskVisible &&
+        !setupData.hasZohoVariations &&
+        !setupData.hasReconciliationBanner &&
         !workPlansData.hasBuild90DayPlan &&
-        !workPlansData.hasCreateFirstPlan &&
-        !reportsData.hasInternalStaffOnly;
+        !workPlansData.hasCreateFirstPlan;
 
-      console.log(`Client ${client.name} pass status:`, clientPass);
+      console.log(`>>> Client ${client.name} OVERALL RESULT: ${clientPass ? 'PASS' : 'FAIL'} <<<`);
       results.clientDetails[client.name] = {
-        clientData,
-        detailsData,
+        initialLandingData,
+        setupData,
         workPlansData,
-        reportsData,
         pass: clientPass
       };
 
       if (!clientPass) {
-        if (!clientData.hasSetupTab || clientData.hasOldDashboardTab) results.check_1_identical_tabs = false;
-        if (clientData.hasPerformanceOverview || clientData.hasMarketingChannels) results.check_2_no_separate_dashboard_or_telemetry = false;
-        if (!clientData.hasWorkspaceLinks) results.check_3_full_staff_sidebar_rendered = false;
-        if (clientData.isAddTaskVisible) results.check_4_client_read_only_controls_hidden = false;
-        if (clientData.hasZohoVariations || clientData.hasReconciliationBanner) results.check_5_internal_materials_shielded = false;
-        if (detailsData.hasSaveChanges || detailsData.hasAddProfile || detailsData.hasArchiveZone) results.check_6_client_details_tab_read_only = false;
-        if (workPlansData.hasBuild90DayPlan || workPlansData.hasCreateFirstPlan) results.check_7_workplans_tab_read_only = false;
-        if (reportsData.hasInternalStaffOnly) results.check_8_monthly_reports_client_visible_only = false;
+        if (!initialLandingData.isOrderCorrect || !initialLandingData.isDetailsActive) results.check_1_tab_order_and_initial_client_details = false;
+        if (initialLandingData.hasPerformanceOverview || initialLandingData.hasMarketingChannels || initialLandingData.hasOldDashboardTab) results.check_2_no_separate_dashboard_or_telemetry = false;
+        if (!initialLandingData.hasWorkspaceLinks) results.check_3_full_staff_sidebar_rendered = false;
+        if (initialLandingData.hasSaveChanges || initialLandingData.hasAddProfile || initialLandingData.hasArchiveZone || !initialLandingData.areAllFormInputsDisabled) results.check_4_client_details_tab_read_only = false;
+        if (!setupData.hasWeek1 || !setupData.hasPendingCol || setupData.isAddTaskVisible) results.check_5_setup_tab_read_only_and_columns = false;
+        if (workPlansData.hasBuild90DayPlan || workPlansData.hasCreateFirstPlan) results.check_6_workplans_tab_read_only = false;
+        if (setupData.hasZohoVariations || setupData.hasReconciliationBanner) results.check_7_internal_materials_shielded = false;
+        if (initialLandingData.hasReportsTab) results.check_8_monthly_reports_hidden_for_client = false;
       }
     }
 
     // Save JSON results artifact
-    const jsonPath = path.join(ARTIFACT_DIR, 'unified_client_view_production_verification.json');
+    const jsonPath = path.join(ARTIFACT_DIR, 'reverted_client_view_production_verification.json');
     fs.writeFileSync(jsonPath, JSON.stringify(results, null, 2));
     console.log(`\nVerification complete. Results saved to: ${jsonPath}`);
     console.log('Overall Results Summary:', JSON.stringify(results, null, 2));
 
   } catch (err) {
     console.error('Fatal verification error:', err);
+    process.exit(1);
   } finally {
     await browser.close();
   }

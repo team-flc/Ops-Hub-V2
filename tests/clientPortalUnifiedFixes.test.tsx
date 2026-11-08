@@ -253,14 +253,15 @@ describe('Client Dashboard 7 Failures & Unified Layout Test Suite', () => {
       />
     );
 
-    // In unified client view, 4 workspace tabs are present and no separate dashboard tab exists
+    // In reverted client view, starting workspace tabs are present and no separate dashboard or reports tab exists
+    expect(screen.getByTestId('tab-details')).toBeDefined();
     expect(screen.getByTestId('tab-setup')).toBeDefined();
     expect(screen.getByTestId('tab-workplans')).toBeDefined();
-    expect(screen.getByTestId('tab-details')).toBeDefined();
-    expect(screen.getByTestId('tab-reports')).toBeDefined();
+    expect(screen.queryByTestId('tab-reports')).toBeNull();
     expect(screen.queryByTestId('tab-dashboard')).toBeNull();
 
-    // Stepper is defined
+    // Switch to 30-Day Setup to verify stepper
+    fireEvent.click(screen.getByTestId('tab-setup'));
     expect(screen.getByTestId('client-week-stepper')).toBeDefined();
 
     // Switch to 90-Day Work Plans
