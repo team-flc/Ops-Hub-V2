@@ -18,6 +18,19 @@ export const profileService = {
         return { data: null, error: error.message };
       }
 
+      let deptIds: string[] = [];
+      try {
+        const { data: deptRows } = await supabase
+          .from('profile_departments')
+          .select('department_id')
+          .eq('profile_id', data.id);
+        if (deptRows && deptRows.length > 0) {
+          deptIds = deptRows.map((r: any) => r.department_id);
+        }
+      } catch (e) {
+        console.warn('Could not fetch profile departments:', e);
+      }
+
       const profile: UserProfile = {
         id: data.id,
         fullName: data.full_name,
@@ -43,6 +56,7 @@ export const profileService = {
         archiveReason: data.archive_reason,
         previousStatus: data.previous_status,
         organizationId: data.organization_id,
+        departmentIds: deptIds,
         createdAt: data.created_at,
         updatedAt: data.updated_at
       };

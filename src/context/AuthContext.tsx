@@ -82,6 +82,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
       }
 
       let designationName: string | undefined = undefined;
+      let userDeptIds: string[] = [];
       if (data.designation_id) {
         try {
           const { data: desData } = await supabase
@@ -97,6 +98,18 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         }
       } else if (role === 'owner') {
         designationName = 'Owner & Founder';
+      }
+
+      try {
+        const { data: deptRows } = await supabase
+          .from('profile_departments')
+          .select('department_id')
+          .eq('profile_id', data.id);
+        if (deptRows && deptRows.length > 0) {
+          userDeptIds = deptRows.map((r: any) => r.department_id);
+        }
+      } catch (e) {
+        console.warn('Could not fetch profile departments:', e);
       }
 
       const userProf: UserProfile = {
@@ -125,6 +138,7 @@ export const AuthProvider: React.FC<{ children: ReactNode }> = ({ children }) =>
         archiveReason: data.archive_reason,
         previousStatus: data.previous_status,
         organizationId: data.organization_id || null,
+        departmentIds: userDeptIds,
         createdAt: data.created_at || new Date().toISOString(),
         updatedAt: data.updated_at || new Date().toISOString()
       };

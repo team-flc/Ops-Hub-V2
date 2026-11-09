@@ -246,15 +246,30 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
     loadTasks();
   }, [loadTasks]);
 
+  const effectiveDepartments = useMemo(() => {
+    if (currentUserProfile?.role === 'team_member' && currentUserProfile?.departmentIds && currentUserProfile.departmentIds.length > 0) {
+      return departments.filter((d) => currentUserProfile.departmentIds!.includes(d.id));
+    }
+    return departments;
+  }, [departments, currentUserProfile?.role, currentUserProfile?.departmentIds]);
+
   const visibleTasks = useMemo(() => {
     let result = allTasks;
     if (isEffectiveClientView) {
       result = filterAndSanitizeClientDeliverables(allTasks);
     } else if (currentUserProfile?.role === 'team_member') {
-      result = allTasks.filter((t) => t.assigneeId === currentUserProfile.id);
+      result = allTasks.filter((t) => {
+        // Enforce assigned departments scope for team members
+        if (currentUserProfile.departmentIds && currentUserProfile.departmentIds.length > 0) {
+          if (!t.departmentId || !currentUserProfile.departmentIds.includes(t.departmentId)) {
+            return false;
+          }
+        }
+        return true;
+      });
     }
     return result;
-  }, [allTasks, isEffectiveClientView, currentUserProfile?.role, currentUserProfile?.id]);
+  }, [allTasks, isEffectiveClientView, currentUserProfile?.role, currentUserProfile?.id, currentUserProfile?.departmentIds]);
 
   const tasksByWeek: Record<1 | 2 | 3 | 4, ClientTask[]> = useMemo(() => {
     return {
@@ -704,7 +719,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                 <ClientWorkPlanView
                   client={client}
                   currentUserProfile={currentUserProfile}
-                  departments={departments}
+                  departments={effectiveDepartments}
                   isClientView={isEffectiveClientView}
                   onSelectWeek={(wk) => {
                     if (wk >= 1 && wk <= 4) {
@@ -762,7 +777,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
             onCreateBlankInstead={handleCreateBlankFromPicker}
             client={client}
             weekNumber={modalWeekNumber}
-            departments={departments}
+            departments={effectiveDepartments}
           />
         </React.Suspense>
       )}
@@ -780,7 +795,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
             }}
             client={client}
             initialWeek={modalWeekNumber}
-            departments={departments}
+            departments={effectiveDepartments}
           />
         </React.Suspense>
       )}
@@ -800,7 +815,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
             }}
             client={client}
             weekNumber={modalWeekNumber}
-            departments={departments}
+            departments={effectiveDepartments}
             eligibleAssignees={eligibleAssignees}
             initialTemplate={selectedTemplateForCreation}
           />
@@ -814,7 +829,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
             onClose={() => setEditingTask(null)}
             onSuccess={handleTaskUpdated}
             task={editingTask}
-            departments={departments}
+            departments={effectiveDepartments}
           />
         </React.Suspense>
       )}
@@ -828,7 +843,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
             client={client}
             currentUserProfile={currentUserProfile}
             isClientView={isEffectiveClientView}
-            departments={departments}
+            departments={effectiveDepartments}
             eligibleAssignees={eligibleAssignees}
             onTaskUpdated={handleTaskUpdated}
             onOpenEditModal={(t) => setEditingTask(t)}

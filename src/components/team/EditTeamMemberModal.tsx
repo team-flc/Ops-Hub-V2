@@ -112,22 +112,55 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
 
       try {
         if (supabase) {
-          const { data: prof } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', member.id)
-            .maybeSingle();
+          try {
+            const queryProf = supabase.from('profiles');
+            const profPromise = queryProf && typeof queryProf.select === 'function'
+              ? queryProf.select('*').eq('id', member.id).maybeSingle()
+              : Promise.resolve({ data: null });
 
-          if (prof) {
-            setAvatarUrl(prof.avatar_url || null);
-            setBackupPhone(prof.backup_phone || '');
-            setContactEmail(prof.contact_email || '');
-            setLinkedinUrl(prof.linkedin_url || '');
-            setFacebookUrl(prof.facebook_url || '');
-            setInstagramUrl(prof.instagram_url || '');
-            setBio(prof.bio || '');
-            setCnic(prof.cnic || member.cnic || '');
-          } else {
+            const queryDepts = supabase.from('profile_departments');
+            const deptPromise = queryDepts && typeof queryDepts.select === 'function' && typeof queryDepts.select('department_id')?.eq === 'function'
+              ? queryDepts.select('department_id').eq('profile_id', member.id)
+              : Promise.resolve({ data: null });
+
+            const queryClients = supabase.from('client_team_access');
+            const clientPromise = queryClients && typeof queryClients.select === 'function' && typeof queryClients.select('client_id')?.eq === 'function'
+              ? queryClients.select('client_id').eq('profile_id', member.id)
+              : Promise.resolve({ data: null });
+
+            const [profRes, deptRowsRes, clientRowsRes] = await Promise.all([
+              Promise.resolve(profPromise).catch(() => ({ data: null })),
+              Promise.resolve(deptPromise).catch(() => ({ data: null })),
+              Promise.resolve(clientPromise).catch(() => ({ data: null }))
+            ]);
+
+            const prof = profRes?.data;
+            if (prof) {
+              setAvatarUrl(prof.avatar_url || null);
+              setBackupPhone(prof.backup_phone || '');
+              setContactEmail(prof.contact_email || '');
+              setLinkedinUrl(prof.linkedin_url || '');
+              setFacebookUrl(prof.facebook_url || '');
+              setInstagramUrl(prof.instagram_url || '');
+              setBio(prof.bio || '');
+              setCnic(prof.cnic || member.cnic || '');
+              if (prof.reporting_manager_id) {
+                setSelectedManagerId(prof.reporting_manager_id);
+              }
+              if (prof.designation_id) {
+                setSelectedDesignationId(prof.designation_id);
+              }
+            } else {
+              setCnic(member.cnic || '');
+            }
+
+            if (deptRowsRes?.data && deptRowsRes.data.length > 0) {
+              setSelectedDeptIds(deptRowsRes.data.map((r: any) => r.department_id));
+            }
+            if (clientRowsRes?.data) {
+              setSelectedClientIds(clientRowsRes.data.map((r: any) => r.client_id));
+            }
+          } catch {
             setCnic(member.cnic || '');
           }
         } else {
@@ -318,7 +351,7 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
     }
 
     // Strict validation for Setup Complete status
-    if (setupCompleted) {
+    if (setupCompleted && !existingSetupCompletedAt) {
       const isOwnerRole = member.role === 'owner' || (member as any).systemRole === 'owner';
       if (!isOwnerRole && (!selectedDesignationId || selectedDeptIds.length === 0)) {
         setErrorMessage('To mark Employee Operations Setup as Completed, you must configure a Designation and at least one Department.');

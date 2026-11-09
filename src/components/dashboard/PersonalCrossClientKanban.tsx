@@ -472,6 +472,13 @@ export const PersonalCrossClientKanban: React.FC<PersonalCrossClientKanbanProps>
   // Filter Tasks
   const filteredTasks = useMemo(() => {
     return tasks.filter((task) => {
+      // Department Filter: Team members can ONLY see work in their assigned departments
+      if (currentUserProfile?.role === 'team_member' && currentUserProfile?.departmentIds && currentUserProfile.departmentIds.length > 0) {
+        if (!task.departmentId || !currentUserProfile.departmentIds.includes(task.departmentId)) {
+          return false;
+        }
+      }
+
       // Scope Filter
       if (viewScope === 'my_tasks') {
         const targetUserId = (typeof window !== 'undefined' && localStorage.getItem('opshub_test_user_id')) || currentUserProfile?.id;

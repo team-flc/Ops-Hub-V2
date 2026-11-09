@@ -56,11 +56,11 @@ export const RoleManagerDashboard: React.FC<RoleManagerDashboardProps> = ({
   // Direct reports IDs
   const reportingIds = new Set(reportingMembers.map((m) => m.id));
 
-  // Team Approvals Queue (tasks assigned to direct reports or in assigned clients awaiting approval)
+  // Team Approvals Queue (tasks assigned strictly to direct reports)
   const teamApprovals = tasks.filter((t) => {
     const isUnderReview = isTaskAwaitingApproval(t.status);
     const isReportingStaff = t.assigneeId ? reportingIds.has(t.assigneeId) : false;
-    return isUnderReview && (isReportingStaff || reportingMembers.length === 0);
+    return isUnderReview && isReportingStaff;
   });
 
   // Team Overdue / Blockers

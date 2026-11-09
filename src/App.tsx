@@ -205,6 +205,21 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
     }
   }, [profile?.role, profile?.organizationId, params.clientId, location.pathname, navigate]);
 
+  // Team Member Client Access Guard: Cannot view clients they are not assigned to
+  useEffect(() => {
+    if (profile?.role === 'team_member' && params.clientId && clients.length > 0) {
+      const isAssigned = clients.some((c) => c.id === params.clientId);
+      if (!isAssigned) {
+        const fallbackClient = clients.find((c) => c.status !== 'Archived') || clients[0];
+        if (fallbackClient) {
+          navigate(`/clients/${fallbackClient.id}`, { replace: true });
+        } else {
+          navigate('/employee/dashboard', { replace: true });
+        }
+      }
+    }
+  }, [profile?.role, params.clientId, clients, navigate]);
+
   const selectedClient =
     clients.find((c) => c.id === selectedClientId) ||
     (params.clientId ? clients.find((c) => c.id === params.clientId) : undefined) ||

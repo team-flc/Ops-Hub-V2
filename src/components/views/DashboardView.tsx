@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSafeNavigate } from '../../lib/safeRouterHooks';
 import {
   Activity, CheckCircle2, AlertTriangle, Clock, TrendingUp,
@@ -141,13 +141,28 @@ export const DashboardView: React.FC = () => {
   // Direct Reports for Operational Manager
   const reportingMembers = teamMembers.filter((m) => m.reportingManagerId === profile?.id);
 
+  // Filter tasks and departments by team member assigned departments
+  const effectiveDepartments = useMemo(() => {
+    if (isTeamMember && profile?.departmentIds && profile.departmentIds.length > 0) {
+      return departments.filter((d) => profile.departmentIds!.includes(d.id));
+    }
+    return departments;
+  }, [departments, isTeamMember, profile?.departmentIds]);
+
+  const visibleTasks: ClientTask[] = useMemo(() => {
+    if (isTeamMember && profile?.departmentIds && profile.departmentIds.length > 0) {
+      return tasks.filter((t: ClientTask) => t.departmentId && profile.departmentIds!.includes(t.departmentId));
+    }
+    return tasks;
+  }, [tasks, isTeamMember, profile?.departmentIds]);
+
   // Top Metrics Calculation
-  const totalTasks = tasks.length;
-  const completedTasks = tasks.filter((t) => t.status === 'Completed' || t.status === 'Done').length;
-  const inProgressTasks = tasks.filter((t) => t.status === 'In Progress').length;
-  const awaitingApprovalTasks = tasks.filter((t) => isTaskAwaitingApproval(t.status)).length;
-  const overdueTasks = tasks.filter((t) => t.isOverdue && t.status !== 'Completed' && t.status !== 'Done').length;
-  const dueTodayTasks = tasks.filter((t) => isTaskDueToday(t.dueDate) && t.status !== 'Completed' && t.status !== 'Done').length;
+  const totalTasks = visibleTasks.length;
+  const completedTasks = visibleTasks.filter((t: ClientTask) => t.status === 'Completed' || t.status === 'Done').length;
+  const inProgressTasks = visibleTasks.filter((t: ClientTask) => t.status === 'In Progress').length;
+  const awaitingApprovalTasks = visibleTasks.filter((t: ClientTask) => isTaskAwaitingApproval(t.status)).length;
+  const overdueTasks = visibleTasks.filter((t: ClientTask) => t.isOverdue && t.status !== 'Completed' && t.status !== 'Done').length;
+  const dueTodayTasks = visibleTasks.filter((t: ClientTask) => isTaskDueToday(t.dueDate) && t.status !== 'Completed' && t.status !== 'Done').length;
 
   const resolutionRate = totalTasks > 0 ? Math.round((completedTasks / totalTasks) * 100) : 100;
   const healthScore = Math.max(10, Math.min(100, Math.round(100 - (overdueTasks * 5) - (awaitingApprovalTasks * 2) + (resolutionRate * 0.1))));
@@ -334,8 +349,7 @@ export const DashboardView: React.FC = () => {
       )}
 
       {/* 4. Integrated Cross-Client Personal Operations Kanban */}
-      <PersonalCrossClientKanban
-        tasks={tasks}
+      <PersonalCrossClientKanban tasks={visibleTasks}
         clients={clients}
         currentUserProfile={profile}
         onRefreshTasks={loadDashboardData}
@@ -345,11 +359,11 @@ export const DashboardView: React.FC = () => {
 
       {/* 5. Reporting & Progress Analytics Visualizations */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        <TaskCompletionTrendChart tasks={tasks} isLoading={isLoading} />
-        <ApprovalTurnaroundChart tasks={tasks} isLoading={isLoading} />
+        <TaskCompletionTrendChart tasks={visibleTasks} isLoading={isLoading} />
+        <ApprovalTurnaroundChart tasks={visibleTasks} isLoading={isLoading} />
       </div>
 
-      <ClientWorkloadDistributionChart tasks={tasks} clients={clients} isLoading={isLoading} />
+      <ClientWorkloadDistributionChart tasks={visibleTasks} clients={clients} isLoading={isLoading} />
 
       {/* Global Modals */}
       <DailyWorkReportModal
@@ -369,7 +383,7 @@ export const DashboardView: React.FC = () => {
           }}
           client={clients[0]}
           weekNumber={1}
-          departments={departments}
+          departments={effectiveDepartments}
           eligibleAssignees={eligibleAssignees}
         />
       )}
@@ -382,7 +396,7 @@ export const DashboardView: React.FC = () => {
             task={selectedTaskForDetails}
             client={clients.find((c) => c.id === selectedTaskForDetails.clientId) || null}
             currentUserProfile={profile}
-            departments={departments}
+            departments={effectiveDepartments}
             eligibleAssignees={eligibleAssignees}
             onOpenEditModal={(t) => setEditingTask(t)}
             onTaskUpdated={() => {
@@ -404,7 +418,7 @@ export const DashboardView: React.FC = () => {
               loadDashboardData();
             }}
             task={editingTask}
-            departments={departments}
+            departments={effectiveDepartments}
           />
         </React.Suspense>
       )}
