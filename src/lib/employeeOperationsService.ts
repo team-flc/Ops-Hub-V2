@@ -415,35 +415,42 @@ export const employeeOperationsService = {
         }
       });
 
-      // Stream track handling - captures selected monitor, window or screen
-      const track = stream.getVideoTracks()[0];
-
       const video = document.createElement('video');
-      video.srcObject = stream;
-      video.autoplay = true;
-      video.playsInline = true;
+      video.style.position = 'fixed';
+      video.style.top = '-9999px';
+      video.style.left = '-9999px';
+      video.style.opacity = '0';
+      video.style.pointerEvents = 'none';
       video.muted = true;
+      video.playsInline = true;
+      if (typeof document !== 'undefined' && document.body) {
+        document.body.appendChild(video);
+      }
+      video.srcObject = stream;
 
-      await new Promise<void>((resolve) => {
-        video.onloadedmetadata = () => {
-          video.play();
-          resolve();
-        };
-      });
+      await Promise.race([
+        video.play().catch(() => {}),
+        new Promise<void>((resolve) => setTimeout(resolve, 800))
+      ]);
 
-      // Wait a moment for frame to stabilize
-      await new Promise((r) => setTimeout(r, 400));
+      await new Promise<void>((r) => setTimeout(r, 200));
 
       const canvas = document.createElement('canvas');
-      canvas.width = video.videoWidth || 1920;
-      canvas.height = video.videoHeight || 1080;
+      const w = video.videoWidth || 1280;
+      const h = video.videoHeight || 720;
+      canvas.width = w;
+      canvas.height = h;
       const ctx = canvas.getContext('2d');
       if (!ctx) {
+        if (video.parentNode) video.parentNode.removeChild(video);
         stream.getTracks().forEach((t) => t.stop());
         return { error: 'Failed to create canvas context for screenshot.' };
       }
 
-      ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+      ctx.drawImage(video, 0, 0, w, h);
+      if (video.parentNode) {
+        video.parentNode.removeChild(video);
+      }
 
       // Stop stream immediately after capture
       stream.getTracks().forEach((t) => t.stop());

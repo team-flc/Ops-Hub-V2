@@ -170,8 +170,12 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
       if (!evidenceBlob && !manualFile && typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices && ('getDisplayMedia' in navigator.mediaDevices))) {
         setIsCapturingScreen(true);
         try {
-          const capRes = await employeeOperationsService.captureScreenFrame();
-          if (capRes.blob) {
+          const capPromise = employeeOperationsService.captureScreenFrame();
+          const timeoutPromise = new Promise<{ error: string }>((resolve) =>
+            setTimeout(() => resolve({ error: 'Screen capture timed out' }), 6000)
+          );
+          const capRes = await Promise.race([capPromise, timeoutPromise]);
+          if (capRes && 'blob' in capRes && capRes.blob) {
             evidenceBlob = capRes.blob;
             setCapturedBlob(capRes.blob);
           }
@@ -221,8 +225,12 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
       if (!evidenceBlob && !manualFile && typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices && ('getDisplayMedia' in navigator.mediaDevices))) {
         setIsCapturingScreen(true);
         try {
-          const capRes = await employeeOperationsService.captureScreenFrame();
-          if (capRes.blob) {
+          const capPromise = employeeOperationsService.captureScreenFrame();
+          const timeoutPromise = new Promise<{ error: string }>((resolve) =>
+            setTimeout(() => resolve({ error: 'Screen capture timed out' }), 6000)
+          );
+          const capRes = await Promise.race([capPromise, timeoutPromise]);
+          if (capRes && 'blob' in capRes && capRes.blob) {
             evidenceBlob = capRes.blob;
             setCapturedBlob(capRes.blob);
           }
