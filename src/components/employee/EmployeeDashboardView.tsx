@@ -16,7 +16,7 @@ import {
   EmployeeWorkReport, EmployeeGoal, EmployeeDocument, EmployeeSalaryHike,
   CompanyWorkSchedule
 } from '../../types';
-import { employeeOperationsService } from '../../lib/employeeOperationsService';
+import { employeeOperationsService, formatAttendanceHours } from '../../lib/employeeOperationsService';
 import {
   getPKTTodayDateString, getDaysInPKTMonth, getPKTDateTimeParts,
   calculatePKTSalaryCountdown, calculateDaysWithCompany, formatPKTTime,
@@ -46,6 +46,12 @@ export const EmployeeDashboardView: React.FC = () => {
   const [employeeRecord, setEmployeeRecord] = useState<EmployeeRecord | null>(null);
   const [shifts, setShifts] = useState<WorkShift[]>([]);
   const [companySchedules, setCompanySchedules] = useState<CompanyWorkSchedule[]>([]);
+  // Live 10s ticker for dynamic active session hours in history
+  const [currentTickerTime, setCurrentTickerTime] = useState<Date>(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTickerTime(new Date()), 10000);
+    return () => clearInterval(timer);
+  }, []);
   const [todayAttendance, setTodayAttendance] = useState<EmployeeAttendance | null>(null);
   const [attendanceHistory, setAttendanceHistory] = useState<EmployeeAttendance[]>([]);
   const [bankDetails, setBankDetails] = useState<EmployeeBankDetails | null>(null);
@@ -217,12 +223,13 @@ export const EmployeeDashboardView: React.FC = () => {
   // Next Salary Payout Countdown (15th payout date in PKT)
   const { daysRemaining: daysUntilPayout } = calculatePKTSalaryCountdown();
 
-  // Current Accrued Earnings Calculation in PKT (Strict single source)
-  const baseSalary = isSetupPending ? 0 : Number(employeeRecord?.salary || 0);
+  // Current Accrued Earnings Calculation in PKT (Strict single source: 25 work days)
+  const isOwner = profile?.role === 'owner' || (profile as any)?.systemRole === 'owner';
+  const baseSalary = Number(employeeRecord?.salary || 0);
   const { day: currentDay } = getPKTDateTimeParts();
-  const totalDaysInMonth = getDaysInPKTMonth();
-  const rawAccrued = (!isSetupPending && baseSalary > 0 && totalDaysInMonth > 0) ? (baseSalary / totalDaysInMonth) * currentDay : 0;
-  const netAccrued = (!isSetupPending && baseSalary > 0) ? Math.max(0, Math.round(rawAccrued - totalLateDeductions - totalAbsenceDeductions)) : 0;
+  const dailySalaryRate = baseSalary > 0 ? Math.round(baseSalary / 25) : 0;
+  const rawAccrued = baseSalary > 0 ? Math.round(dailySalaryRate * presentDays) : 0;
+  const netAccrued = baseSalary > 0 ? Math.max(0, Math.round(rawAccrued - totalLateDeductions - totalAbsenceDeductions)) : 0;
 
   // Configured Shift Duration in Hours
   const shiftDurationHours = useMemo(() => {
@@ -765,7 +772,7 @@ export const EmployeeDashboardView: React.FC = () => {
             )}
           </div>
           <p className="text-[10px] text-slate-500 dark:text-gray-400 text-center pt-1">
-            Flat PKR 500 per late arrival from 1 min onward.
+            Flat PKR 500 per late arrival after 15 minutes grace, from 16 minutes past start time.
           </p>
         </div>
 
@@ -780,9 +787,11 @@ export const EmployeeDashboardView: React.FC = () => {
           </div>
 
           <div className="h-32 flex items-end justify-between gap-2 pt-4">
-            {isSetupPending || !baseSalary || baseSalary <= 0 ? (
+            {baseSalary <= 0 ? (
               <div className="w-full text-center text-slate-400 text-xs py-8 italic">
-                No finalized payroll history (Setup Pending / Missing Salary Parameter)
+                {isOwner
+                  ? 'Owner Draw / Equity (No Standard Payroll Generation)'
+                  : 'No finalized payroll history (Setup Pending / Missing Base Monthly Salary)'}
               </div>
             ) : (
               last6Payrolls.map((p, i) => {
@@ -1027,7 +1036,7 @@ export const EmployeeDashboardView: React.FC = () => {
                             </span>
                           </td>
                           <td className="py-2.5 px-3 font-mono text-slate-700 dark:text-gray-300">
-                            {att.totalHours ? `${att.totalHours}h` : '--'}
+                            {formatAttendanceHours(att.checkInTime, att.checkOutTime, att.totalHours, currentTickerTime)}
                           </td>
                           <td className="py-2.5 px-3 font-mono">
                             {att.lateDeduction || att.absenceDeduction ? (
@@ -1179,8 +1188,8 @@ export const EmployeeDashboardView: React.FC = () => {
                       <span>Company Attendance Rules:</span>
                     </div>
                     <ul className="list-disc pl-4 space-y-1 text-slate-600 dark:text-gray-300">
-                      <li>Punctuality: Flat PKR 500 per late arrival from 1 min past start time (no monthly cap).</li>
-                      <li>Absence: 1 calendar day salary cut (Base Salary / Days in Month).</li>
+                      <li>Punctuality: Flat PKR 500 per late arrival after 15 minutes grace, from 16 minutes past start time (no monthly cap).</li>
+                      <li>Absence: 1 work day salary cut (Base Salary / 25 work days).</li>
                       <li>Evidence: High-resolution desktop screen capture required at clock-in/out.</li>
                     </ul>
                   </div>
@@ -1204,12 +1213,26 @@ export const EmployeeDashboardView: React.FC = () => {
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between">
                   <span className="text-slate-500">Monthly Base Salary:</span>
-                  <span className="font-mono font-bold text-slate-900 dark:text-gray-100">{isSetupPending || !baseSalary || baseSalary <= 0 ? <span className="text-amber-600">Missing Parameter (Base Salary)</span> : `PKR ${baseSalary.toLocaleString()}`}</span>
+                  <span className="font-mono font-bold text-slate-900 dark:text-gray-100">
+                    {baseSalary > 0 ? (
+                      `PKR ${baseSalary.toLocaleString()}`
+                    ) : isOwner ? (
+                      <span className="text-indigo-600 dark:text-indigo-400 font-semibold">Owner Draw / Equity</span>
+                    ) : (
+                      <span className="text-amber-600">Missing Parameter (Base Salary)</span>
+                    )}
+                  </span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-slate-500">Daily Salary Rate (PKT):</span>
                   <span className="font-mono font-semibold text-slate-700 dark:text-gray-300">
-                    {isSetupPending || !baseSalary || baseSalary <= 0 ? 'Missing Parameter' : `PKR ${totalDaysInMonth > 0 ? Math.round(baseSalary / totalDaysInMonth).toLocaleString() : 0} / day`}
+                    {baseSalary > 0 ? (
+                      `PKR ${dailySalaryRate.toLocaleString()} / day`
+                    ) : isOwner ? (
+                      <span className="text-indigo-600 dark:text-indigo-400 font-semibold">Owner Draw / Equity</span>
+                    ) : (
+                      <span className="text-amber-600">Missing Parameter</span>
+                    )}
                   </span>
                 </div>
                 <div className="flex justify-between">
@@ -1231,20 +1254,40 @@ export const EmployeeDashboardView: React.FC = () => {
               </h2>
               <div className="space-y-2 text-xs">
                 <div className="flex justify-between">
-                  <span className="text-slate-500">Gross Accrued ({currentDay} days):</span>
-                  <span className="font-mono font-semibold text-slate-800 dark:text-gray-200">PKR {Math.round(rawAccrued).toLocaleString()}</span>
+                  <span className="text-slate-500">Gross Accrued ({presentDays} present days):</span>
+                  <span className="font-mono font-semibold text-slate-800 dark:text-gray-200">
+                    {baseSalary > 0 ? (
+                      `PKR ${rawAccrued.toLocaleString()}`
+                    ) : isOwner ? (
+                      <span className="text-indigo-600 dark:text-indigo-400 font-semibold">Owner Draw / Equity</span>
+                    ) : (
+                      <span className="text-amber-600">Payroll Blocked (Missing Base Salary)</span>
+                    )}
+                  </span>
                 </div>
                 <div className="flex justify-between text-rose-600">
                   <span>Late Deductions:</span>
-                  <span className="font-mono font-semibold">-PKR {totalLateDeductions.toLocaleString()}</span>
+                  <span className="font-mono font-semibold">
+                    {totalLateDeductions > 0 ? `-PKR ${totalLateDeductions.toLocaleString()}` : 'PKR 0'}
+                  </span>
                 </div>
                 <div className="flex justify-between text-rose-600">
                   <span>Absence Deductions:</span>
-                  <span className="font-mono font-semibold">-PKR {totalAbsenceDeductions.toLocaleString()}</span>
+                  <span className="font-mono font-semibold">
+                    {totalAbsenceDeductions > 0 ? `-PKR ${totalAbsenceDeductions.toLocaleString()}` : 'PKR 0'}
+                  </span>
                 </div>
                 <div className="pt-2 border-t border-slate-100 dark:border-dark-border flex justify-between font-bold">
                   <span>Estimated Net Accrued:</span>
-                  <span className="font-mono text-indigo-600 dark:text-indigo-400">PKR {netAccrued.toLocaleString()}</span>
+                  <span className="font-mono text-indigo-600 dark:text-indigo-400">
+                    {baseSalary > 0 ? (
+                      `PKR ${netAccrued.toLocaleString()}`
+                    ) : isOwner ? (
+                      <span className="text-indigo-600 dark:text-indigo-400 font-semibold">Owner Draw / Equity</span>
+                    ) : (
+                      <span className="text-amber-600">Payroll Blocked (Missing Base Salary)</span>
+                    )}
+                  </span>
                 </div>
               </div>
             </div>
@@ -1288,7 +1331,9 @@ export const EmployeeDashboardView: React.FC = () => {
                   {payrolls.length === 0 ? (
                     <tr>
                       <td colSpan={8} className="py-6 text-center text-slate-400 italic">
-                        No disbursed payroll records found. First cycle dispatches on the 15th.
+                        {isOwner
+                          ? 'Owner Draw / Equity (No Standard Payroll Generation)'
+                          : 'No disbursed payroll records found. First cycle dispatches on the 15th.'}
                       </td>
                     </tr>
                   ) : (

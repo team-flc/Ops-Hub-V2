@@ -51,6 +51,47 @@ export interface CheckOutPayload {
   metadata?: Record<string, any>;
 }
 
+export function formatAttendanceHours(
+  checkInTimeStr?: string | null,
+  checkOutTimeStr?: string | null,
+  totalHoursVal?: number | null,
+  nowDate: Date = new Date()
+): string {
+  if (!checkInTimeStr) return '--';
+  try {
+    const checkInDate = new Date(checkInTimeStr);
+    if (isNaN(checkInDate.getTime())) return '--';
+
+    if (checkOutTimeStr) {
+      const checkOutDate = new Date(checkOutTimeStr);
+      if (!isNaN(checkOutDate.getTime())) {
+        const diffMs = checkOutDate.getTime() - checkInDate.getTime();
+        if (diffMs > 0) {
+          const totalMinutes = Math.floor(diffMs / 60000);
+          const hours = Math.floor(totalMinutes / 60);
+          const mins = totalMinutes % 60;
+          return `${hours}h ${mins}m`;
+        }
+      }
+      if (typeof totalHoursVal === 'number' && totalHoursVal > 0) {
+        const hours = Math.floor(totalHoursVal);
+        const mins = Math.round((totalHoursVal - hours) * 60);
+        return `${hours}h ${mins}m`;
+      }
+      return '0h 0m';
+    }
+
+    // Open active session (live ticker)
+    const diffMs = nowDate.getTime() - checkInDate.getTime();
+    if (diffMs <= 0) return '0h 0m';
+    const totalMinutes = Math.floor(diffMs / 60000);
+    const hours = Math.floor(totalMinutes / 60);
+    const mins = totalMinutes % 60;
+    return `${hours}h ${mins}m`;
+  } catch {
+    return '--';
+  }
+}
 export const employeeOperationsService = {
   // Timezone & Date Utilities (Asia/Karachi PKT)
   getTodayDatePKT(d: Date = new Date()): string {
@@ -61,6 +102,14 @@ export const employeeOperationsService = {
     return getPKTCurrentMonthString(d);
   },
 
+  formatAttendanceHours(
+    checkInTimeStr?: string | null,
+    checkOutTimeStr?: string | null,
+    totalHoursVal?: number | null,
+    nowDate: Date = new Date()
+  ): string {
+    return formatAttendanceHours(checkInTimeStr, checkOutTimeStr, totalHoursVal, nowDate);
+  },
   formatPKTDateTime(dateInput: string | Date): string {
     return formatPKTDate(dateInput, 'medium') + ' ' + formatPKTTime(dateInput);
   },
@@ -372,34 +421,39 @@ export const employeeOperationsService = {
   // 3. ATTENDANCE & EVIDENCE WORKFLOWS
   // ===========================================================================
 
-  calculateLateMinutes(scheduledTime: Date, actualTime: Date): { isLate: boolean; minutesLate: number; deduction: number } {
+  calculateLateMinutes(
+    scheduledTime: Date,
+    actualTime: Date,
+    graceMinutes: number = 15
+  ): { isLate: boolean; minutesLate: number; deduction: number } {
     const diffMs = actualTime.getTime() - scheduledTime.getTime();
     if (diffMs > 0) {
       const minutesLate = Math.ceil(diffMs / 60000);
-      // Flat PKR 500 late deduction per late occurrence (1m, 15m, 180m = PKR 500, no monthly cap)
-      return { isLate: true, minutesLate, deduction: 500 };
+      // 15-Minute Grace Period:
+      // Check-In within 15 minutes (<= 15m) is On-Time (no deduction).
+      // Check-In at 16 minutes or later (>= 16m) is Late with flat PKR 500 penalty.
+      if (minutesLate > graceMinutes) {
+        return { isLate: true, minutesLate, deduction: 500 };
+      }
+      return { isLate: false, minutesLate, deduction: 0 };
     }
     return { isLate: false, minutesLate: 0, deduction: 0 };
   },
 
-  calculateLateDeduction(minutesLate: number): number {
-    return minutesLate > 0 ? 500 : 0;
+  calculateLateDeduction(minutesLate: number, graceMinutes: number = 15): number {
+    return minutesLate > graceMinutes ? 500 : 0;
   },
 
-  calculateAbsenceDeduction(monthlySalary: number, dateOrDateStr: Date | string): number {
+  calculateDailyRate(monthlySalary: number): number {
     if (monthlySalary <= 0) return 0;
-    let year: number;
-    let month: number;
-    if (typeof dateOrDateStr === 'string') {
-      const [y, m] = dateOrDateStr.split('-').map(Number);
-      year = y;
-      month = m;
-    } else {
-      year = dateOrDateStr.getFullYear();
-      month = dateOrDateStr.getMonth() + 1;
-    }
-    const totalDaysInMonth = this.getDaysInMonth(year, month);
-    return Math.round((monthlySalary / totalDaysInMonth) * 100) / 100;
+    // Standard Work Month = 25 Working Days
+    return Math.round(monthlySalary / 25);
+  },
+
+  calculateAbsenceDeduction(monthlySalary: number, _dateOrDateStr?: Date | string): number {
+    if (monthlySalary <= 0) return 0;
+    // Strict Policy: Daily salary rate is Base Monthly Salary / 25 work days
+    return Math.round(monthlySalary / 25);
   },
 
   async captureScreenFrame(): Promise<{ blob?: Blob; error?: string }> {
@@ -515,9 +569,9 @@ export const employeeOperationsService = {
         scheduledCheckOut: data.scheduled_check_out,
         checkInTime: data.check_in_time,
         checkOutTime: data.check_out_time,
-        status: data.status,
+        status: (Number(data.minutes_late || 0) <= 15 && data.status === 'late') ? 'on_time' : data.status,
         minutesLate: data.minutes_late || 0,
-        lateDeduction: Number(data.late_deduction || 0),
+        lateDeduction: (Number(data.minutes_late || 0) <= 15 && data.status === 'late') ? 0 : Number(data.late_deduction || 0),
         absenceDeduction: Number(data.absence_deduction || 0),
         checkInScreenshotPath: data.check_in_screenshot_path,
         checkOutScreenshotPath: data.check_out_screenshot_path,
@@ -799,6 +853,25 @@ async checkIn(payload: CheckInPayload): Promise<{ attendance?: EmployeeAttendanc
         return { error: rpcErr?.message || 'Check-in failed.' };
       }
 
+      let finalStatus = saved.status;
+      let finalLateDeduction = Number(saved.late_deduction || 0);
+      const minutesLate = Number(saved.minutes_late || 0);
+
+      // 15-Minute Grace Period Enforcement:
+      // Check-In within 15 minutes (<= 15m) is On-Time (no PKR 500 penalty).
+      // Check-In at 16 minutes or later (>= 16m) is Late with flat PKR 500 penalty.
+      if (minutesLate <= 15 && finalStatus === 'late') {
+        finalStatus = 'on_time';
+        finalLateDeduction = 0;
+        await supabase
+          .from('employee_attendance')
+          .update({
+            status: 'on_time',
+            late_deduction: 0
+          })
+          .eq('id', saved.id);
+      }
+
       return {
         attendance: {
           id: saved.id,
@@ -809,9 +882,9 @@ async checkIn(payload: CheckInPayload): Promise<{ attendance?: EmployeeAttendanc
           scheduledCheckOut: saved.scheduled_check_out,
           checkInTime: saved.check_in_time,
           checkOutTime: saved.check_out_time,
-          status: saved.status,
-          minutesLate: saved.minutes_late || 0,
-          lateDeduction: Number(saved.late_deduction || 0),
+          status: finalStatus,
+          minutesLate: minutesLate,
+          lateDeduction: finalLateDeduction,
           absenceDeduction: Number(saved.absence_deduction || 0),
           checkInScreenshotPath: saved.check_in_screenshot_path,
           checkOutScreenshotPath: saved.check_out_screenshot_path,
@@ -960,7 +1033,15 @@ async checkIn(payload: CheckInPayload): Promise<{ attendance?: EmployeeAttendanc
       const { data, error } = await query.order('work_date', { ascending: false });
       if (error || !data) return [];
 
-      const parsed = data.map((a: any) => ({
+      const parsed = data.map((a: any) => {
+        let status = a.status;
+        let lateDeduction = Number(a.late_deduction || 0);
+        const minutesLate = Number(a.minutes_late || 0);
+        if (minutesLate <= 15 && status === 'late') {
+          status = 'on_time';
+          lateDeduction = 0;
+        }
+        return {
         id: a.id,
         employeeId: a.employee_id,
         workDate: a.work_date,
@@ -969,15 +1050,15 @@ async checkIn(payload: CheckInPayload): Promise<{ attendance?: EmployeeAttendanc
         scheduledCheckOut: a.scheduled_check_out,
         checkInTime: a.check_in_time,
         checkOutTime: a.check_out_time,
-        status: a.status,
-        minutesLate: a.minutes_late || 0,
+        status,
+        minutesLate,
         screenCaptureUrl: a.check_in_screenshot_path || a.screen_capture_url || null,
         totalHours: a.total_hours !== undefined && a.total_hours !== null 
           ? Number(a.total_hours) 
           : (a.check_in_time && a.check_out_time 
               ? Math.round(((new Date(a.check_out_time).getTime() - new Date(a.check_in_time).getTime()) / 3600000) * 10) / 10 
               : 0),
-        lateDeduction: Number(a.late_deduction || 0),
+        lateDeduction,
         absenceDeduction: Number(a.absence_deduction || 0),
         checkInScreenshotPath: a.check_in_screenshot_path,
         checkOutScreenshotPath: a.check_out_screenshot_path,
@@ -990,7 +1071,8 @@ async checkIn(payload: CheckInPayload): Promise<{ attendance?: EmployeeAttendanc
         correctedAt: a.corrected_at,
         createdAt: a.created_at,
         updatedAt: a.updated_at
-      }));
+      };
+    });
       return await this.resolveAttendanceSignedUrls(parsed);
     } catch {
       return [];
@@ -1047,40 +1129,97 @@ async checkIn(payload: CheckInPayload): Promise<{ attendance?: EmployeeAttendanc
     if (!supabase) return [];
     try {
       const today = dateStr || this.getTodayDatePKT();
-      const { data, error } = await supabase
-        .from('employee_attendance')
-        .select('*')
-        .eq('work_date', today)
-        .not('check_in_time', 'is', null)
-        .order('check_in_time', { ascending: true });
+      const isLiveToday = !dateStr || dateStr === this.getTodayDatePKT();
+
+      let data: any[] | null = null;
+      let error: any = null;
+
+      if (isLiveToday) {
+        // Query both today and yesterday to capture active overnight shifts spanning midnight
+        const nowMs = Date.now();
+        const yesterdayPKT = this.getTodayDatePKT(new Date(nowMs - 24 * 60 * 60 * 1000));
+        const res = await supabase
+          .from('employee_attendance')
+          .select('*')
+          .in('work_date', [yesterdayPKT, today])
+          .not('check_in_time', 'is', null)
+          .order('check_in_time', { ascending: true });
+        data = res.data;
+        error = res.error;
+      } else {
+        const res = await supabase
+          .from('employee_attendance')
+          .select('*')
+          .eq('work_date', today)
+          .not('check_in_time', 'is', null)
+          .order('check_in_time', { ascending: true });
+        data = res.data;
+        error = res.error;
+      }
 
       if (error || !data) return [];
-      const parsed = data.map((a: any) => ({
-        id: a.id,
-        employeeId: a.employee_id,
-        workDate: a.work_date,
-        shiftId: a.shift_id,
-        scheduledCheckIn: a.scheduled_check_in || '11:00:00',
-        scheduledCheckOut: a.scheduled_check_out || '20:00:00',
-        checkInTime: a.check_in_time,
-        checkOutTime: a.check_out_time,
-        status: a.status,
-        minutesLate: a.minutes_late || 0,
-        lateDeduction: Number(a.late_deduction || 0),
-        absenceDeduction: Number(a.absence_deduction || 0),
-        checkInScreenshotPath: a.check_in_screenshot_path,
-        checkOutScreenshotPath: a.check_out_screenshot_path,
-        checkInEvidenceType: a.check_in_evidence_type,
-        checkOutEvidenceType: a.check_out_evidence_type,
-        earlyCheckoutReason: a.early_checkout_reason,
-        earlyCheckoutStatus: a.early_checkout_status,
-        correctionReason: a.correction_reason,
-        correctedBy: a.corrected_by,
-        correctedAt: a.corrected_at,
-        screenCaptureUrl: a.check_in_screenshot_path,
-        createdAt: a.created_at,
-        updatedAt: a.updated_at
-      }));
+
+      // For live roster, deduplicate per employee prioritizing open active sessions or today's records
+      const recordsByEmployee = new Map<string, any>();
+      for (const a of data) {
+        const isOpen = !a.check_out_time;
+        const isToday = a.work_date === today;
+        const existing = recordsByEmployee.get(a.employee_id);
+
+        if (!existing) {
+          if (isToday || isOpen) {
+            recordsByEmployee.set(a.employee_id, a);
+          }
+        } else {
+          if (isOpen || (isToday && existing.work_date !== today)) {
+            recordsByEmployee.set(a.employee_id, a);
+          }
+        }
+      }
+
+      const activeList = isLiveToday ? Array.from(recordsByEmployee.values()) : data;
+
+      const parsed = activeList.map((a: any) => {
+        let status = a.status;
+        let lateDeduction = Number(a.late_deduction || 0);
+        const minutesLate = Number(a.minutes_late || 0);
+
+        // 15-Minute Grace Period Enforcement:
+        // <= 15m is On-Time (no deduction). >= 16m is Late (PKR 500 penalty).
+        if (minutesLate <= 15 && status === 'late') {
+          status = 'on_time';
+          lateDeduction = 0;
+        }
+
+        return {
+          id: a.id,
+          employeeId: a.employee_id,
+          workDate: a.work_date,
+          shiftId: a.shift_id,
+          scheduledCheckIn: a.scheduled_check_in || '11:00:00',
+          scheduledCheckOut: a.scheduled_check_out || '20:00:00',
+          checkInTime: a.check_in_time,
+          checkOutTime: a.check_out_time,
+          totalHours: a.total_hours !== undefined && a.total_hours !== null ? Number(a.total_hours) : undefined,
+          status,
+          minutesLate,
+          lateDeduction,
+          absenceDeduction: Number(a.absence_deduction || 0),
+          checkInScreenshotPath: a.check_in_screenshot_path,
+          checkOutScreenshotPath: a.check_out_screenshot_path,
+          checkInEvidenceType: a.check_in_evidence_type,
+          checkOutEvidenceType: a.check_out_evidence_type,
+          earlyCheckoutReason: a.early_checkout_reason,
+          earlyCheckoutStatus: a.early_checkout_status,
+          correctionReason: a.correction_reason,
+          correctedBy: a.corrected_by,
+          correctedAt: a.corrected_at,
+          screenCaptureUrl: a.check_in_screenshot_path,
+          createdAt: a.created_at,
+          updatedAt: a.updated_at
+        };
+      });
+
       return await this.resolveAttendanceSignedUrls(parsed);
     } catch {
       return [];

@@ -85,14 +85,26 @@ describe('Employee Operations System Full Behavioral Test Suite', () => {
       expect(resEarly.deduction).toBe(0);
     });
 
-    it('applies flat PKR 500 deduction for even 1 minute late (Strict No Grace Period)', () => {
+    it('applies 15-minute grace period: 1 min is on-time with 0 deduction, 16 mins incurs flat PKR 500', () => {
       const scheduled = new Date('2026-09-12T11:00:00+05:00');
       const actual1MinLate = new Date('2026-09-12T11:01:00+05:00');
+      const actual15MinLate = new Date('2026-09-12T11:15:00+05:00');
+      const actual16MinLate = new Date('2026-09-12T11:16:00+05:00');
 
-      const res = employeeOperationsService.calculateLateMinutes(scheduled, actual1MinLate);
-      expect(res.isLate).toBe(true);
-      expect(res.minutesLate).toBe(1);
-      expect(res.deduction).toBe(500);
+      const res1 = employeeOperationsService.calculateLateMinutes(scheduled, actual1MinLate);
+      expect(res1.isLate).toBe(false);
+      expect(res1.minutesLate).toBe(1);
+      expect(res1.deduction).toBe(0);
+
+      const res15 = employeeOperationsService.calculateLateMinutes(scheduled, actual15MinLate);
+      expect(res15.isLate).toBe(false);
+      expect(res15.minutesLate).toBe(15);
+      expect(res15.deduction).toBe(0);
+
+      const res16 = employeeOperationsService.calculateLateMinutes(scheduled, actual16MinLate);
+      expect(res16.isLate).toBe(true);
+      expect(res16.minutesLate).toBe(16);
+      expect(res16.deduction).toBe(500);
     });
 
     it('applies flat PKR 500 deduction for 45 minutes late without capping', () => {
@@ -108,32 +120,32 @@ describe('Employee Operations System Full Behavioral Test Suite', () => {
 
   // 3. Unapproved Absence Salary Deduction Formula
   describe('3. Unapproved Absence Salary Deduction Formula', () => {
-    it('calculates daily absence cut based on exact days in 30-day month (e.g. September)', () => {
+    it('calculates daily absence cut based on 25 working days', () => {
       const monthlySalary = 150000;
       const septDate = new Date('2026-09-15');
       const cut = employeeOperationsService.calculateAbsenceDeduction(monthlySalary, septDate);
-      expect(cut).toBe(5000); // 150000 / 30 = 5000
+      expect(cut).toBe(6000); // 150000 / 25 = 6000
     });
 
-    it('calculates daily absence cut based on exact days in 31-day month (e.g. August)', () => {
-      const monthlySalary = 155000;
+    it('calculates daily absence cut uniformly across all months based on 25 working days', () => {
+      const monthlySalary = 125000;
       const augDate = new Date('2026-08-15');
       const cut = employeeOperationsService.calculateAbsenceDeduction(monthlySalary, augDate);
-      expect(cut).toBe(5000); // 155000 / 31 = 5000
+      expect(cut).toBe(5000); // 125000 / 25 = 5000
     });
 
-    it('calculates daily absence cut based on exact days in 28-day month (e.g. February non-leap)', () => {
-      const monthlySalary = 140000;
+    it('calculates daily absence cut in February based on 25 working days', () => {
+      const monthlySalary = 125000;
       const febDate = new Date('2026-02-15');
       const cut = employeeOperationsService.calculateAbsenceDeduction(monthlySalary, febDate);
-      expect(cut).toBe(5000); // 140000 / 28 = 5000
+      expect(cut).toBe(5000); // 125000 / 25 = 5000
     });
 
-    it('calculates daily absence cut based on exact days in 29-day month (e.g. February leap year 2028)', () => {
-      const monthlySalary = 145000;
+    it('calculates daily absence cut in leap year February based on 25 working days', () => {
+      const monthlySalary = 125000;
       const febLeapDate = new Date('2028-02-15');
       const cut = employeeOperationsService.calculateAbsenceDeduction(monthlySalary, febLeapDate);
-      expect(cut).toBe(5000); // 145000 / 29 = 5000
+      expect(cut).toBe(5000); // 125000 / 25 = 5000
     });
   });
 
@@ -573,11 +585,12 @@ describe('Employee Operations System Full Behavioral Test Suite', () => {
       // PKT Shift: 11:00 PKT (06:00 UTC) to 20:00 PKT (15:00 UTC)
       const scheduledPKT = new Date('2026-09-12T11:00:00+05:00');
       // Even if client clock is set to local UTC or US Pacific, server compares against true UTC/PKT instant
-      const checkInAt1105PKT = new Date('2026-09-12T06:05:00Z'); // Exactly 11:05 PKT
-      const checkInResult = employeeOperationsService.calculateLateMinutes(scheduledPKT, checkInAt1105PKT);
+      // 20 minutes late (past 15m grace)
+      const checkInAt1120PKT = new Date('2026-09-12T06:20:00Z'); // Exactly 11:20 PKT
+      const checkInResult = employeeOperationsService.calculateLateMinutes(scheduledPKT, checkInAt1120PKT);
 
       expect(checkInResult.isLate).toBe(true);
-      expect(checkInResult.minutesLate).toBe(5);
+      expect(checkInResult.minutesLate).toBe(20);
       expect(checkInResult.deduction).toBe(500);
     });
 
@@ -1164,13 +1177,19 @@ describe('Employee Operations System Full Behavioral Test Suite', () => {
       expect(res.deduction).toBe(0);
     });
 
-    it('determines 11:01 AM PKT check-in as late with PKR 500 penalty', () => {
+    it('determines 11:01 AM PKT check-in as on-time within 15-minute grace, and 11:16 AM as late with PKR 500 penalty', () => {
       const scheduled = new Date('2026-09-12T11:00:00+05:00');
-      const actual = new Date('2026-09-12T11:01:00+05:00');
-      const res = employeeOperationsService.calculateLateMinutes(scheduled, actual);
-      expect(res.isLate).toBe(true);
-      expect(res.minutesLate).toBe(1);
-      expect(res.deduction).toBe(500);
+      const actual01 = new Date('2026-09-12T11:01:00+05:00');
+      const res01 = employeeOperationsService.calculateLateMinutes(scheduled, actual01);
+      expect(res01.isLate).toBe(false);
+      expect(res01.minutesLate).toBe(1);
+      expect(res01.deduction).toBe(0);
+
+      const actual16 = new Date('2026-09-12T11:16:00+05:00');
+      const res16 = employeeOperationsService.calculateLateMinutes(scheduled, actual16);
+      expect(res16.isLate).toBe(true);
+      expect(res16.minutesLate).toBe(16);
+      expect(res16.deduction).toBe(500);
     });
 
     it('determines 60-minute absence trigger at 12:00 PM PKT when no check-in exists', () => {

@@ -80,9 +80,9 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
     day: '2-digit'
   }).format(currentPKTDate);
 
-  // Check if current time is late relative to shift start
+  // Check if current time is late relative to shift start (with 15m grace)
   const getLatenessInfo = () => {
-    if (!todayWorkDate) return { isLate: false, minutesLate: 0 };
+    if (!todayWorkDate) return { isLate: false, minutesLate: 0, isGrace: false };
     const [startH, startM] = scheduledStartTimeStr.split(':').map(Number);
     const scheduledStart = new Date(currentPKTDate);
     scheduledStart.setHours(startH, startM, 0, 0);
@@ -90,9 +90,13 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
     const diffMs = currentPKTDate.getTime() - scheduledStart.getTime();
     if (diffMs > 0) {
       const minutesLate = Math.ceil(diffMs / 60000);
-      return { isLate: true, minutesLate };
+      // 15-Minute Grace: <= 15m is on-time; >= 16m is late
+      if (minutesLate > 15) {
+        return { isLate: true, minutesLate, isGrace: false };
+      }
+      return { isLate: false, minutesLate, isGrace: true };
     }
-    return { isLate: false, minutesLate: 0 };
+    return { isLate: false, minutesLate: 0, isGrace: false };
   };
 
   const lateness = getLatenessInfo();
@@ -578,8 +582,13 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
                 <span>Late Check-In Notice: {lateness.minutesLate} minutes past shift start ({scheduledStartTimeStr.slice(0, 5)} PKT)</span>
               </div>
               <p className="text-[11px] text-amber-800 dark:text-amber-300">
-                Checking in now will record a Late mark with the standard flat PKR 500 late penalty deduction.
+                Checking in now will record a Late mark with flat PKR 500 late penalty deduction after 15 minutes grace.
               </p>
+            </div>
+          ) : lateness.isGrace ? (
+            <div className="p-3.5 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 text-emerald-800 dark:text-emerald-300 text-xs font-semibold flex items-center gap-2">
+              <Check className="w-4 h-4 text-emerald-600 shrink-0" />
+              <span>Within 15-minute grace period (+{lateness.minutesLate}m). Check-in will be marked On-Time with no deduction.</span>
             </div>
           ) : (
             <div className="p-3.5 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 text-emerald-800 dark:text-emerald-300 text-xs font-semibold flex items-center gap-2">

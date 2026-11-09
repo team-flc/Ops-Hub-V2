@@ -974,6 +974,7 @@ export interface EmployeeRecord {
   shift?: WorkShift | null;
   customCheckInTime?: string | null; // HH:mm
   customCheckOutTime?: string | null; // HH:mm
+  lateGraceMinutes?: number | null; // Grace period in minutes (defaults to 15)
   employmentStatus: EmploymentStatus;
   sopAcknowledged: boolean;
   sopAcknowledgedAt?: string | null;

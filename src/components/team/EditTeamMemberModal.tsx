@@ -66,6 +66,7 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
   const [employmentType, setEmploymentType] = useState<EmploymentType>('full_time');
   const [dob, setDob] = useState('');
   const [salary, setSalary] = useState<number | ''>('');
+  const [lateGraceMinutes, setLateGraceMinutes] = useState<number>(15);
   const [shifts, setShifts] = useState<WorkShift[]>([]);
   const [companySchedules, setCompanySchedules] = useState<CompanyWorkSchedule[]>([]);
   const [selectedShiftId, setSelectedShiftId] = useState('');
@@ -147,6 +148,7 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
           setEmploymentType(employeeRec.employmentType || 'full_time');
           setDob(employeeRec.dateOfBirth || '');
           setSalary(employeeRec.salary || '');
+          setLateGraceMinutes(employeeRec.lateGraceMinutes ?? 15);
           setSelectedShiftId(employeeRec.shiftId || (fetchedShifts[0]?.id || ''));
           setCustomCheckInTime(employeeRec.customCheckInTime || '');
           setCustomCheckOutTime(employeeRec.customCheckOutTime || '');
@@ -322,7 +324,11 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
         setErrorMessage('To mark Employee Operations Setup as Completed, you must configure a Designation and at least one Department.');
         return;
       }
-      if (!selectedShiftId || !salary || Number(salary) <= 0) {
+      if (!selectedShiftId) {
+        setErrorMessage('To mark Employee Operations Setup as Completed, you must configure an Assigned Shift.');
+        return;
+      }
+      if (!isOwnerRole && (!salary || Number(salary) <= 0)) {
         setErrorMessage('To mark Employee Operations Setup as Completed, you must configure an Assigned Shift and a valid Base Monthly Salary (> 0 PKR).');
         return;
       }
@@ -387,6 +393,7 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
         dateOfBirth: dob || null,
         cnic: cnic.trim() || undefined,
         salary: salary ? Number(salary) : 0,
+        lateGraceMinutes: Number(lateGraceMinutes) || 15,
         jobDescription: jobDescription.trim() || undefined,
         shiftId: selectedShiftId || undefined,
         customCheckInTime: customCheckInTime.trim() || undefined,
@@ -795,6 +802,23 @@ export const EditTeamMemberModal: React.FC<EditTeamMemberModalProps> = ({
                 </select>
               </div>
 
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
+                  Late Grace Period (Minutes)
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="60"
+                  value={lateGraceMinutes}
+                  onChange={(e) => setLateGraceMinutes(e.target.value ? Number(e.target.value) : 15)}
+                  placeholder="15"
+                  className="w-full px-3.5 py-2.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 font-mono focus:outline-none focus:ring-2 focus:ring-brand-500"
+                />
+                <p className="text-[10px] text-slate-500 dark:text-gray-400">
+                  Check-in within 15 minutes is On-Time. Flat PKR 500 penalty applies from 16 minutes past start time.
+                </p>
+              </div>
               <div className="space-y-1">
                 <label className="block text-xs font-semibold text-slate-700 dark:text-gray-300">
                   Custom Shift Check-In Time (Optional override)

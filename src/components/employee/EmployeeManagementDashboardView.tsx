@@ -15,7 +15,7 @@ import {
   Department, Designation, ROLE_DISPLAY_NAMES
 } from '../../types';
 import { teamManagementService } from '../../lib/teamManagementService';
-import { employeeOperationsService } from '../../lib/employeeOperationsService';
+import { employeeOperationsService, formatAttendanceHours } from '../../lib/employeeOperationsService';
 import { getPKTTodayDateString, getPKTCurrentMonthString, getPKTDateTimeParts } from '../../lib/pktDateUtils';
 import { AssignAssetModal } from './AssignAssetModal';
 import { LogIncidentModal } from './LogIncidentModal';
@@ -76,6 +76,12 @@ export const EmployeeManagementDashboardView: React.FC = () => {
   const [employeeRecords, setEmployeeRecords] = useState<EmployeeRecord[]>([]);
   const [shifts, setShifts] = useState<WorkShift[]>([]);
   const [companySchedules, setCompanySchedules] = useState<CompanyWorkSchedule[]>([]);
+  // Live ticker for active open sessions in roster
+  const [currentTickerTime, setCurrentTickerTime] = useState<Date>(new Date());
+  useEffect(() => {
+    const timer = setInterval(() => setCurrentTickerTime(new Date()), 10000);
+    return () => clearInterval(timer);
+  }, []);
   const [todayAttendanceList, setTodayAttendanceList] = useState<EmployeeAttendance[]>([]);
   const [missingCheckIns, setMissingCheckIns] = useState<Array<{ employee: UserProfile | TeamMemberRecord; shift: WorkShift; minutesLate: number }>>([]);
   const [assets, setAssets] = useState<CompanyAsset[]>([]);
@@ -303,13 +309,14 @@ export const EmployeeManagementDashboardView: React.FC = () => {
     return { configuredActiveStaff: configured, setupPendingStaff: pending };
   }, [allStaffMembers, empRecordMap, shifts, companySchedules]);
 
-  // Governed Stats
+  // Governed Stats - Single Source of Truth
   const activeStaffCount = configuredActiveStaff.length;
   const setupPendingCount = setupPendingStaff.length;
-  const checkedInTodayCount = todayAttendanceList.filter(a => a.checkInTime && configuredActiveStaff.some(cs => cs.id === a.employeeId)).length;
-  const lateTodayCount = todayAttendanceList.filter(a => a.status === 'late' && a.checkInTime && configuredActiveStaff.some(cs => cs.id === a.employeeId)).length;
+  const totalStaffCount = allStaffMembers.length;
+  const checkedInTodayCount = todayAttendanceList.filter(a => a.checkInTime).length;
+  const lateTodayCount = todayAttendanceList.filter(a => a.status === 'late' && a.checkInTime).length;
   const onTimeTodayCount = Math.max(0, checkedInTodayCount - lateTodayCount);
-  const pendingCheckInCount = Math.max(0, activeStaffCount - checkedInTodayCount);
+  const pendingCheckInCount = Math.max(0, totalStaffCount - checkedInTodayCount);
   const pendingPayrollCount = payrollRecords.filter(p => p.status === 'draft' || p.status === 'approved' || p.status === 'under_review').length;
   const openConcernsCount = concerns.filter(c => c.status !== 'completed').length;
 
@@ -325,11 +332,11 @@ export const EmployeeManagementDashboardView: React.FC = () => {
       'Shift',
       'Check In (PKT)',
       'Check Out (PKT)',
+      'Hours',
+      'Deductions (PKR)',
+      'Proof',
       'Today Status',
-      'Late Minutes',
-      'Total Hours',
-      'Late Deduction (PKR)',
-      'Absence Deduction (PKR)'
+      'Late Minutes'
     ];
 
     const rows = allStaffMembers.map(member => {
@@ -340,9 +347,12 @@ export const EmployeeManagementDashboardView: React.FC = () => {
       const shiftStr = shift ? `${shift.name} (${shift.startTime.slice(0, 5)} - ${shift.endTime.slice(0, 5)} PKT)` : 'Unassigned';
       const checkInStr = att?.checkInTime ? new Date(att.checkInTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi', hour: '2-digit', minute: '2-digit' }) : '--';
       const checkOutStr = att?.checkOutTime ? new Date(att.checkOutTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi', hour: '2-digit', minute: '2-digit' }) : '--';
+      const hoursStr = formatAttendanceHours(att?.checkInTime, att?.checkOutTime, att?.totalHours);
+      const totalDeductions = (att?.lateDeduction || 0) + (att?.absenceDeduction || 0);
+      const proofStr = [att?.checkInScreenshotPath ? 'IN' : '', att?.checkOutScreenshotPath ? 'OUT' : ''].filter(Boolean).join('/') || '--';
       const isMissing = missingCheckIns.some(mc => mc.employee.id === member.id);
       const statusStr = att?.checkInTime
-        ? (att.checkOutTime ? 'Shift Completed' : (att.status === 'late' ? 'Late' : 'Present'))
+        ? (att.checkOutTime ? 'Off Duty' : (att.status === 'late' ? `Late (+${att.minutesLate}m)` : 'Present'))
         : (isMissing ? 'Absent' : 'Pending Check-In');
 
       return [
@@ -353,11 +363,11 @@ export const EmployeeManagementDashboardView: React.FC = () => {
         `"${shiftStr}"`,
         `"${checkInStr}"`,
         `"${checkOutStr}"`,
+        `"${hoursStr}"`,
+        totalDeductions > 0 ? `"-PKR ${totalDeductions.toLocaleString()}"` : '"PKR 0"',
+        `"${proofStr}"`,
         `"${statusStr}"`,
-        att?.minutesLate || 0,
-        att?.totalHours || 0,
-        att?.lateDeduction || 0,
-        att?.absenceDeduction || 0
+        att?.minutesLate || 0
       ].join(',');
     });
 
@@ -755,6 +765,8 @@ export const EmployeeManagementDashboardView: React.FC = () => {
                     <th className="py-3 px-3">Shift</th>
                     <th className="py-3 px-3">Check In</th>
                     <th className="py-3 px-3">Check Out</th>
+                    <th className="py-3 px-3">Hours</th>
+                    <th className="py-3 px-3">Deductions</th>
                     <th className="py-3 px-3">Proof</th>
                     <th className="py-3 px-3">Today Status</th>
                     <th className="py-3 px-3 text-right">Actions</th>
@@ -866,6 +878,53 @@ export const EmployeeManagementDashboardView: React.FC = () => {
                           {/* Check Out */}
                           <td className="py-3 px-3 font-mono text-slate-700 dark:text-gray-300 font-semibold">
                             {att?.checkOutTime ? new Date(att.checkOutTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi', hour: '2-digit', minute: '2-digit' }) : '--'}
+                          </td>
+
+                          {/* Hours */}
+                          <td className="py-3 px-3 font-mono text-slate-700 dark:text-gray-300 font-semibold">
+                            {formatAttendanceHours(att?.checkInTime, att?.checkOutTime, att?.totalHours, currentTickerTime)}
+                          </td>
+
+                          {/* Deductions */}
+                          <td className="py-3 px-3 font-mono">
+                            {att?.lateDeduction || att?.absenceDeduction ? (
+                              <span className="text-rose-600 font-semibold">
+                                -PKR {((att.lateDeduction || 0) + (att.absenceDeduction || 0)).toLocaleString()}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400">--</span>
+                            )}
+                          </td>
+
+                          {/* Proof */}
+                          <td className="py-3 px-3">
+                            <div className="flex items-center gap-1.5">
+                              {att?.checkInScreenshotPath ? (
+                                <button
+                                  type="button"
+                                  data-testid={`roster-proof-in-${member.id}`}
+                                  onClick={() => setPreviewEvidenceUrl(att.checkInSignedUrl || att.checkInScreenshotPath || null)}
+                                  className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-indigo-50 text-indigo-700 dark:bg-indigo-950/40 dark:text-indigo-300 border border-indigo-200 hover:bg-indigo-100 transition-colors cursor-pointer"
+                                  title="Check-In Screenshot Proof"
+                                >
+                                  IN
+                                </button>
+                              ) : null}
+                              {att?.checkOutScreenshotPath ? (
+                                <button
+                                  type="button"
+                                  data-testid={`roster-proof-out-${member.id}`}
+                                  onClick={() => setPreviewEvidenceUrl(att.checkOutSignedUrl || att.checkOutScreenshotPath || null)}
+                                  className="px-1.5 py-0.5 rounded text-[10px] font-bold bg-purple-50 text-purple-700 dark:bg-purple-950/40 dark:text-purple-300 border border-purple-200 hover:bg-purple-100 transition-colors cursor-pointer"
+                                  title="Check-Out Screenshot Proof"
+                                >
+                                  OUT
+                                </button>
+                              ) : null}
+                              {!att?.checkInScreenshotPath && !att?.checkOutScreenshotPath && (
+                                <span className="text-slate-400 font-mono">--</span>
+                              )}
+                            </div>
                           </td>
 
                           {/* Today Status */}
