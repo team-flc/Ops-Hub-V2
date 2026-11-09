@@ -5,7 +5,7 @@ import {
   Lock, Plus, FileText, ExternalLink, RefreshCw,
   TrendingUp, AlertCircle, Eye, X, Briefcase,
   BarChart3, PieChart, Activity,
-  Sparkles, FileCheck, Landmark
+  Sparkles, FileCheck, Landmark, Trash2
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import {
@@ -23,6 +23,7 @@ import {
   formatPKTDate, getPKTCurrentMonthString, formatWorkingScheduleDescription
 } from '../../lib/pktDateUtils';
 import { EmployeeAttendanceControl } from './EmployeeAttendanceControl';
+import { DeleteAttendanceModal, DeleteAttendanceRecordData } from './DeleteAttendanceModal';
 import { SOPModal } from './SOPModal';
 import { BankDetailsModal } from './BankDetailsModal';
 import { SubmitConcernModal } from './SubmitConcernModal';
@@ -54,6 +55,7 @@ export const EmployeeDashboardView: React.FC = () => {
   }, []);
   const [todayAttendance, setTodayAttendance] = useState<EmployeeAttendance | null>(null);
   const [attendanceHistory, setAttendanceHistory] = useState<EmployeeAttendance[]>([]);
+  const [selectedDeleteAttendance, setSelectedDeleteAttendance] = useState<DeleteAttendanceRecordData | null>(null);
   const [bankDetails, setBankDetails] = useState<EmployeeBankDetails | null>(null);
   const [assets, setAssets] = useState<CompanyAsset[]>([]);
   const [payrolls, setPayrolls] = useState<EmployeePayrollRecord[]>([]);
@@ -999,12 +1001,13 @@ export const EmployeeDashboardView: React.FC = () => {
                       <th className="py-2.5 px-3">Hours</th>
                       <th className="py-2.5 px-3">Deductions</th>
                       <th className="py-2.5 px-3 text-right">Proof</th>
+                      {isOwner && <th className="py-2.5 px-3 text-center w-16">Actions</th>}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100 dark:divide-dark-border">
                     {attendanceHistory.length === 0 ? (
                       <tr>
-                        <td colSpan={7} className="py-6 text-center text-slate-400 italic">
+                        <td colSpan={isOwner ? 8 : 7} className="py-6 text-center text-slate-400 italic">
                           {isSetupPending
                             ? 'Setup Pending — Attendance tracking activates once configuration is finalized.'
                             : 'No attendance logs recorded yet.'}
@@ -1141,6 +1144,26 @@ export const EmployeeDashboardView: React.FC = () => {
                               );
                             })()}
                           </td>
+                          {isOwner && (
+                            <td className="py-2.5 px-3 text-center">
+                              <button
+                                type="button"
+                                data-testid={`delete-attendance-btn-${att.id}`}
+                                onClick={() => setSelectedDeleteAttendance({
+                                  id: att.id,
+                                  employeeId: att.employeeId,
+                                  employeeName: profile?.fullName || 'Employee',
+                                  workDate: att.workDate,
+                                  checkInTime: att.checkInTime,
+                                  checkOutTime: att.checkOutTime
+                                })}
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                                title="Delete Attendance Record (Owner Only)"
+                              >
+                                <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                              </button>
+                            </td>
+                          )}
                         </tr>
                       ))
                     )}
@@ -1950,6 +1973,18 @@ export const EmployeeDashboardView: React.FC = () => {
       )}
 
       {/* Screen Evidence Lightbox Modal */}
+      {/* Owner-Only Delete Attendance Modal */}
+      <DeleteAttendanceModal
+        isOpen={!!selectedDeleteAttendance}
+        onClose={() => setSelectedDeleteAttendance(null)}
+        attendance={selectedDeleteAttendance}
+        callerId={profile?.id || ''}
+        onSuccess={() => {
+          loadEmployeeData();
+          setSelectedDeleteAttendance(null);
+        }}
+      />
+
       {previewEvidenceUrl && (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-sm z-50 flex items-center justify-center p-4 animate-fade-in">
           <div className="bg-white dark:bg-dark-300 rounded-3xl max-w-4xl w-full p-6 space-y-4 shadow-2xl border border-slate-200 dark:border-dark-border">

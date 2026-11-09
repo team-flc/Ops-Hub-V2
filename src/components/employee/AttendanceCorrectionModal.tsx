@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 import { Clock, CheckCircle2, AlertCircle, X, User, Search, ShieldCheck } from 'lucide-react';
 import { EmployeeAttendance, EmployeeRecord, UserProfile, TeamMemberRecord, WorkShift } from '../../types';
 import { employeeOperationsService } from '../../lib/employeeOperationsService';
-import { getPKTTodayDateString } from '../../lib/pktDateUtils';
+import { getPKTTodayDateString, formatPKTTimeHHMM } from '../../lib/pktDateUtils';
 import { supabase } from '../../lib/supabase';
 
 interface AttendanceCorrectionModalProps {
@@ -95,8 +95,8 @@ export const AttendanceCorrectionModal: React.FC<AttendanceCorrectionModalProps>
     if (attendance) {
       setTargetEmployeeId(attendance.employeeId);
       setWorkDate(attendance.workDate || getPKTTodayDateString());
-      setCheckInTime(attendance.checkInTime ? attendance.checkInTime.slice(11, 16) : '');
-      setCheckOutTime(attendance.checkOutTime ? attendance.checkOutTime.slice(11, 16) : '');
+      setCheckInTime(formatPKTTimeHHMM(attendance.checkInTime));
+      setCheckOutTime(formatPKTTimeHHMM(attendance.checkOutTime));
       setStatus(attendance.status);
       setLateDeduction(attendance.lateDeduction || 0);
       setAbsenceDeduction(attendance.absenceDeduction || 0);

@@ -1226,6 +1226,92 @@ async checkIn(payload: CheckInPayload): Promise<{ attendance?: EmployeeAttendanc
     }
   },
 
+  /**
+   * Owner-Authoritative Attendance Record Deletion.
+   * Strictly deletes attendance entry, removes associated screenshot proof files from storage,
+   * resets late/absence deductions dynamically, and writes an immutable audit event.
+   */
+  async deleteAttendanceRecord(
+    attendanceId: string,
+    callerId: string,
+    reason: string
+  ): Promise<{ success: boolean; error?: string }> {
+    if (!supabase) return { success: false, error: 'Database unconfigured.' };
+    if (!attendanceId) return { success: false, error: 'Attendance record ID is required.' };
+    if (!reason || !reason.trim()) {
+      return { success: false, error: 'A mandatory reason is required for attendance deletion audit.' };
+    }
+
+    try {
+      // 1. Fetch record first to get evidence paths and employee details
+      const { data: record, error: fetchErr } = await supabase
+        .from('employee_attendance')
+        .select('*')
+        .eq('id', attendanceId)
+        .maybeSingle();
+
+      if (fetchErr) {
+        return { success: false, error: fetchErr.message };
+      }
+
+      if (!record) {
+        return { success: false, error: 'Attendance record not found or already deleted.' };
+      }
+
+      // 2. Remove screenshot proofs from storage bucket(s)
+      const pathsToDelete: string[] = [];
+      if (record.check_in_screenshot_path && !record.check_in_screenshot_path.startsWith('http')) {
+        pathsToDelete.push(record.check_in_screenshot_path);
+      }
+      if (record.check_out_screenshot_path && !record.check_out_screenshot_path.startsWith('http')) {
+        pathsToDelete.push(record.check_out_screenshot_path);
+      }
+
+      if (pathsToDelete.length > 0) {
+        await supabase.storage.from('employee-attendance-evidence').remove(pathsToDelete).catch(() => {});
+        await supabase.storage.from('attendance-proofs').remove(pathsToDelete).catch(() => {});
+      }
+
+      // 3. Delete the attendance record row from database
+      const { error: delErr } = await supabase
+        .from('employee_attendance')
+        .delete()
+        .eq('id', attendanceId);
+
+      if (delErr) {
+        return { success: false, error: delErr.message };
+      }
+
+      // 4. Immutable Audit Event Log
+      try {
+        await supabase.from('system_audit_events').insert({
+          actor_id: callerId,
+          action: 'attendance_record_deleted',
+          entity_type: 'employee_attendance',
+          entity_id: attendanceId,
+          metadata: {
+            deleted_by: callerId,
+            employee_id: record.employee_id,
+            work_date: record.work_date,
+            check_in_time: record.check_in_time,
+            check_out_time: record.check_out_time,
+            status: record.status,
+            late_deduction: record.late_deduction,
+            absence_deduction: record.absence_deduction,
+            deleted_screenshots: pathsToDelete,
+            reason: reason.trim(),
+            timestamp: new Date().toISOString()
+          },
+          reason: reason.trim()
+        });
+      } catch (_) {}
+
+      return { success: true };
+    } catch (err: any) {
+      return { success: false, error: err.message || 'Failed to delete attendance record.' };
+    }
+  },
+
   async correctAttendanceRecord(
     attendanceId: string,
     correction: {

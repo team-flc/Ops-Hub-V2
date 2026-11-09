@@ -176,15 +176,32 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
         try {
           const capPromise = employeeOperationsService.captureScreenFrame();
           const timeoutPromise = new Promise<{ error: string }>((resolve) =>
-            setTimeout(() => resolve({ error: 'Screen capture timed out' }), 6000)
+            setTimeout(() => resolve({ error: 'Screen capture timed out' }), 60000)
           );
           const capRes = await Promise.race([capPromise, timeoutPromise]);
           if (capRes && 'blob' in capRes && capRes.blob) {
             evidenceBlob = capRes.blob;
             setCapturedBlob(capRes.blob);
+          } else if (capRes && 'error' in capRes && capRes.error) {
+            setErrorMessage(capRes.error);
+            setIsProcessing(false);
+            setIsCapturingScreen(false);
+            return;
           }
-        } catch (_) {}
+        } catch (err: any) {
+          setErrorMessage(err.message || 'Screen capture failed.');
+          setIsProcessing(false);
+          setIsCapturingScreen(false);
+          return;
+        }
         setIsCapturingScreen(false);
+      }
+
+      if (!evidenceBlob && !manualFile) {
+        setErrorMessage('Workstation screen capture is required to check in. Please select entire screen or upload a screenshot proof.');
+        setIsProcessing(false);
+        setIsCapturingScreen(false);
+        return;
       }
 
       const res = await employeeOperationsService.checkIn({
@@ -231,15 +248,32 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
         try {
           const capPromise = employeeOperationsService.captureScreenFrame();
           const timeoutPromise = new Promise<{ error: string }>((resolve) =>
-            setTimeout(() => resolve({ error: 'Screen capture timed out' }), 6000)
+            setTimeout(() => resolve({ error: 'Screen capture timed out' }), 60000)
           );
           const capRes = await Promise.race([capPromise, timeoutPromise]);
           if (capRes && 'blob' in capRes && capRes.blob) {
             evidenceBlob = capRes.blob;
             setCapturedBlob(capRes.blob);
+          } else if (capRes && 'error' in capRes && capRes.error) {
+            setErrorMessage(capRes.error);
+            setIsProcessing(false);
+            setIsCapturingScreen(false);
+            return;
           }
-        } catch (_) {}
+        } catch (err: any) {
+          setErrorMessage(err.message || 'Screen capture failed.');
+          setIsProcessing(false);
+          setIsCapturingScreen(false);
+          return;
+        }
         setIsCapturingScreen(false);
+      }
+
+      if (!evidenceBlob && !manualFile) {
+        setErrorMessage('Workstation screen capture is required to check out. Please select entire screen or upload a screenshot proof.');
+        setIsProcessing(false);
+        setIsCapturingScreen(false);
+        return;
       }
 
       const res = await employeeOperationsService.checkOut({
@@ -411,7 +445,7 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2 text-sm font-bold">
               <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-              <span>Shift Completed Today ({todayWorkDate})</span>
+              <span>Shift Completed ({todayAttendance?.workDate || todayWorkDate})</span>
             </div>
             <span className="px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-800 dark:bg-dark-card dark:text-gray-200 border border-slate-300">
               Status: Off Duty

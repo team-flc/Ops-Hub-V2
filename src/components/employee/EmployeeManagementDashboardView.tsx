@@ -4,7 +4,7 @@ import {
   Users, Clock, DollarSign, Laptop, Award, MessageSquare, 
   Calculator, AlertTriangle, CheckCircle2, Search, 
   Plus, Download, Eye, Edit3, RefreshCw, 
-  X, ShieldAlert, Settings
+  X, ShieldAlert, Settings, Trash2, Calendar
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useSafeNavigate } from '../../lib/safeRouterHooks';
@@ -23,6 +23,7 @@ import { PayrollAdjustmentModal } from './PayrollAdjustmentModal';
 import { AttendanceCorrectionModal } from './AttendanceCorrectionModal';
 import { FinalSettlementModal } from './FinalSettlementModal';
 import { EditTeamMemberModal } from '../team/EditTeamMemberModal';
+import { DeleteAttendanceModal, DeleteAttendanceRecordData } from './DeleteAttendanceModal';
 
 const formatPKTTime = (dateStr: string) => {
   try {
@@ -66,6 +67,9 @@ export const EmployeeManagementDashboardView: React.FC = () => {
     }
   };
 
+  const isOwner = currentUserProfile?.role === 'owner' || (currentUserProfile as any)?.systemRole === 'owner';
+  const [rosterSelectedDate, setRosterSelectedDate] = useState<string>(() => getPKTTodayDateString());
+  const [selectedDeleteAttendance, setSelectedDeleteAttendance] = useState<DeleteAttendanceRecordData | null>(null);
   // Roster Filters
   const [rosterSearch, setRosterSearch] = useState('');
   const [shiftFilter, setShiftFilter] = useState<'all' | 'morning' | 'night'>('all');
@@ -169,8 +173,8 @@ export const EmployeeManagementDashboardView: React.FC = () => {
       setDesignations(desigs);
       setEligibleManagers(managers);
 
-      // Fetch genuine today's attendance in a single batch query
-      const todayAttendance = await employeeOperationsService.fetchAllTodayAttendance(todayDate);
+      // Fetch genuine attendance for rosterSelectedDate in a single batch query
+      const todayAttendance = await employeeOperationsService.fetchAllTodayAttendance(rosterSelectedDate);
       setTodayAttendanceList(todayAttendance);
 
       // Build employee record map to isolate configured vs setup-pending staff
@@ -220,7 +224,16 @@ export const EmployeeManagementDashboardView: React.FC = () => {
     loadAllData();
   }, [loadAllData]);
 
-  // Load attendance proofs when proofSelectedDate changes
+  // Load roster attendance when rosterSelectedDate changes
+  useEffect(() => {
+    if (activeTab === 'attendance' && attendanceSubTab === 'roster') {
+      employeeOperationsService.fetchAllTodayAttendance(rosterSelectedDate)
+        .then(setTodayAttendanceList)
+        .catch(() => {});
+    }
+  }, [activeTab, attendanceSubTab, rosterSelectedDate]);
+
+    // Load attendance proofs when proofSelectedDate changes
   useEffect(() => {
     if (activeTab === 'attendance' && attendanceSubTab === 'proof') {
       setIsLoadingProof(true);
@@ -677,7 +690,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
                   <span>Team Attendance Roster ({allStaffMembers.length} Members)</span>
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-gray-400">
-                  Live workstation attendance tracking, scheduled shifts, and punch records for today
+                  Live workstation attendance tracking, scheduled shifts, and punch records for {rosterSelectedDate}
                 </p>
               </div>
 
@@ -731,6 +744,18 @@ export const EmployeeManagementDashboardView: React.FC = () => {
               </div>
 
               <div className="flex items-center gap-2">
+                <div className="flex items-center gap-1.5 px-3 py-1.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl">
+                  <Calendar className="w-3.5 h-3.5 text-slate-400" />
+                  <span className="text-slate-500 dark:text-gray-400 font-semibold text-[11px] whitespace-nowrap">Date:</span>
+                  <input
+                    type="date"
+                    data-testid="roster-date-picker"
+                    value={rosterSelectedDate}
+                    onChange={(e) => setRosterSelectedDate(e.target.value)}
+                    className="bg-transparent text-slate-800 dark:text-gray-200 focus:outline-none font-mono text-xs cursor-pointer"
+                  />
+                </div>
+
                 <select
                   value={shiftFilter}
                   onChange={(e) => setShiftFilter(e.target.value as any)}
@@ -965,7 +990,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
                                 onClick={() => setSelectedAttendanceCorrection(att || {
                                   id: '',
                                   employeeId: member.id,
-                                  workDate: getPKTTodayDateString(),
+                                  workDate: rosterSelectedDate,
                                   scheduledCheckIn: shift?.startTime || '11:00:00',
                                   scheduledCheckOut: shift?.endTime || '20:00:00',
                                   minutesLate: 0,
@@ -975,11 +1000,31 @@ export const EmployeeManagementDashboardView: React.FC = () => {
                                   createdAt: '',
                                   updatedAt: ''
                                 })}
-                                className="p-1.5 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-slate-100 dark:hover:bg-dark-100 transition-colors"
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-slate-100 dark:hover:bg-dark-100 transition-colors cursor-pointer"
                                 title="Adjust Attendance"
                               >
                                 <Edit3 className="w-3.5 h-3.5" />
                               </button>
+
+                              {/* Owner-Only Delete Attendance Button */}
+                              {isOwner && att && att.id && (
+                                <button
+                                  type="button"
+                                  data-testid={`roster-delete-btn-${member.id}`}
+                                  onClick={() => setSelectedDeleteAttendance({
+                                    id: att.id,
+                                    employeeId: member.id,
+                                    employeeName: member.fullName,
+                                    workDate: att.workDate,
+                                    checkInTime: att.checkInTime,
+                                    checkOutTime: att.checkOutTime
+                                  })}
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/30 transition-colors cursor-pointer"
+                                  title="Delete Attendance Record (Owner Only)"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5 text-rose-500" />
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -1671,6 +1716,22 @@ export const EmployeeManagementDashboardView: React.FC = () => {
             employeeName={teamMembers.find(m => m.id === selectedPayrollRecord?.employeeId)?.fullName || 'Staff Member'}
             callerId={currentUserProfile.id}
             onSuccess={loadAllData}
+          />
+
+          {/* Owner-Only Delete Attendance Modal */}
+          <DeleteAttendanceModal
+            isOpen={!!selectedDeleteAttendance}
+            onClose={() => setSelectedDeleteAttendance(null)}
+            attendance={selectedDeleteAttendance}
+            callerId={currentUserProfile?.id || ''}
+            onSuccess={() => {
+              employeeOperationsService.fetchAllTodayAttendance(rosterSelectedDate).then(setTodayAttendanceList);
+              if (attendanceSubTab === 'proof') {
+                employeeOperationsService.fetchAllTodayAttendance(proofSelectedDate).then(setProofAttendanceList);
+              }
+              loadAllData();
+              setSelectedDeleteAttendance(null);
+            }}
           />
 
           <AttendanceCorrectionModal

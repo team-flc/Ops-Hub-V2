@@ -126,6 +126,19 @@ export function formatPKTTime(
 /**
  * Formats an ISO string, Date object, or "YYYY-MM-DD" string into readable PKT display date.
  */
+/**
+ * Formats an ISO string or Date object into "HH:mm" (24-hour format) in PKT timezone (Asia/Karachi).
+ * Ideal for HTML <input type="time"> controls.
+ */
+export function formatPKTTimeHHMM(isoOrDate: string | Date | null | undefined): string {
+  if (!isoOrDate) return '';
+  const d = typeof isoOrDate === 'string' ? new Date(isoOrDate) : isoOrDate;
+  if (isNaN(d.getTime())) return '';
+
+  const parts = getPKTDateTimeParts(d);
+  return `${String(parts.hour).padStart(2, '0')}:${String(parts.minute).padStart(2, '0')}`;
+}
+
 export function formatPKTDate(
   isoOrDate: string | Date | null | undefined,
   format: 'iso' | 'short' | 'medium' | 'long' = 'medium'
