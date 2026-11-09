@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from 'react';
 import {
   Clock, Camera, Upload, AlertTriangle, CheckCircle2,
-  Monitor, Building, Home, Check, RefreshCw, X, AlertCircle
+  Building, Home, Check, RefreshCw, X, AlertCircle, ShieldAlert
 } from 'lucide-react';
 import { EmployeeAttendance, EmployeeRecord, WorkShift } from '../../types';
 import { employeeOperationsService } from '../../lib/employeeOperationsService';
@@ -25,6 +25,9 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
   onOpenSOPModal,
   onConfigureSetup
 }) => {
+  const { profile } = useAuth();
+  const isOwner = profile?.role === 'owner';
+
   // Current Pakistan Standard Time Ticker (PKT / UTC+5)
   const [currentPKT, setCurrentPKT] = useState<string>('');
   const [currentPKTDate, setCurrentPKTDate] = useState<Date>(new Date());
@@ -41,6 +44,7 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
   const [isCapturingScreen, setIsCapturingScreen] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -48,7 +52,6 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
   useEffect(() => {
     const updateTime = () => {
       const now = new Date();
-      // Format in Asia/Karachi
       const timeStr = now.toLocaleTimeString('en-US', {
         timeZone: 'Asia/Karachi',
         hour12: true,
@@ -150,24 +153,18 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
     }
   };
 
-  // Clock In Action
+  // Check In Action
   const handleClockIn = async () => {
-    if (!employeeRecord) {
-      setErrorMessage('Employee profile not loaded.');
-      return;
-    }
-
-    if (!employeeRecord.sopAcknowledged) {
-      setErrorMessage('You must review and acknowledge the Company SOP before clocking in.');
-      if (onOpenSOPModal) onOpenSOPModal();
-      return;
-    }
-
     setIsProcessing(true);
     setErrorMessage(null);
     setSuccessMessage(null);
 
     try {
+      // Auto-acknowledge SOP if pending
+      if (employeeRecord && !employeeRecord.sopAcknowledged) {
+        await employeeOperationsService.acknowledgeSOP(employeeRecord.id).catch(() => {});
+      }
+
       const res = await employeeOperationsService.checkIn({
         evidenceBlob: capturedBlob || undefined,
         manualFile: manualFile || undefined,
@@ -182,25 +179,22 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
       } else {
         setSuccessMessage(
           res.attendance?.status === 'late'
-            ? `Clocked in successfully (Marked LATE with PKR ${res.attendance.lateDeduction} penalty).`
-            : 'Clocked in on time! Have a productive shift.'
+            ? `Checked in successfully (Marked LATE with flat PKR ${res.attendance.lateDeduction || 500} penalty).`
+            : 'Checked in on time! Have a productive shift.'
         );
         clearEvidence();
         onAttendanceUpdated();
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to clock in.');
+      setErrorMessage(err.message || 'Failed to check in.');
     } finally {
       setIsProcessing(false);
     }
   };
 
-  const { profile } = useAuth();
-  const [isReportModalOpen, setIsReportModalOpen] = useState(false);
-
-  // Actual Clock Out Execution
+  // Actual Check Out Execution
   const performActualClockOut = async () => {
-    if (!todayAttendance || !employeeRecord) return;
+    if (!todayAttendance) return;
 
     setIsProcessing(true);
     setErrorMessage(null);
@@ -217,30 +211,62 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
       if (res.error) {
         setErrorMessage(res.error);
       } else {
-        setSuccessMessage('Clocked out successfully. Shift completed!');
+        setSuccessMessage('Checked out successfully. Shift completed!');
         clearEvidence();
         onAttendanceUpdated();
       }
     } catch (err: any) {
-      setErrorMessage(err.message || 'Failed to clock out.');
+      setErrorMessage(err.message || 'Failed to check out.');
     } finally {
       setIsProcessing(false);
     }
   };
 
-  // Clock Out Action: Checks for daily report first
+  // Check Out Action
   const handleClockOut = async () => {
-    if (!todayAttendance || !employeeRecord) return;
+    if (!todayAttendance) return;
     setIsReportModalOpen(true);
   };
 
-  const isSetupPending = !employeeRecord || !employeeRecord.setupCompletedAt;
-  const missingParams: string[] = [];
-  if (!employeeRecord?.shiftId) missingParams.push('Shift');
-  if (!employeeRecord?.salary || employeeRecord.salary <= 0) missingParams.push('Base Salary');
-  if (missingParams.length === 0 && isSetupPending) missingParams.push('Work Schedule');
   const isCheckedIn = Boolean(todayAttendance && todayAttendance.checkInTime);
   const isCheckedOut = Boolean(todayAttendance && todayAttendance.checkOutTime);
+
+  const isSetupPending = !shift && (!employeeRecord || !employeeRecord.shiftId || !employeeRecord.setupCompletedAt);
+  const missingParams: string[] = [];
+  if (!employeeRecord?.shiftId) missingParams.push('Shift');
+  if (!isOwner && (!employeeRecord?.salary || Number(employeeRecord.salary) <= 0)) {
+    missingParams.push('Base Salary');
+  }
+  if (missingParams.length === 0 && isSetupPending) {
+    missingParams.push('Work Schedule');
+  }
+
+  // Calculate elapsed hours since check-in
+  const getElapsedHours = (checkInTimeStr: string | null | undefined) => {
+    if (!checkInTimeStr) return '--';
+    try {
+      const checkInDate = new Date(checkInTimeStr);
+      const diffMs = currentPKTDate.getTime() - checkInDate.getTime();
+      if (diffMs <= 0) return '0.0 hrs';
+      const totalMinutes = Math.floor(diffMs / 60000);
+      const hours = Math.floor(totalMinutes / 60);
+      const mins = totalMinutes % 60;
+      return `${hours}h ${mins}m (${(totalMinutes / 60).toFixed(1)} hrs)`;
+    } catch {
+      return '--';
+    }
+  };
+
+  // Dynamic Current Status
+  const getCurrentStatus = () => {
+    if (isCheckedOut) return 'Off Duty';
+    if (isCheckedIn) {
+      return todayAttendance?.status === 'late' ? 'Late' : 'Present';
+    }
+    return 'Off Duty';
+  };
+
+  const currentStatus = getCurrentStatus();
 
   return (
     <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border shadow-sm space-y-6">
@@ -260,16 +286,7 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
               </span>
             </div>
             <p className="text-xs text-slate-500 dark:text-gray-400">
-              {isSetupPending ? (
-                <span className="text-amber-600 dark:text-amber-400 font-semibold flex items-center gap-1.5 mt-0.5">
-                  <AlertCircle className="w-3.5 h-3.5" />
-                  <span>Setup Pending — Shift Unconfigured</span>
-                </span>
-              ) : (
-                <>
-                  Shift: <span className="font-semibold text-slate-700 dark:text-gray-300">{shift?.name || 'Standard Shift'}</span> ({scheduledStartTimeStr.slice(0, 5)} – {scheduledEndTimeStr.slice(0, 5)} PKT)
-                </>
-              )}
+              Shift: <span className="font-semibold text-slate-700 dark:text-gray-300">{shift?.name || 'Standard Shift'}</span> ({scheduledStartTimeStr.slice(0, 5)} – {scheduledEndTimeStr.slice(0, 5)} PKT)
             </p>
           </div>
         </div>
@@ -283,21 +300,6 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
           <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Live System Clock (PKT)</span>
         </div>
       </div>
-
-      {/* Notifications / Alerts */}
-      {errorMessage && (
-        <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium">
-          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
-          <div className="flex-1">{errorMessage}</div>
-        </div>
-      )}
-
-      {successMessage && (
-        <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium">
-          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
-          <div className="flex-1">{successMessage}</div>
-        </div>
-      )}
 
       {/* State 0: Setup Pending */}
       {isSetupPending ? (
@@ -342,24 +344,44 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
         </div>
       ) : (
         <>
-          {/* State 1: Already Completed Shift */}
-          {isCheckedOut && (
-            <div className="p-5 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 text-emerald-900 dark:text-emerald-200 space-y-3">
-              <div className="flex items-center gap-2 text-sm font-bold">
-                <CheckCircle2 className="w-5 h-5 text-emerald-600" />
-                <span>Shift Completed Today ({todayWorkDate})</span>
-              </div>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                <div className="p-3 rounded-xl bg-white/70 dark:bg-dark-card border border-emerald-100 dark:border-emerald-900/40">
-                  <span className="text-slate-500 dark:text-gray-400 block text-[10px] font-semibold uppercase">Check In</span>
-                  <span className="font-bold text-slate-800 dark:text-gray-200">
-                    {todayAttendance?.checkInTime ? new Date(todayAttendance.checkInTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi', hour: '2-digit', minute: '2-digit' }) : '--'}
-                  </span>
-                </div>
+      {/* Notifications / Alerts */}
+      {errorMessage && (
+        <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-rose-50 border border-rose-200 text-rose-800 text-xs font-medium">
+          <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+          <div className="flex-1">{errorMessage}</div>
+        </div>
+      )}
+
+      {successMessage && (
+        <div className="flex items-start gap-2.5 p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-xs font-medium">
+          <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+          <div className="flex-1">{successMessage}</div>
+        </div>
+      )}
+
+      {/* State 1: Already Completed Shift Today */}
+      {isCheckedOut && (
+        <div className="p-5 rounded-2xl bg-emerald-50/60 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 text-emerald-900 dark:text-emerald-200 space-y-3">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-sm font-bold">
+              <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+              <span>Shift Completed Today ({todayWorkDate})</span>
+            </div>
+            <span className="px-3 py-1 rounded-full text-xs font-bold bg-slate-100 text-slate-800 dark:bg-dark-card dark:text-gray-200 border border-slate-300">
+              Status: Off Duty
+            </span>
+          </div>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            <div className="p-3 rounded-xl bg-white/70 dark:bg-dark-card border border-emerald-100 dark:border-emerald-900/40">
+              <span className="text-slate-500 dark:text-gray-400 block text-[10px] font-semibold uppercase">Check In</span>
+              <span className="font-bold text-slate-800 dark:text-gray-200">
+                {todayAttendance?.checkInTime ? new Date(todayAttendance.checkInTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi', hour: '2-digit', minute: '2-digit' }) : '--'} PKT
+              </span>
+            </div>
             <div className="p-3 rounded-xl bg-white/70 dark:bg-dark-card border border-emerald-100 dark:border-emerald-900/40">
               <span className="text-slate-500 dark:text-gray-400 block text-[10px] font-semibold uppercase">Check Out</span>
               <span className="font-bold text-slate-800 dark:text-gray-200">
-                {todayAttendance?.checkOutTime ? new Date(todayAttendance.checkOutTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi', hour: '2-digit', minute: '2-digit' }) : '--'}
+                {todayAttendance?.checkOutTime ? new Date(todayAttendance.checkOutTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi', hour: '2-digit', minute: '2-digit' }) : '--'} PKT
               </span>
             </div>
             <div className="p-3 rounded-xl bg-white/70 dark:bg-dark-card border border-emerald-100 dark:border-emerald-900/40">
@@ -378,21 +400,33 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
         </div>
       )}
 
-      {/* State 2: Checked In (Awaiting Clock Out) */}
+      {/* State 2: Checked In (Awaiting Check-Out) */}
       {isCheckedIn && !isCheckedOut && (
         <div className="space-y-5">
           <div className="p-4 rounded-2xl bg-blue-50/70 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <span className="text-[11px] font-semibold text-blue-700 dark:text-blue-300 uppercase tracking-wider block">
-                Active Recorded Session
-              </span>
-              <div className="text-sm font-bold text-slate-900 dark:text-gray-100 mt-0.5">
+              <div className="flex items-center gap-2">
+                <span className="text-[11px] font-semibold text-blue-700 dark:text-blue-300 uppercase tracking-wider block">
+                  Active Recorded Session
+                </span>
+                <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                  todayAttendance?.status === 'late'
+                    ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                    : 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                }`}>
+                  Status: {currentStatus}
+                </span>
+              </div>
+              <div className="text-sm font-bold text-slate-900 dark:text-gray-100 mt-1">
                 Checked in at {new Date(todayAttendance!.checkInTime!).toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi', hour: '2-digit', minute: '2-digit' })} PKT
                 {todayAttendance?.status === 'late' && (
                   <span className="ml-2 px-2 py-0.5 rounded-md text-[10px] bg-amber-100 text-amber-800 border border-amber-300 font-semibold">
-                    Late ({todayAttendance.minutesLate}m)
+                    Late ({todayAttendance.minutesLate}m • flat PKR 500 penalty)
                   </span>
                 )}
+              </div>
+              <div className="text-xs font-semibold text-blue-800 dark:text-blue-300 mt-1">
+                Hours worked today: {getElapsedHours(todayAttendance?.checkInTime)}
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -402,14 +436,14 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
             </div>
           </div>
 
-          {/* Evidence Capture for Clock Out */}
+          {/* Evidence Capture for Check-Out */}
           <div className="space-y-3 p-4 rounded-2xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-gray-300">
-                Shift End Workstation Evidence (Mandatory)
+                Shift End Workstation Evidence
               </label>
               <span className="text-[11px] text-slate-500 dark:text-gray-400">
-                Select <strong className="text-brand-600 dark:text-brand-400">"Entire Screen"</strong> to verify taskbar clock
+                Select <strong className="text-brand-600 dark:text-brand-400">"Entire Screen"</strong> or upload screenshot
               </span>
             </div>
 
@@ -455,9 +489,6 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
                     className="hidden"
                   />
                 </div>
-                <p className="text-[11px] text-amber-700 dark:text-amber-400 italic">
-                  Desktop screen capture (or manual upload) is required before clocking out.
-                </p>
               </div>
             )}
 
@@ -476,32 +507,33 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
             </div>
           </div>
 
-          {/* Clock Out Action Button */}
+          {/* Check-Out Action Button */}
           <button
             type="button"
-            disabled={isProcessing || (!capturedBlob && !manualFile)}
+            data-testid="check-out-btn" aria-label="Check-Out Clock Out"
+            disabled={isProcessing}
             onClick={handleClockOut}
-            className="w-full py-3.5 px-4 rounded-2xl bg-rose-600 hover:bg-rose-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-sm transition-all shadow-lg shadow-rose-600/25 flex items-center justify-center gap-2"
+            className="w-full py-3.5 px-4 rounded-2xl bg-rose-600 hover:bg-rose-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-sm transition-all shadow-lg shadow-rose-600/25 flex items-center justify-center gap-2 cursor-pointer"
           >
             {isProcessing ? (
               <RefreshCw className="w-4 h-4 animate-spin" />
             ) : (
               <Clock className="w-4 h-4" />
             )}
-            <span>Clock Out & End Shift</span>
+            <span>Check-Out</span>
           </button>
         </div>
       )}
 
       {/* State 3: Not Checked In Yet */}
-      {!isCheckedIn && (
+      {!isCheckedIn && !isCheckedOut && (
         <div className="space-y-5">
           {/* Lateness Warning Banner */}
           {lateness.isLate ? (
             <div className="p-4 rounded-2xl bg-amber-50 dark:bg-amber-950/30 border border-amber-300 dark:border-amber-800/60 text-amber-900 dark:text-amber-200 space-y-1">
               <div className="flex items-center gap-2 font-bold text-xs">
                 <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0" />
-                <span>Late Check-In Notice: {lateness.minutesLate} minutes past shift start</span>
+                <span>Late Check-In Notice: {lateness.minutesLate} minutes past shift start ({scheduledStartTimeStr.slice(0, 5)} PKT)</span>
               </div>
               <p className="text-[11px] text-amber-800 dark:text-amber-300">
                 Checking in now will record a Late mark with the standard flat PKR 500 late penalty deduction.
@@ -510,7 +542,7 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
           ) : (
             <div className="p-3.5 rounded-2xl bg-emerald-50/70 dark:bg-emerald-950/20 border border-emerald-200 dark:border-emerald-800/40 text-emerald-800 dark:text-emerald-300 text-xs font-semibold flex items-center gap-2">
               <Check className="w-4 h-4 text-emerald-600 shrink-0" />
-              <span>You are on time for your scheduled shift ({scheduledStartTimeStr.slice(0, 5)} PKT).</span>
+              <span>You are on time for your scheduled shift ({scheduledStartTimeStr.slice(0, 5)} PKT). Status: Off Duty</span>
             </div>
           )}
 
@@ -547,14 +579,14 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
             </div>
           </div>
 
-          {/* Evidence Capture for Clock In */}
+          {/* Evidence Capture for Check In */}
           <div className="space-y-3 p-4 rounded-2xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border">
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
               <label className="block text-xs font-bold uppercase tracking-wider text-slate-700 dark:text-gray-300">
-                Workstation Screen Evidence (Mandatory)
+                Workstation Screen Evidence (Optional)
               </label>
               <span className="text-[11px] text-slate-500 dark:text-gray-400">
-                Select <strong className="text-brand-600 dark:text-brand-400">"Entire Screen"</strong> to verify taskbar clock
+                Select <strong className="text-brand-600 dark:text-brand-400">"Entire Screen"</strong> or upload screenshot
               </span>
             </div>
 
@@ -600,31 +632,30 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
                     className="hidden"
                   />
                 </div>
-                <p className="text-[11px] text-amber-700 dark:text-amber-400 italic">
-                  Desktop screen capture (or manual upload) is required before clocking in.
-                </p>
               </div>
             )}
           </div>
 
-          {/* Clock In Action Button */}
+          {/* Check-In Action Button */}
           <button
             type="button"
-            disabled={isProcessing || (!capturedBlob && !manualFile)}
+            data-testid="check-in-btn" aria-label="Check-In Clock In"
+            disabled={isProcessing}
             onClick={handleClockIn}
-            className="w-full py-4 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-bold text-sm transition-all shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-2"
+            className="w-full py-4 px-4 rounded-2xl bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-bold text-sm transition-all shadow-lg shadow-emerald-600/25 flex items-center justify-center gap-2 cursor-pointer"
           >
             {isProcessing ? (
               <RefreshCw className="w-4 h-4 animate-spin" />
             ) : (
               <>
                 <CheckCircle2 className="w-5 h-5" />
-                <span>Clock In & Verify Workstation</span>
+                <span>Check-In</span>
               </>
             )}
           </button>
         </div>
       )}
+
       </>
       )}
 

@@ -421,7 +421,7 @@ export const EmployeeDashboardView: React.FC = () => {
               <span className={isSetupPending ? 'text-amber-200 font-semibold' : ''}>
                 {isSetupPending
                   ? 'Setup Pending — Shift Unconfigured'
-                  : (activeShift ? `${activeShift.name} (${activeShift.startTime.slice(0, 5)} - ${activeShift.endTime.slice(0, 5)} PKT) • ${formatWorkingScheduleDescription(companySchedules)}` : 'Shift Unconfigured')}
+                  : (activeShift ? `${activeShift.name} (${activeShift.startTime.slice(0, 5)} - ${activeShift.endTime.slice(0, 5)} PKT) • ${formatWorkingScheduleDescription(companySchedules)}` : 'Night Shift (21:00 - 06:00 PKT) • Mon - Sat (Sunday Off)')}
               </span>
             </p>
             <div className="text-[11px] text-indigo-200/80 flex items-center gap-3 flex-wrap pt-0.5">
@@ -431,7 +431,7 @@ export const EmployeeDashboardView: React.FC = () => {
               <span>•</span>
               <span className="inline-flex items-center gap-1 font-semibold text-emerald-300">
                 <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
-                {isSetupPending ? 'Setup Locked' : (todayAttendance?.checkInTime ? (todayAttendance.checkOutTime ? 'Shift Completed' : 'Checked In') : 'Not Clocked In')}
+                {isSetupPending ? 'Setup Pending' : (todayAttendance?.checkInTime ? (todayAttendance.checkOutTime ? 'Shift Completed' : 'Checked In') : 'Off Duty')}
               </span>
             </div>
           </div>
@@ -585,15 +585,19 @@ export const EmployeeDashboardView: React.FC = () => {
             <TrendingUp className="w-4 h-4 text-indigo-500" />
           </div>
           <div className="text-xl sm:text-2xl font-black text-indigo-600 dark:text-indigo-400 font-mono">
-            {isSetupPending || !baseSalary || baseSalary <= 0 ? (
-              <span className="text-xs sm:text-sm font-bold text-amber-600 dark:text-amber-400">Missing Parameter</span>
+            {profile?.role === 'owner' ? (
+              <span className="text-sm font-bold text-slate-700 dark:text-gray-200">Owner Draw / Equity</span>
+            ) : isSetupPending || !baseSalary || baseSalary <= 0 ? (
+              <span className="text-xs sm:text-sm font-bold text-slate-500">Not configured</span>
             ) : (
               `PKR ${netAccrued.toLocaleString()}`
             )}
           </div>
           <p className="text-[10px] text-slate-500 dark:text-gray-400">
-            {isSetupPending || !baseSalary || baseSalary <= 0 ? (
-              <span className="text-amber-600 dark:text-amber-400 font-medium">Base: Missing Parameter</span>
+            {profile?.role === 'owner' ? (
+              <span>Owner compensation structure</span>
+            ) : isSetupPending || !baseSalary || baseSalary <= 0 ? (
+              <span className="text-slate-500 font-medium">Base: Not configured</span>
             ) : (
               `Base: PKR ${baseSalary.toLocaleString()}`
             )}

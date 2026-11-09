@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { 
   Users, Clock, DollarSign, Laptop, Award, MessageSquare, 
   Calculator, AlertTriangle, CheckCircle2, Search, 
-  Plus, Eye, Edit3, RefreshCw, 
+  Plus, Download, Eye, Edit3, RefreshCw, 
   X, ShieldAlert, Settings
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
@@ -28,7 +28,34 @@ export const EmployeeManagementDashboardView: React.FC = () => {
   const navigate = useSafeNavigate();
 
   // Active Tab
-  const [activeTab, setActiveTab] = useState<'attendance' | 'directory' | 'payroll' | 'assets' | 'performance' | 'concerns' | 'settlement'>('attendance');
+  const [activeTab, setActiveTab] = useState<'attendance' | 'directory' | 'payroll' | 'assets' | 'performance' | 'concerns' | 'settlement'>(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam === 'attendance') return 'attendance';
+      if (tabParam === 'directory') return 'directory';
+      if (tabParam === 'payroll') return 'payroll';
+      if (tabParam === 'assets') return 'assets';
+      if (tabParam === 'performance') return 'performance';
+      if (tabParam === 'concerns') return 'concerns';
+      if (tabParam === 'settlement') return 'settlement';
+    }
+    return 'attendance';
+  });
+
+  const handleTabChange = (tab: typeof activeTab) => {
+    setActiveTab(tab);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', tab);
+      window.history.replaceState({}, '', url.toString());
+    }
+  };
+
+  // Roster Filters
+  const [rosterSearch, setRosterSearch] = useState('');
+  const [shiftFilter, setShiftFilter] = useState<'all' | 'morning' | 'night'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'present' | 'late' | 'absent' | 'pending'>('all');
 
   // Core Data
   const [teamMembers, setTeamMembers] = useState<TeamMemberRecord[]>([]);
@@ -253,6 +280,62 @@ export const EmployeeManagementDashboardView: React.FC = () => {
   const pendingPayrollCount = payrollRecords.filter(p => p.status === 'draft' || p.status === 'approved' || p.status === 'under_review').length;
   const openConcernsCount = concerns.filter(c => c.status !== 'completed').length;
 
+
+  // Export Team Attendance Roster as CSV
+  const handleExportRoster = () => {
+    const todayStr = getPKTTodayDateString();
+    const headers = [
+      'Member Name',
+      'Email',
+      'Role',
+      'Designation',
+      'Shift',
+      'Check In (PKT)',
+      'Check Out (PKT)',
+      'Today Status',
+      'Late Minutes',
+      'Total Hours',
+      'Late Deduction (PKR)',
+      'Absence Deduction (PKR)'
+    ];
+
+    const rows = allStaffMembers.map(member => {
+      const empRec = empRecordMap.get(member.id);
+      const shift = empRec?.shift || shifts.find(s => s.id === empRec?.shiftId) || shifts[0];
+      const att = todayAttendanceList.find(a => a.employeeId === member.id);
+      const roleStr = ROLE_DISPLAY_NAMES[member.role] || member.role;
+      const shiftStr = shift ? `${shift.name} (${shift.startTime.slice(0, 5)} - ${shift.endTime.slice(0, 5)} PKT)` : 'Unassigned';
+      const checkInStr = att?.checkInTime ? new Date(att.checkInTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi', hour: '2-digit', minute: '2-digit' }) : '--';
+      const checkOutStr = att?.checkOutTime ? new Date(att.checkOutTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi', hour: '2-digit', minute: '2-digit' }) : '--';
+      const isMissing = missingCheckIns.some(mc => mc.employee.id === member.id);
+      const statusStr = att?.checkInTime
+        ? (att.checkOutTime ? 'Shift Completed' : (att.status === 'late' ? 'Late' : 'Present'))
+        : (isMissing ? 'Absent' : 'Pending Check-In');
+
+      return [
+        `"${member.fullName}"`,
+        `"${member.workEmail}"`,
+        `"${roleStr}"`,
+        `"${member.designationName || ''}"`,
+        `"${shiftStr}"`,
+        `"${checkInStr}"`,
+        `"${checkOutStr}"`,
+        `"${statusStr}"`,
+        att?.minutesLate || 0,
+        att?.totalHours || 0,
+        att?.lateDeduction || 0,
+        att?.absenceDeduction || 0
+      ].join(',');
+    });
+
+    const csvContent = 'data:text/csv;charset=utf-8,' + encodeURIComponent([headers.join(','), ...rows].join('\n'));
+    const link = document.createElement('a');
+    link.setAttribute('href', csvContent);
+    link.setAttribute('download', `Team_Attendance_Roster_${todayStr}.csv`);
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
   return (
     <div className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto space-y-6 animate-fade-in">
       {/* View Switcher for Owner & Manager */}
@@ -384,7 +467,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
       <div className="flex flex-wrap items-center gap-1.5 p-1.5 rounded-2xl bg-slate-100 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border">
         <button
           type="button"
-          onClick={() => setActiveTab('attendance')}
+          onClick={() => handleTabChange('attendance')}
           className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
             activeTab === 'attendance'
               ? 'bg-white dark:bg-dark-card text-brand-700 dark:text-brand-300 shadow-sm'
@@ -397,7 +480,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
 
         <button
           type="button"
-          onClick={() => setActiveTab('directory')}
+          onClick={() => handleTabChange('directory')}
           className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
             activeTab === 'directory'
               ? 'bg-white dark:bg-dark-card text-brand-700 dark:text-brand-300 shadow-sm'
@@ -410,7 +493,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
 
         <button
           type="button"
-          onClick={() => setActiveTab('payroll')}
+          onClick={() => handleTabChange('payroll')}
           className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
             activeTab === 'payroll'
               ? 'bg-white dark:bg-dark-card text-brand-700 dark:text-brand-300 shadow-sm'
@@ -423,7 +506,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
 
         <button
           type="button"
-          onClick={() => setActiveTab('assets')}
+          onClick={() => handleTabChange('assets')}
           className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
             activeTab === 'assets'
               ? 'bg-white dark:bg-dark-card text-brand-700 dark:text-brand-300 shadow-sm'
@@ -436,7 +519,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
 
         <button
           type="button"
-          onClick={() => setActiveTab('performance')}
+          onClick={() => handleTabChange('performance')}
           className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
             activeTab === 'performance'
               ? 'bg-white dark:bg-dark-card text-brand-700 dark:text-brand-300 shadow-sm'
@@ -449,7 +532,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
 
         <button
           type="button"
-          onClick={() => setActiveTab('concerns')}
+          onClick={() => handleTabChange('concerns')}
           className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
             activeTab === 'concerns'
               ? 'bg-white dark:bg-dark-card text-brand-700 dark:text-brand-300 shadow-sm'
@@ -462,7 +545,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
 
         <button
           type="button"
-          onClick={() => setActiveTab('settlement')}
+          onClick={() => handleTabChange('settlement')}
           className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
             activeTab === 'settlement'
               ? 'bg-white dark:bg-dark-card text-brand-700 dark:text-brand-300 shadow-sm'
@@ -477,243 +560,285 @@ export const EmployeeManagementDashboardView: React.FC = () => {
       {/* TAB 1: LIVE ATTENDANCE */}
       {activeTab === 'attendance' && (
         <div className="space-y-6">
-          {/* Visual Distribution Summary Bar */}
-          <div className="p-4 sm:p-5 rounded-3xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border shadow-xs space-y-3">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-500 dark:text-gray-400">
-                Today's Attendance Composition (Configured Staff: {activeStaffCount})
-              </span>
-              <div className="flex items-center gap-4 text-xs font-mono">
-                <span className="flex items-center gap-1.5 text-emerald-600 font-bold">
-                  <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
-                  On-Time: {onTimeTodayCount}
-                </span>
-                <span className="flex items-center gap-1.5 text-amber-600 font-bold">
-                  <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span>
-                  Late (+500 PKR): {lateTodayCount}
-                </span>
-                <span className="flex items-center gap-1.5 text-slate-500 font-bold">
-                  <span className="w-2.5 h-2.5 rounded-full bg-slate-400"></span>
-                  Pending Check-In: {pendingCheckInCount}
-                </span>
-              </div>
+          {/* Today's Attendance Summary KPI Bar */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            <div className="p-4 rounded-2xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border space-y-1 shadow-xs">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Team Members</span>
+              <div className="text-xl font-black text-slate-900 dark:text-gray-100 font-mono">{allStaffMembers.length}</div>
+              <p className="text-[10px] text-slate-500">Registered staff</p>
             </div>
-
-            {/* Distribution Bar */}
-            <div className="h-3 w-full rounded-full bg-slate-100 dark:bg-dark-100 overflow-hidden flex">
-              {activeStaffCount > 0 ? (
-                <>
-                  <div
-                    style={{ width: `${(onTimeTodayCount / activeStaffCount) * 100}%` }}
-                    className="h-full bg-emerald-500 transition-all"
-                    title={`On-Time: ${onTimeTodayCount}`}
-                  />
-                  <div
-                    style={{ width: `${(lateTodayCount / activeStaffCount) * 100}%` }}
-                    className="h-full bg-amber-500 transition-all"
-                    title={`Late: ${lateTodayCount}`}
-                  />
-                  <div
-                    style={{ width: `${(pendingCheckInCount / activeStaffCount) * 100}%` }}
-                    className="h-full bg-slate-300 dark:bg-dark-border transition-all"
-                    title={`Pending: ${pendingCheckInCount}`}
-                  />
-                </>
-              ) : (
-                <div className="h-full w-full bg-slate-200 dark:bg-dark-border" />
-              )}
+            <div className="p-4 rounded-2xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border space-y-1 shadow-xs">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">Clocked In</span>
+              <div className="text-xl font-black text-emerald-600 font-mono">{todayAttendanceList.filter(a => a.checkInTime).length}</div>
+              <p className="text-[10px] text-emerald-600 font-medium">Real punches</p>
+            </div>
+            <div className="p-4 rounded-2xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border space-y-1 shadow-xs">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-blue-600">On Break</span>
+              <div className="text-xl font-black text-blue-600 font-mono">0</div>
+              <p className="text-[10px] text-slate-500">Active breaks</p>
+            </div>
+            <div className="p-4 rounded-2xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border space-y-1 shadow-xs">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-purple-600">On Leave</span>
+              <div className="text-xl font-black text-purple-600 font-mono">0</div>
+              <p className="text-[10px] text-slate-500">Approved leaves</p>
+            </div>
+            <div className="p-4 rounded-2xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border space-y-1 shadow-xs">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600">Expected Today</span>
+              <div className="text-xl font-black text-indigo-600 font-mono">{allStaffMembers.filter(m => m.status === 'active').length}</div>
+              <p className="text-[10px] text-slate-500">Scheduled shifts</p>
+            </div>
+            <div className="p-4 rounded-2xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border space-y-1 shadow-xs">
+              <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600">Absent</span>
+              <div className="text-xl font-black text-rose-600 font-mono">{missingCheckIns.length}</div>
+              <p className="text-[10px] text-rose-600 font-medium">Unapproved / missed</p>
             </div>
           </div>
 
-          {/* Section 1: Genuine Checked-In Staff */}
+          {/* Unified Team Attendance Roster Table */}
           <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border shadow-xs space-y-4">
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
               <div>
                 <h2 className="text-sm font-bold text-slate-900 dark:text-gray-100 flex items-center gap-2">
-                  <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                  <span>Checked-In Staff Today ({checkedInTodayCount})</span>
+                  <Users className="w-4 h-4 text-brand-600" />
+                  <span>Team Attendance Roster ({allStaffMembers.length} Members)</span>
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-gray-400">
-                  Verified desktop screen capture check-in records (PKT)
+                  Live workstation attendance tracking, scheduled shifts, and punch records for today
                 </p>
               </div>
-              <button
-                type="button"
-                onClick={() => setSelectedAttendanceCorrection({
-                  id: '',
-                  employeeId: '',
-                  workDate: getPKTTodayDateString(),
-                  scheduledCheckIn: '11:00:00',
-                  scheduledCheckOut: '20:00:00',
-                  minutesLate: 0,
-                  status: 'on_time',
-                  lateDeduction: 0,
-                  absenceDeduction: 0,
-                  createdAt: '',
-                  updatedAt: ''
-                })}
-                className="px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-brand-600 text-white text-xs font-bold hover:bg-slate-800 transition-colors flex items-center gap-1.5"
-              >
-                <Plus className="w-3.5 h-3.5" /> Manual Attendance Log
-              </button>
+
+              {/* Action Buttons: Export & Manual Log */}
+              <div className="flex items-center gap-2.5 flex-wrap">
+                <button
+                  type="button"
+                  data-testid="export-roster-btn"
+                  onClick={handleExportRoster}
+                  className="px-3.5 py-2 rounded-xl bg-white dark:bg-dark-card border border-slate-300 dark:border-dark-border hover:bg-slate-100 dark:hover:bg-dark-100 text-slate-700 dark:text-gray-200 text-xs font-bold transition-colors flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  title="Download Attendance Roster Report (CSV)"
+                >
+                  <Download className="w-3.5 h-3.5 text-brand-600" />
+                  <span>Export</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setSelectedAttendanceCorrection({
+                    id: '',
+                    employeeId: '',
+                    workDate: getPKTTodayDateString(),
+                    scheduledCheckIn: '11:00:00',
+                    scheduledCheckOut: '20:00:00',
+                    minutesLate: 0,
+                    status: 'on_time',
+                    lateDeduction: 0,
+                    absenceDeduction: 0,
+                    createdAt: '',
+                    updatedAt: ''
+                  })}
+                  className="px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-brand-600 text-white text-xs font-bold hover:bg-slate-800 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Manual Attendance Log</span>
+                </button>
+              </div>
             </div>
 
+            {/* Filters Row */}
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pt-2">
+              <div className="relative max-w-sm w-full">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
+                <input
+                  type="text"
+                  value={rosterSearch}
+                  onChange={(e) => setRosterSearch(e.target.value)}
+                  placeholder="Filter roster by member name, email or designation..."
+                  className="w-full pl-9 pr-3 py-1.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-900 dark:text-gray-100 focus:outline-none"
+                />
+              </div>
+
+              <div className="flex items-center gap-2">
+                <select
+                  value={shiftFilter}
+                  onChange={(e) => setShiftFilter(e.target.value as any)}
+                  className="px-3 py-1.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-700 dark:text-gray-300 focus:outline-none"
+                >
+                  <option value="all">All Shifts</option>
+                  <option value="morning">Morning Shift (11:00 - 20:00 PKT)</option>
+                  <option value="night">Night Shift (21:00 - 06:00 PKT)</option>
+                </select>
+
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value as any)}
+                  className="px-3 py-1.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-700 dark:text-gray-300 focus:outline-none"
+                >
+                  <option value="all">All Statuses</option>
+                  <option value="present">Present / On Time</option>
+                  <option value="late">Late (+PKR 500)</option>
+                  <option value="absent">Absent</option>
+                  <option value="pending">Pending Check-In</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Roster Table */}
             <div className="overflow-x-auto">
               <table className="w-full text-left text-xs">
                 <thead>
                   <tr className="border-b border-slate-100 dark:border-dark-border text-slate-400 uppercase text-[10px] font-bold tracking-wider">
-                    <th className="py-3 px-3">Employee</th>
+                    <th className="py-3 px-3">Member Name</th>
+                    <th className="py-3 px-3">Role</th>
+                    <th className="py-3 px-3">Shift</th>
                     <th className="py-3 px-3">Check In</th>
                     <th className="py-3 px-3">Check Out</th>
-                    <th className="py-3 px-3">Status</th>
-                    <th className="py-3 px-3">Evidence</th>
-                    <th className="py-3 px-3">Deduction</th>
-                    <th className="py-3 px-3 text-right">Action</th>
+                    <th className="py-3 px-3">Today Status</th>
+                    <th className="py-3 px-3 text-right">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 dark:divide-dark-border">
-                  {todayAttendanceList.filter(a => a.checkInTime).length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="py-8 text-center text-slate-400 italic">
-                        No check-ins recorded for today yet. Staff will appear here once they clock in with entire-screen workstation proof.
-                      </td>
-                    </tr>
-                  ) : (
-                    todayAttendanceList.filter(a => a.checkInTime).map((att) => {
-                      const member = teamMembers.find(m => m.id === att.employeeId);
-                      const name = member?.fullName || 'Staff Member';
-                      return (
-                        <tr key={att.id} className="hover:bg-slate-50/50 dark:hover:bg-dark-sidebar transition-colors">
-                          <td className="py-3 px-3">
-                            <div className="font-bold text-slate-900 dark:text-gray-100">{name}</div>
-                            <div className="text-[10px] text-slate-400">{member?.workEmail}</div>
-                          </td>
-                          <td className="py-3 px-3 font-mono">
-                            {att.checkInTime ? new Date(att.checkInTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi', hour: '2-digit', minute: '2-digit' }) : '--'}
-                          </td>
-                          <td className="py-3 px-3 font-mono">
-                            {att.checkOutTime ? new Date(att.checkOutTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi', hour: '2-digit', minute: '2-digit' }) : '--'}
-                          </td>
-                          <td className="py-3 px-3">
-                            <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold capitalize ${
-                              att.status === 'on_time' || att.status === 'present'
-                                ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300'
-                                : att.status === 'late'
-                                ? 'bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300'
-                                : 'bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-300'
-                            }`}>
-                              {att.status} {att.status === 'late' && att.minutesLate ? `(+${att.minutesLate}m)` : ''}
-                            </span>
-                          </td>
-                          <td className="py-3 px-3">
-                            {(att.screenCaptureUrl || att.checkInScreenshotPath) ? (
-                              <button
-                                type="button"
-                                onClick={() => setPreviewEvidenceUrl(att.screenCaptureUrl || att.checkInScreenshotPath || null)}
-                                className="px-2.5 py-1 rounded-lg bg-slate-100 dark:bg-dark-card hover:bg-slate-200 text-brand-600 text-[11px] font-semibold flex items-center gap-1"
-                              >
-                                <Eye className="w-3 h-3" /> View Frame
-                              </button>
-                            ) : (
-                              <span className="text-[11px] text-slate-400 italic">No Capture</span>
-                            )}
-                          </td>
-                          <td className="py-3 px-3 font-mono">
-                            {att.lateDeduction || att.absenceDeduction ? (
-                              <span className="text-rose-600 font-bold">
-                                -PKR {((att.lateDeduction || 0) + (att.absenceDeduction || 0)).toLocaleString()}
-                              </span>
-                            ) : (
-                              <span className="text-emerald-600 font-semibold">PKR 0</span>
-                            )}
-                          </td>
-                          <td className="py-3 px-3 text-right">
-                            <button
-                              type="button"
-                              onClick={() => setSelectedAttendanceCorrection(att)}
-                              className="p-1.5 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-slate-100 dark:hover:bg-dark-100 transition-colors"
-                              title="Adjust / Excuse Attendance"
-                            >
-                              <Edit3 className="w-3.5 h-3.5" />
-                            </button>
-                          </td>
-                        </tr>
-                      );
+                  {allStaffMembers
+                    .filter(member => {
+                      const q = rosterSearch.toLowerCase().trim();
+                      const matchSearch = !q ||
+                        member.fullName.toLowerCase().includes(q) ||
+                        member.workEmail.toLowerCase().includes(q) ||
+                        (member.designationName && member.designationName.toLowerCase().includes(q));
+
+                      const empRec = empRecordMap.get(member.id);
+                      const shift = empRec?.shift || shifts.find(s => s.id === empRec?.shiftId);
+                      const isNight = shift ? (shift.code === 'night' || shift.name.toLowerCase().includes('night')) : false;
+
+                      const matchShift = shiftFilter === 'all' ||
+                        (shiftFilter === 'night' && isNight) ||
+                        (shiftFilter === 'morning' && !isNight);
+
+                      const att = todayAttendanceList.find(a => a.employeeId === member.id);
+                      const isMissing = missingCheckIns.some(mc => mc.employee.id === member.id);
+                      let memberStatus = 'pending';
+                      if (att?.checkInTime) {
+                        memberStatus = att.status === 'late' ? 'late' : 'present';
+                      } else if (isMissing) {
+                        memberStatus = 'absent';
+                      }
+
+                      const matchStatus = statusFilter === 'all' || statusFilter === memberStatus;
+
+                      return matchSearch && matchShift && matchStatus;
                     })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                    .map((member) => {
+                      const empRec = empRecordMap.get(member.id);
+                      const shift = empRec?.shift || shifts.find(s => s.id === empRec?.shiftId) || shifts[0];
+                      const att = todayAttendanceList.find(a => a.employeeId === member.id);
+                      const isMissing = missingCheckIns.some(mc => mc.employee.id === member.id);
 
-          {/* Section 2: Pending Check-In Staff (Configured Staff Only) */}
-          <div className="p-5 sm:p-6 rounded-3xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border shadow-xs space-y-4">
-            <div className="flex items-center justify-between">
-              <div>
-                <h2 className="text-sm font-bold text-slate-900 dark:text-gray-100 flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-slate-500" />
-                  <span>Pending Check-In Staff ({pendingCheckInCount})</span>
-                </h2>
-                <p className="text-xs text-slate-500 dark:text-gray-400">
-                  Configured active team members who have not yet logged attendance today
-                </p>
-              </div>
-            </div>
+                      // Determine Today Status
+                      let statusBadge = (
+                        <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-100 text-slate-700 dark:bg-dark-card dark:text-gray-300 border border-slate-200">
+                          Pending Check-In
+                        </span>
+                      );
 
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs">
-                <thead>
-                  <tr className="border-b border-slate-200 dark:border-dark-border text-slate-400 uppercase text-[10px] font-bold tracking-wider">
-                    <th className="py-2.5 px-3">Employee</th>
-                    <th className="py-2.5 px-3">Governed Role</th>
-                    <th className="py-2.5 px-3">Scheduled Shift</th>
-                    <th className="py-2.5 px-3">Status</th>
-                    <th className="py-2.5 px-3 text-right">Action</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200 dark:divide-dark-border">
-                  {configuredActiveStaff.filter(m => !todayAttendanceList.some(a => a.employeeId === m.id && a.checkInTime)).length === 0 ? (
-                    <tr>
-                      <td colSpan={5} className="py-6 text-center text-slate-400 italic">
-                        All configured active staff members have checked in for today.
-                      </td>
-                    </tr>
-                  ) : (
-                    configuredActiveStaff
-                      .filter(m => !todayAttendanceList.some(a => a.employeeId === m.id && a.checkInTime))
-                      .map((member) => {
-                        const isLateEscalated = missingCheckIns.some(mc => mc.employee.id === member.id);
-                        const empRec = empRecordMap.get(member.id);
-                        const shift = empRec?.shift || shifts.find(s => s.id === empRec?.shiftId) || shifts[0];
-                        const roleTitle = ROLE_DISPLAY_NAMES[member.role] || member.role.replace('_', ' ');
+                      if (att?.checkInTime) {
+                        if (att.checkOutTime) {
+                          statusBadge = (
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300 border border-emerald-200">
+                              Off Duty
+                            </span>
+                          );
+                        } else if (att.status === 'late') {
+                          statusBadge = (
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/30 dark:text-amber-300 border border-amber-200">
+                              Late {att.minutesLate ? `(+ ${att.minutesLate}m)` : ''}
+                            </span>
+                          );
+                        } else {
+                          statusBadge = (
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-emerald-50 text-emerald-700 dark:bg-emerald-950/30 dark:text-emerald-300 border border-emerald-200">
+                              Present
+                            </span>
+                          );
+                        }
+                      } else if (isMissing) {
+                        statusBadge = (
+                          <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-50 text-rose-700 dark:bg-rose-950/30 dark:text-rose-300 border border-rose-200">
+                            Absent
+                          </span>
+                        );
+                      }
 
-                        return (
-                          <tr key={member.id} className="hover:bg-white/60 dark:hover:bg-dark-card transition-colors">
-                            <td className="py-2.5 px-3">
-                              <div className="font-bold text-slate-900 dark:text-gray-100">{member.fullName}</div>
-                              <div className="text-[10px] text-slate-400">{member.workEmail}</div>
-                            </td>
-                            <td className="py-2.5 px-3 text-slate-600 dark:text-gray-400 font-medium">
-                              {roleTitle} {member.designationName ? `• ${member.designationName}` : ''}
-                            </td>
-                            <td className="py-2.5 px-3 text-slate-600 dark:text-gray-400 font-mono">
-                              {shift ? `${shift.name} (${shift.startTime.slice(0, 5)} - ${shift.endTime.slice(0, 5)} PKT)` : '11:00 AM – 08:00 PM PKT'}
-                            </td>
-                            <td className="py-2.5 px-3">
-                              {isLateEscalated ? (
-                                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-rose-100 text-rose-800 dark:bg-rose-950/40 dark:text-rose-300">
-                                  Missing (&gt;60m)
-                                </span>
-                              ) : (
-                                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold bg-slate-200 text-slate-700 dark:bg-dark-border dark:text-gray-300">
-                                  Pending Check-In
+                      return (
+                        <tr key={member.id} className="hover:bg-slate-50/50 dark:hover:bg-dark-sidebar transition-colors">
+                          {/* Member Name */}
+                          <td className="py-3 px-3">
+                            <div className="font-bold text-slate-900 dark:text-gray-100 flex items-center gap-1.5 flex-wrap">
+                              <span>{member.fullName}</span>
+                              {member.designationName && (
+                                <span className="px-2 py-0.5 rounded-full text-[10px] font-medium bg-slate-100 dark:bg-dark-card text-slate-600 dark:text-gray-300">
+                                  {member.designationName}
                                 </span>
                               )}
-                            </td>
-                            <td className="py-2.5 px-3 text-right">
+                            </div>
+                            <div className="text-[10px] text-slate-400 font-mono">{member.workEmail}</div>
+                          </td>
+
+                          {/* Role */}
+                          <td className="py-3 px-3 text-slate-700 dark:text-gray-300 font-medium">
+                            <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-slate-100 dark:bg-dark-card text-slate-700 dark:text-gray-300">
+                              {ROLE_DISPLAY_NAMES[member.role] || member.role.replace('_', ' ')}
+                            </span>
+                          </td>
+
+                          {/* Shift */}
+                          <td className="py-3 px-3 text-slate-600 dark:text-gray-400 font-mono text-[11px]">
+                            {shift ? `${shift.name} (${shift.startTime.slice(0, 5)} - ${shift.endTime.slice(0, 5)} PKT)` : '11:00 AM – 08:00 PM PKT'}
+                          </td>
+
+                          {/* Check In */}
+                          <td className="py-3 px-3 font-mono text-slate-700 dark:text-gray-300 font-semibold">
+                            {att?.checkInTime ? new Date(att.checkInTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi', hour: '2-digit', minute: '2-digit' }) : '--'}
+                          </td>
+
+                          {/* Check Out */}
+                          <td className="py-3 px-3 font-mono text-slate-700 dark:text-gray-300 font-semibold">
+                            {att?.checkOutTime ? new Date(att.checkOutTime).toLocaleTimeString('en-US', { timeZone: 'Asia/Karachi', hour: '2-digit', minute: '2-digit' }) : '--'}
+                          </td>
+
+                          {/* Today Status */}
+                          <td className="py-3 px-3">
+                            {statusBadge}
+                          </td>
+
+                          {/* Actions */}
+                          <td className="py-3 px-3 text-right">
+                            <div className="flex items-center justify-end gap-1.5">
+                              {/* Configure button */}
                               <button
                                 type="button"
-                                onClick={() => setSelectedAttendanceCorrection({
+                                data-testid={`configure-btn-${member.id}`}
+                                onClick={() => setEditingMemberForSetup(member)}
+                                className="px-2.5 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-[11px] transition-colors shadow-xs flex items-center gap-1 cursor-pointer"
+                                title="Configure Shift, Schedule & Compensation"
+                              >
+                                <Settings className="w-3 h-3" />
+                                <span>Configure</span>
+                              </button>
+
+                              {/* View Frame if screenshot exists */}
+                              {(att?.screenCaptureUrl || att?.checkInScreenshotPath) && (
+                                <button
+                                  type="button"
+                                  onClick={() => setPreviewEvidenceUrl(att.screenCaptureUrl || att.checkInScreenshotPath || null)}
+                                  className="p-1.5 rounded-lg bg-slate-100 dark:bg-dark-card hover:bg-slate-200 text-brand-600 transition-colors"
+                                  title="View Workstation Frame"
+                                >
+                                  <Eye className="w-3.5 h-3.5" />
+                                </button>
+                              )}
+
+                              {/* Log / Adjust Attendance */}
+                              <button
+                                type="button"
+                                onClick={() => setSelectedAttendanceCorrection(att || {
                                   id: '',
                                   employeeId: member.id,
                                   workDate: getPKTTodayDateString(),
@@ -726,100 +851,20 @@ export const EmployeeManagementDashboardView: React.FC = () => {
                                   createdAt: '',
                                   updatedAt: ''
                                 })}
-                                className="px-2.5 py-1 rounded-xl bg-slate-200 dark:bg-dark-card hover:bg-slate-300 dark:hover:bg-dark-100 text-slate-800 dark:text-gray-200 font-bold text-[11px] transition-colors"
+                                className="p-1.5 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-slate-100 dark:hover:bg-dark-100 transition-colors"
+                                title="Adjust Attendance"
                               >
-                                Log Attendance
+                                <Edit3 className="w-3.5 h-3.5" />
                               </button>
-                            </td>
-                          </tr>
-                        );
-                      })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Section 3: Dedicated Employee Setup Required Section (Neutral Isolation) */}
-          {setupPendingStaff.length > 0 && (
-            <div className="p-5 sm:p-6 rounded-3xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border shadow-xs space-y-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <h2 className="text-sm font-bold text-slate-900 dark:text-gray-100 flex items-center gap-2">
-                    <Settings className="w-4 h-4 text-amber-600" />
-                    <span>Employee Setup Required ({setupPendingStaff.length} Staff Member(s))</span>
-                  </h2>
-                  <p className="text-xs text-slate-500 dark:text-gray-400">
-                    The following staff members require operational onboarding (work shift assignment, baseline compensation, and shift schedule) before automated attendance audit tracking and monthly payroll generation begin. Inactive staff remain inactive until explicitly activated.
-                  </p>
-                </div>
-              </div>
-
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs">
-                  <thead>
-                    <tr className="border-b border-slate-200 dark:border-dark-border text-slate-400 uppercase text-[10px] font-bold tracking-wider">
-                      <th className="py-2.5 px-3">Employee</th>
-                      <th className="py-2.5 px-3">System Role</th>
-                      <th className="py-2.5 px-3">Status</th>
-                      <th className="py-2.5 px-3">Missing Parameters</th>
-                      <th className="py-2.5 px-3 text-right">Action</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-200 dark:divide-dark-border">
-                    {setupPendingStaff.map((member) => {
-                      const empRec = empRecordMap.get(member.id);
-                      const statusInfo = employeeOperationsService.getEmployeeSetupStatus(
-                        empRec || null,
-                        shifts,
-                        companySchedules,
-                        member.role === 'owner'
-                      );
-
-                      return (
-                        <tr key={member.id} className="hover:bg-white/60 dark:hover:bg-dark-card transition-colors">
-                          <td className="py-2.5 px-3">
-                            <div className="font-bold text-slate-900 dark:text-gray-100">{member.fullName}</div>
-                            <div className="text-[10px] text-slate-400">{member.workEmail}</div>
-                          </td>
-                          <td className="py-2.5 px-3 text-slate-600 dark:text-gray-400 font-medium">
-                            {ROLE_DISPLAY_NAMES[member.role] || member.role.replace('_', ' ')}
-                          </td>
-                          <td className="py-2.5 px-3">
-                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold capitalize ${
-                              member.status === 'active'
-                                ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/40 dark:text-amber-300'
-                                : 'bg-slate-200 text-slate-700 dark:bg-dark-border dark:text-gray-400'
-                            }`}>
-                              {member.status === 'active' ? 'Setup Pending' : member.status}
-                            </span>
-                          </td>
-                          <td className="py-2.5 px-3">
-                            <div className="flex flex-wrap gap-1">
-                              {statusInfo.missingParameters.map(param => (
-                                <span key={param} className="px-2 py-0.5 rounded text-[10px] font-semibold bg-rose-50 text-rose-700 border border-rose-200">
-                                  Missing Parameter: {param}
-                                </span>
-                              ))}
                             </div>
-                          </td>
-                          <td className="py-2.5 px-3 text-right">
-                            <button
-                              type="button"
-                              onClick={() => setEditingMemberForSetup(member)}
-                              className="px-3 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-[11px] transition-colors shadow-xs"
-                            >
-                              Configure Setup
-                            </button>
                           </td>
                         </tr>
                       );
                     })}
-                  </tbody>
-                </table>
-              </div>
+                </tbody>
+              </table>
             </div>
-          )}
+          </div>
         </div>
       )}
 

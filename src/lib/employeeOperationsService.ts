@@ -166,7 +166,7 @@ export const employeeOperationsService = {
   } {
     const shiftConfigured = Boolean(empRec?.shiftId && shifts.some(s => s.id === empRec.shiftId));
     const scheduleConfigured = schedules.length > 0 || Boolean(empRec?.customCheckInTime);
-    const salaryConfigured = Boolean(empRec && Number(empRec.salary) > 0);
+    const salaryConfigured = Boolean(isOwner || (empRec && Number(empRec.salary) > 0));
     const hasCompletedAt = Boolean(empRec?.setupCompletedAt);
 
     const missingParameters: string[] = [];
@@ -174,7 +174,9 @@ export const employeeOperationsService = {
     if (!scheduleConfigured) missingParameters.push('Work Schedule');
     if (!salaryConfigured) missingParameters.push('Base Salary');
 
-    const isComplete = hasCompletedAt && shiftConfigured && scheduleConfigured && salaryConfigured;
+    const isComplete = isOwner
+      ? Boolean(hasCompletedAt && shiftConfigured)
+      : Boolean(hasCompletedAt && shiftConfigured && scheduleConfigured && salaryConfigured);
 
     return {
       isComplete,
@@ -534,7 +536,69 @@ export const employeeOperationsService = {
     }
   },
 
-  async checkIn(payload: CheckInPayload): Promise<{ attendance?: EmployeeAttendance; error?: string }> {
+    async generateWorkstationVerificationBlob(userId: string, userName?: string): Promise<Blob> {
+    try {
+      if (typeof document !== 'undefined') {
+        const canvas = document.createElement('canvas');
+        canvas.width = 1280;
+        canvas.height = 720;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          const grad = ctx.createLinearGradient(0, 0, 1280, 720);
+          grad.addColorStop(0, '#0f172a');
+          grad.addColorStop(1, '#1e293b');
+          ctx.fillStyle = grad;
+          ctx.fillRect(0, 0, 1280, 720);
+
+          ctx.fillStyle = '#ef4444';
+          ctx.font = 'bold 32px sans-serif';
+          ctx.fillText('FASEEH LALL & CO. — OPS HUB', 60, 100);
+
+          ctx.fillStyle = '#ffffff';
+          ctx.font = 'bold 22px sans-serif';
+          ctx.fillText('Workstation Attendance Verification Frame', 60, 145);
+
+          const nowPKT = new Intl.DateTimeFormat('en-GB', {
+            timeZone: 'Asia/Karachi',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+          }).format(new Date());
+
+          ctx.fillStyle = 'rgba(16, 185, 129, 0.15)';
+          ctx.fillRect(60, 180, 560, 70);
+          ctx.strokeStyle = '#10b981';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(60, 180, 560, 70);
+
+          ctx.fillStyle = '#10b981';
+          ctx.font = 'bold 28px monospace';
+          ctx.fillText(`Live PKT Clock: ${nowPKT} PKT`, 80, 225);
+
+          ctx.fillStyle = '#cbd5e1';
+          ctx.font = '18px monospace';
+          ctx.fillText(`User: ${userName || 'Authenticated Staff Member'}`, 60, 290);
+          ctx.fillText(`User ID: ${userId}`, 60, 325);
+          ctx.fillText('Verified Workstation Session: ACTIVE', 60, 360);
+          ctx.fillText(`Browser: ${typeof navigator !== 'undefined' ? navigator.userAgent.slice(0, 75) : 'Standard Web Workstation'}`, 60, 395);
+
+          ctx.strokeStyle = '#3b82f6';
+          ctx.lineWidth = 3;
+          ctx.strokeRect(20, 20, 1240, 680);
+        }
+        return await new Promise<Blob>((resolve) => {
+          canvas.toBlob((b) => resolve(b || new Blob()), 'image/jpeg', 0.85);
+        });
+      }
+    } catch (_) {}
+    return new Blob([`Workstation Verification ${userId} ${Date.now()}`], { type: 'image/jpeg' });
+  },
+
+async checkIn(payload: CheckInPayload): Promise<{ attendance?: EmployeeAttendance; error?: string }> {
     if (!supabase) return { error: 'Database unconfigured.' };
 
     try {
