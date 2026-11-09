@@ -1039,21 +1039,98 @@ export const EmployeeDashboardView: React.FC = () => {
                             )}
                           </td>
                           <td className="py-2.5 px-3 text-right">
-                            {att.checkInScreenshotPath || att.screenCaptureUrl ? (
-                              <button
-                                type="button"
-                                onClick={() => setPreviewEvidenceUrl({
-                                  url: att.screenCaptureUrl || att.checkInScreenshotPath!,
-                                  title: `Punch Evidence — ${att.workDate}`,
-                                  date: att.checkInTime ? formatPKTTime(att.checkInTime) : att.workDate
-                                })}
-                                className="inline-flex items-center gap-1 text-[11px] text-brand-600 hover:text-brand-700 font-semibold hover:underline"
-                              >
-                                <Eye className="w-3.5 h-3.5" /> View
-                              </button>
-                            ) : (
-                              <span className="text-slate-300 dark:text-gray-600 text-[10px]">None</span>
-                            )}
+                            {(() => {
+                              const hasInProof = Boolean(
+                                (att.checkInSignedUrl || (att.checkInScreenshotPath && !att.checkInScreenshotPath.includes('missing_proof'))) &&
+                                !(att as any).isCheckInProofMissing
+                              );
+                              const inUrl = att.checkInSignedUrl || att.checkInScreenshotPath || att.screenCaptureUrl;
+
+                              const hasOutProof = Boolean(
+                                (att.checkOutSignedUrl || (att.checkOutScreenshotPath && !att.checkOutScreenshotPath.includes('missing_proof'))) &&
+                                !(att as any).isCheckOutProofMissing
+                              );
+                              const outUrl = att.checkOutSignedUrl || att.checkOutScreenshotPath;
+
+                              if (!hasInProof && !hasOutProof) {
+                                return (
+                                  <span
+                                    data-testid={`proof-missing-${att.id}`}
+                                    className="inline-flex items-center gap-1 px-2 py-1 rounded-lg text-[10px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800/50 shadow-2xs"
+                                    title="Workstation screenshot was not recorded for this shift"
+                                  >
+                                    <AlertTriangle className="w-3 h-3 text-amber-500 shrink-0" />
+                                    <span>Proof Missing</span>
+                                  </span>
+                                );
+                              }
+
+                              return (
+                                <div className="flex items-center justify-end gap-2 flex-wrap">
+                                  {/* Check-In Screenshot Thumbnail */}
+                                  {hasInProof && inUrl ? (
+                                    <button
+                                      type="button"
+                                      data-testid={`proof-thumbnail-in-${att.id}`}
+                                      onClick={() => setPreviewEvidenceUrl({
+                                        url: inUrl,
+                                        title: `Check-In Screenshot Proof — ${att.workDate}`,
+                                        date: att.checkInTime ? formatPKTTime(att.checkInTime) : att.workDate
+                                      })}
+                                      className="group relative flex flex-col items-center cursor-pointer transition-transform hover:scale-105"
+                                      title={`View Check-In Screenshot (${att.checkInTime ? formatPKTTime(att.checkInTime) : att.workDate})`}
+                                    >
+                                      <div className="w-11 h-8 rounded-lg overflow-hidden border border-slate-200 dark:border-dark-border group-hover:border-brand-500 shadow-2xs group-hover:shadow-xs bg-slate-900 flex items-center justify-center">
+                                        <img
+                                          src={inUrl}
+                                          alt="Check-In Screenshot"
+                                          className="w-full h-full object-cover"
+                                          onError={(e) => {
+                                            (e.target as HTMLElement).style.display = 'none';
+                                          }}
+                                        />
+                                      </div>
+                                      <span className="text-[9px] font-extrabold text-emerald-600 dark:text-emerald-400 uppercase tracking-wider mt-0.5">In</span>
+                                    </button>
+                                  ) : att.checkInTime ? (
+                                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800/50">
+                                      <AlertTriangle className="w-2.5 h-2.5 text-amber-500" /> In: Missing
+                                    </span>
+                                  ) : null}
+
+                                  {/* Check-Out Screenshot Thumbnail */}
+                                  {hasOutProof && outUrl ? (
+                                    <button
+                                      type="button"
+                                      data-testid={`proof-thumbnail-out-${att.id}`}
+                                      onClick={() => setPreviewEvidenceUrl({
+                                        url: outUrl,
+                                        title: `Check-Out Screenshot Proof — ${att.workDate}`,
+                                        date: att.checkOutTime ? formatPKTTime(att.checkOutTime) : att.workDate
+                                      })}
+                                      className="group relative flex flex-col items-center cursor-pointer transition-transform hover:scale-105"
+                                      title={`View Check-Out Screenshot (${att.checkOutTime ? formatPKTTime(att.checkOutTime) : att.workDate})`}
+                                    >
+                                      <div className="w-11 h-8 rounded-lg overflow-hidden border border-slate-200 dark:border-dark-border group-hover:border-brand-500 shadow-2xs group-hover:shadow-xs bg-slate-900 flex items-center justify-center">
+                                        <img
+                                          src={outUrl}
+                                          alt="Check-Out Screenshot"
+                                          className="w-full h-full object-cover"
+                                          onError={(e) => {
+                                            (e.target as HTMLElement).style.display = 'none';
+                                          }}
+                                        />
+                                      </div>
+                                      <span className="text-[9px] font-extrabold text-rose-600 dark:text-rose-400 uppercase tracking-wider mt-0.5">Out</span>
+                                    </button>
+                                  ) : att.checkOutTime ? (
+                                    <span className="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-50 text-amber-700 dark:bg-amber-950/40 dark:text-amber-300 border border-amber-200 dark:border-amber-800/50">
+                                      <AlertTriangle className="w-2.5 h-2.5 text-amber-500" /> Out: Missing
+                                    </span>
+                                  ) : null}
+                                </div>
+                              );
+                            })()}
                           </td>
                         </tr>
                       ))

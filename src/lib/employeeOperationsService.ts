@@ -415,15 +415,8 @@ export const employeeOperationsService = {
         }
       });
 
-      // Strict enforcement: Where browser exposes displaySurface, reject tab / window captures
+      // Stream track handling - captures selected monitor, window or screen
       const track = stream.getVideoTracks()[0];
-      const settings = track?.getSettings() as any;
-      if (settings?.displaySurface && settings.displaySurface !== 'monitor') {
-        stream.getTracks().forEach((t) => t.stop());
-        return {
-          error: 'Please select "Entire Screen" rather than an individual tab or window so your workstation taskbar and system clock can be verified.'
-        };
-      }
 
       const video = document.createElement('video');
       video.srcObject = stream;
@@ -536,7 +529,131 @@ export const employeeOperationsService = {
     }
   },
 
-    async generateWorkstationVerificationBlob(userId: string, userName?: string): Promise<Blob> {
+      async generateMissingProofBlob(userId: string, type: 'checkin' | 'checkout'): Promise<Blob> {
+    try {
+      if (typeof document !== 'undefined') {
+        const canvas = document.createElement('canvas');
+        canvas.width = 640;
+        canvas.height = 360;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.fillStyle = '#0f172a';
+          ctx.fillRect(0, 0, 640, 360);
+
+          ctx.fillStyle = '#f59e0b';
+          ctx.font = 'bold 24px sans-serif';
+          ctx.fillText('PROOF MISSING', 40, 80);
+
+          ctx.fillStyle = '#ffffff';
+          ctx.font = '16px sans-serif';
+          ctx.fillText(
+            `Workstation screenshot capture was not recorded on ${type === 'checkin' ? 'Check-In' : 'Check-Out'}.`,
+            40,
+            130
+          );
+
+          const nowPKT = new Intl.DateTimeFormat('en-GB', {
+            timeZone: 'Asia/Karachi',
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit',
+            second: '2-digit',
+            hour12: true
+          }).format(new Date());
+
+          ctx.fillStyle = '#94a3b8';
+          ctx.font = '14px monospace';
+          ctx.fillText(`Timestamp: ${nowPKT} PKT`, 40, 180);
+          ctx.fillText(`Employee ID: ${userId}`, 40, 210);
+
+          ctx.strokeStyle = '#f59e0b';
+          ctx.lineWidth = 2;
+          ctx.strokeRect(10, 10, 620, 340);
+        }
+        return await new Promise<Blob>((resolve) => {
+          canvas.toBlob((b) => resolve(b || new Blob()), 'image/jpeg', 0.80);
+        });
+      }
+    } catch (_) {}
+    return new Blob([`Missing Proof ${userId} ${type} ${Date.now()}`], { type: 'image/jpeg' });
+  },
+
+  async resolveAttendanceSignedUrls<T extends {
+    checkInScreenshotPath?: string | null;
+    checkOutScreenshotPath?: string | null;
+    checkInTime?: string | null;
+    checkOutTime?: string | null;
+  }>(records: T[]): Promise<Array<T & {
+    checkInSignedUrl?: string | null;
+    checkOutSignedUrl?: string | null;
+    isProofMissing?: boolean;
+    isCheckInProofMissing?: boolean;
+    isCheckOutProofMissing?: boolean;
+  }>> {
+    if (!supabase || !records || records.length === 0) return records as any;
+    try {
+      const pathsToSign: string[] = [];
+      for (const r of records) {
+        if (r.checkInScreenshotPath && !r.checkInScreenshotPath.startsWith('http') && !r.checkInScreenshotPath.startsWith('data:') && !r.checkInScreenshotPath.includes('missing_proof')) {
+          pathsToSign.push(r.checkInScreenshotPath);
+        }
+        if (r.checkOutScreenshotPath && !r.checkOutScreenshotPath.startsWith('http') && !r.checkOutScreenshotPath.startsWith('data:') && !r.checkOutScreenshotPath.includes('missing_proof')) {
+          pathsToSign.push(r.checkOutScreenshotPath);
+        }
+      }
+
+      const urlMap = new Map<string, string>();
+      if (pathsToSign.length > 0) {
+        const uniquePaths = Array.from(new Set(pathsToSign));
+        const { data: signedData } = await supabase.storage
+          .from('employee-attendance-evidence')
+          .createSignedUrls(uniquePaths, 7200);
+
+        if (signedData) {
+          for (const item of signedData) {
+            if (item?.path && item?.signedUrl) {
+              urlMap.set(item.path, item.signedUrl);
+            }
+          }
+        }
+      }
+
+      return records.map(r => {
+        const hasValidInPath = Boolean(r.checkInScreenshotPath && !r.checkInScreenshotPath.includes('missing_proof'));
+        const inUrl = hasValidInPath
+          ? (r.checkInScreenshotPath!.startsWith('http') ? r.checkInScreenshotPath! : urlMap.get(r.checkInScreenshotPath!) || null)
+          : null;
+
+        const hasValidOutPath = Boolean(r.checkOutScreenshotPath && !r.checkOutScreenshotPath.includes('missing_proof'));
+        const outUrl = hasValidOutPath
+          ? (r.checkOutScreenshotPath!.startsWith('http') ? r.checkOutScreenshotPath! : urlMap.get(r.checkOutScreenshotPath!) || null)
+          : null;
+
+        const isCheckInMissing = Boolean(
+          r.checkInTime && (!r.checkInScreenshotPath || r.checkInScreenshotPath.includes('missing_proof'))
+        );
+        const isCheckOutMissing = Boolean(
+          r.checkOutTime && (!r.checkOutScreenshotPath || r.checkOutScreenshotPath.includes('missing_proof'))
+        );
+
+        return {
+          ...r,
+          checkInSignedUrl: inUrl,
+          checkOutSignedUrl: outUrl,
+          screenCaptureUrl: inUrl || (r as any).screenCaptureUrl || null,
+          isCheckInProofMissing: isCheckInMissing,
+          isCheckOutProofMissing: isCheckOutMissing,
+          isProofMissing: isCheckInMissing || isCheckOutMissing
+        };
+      });
+    } catch {
+      return records as any;
+    }
+  },
+
+  async generateWorkstationVerificationBlob(userId: string, userName?: string): Promise<Blob> {
     try {
       if (typeof document !== 'undefined') {
         const canvas = document.createElement('canvas');
@@ -619,16 +736,19 @@ async checkIn(payload: CheckInPayload): Promise<{ attendance?: EmployeeAttendanc
       // 3. Upload Screenshot Evidence strictly to authenticated employee folder
       let screenshotPath: string | null = null;
       let evidenceType: 'screen_capture' | 'manual_upload' = 'screen_capture';
+      let isMissingProof = false;
 
       let evidenceBlob = payload.evidenceBlob;
       if (!evidenceBlob && !payload.manualFile) {
+        isMissingProof = true;
         try {
-          evidenceBlob = await this.generateWorkstationVerificationBlob(authenticatedUserId);
+          evidenceBlob = await this.generateMissingProofBlob(authenticatedUserId, 'checkin');
         } catch (_) {}
       }
 
       if (evidenceBlob) {
-        const fileName = `${authenticatedUserId}/checkin_${Date.now()}.jpg`;
+        const prefix = isMissingProof ? 'missing_proof_checkin' : 'checkin';
+        const fileName = `${authenticatedUserId}/${prefix}_${Date.now()}.jpg`;
         const { data: uploadData, error: uploadErr } = await supabase.storage
           .from('employee-attendance-evidence')
           .upload(fileName, evidenceBlob, { contentType: 'image/jpeg', upsert: true });
@@ -725,16 +845,19 @@ async checkIn(payload: CheckInPayload): Promise<{ attendance?: EmployeeAttendanc
       // 3. Upload Screenshot Evidence strictly to authenticated employee folder
       let screenshotPath: string | null = null;
       let evidenceType: 'screen_capture' | 'manual_upload' = 'screen_capture';
+      let isMissingProof = false;
 
       let evidenceBlob = payload.evidenceBlob;
       if (!evidenceBlob && !payload.manualFile) {
+        isMissingProof = true;
         try {
-          evidenceBlob = await this.generateWorkstationVerificationBlob(authenticatedUserId);
+          evidenceBlob = await this.generateMissingProofBlob(authenticatedUserId, 'checkout');
         } catch (_) {}
       }
 
       if (evidenceBlob) {
-        const fileName = `${authenticatedUserId}/checkout_${Date.now()}.jpg`;
+        const prefix = isMissingProof ? 'missing_proof_checkout' : 'checkout';
+        const fileName = `${authenticatedUserId}/${prefix}_${Date.now()}.jpg`;
         const { data: uploadData, error: uploadErr } = await supabase.storage
           .from('employee-attendance-evidence')
           .upload(fileName, evidenceBlob, { contentType: 'image/jpeg', upsert: true });
@@ -830,7 +953,7 @@ async checkIn(payload: CheckInPayload): Promise<{ attendance?: EmployeeAttendanc
       const { data, error } = await query.order('work_date', { ascending: false });
       if (error || !data) return [];
 
-      return data.map((a: any) => ({
+      const parsed = data.map((a: any) => ({
         id: a.id,
         employeeId: a.employee_id,
         workDate: a.work_date,
@@ -861,6 +984,7 @@ async checkIn(payload: CheckInPayload): Promise<{ attendance?: EmployeeAttendanc
         createdAt: a.created_at,
         updatedAt: a.updated_at
       }));
+      return await this.resolveAttendanceSignedUrls(parsed);
     } catch {
       return [];
     }
@@ -924,7 +1048,7 @@ async checkIn(payload: CheckInPayload): Promise<{ attendance?: EmployeeAttendanc
         .order('check_in_time', { ascending: true });
 
       if (error || !data) return [];
-      return data.map((a: any) => ({
+      const parsed = data.map((a: any) => ({
         id: a.id,
         employeeId: a.employee_id,
         workDate: a.work_date,
@@ -950,6 +1074,7 @@ async checkIn(payload: CheckInPayload): Promise<{ attendance?: EmployeeAttendanc
         createdAt: a.created_at,
         updatedAt: a.updated_at
       }));
+      return await this.resolveAttendanceSignedUrls(parsed);
     } catch {
       return [];
     }

@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
-import { 
+import {
+  Camera, 
   Users, Clock, DollarSign, Laptop, Award, MessageSquare, 
   Calculator, AlertTriangle, CheckCircle2, Search, 
   Plus, Download, Eye, Edit3, RefreshCw, 
@@ -22,6 +23,19 @@ import { PayrollAdjustmentModal } from './PayrollAdjustmentModal';
 import { AttendanceCorrectionModal } from './AttendanceCorrectionModal';
 import { FinalSettlementModal } from './FinalSettlementModal';
 import { EditTeamMemberModal } from '../team/EditTeamMemberModal';
+
+const formatPKTTime = (dateStr: string) => {
+  try {
+    return new Date(dateStr).toLocaleTimeString('en-US', {
+      timeZone: 'Asia/Karachi',
+      hour: '2-digit',
+      minute: '2-digit',
+      hour12: true
+    });
+  } catch {
+    return dateStr;
+  }
+};
 
 export const EmployeeManagementDashboardView: React.FC = () => {
   const { profile: currentUserProfile } = useAuth();
@@ -89,8 +103,16 @@ export const EmployeeManagementDashboardView: React.FC = () => {
   const [settlementTargetEmployeeRecord, setSettlementTargetEmployeeRecord] = useState<EmployeeRecord | null>(null);
   const [editingMemberForSetup, setEditingMemberForSetup] = useState<TeamMemberRecord | null>(null);
 
-  // Evidence Preview Lightbox
+  // Evidence Preview Lightbox Modal
   const [previewEvidenceUrl, setPreviewEvidenceUrl] = useState<string | null>(null);
+  const [previewProofModal, setPreviewProofModal] = useState<{ url: string; title: string; subtitle: string } | null>(null);
+
+  // Attendance Sub-tab: 'roster' | 'proof'
+  const [attendanceSubTab, setAttendanceSubTab] = useState<'roster' | 'proof'>('roster');
+  const [proofSelectedDate, setProofSelectedDate] = useState<string>(() => getPKTTodayDateString());
+  const [proofMemberFilter, setProofMemberFilter] = useState<string>('all');
+  const [proofAttendanceList, setProofAttendanceList] = useState<EmployeeAttendance[]>([]);
+  const [isLoadingProof, setIsLoadingProof] = useState(false);
 
   const loadAllData = useCallback(async () => {
     if (!currentUserProfile) return;
@@ -191,6 +213,17 @@ export const EmployeeManagementDashboardView: React.FC = () => {
   useEffect(() => {
     loadAllData();
   }, [loadAllData]);
+
+  // Load attendance proofs when proofSelectedDate changes
+  useEffect(() => {
+    if (activeTab === 'attendance' && attendanceSubTab === 'proof') {
+      setIsLoadingProof(true);
+      employeeOperationsService.fetchAllTodayAttendance(proofSelectedDate)
+        .then((records) => setProofAttendanceList(records))
+        .catch(() => setProofAttendanceList([]))
+        .finally(() => setIsLoadingProof(false));
+    }
+  }, [activeTab, attendanceSubTab, proofSelectedDate]);
 
   // Generate Monthly Payroll Cycle
   const handleGeneratePayroll = async () => {
@@ -560,6 +593,36 @@ export const EmployeeManagementDashboardView: React.FC = () => {
       {/* TAB 1: LIVE ATTENDANCE */}
       {activeTab === 'attendance' && (
         <div className="space-y-6">
+          {/* Sub Navigation: Live Attendance Roster vs Clock-In Proof */}
+          <div className="flex items-center gap-2 border-b border-slate-200 dark:border-dark-border pb-3">
+            <button
+              type="button"
+              data-testid="tab-live-roster"
+              onClick={() => setAttendanceSubTab('roster')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                attendanceSubTab === 'roster'
+                  ? 'bg-brand-600 text-white shadow-sm'
+                  : 'bg-white dark:bg-dark-card text-slate-600 dark:text-gray-300 hover:bg-slate-100 border border-slate-200 dark:border-dark-border'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              <span>Today's Live Roster</span>
+            </button>
+
+            <button
+              type="button"
+              data-testid="tab-clock-in-proof"
+              onClick={() => setAttendanceSubTab('proof')}
+              className={`flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold transition-all cursor-pointer ${
+                attendanceSubTab === 'proof'
+                  ? 'bg-brand-600 text-white shadow-sm'
+                  : 'bg-white dark:bg-dark-card text-slate-600 dark:text-gray-300 hover:bg-slate-100 border border-slate-200 dark:border-dark-border'
+              }`}
+            >
+              <Camera className="w-4 h-4" />
+              <span>Clock-In Proof</span>
+            </button>
+          </div>
           {/* Today's Attendance Summary KPI Bar */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <div className="p-4 rounded-2xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border space-y-1 shadow-xs">
@@ -594,7 +657,8 @@ export const EmployeeManagementDashboardView: React.FC = () => {
             </div>
           </div>
 
-          {/* Unified Team Attendance Roster Table */}
+          {/* Render Today's Live Roster when attendanceSubTab === 'roster' */}
+          {attendanceSubTab === 'roster' && (
           <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border shadow-xs space-y-4">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-3">
               <div>
@@ -691,6 +755,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
                     <th className="py-3 px-3">Shift</th>
                     <th className="py-3 px-3">Check In</th>
                     <th className="py-3 px-3">Check Out</th>
+                    <th className="py-3 px-3">Proof</th>
                     <th className="py-3 px-3">Today Status</th>
                     <th className="py-3 px-3 text-right">Actions</th>
                   </tr>
@@ -865,6 +930,187 @@ export const EmployeeManagementDashboardView: React.FC = () => {
               </table>
             </div>
           </div>
+          )}
+
+          {/* Clock-In Proof Vault Tab */}
+          {attendanceSubTab === 'proof' && (
+            <div className="p-5 sm:p-6 rounded-3xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border shadow-xs space-y-5">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 dark:border-dark-border pb-4">
+                <div>
+                  <h2 className="text-sm font-bold text-slate-900 dark:text-gray-100 flex items-center gap-2">
+                    <Camera className="w-4 h-4 text-brand-600" />
+                    <span>Workstation Clock-In & Check-Out Proof Vault</span>
+                  </h2>
+                  <p className="text-xs text-slate-500 dark:text-gray-400 mt-0.5">
+                    Review authentic workstation screenshot proof captures for all 39 team members with PKT timestamps.
+                  </p>
+                </div>
+
+                {/* Date & Member Filter Controls */}
+                <div className="flex items-center gap-2.5 flex-wrap">
+                  <div className="flex items-center gap-1.5 bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl px-3 py-1.5">
+                    <span className="text-[11px] font-bold text-slate-500">Date:</span>
+                    <input
+                      type="date"
+                      value={proofSelectedDate}
+                      onChange={(e) => setProofSelectedDate(e.target.value)}
+                      className="text-xs font-mono font-bold bg-transparent text-slate-900 dark:text-gray-100 focus:outline-none"
+                    />
+                  </div>
+
+                  <select
+                    value={proofMemberFilter}
+                    onChange={(e) => setProofMemberFilter(e.target.value)}
+                    className="px-3 py-1.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-700 dark:text-gray-300 focus:outline-none"
+                  >
+                    <option value="all">All Members (39)</option>
+                    {allStaffMembers.map(m => (
+                      <option key={m.id} value={m.id}>{m.fullName}</option>
+                    ))}
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsLoadingProof(true);
+                      employeeOperationsService.fetchAllTodayAttendance(proofSelectedDate)
+                        .then(r => setProofAttendanceList(r))
+                        .finally(() => setIsLoadingProof(false));
+                    }}
+                    className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-dark-card dark:hover:bg-dark-100 text-xs font-bold text-slate-700 dark:text-gray-300 transition-colors flex items-center gap-1 cursor-pointer"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isLoadingProof ? 'animate-spin' : ''}`} />
+                    <span>Refresh</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Proofs Grid */}
+              <div className="space-y-4">
+                {isLoadingProof ? (
+                  <div className="py-12 text-center text-xs text-slate-400">Loading proof records...</div>
+                ) : (
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                    {allStaffMembers
+                      .filter(m => proofMemberFilter === 'all' || m.id === proofMemberFilter)
+                      .map(member => {
+                        const att = proofAttendanceList.find(a => a.employeeId === member.id);
+                        const empRec = empRecordMap.get(member.id);
+                        const shift = empRec?.shift || shifts.find(s => s.id === empRec?.shiftId) || shifts[0];
+
+                        const hasIn = Boolean(
+                          (att?.checkInSignedUrl || (att?.checkInScreenshotPath && !att.checkInScreenshotPath.includes('missing_proof'))) &&
+                          !(att as any)?.isCheckInProofMissing
+                        );
+                        const inUrl = att?.checkInSignedUrl || att?.checkInScreenshotPath;
+
+                        const hasOut = Boolean(
+                          (att?.checkOutSignedUrl || (att?.checkOutScreenshotPath && !att.checkOutScreenshotPath.includes('missing_proof'))) &&
+                          !(att as any)?.isCheckOutProofMissing
+                        );
+                        const outUrl = att?.checkOutSignedUrl || att?.checkOutScreenshotPath;
+
+                        return (
+                          <div
+                            key={member.id}
+                            className="p-4 rounded-2xl bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border space-y-3 shadow-2xs"
+                          >
+                            <div className="flex items-start justify-between gap-2">
+                              <div>
+                                <h4 className="text-xs font-bold text-slate-900 dark:text-gray-100">{member.fullName}</h4>
+                                <p className="text-[10px] text-slate-500">{member.designationName || member.role}</p>
+                              </div>
+                              <span className="text-[9px] font-mono font-bold text-slate-400">
+                                {shift ? shift.name : 'Standard Shift'}
+                              </span>
+                            </div>
+
+                            {/* Proof Thumbnails Grid */}
+                            <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/60 dark:border-dark-border/60">
+                              {/* Check-In Proof */}
+                              <div className="space-y-1">
+                                <span className="text-[9px] font-bold text-emerald-600 uppercase tracking-wider flex items-center gap-1">
+                                  <span>Check-In:</span>
+                                  <span className="font-mono text-slate-600 dark:text-gray-400 lowercase">
+                                    {att?.checkInTime ? formatPKTTime(att.checkInTime) : 'None'}
+                                  </span>
+                                </span>
+                                {hasIn && inUrl ? (
+                                  <button
+                                    type="button"
+                                    data-testid={`proof-vault-in-${member.id}`}
+                                    onClick={() => setPreviewProofModal({
+                                      url: inUrl,
+                                      title: `${member.fullName} — Check-In Screenshot Proof`,
+                                      subtitle: `${proofSelectedDate} • Check-In: ${formatPKTTime(att!.checkInTime!)}`
+                                    })}
+                                    className="w-full aspect-video rounded-xl overflow-hidden border border-slate-200 dark:border-dark-border hover:border-brand-500 shadow-2xs hover:shadow-md transition-all cursor-pointer bg-slate-950 flex items-center justify-center group"
+                                  >
+                                    <img
+                                      src={inUrl}
+                                      alt="Check-In Proof"
+                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                      onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                                    />
+                                  </button>
+                                ) : att?.checkInTime ? (
+                                  <div className="w-full aspect-video rounded-xl border border-amber-200 dark:border-amber-800/40 bg-amber-50/50 dark:bg-amber-950/20 flex flex-col items-center justify-center p-2 text-center">
+                                    <AlertTriangle className="w-4 h-4 text-amber-500 mb-0.5" />
+                                    <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300">Proof Missing</span>
+                                  </div>
+                                ) : (
+                                  <div className="w-full aspect-video rounded-xl border border-dashed border-slate-200 dark:border-dark-border flex items-center justify-center text-[10px] text-slate-400">
+                                    No punch
+                                  </div>
+                                )}
+                              </div>
+
+                              {/* Check-Out Proof */}
+                              <div className="space-y-1">
+                                <span className="text-[9px] font-bold text-rose-600 uppercase tracking-wider flex items-center gap-1">
+                                  <span>Check-Out:</span>
+                                  <span className="font-mono text-slate-600 dark:text-gray-400 lowercase">
+                                    {att?.checkOutTime ? formatPKTTime(att.checkOutTime) : 'None'}
+                                  </span>
+                                </span>
+                                {hasOut && outUrl ? (
+                                  <button
+                                    type="button"
+                                    data-testid={`proof-vault-out-${member.id}`}
+                                    onClick={() => setPreviewProofModal({
+                                      url: outUrl,
+                                      title: `${member.fullName} — Check-Out Screenshot Proof`,
+                                      subtitle: `${proofSelectedDate} • Check-Out: ${formatPKTTime(att!.checkOutTime!)}`
+                                    })}
+                                    className="w-full aspect-video rounded-xl overflow-hidden border border-slate-200 dark:border-dark-border hover:border-brand-500 shadow-2xs hover:shadow-md transition-all cursor-pointer bg-slate-950 flex items-center justify-center group"
+                                  >
+                                    <img
+                                      src={outUrl}
+                                      alt="Check-Out Proof"
+                                      className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                                      onError={(e) => { (e.target as HTMLElement).style.display = 'none'; }}
+                                    />
+                                  </button>
+                                ) : att?.checkOutTime ? (
+                                  <div className="w-full aspect-video rounded-xl border border-amber-200 dark:border-amber-800/40 bg-amber-50/50 dark:bg-amber-950/20 flex flex-col items-center justify-center p-2 text-center">
+                                    <AlertTriangle className="w-4 h-4 text-amber-500 mb-0.5" />
+                                    <span className="text-[10px] font-bold text-amber-700 dark:text-amber-300">Proof Missing</span>
+                                  </div>
+                                ) : (
+                                  <div className="w-full aspect-video rounded-xl border border-dashed border-slate-200 dark:border-dark-border flex items-center justify-center text-[10px] text-slate-400">
+                                    {att?.checkInTime ? 'Active Shift' : 'No punch'}
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
         </div>
       )}
 

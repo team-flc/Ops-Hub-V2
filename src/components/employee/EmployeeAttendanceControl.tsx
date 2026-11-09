@@ -165,12 +165,26 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
         await employeeOperationsService.acknowledgeSOP(employeeRecord.id).catch(() => {});
       }
 
+      // Capture screenshot locally at the same moment as Check-In
+      let evidenceBlob = capturedBlob;
+      if (!evidenceBlob && !manualFile && typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices && ('getDisplayMedia' in navigator.mediaDevices))) {
+        setIsCapturingScreen(true);
+        try {
+          const capRes = await employeeOperationsService.captureScreenFrame();
+          if (capRes.blob) {
+            evidenceBlob = capRes.blob;
+            setCapturedBlob(capRes.blob);
+          }
+        } catch (_) {}
+        setIsCapturingScreen(false);
+      }
+
       const res = await employeeOperationsService.checkIn({
-        evidenceBlob: capturedBlob || undefined,
+        evidenceBlob: evidenceBlob || undefined,
         manualFile: manualFile || undefined,
         metadata: {
           workMode,
-          userAgent: navigator.userAgent
+          userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : ''
         }
       });
 
@@ -189,6 +203,7 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
       setErrorMessage(err.message || 'Failed to check in.');
     } finally {
       setIsProcessing(false);
+      setIsCapturingScreen(false);
     }
   };
 
@@ -201,11 +216,29 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
     setSuccessMessage(null);
 
     try {
+      // Capture screenshot locally at the same moment as Check-Out
+      let evidenceBlob = capturedBlob;
+      if (!evidenceBlob && !manualFile && typeof navigator !== 'undefined' && Boolean(navigator.mediaDevices && ('getDisplayMedia' in navigator.mediaDevices))) {
+        setIsCapturingScreen(true);
+        try {
+          const capRes = await employeeOperationsService.captureScreenFrame();
+          if (capRes.blob) {
+            evidenceBlob = capRes.blob;
+            setCapturedBlob(capRes.blob);
+          }
+        } catch (_) {}
+        setIsCapturingScreen(false);
+      }
+
       const res = await employeeOperationsService.checkOut({
         attendanceId: todayAttendance.id,
-        evidenceBlob: capturedBlob || undefined,
+        evidenceBlob: evidenceBlob || undefined,
         manualFile: manualFile || undefined,
-        earlyCheckoutReason: earlyCheckoutReason.trim() || undefined
+        earlyCheckoutReason: earlyCheckoutReason.trim() || undefined,
+        metadata: {
+          workMode,
+          userAgent: typeof navigator !== 'undefined' ? navigator.userAgent : ''
+        }
       });
 
       if (res.error) {
@@ -219,6 +252,7 @@ export const EmployeeAttendanceControl: React.FC<EmployeeAttendanceControlProps>
       setErrorMessage(err.message || 'Failed to check out.');
     } finally {
       setIsProcessing(false);
+      setIsCapturingScreen(false);
     }
   };
 

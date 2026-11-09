@@ -1005,6 +1005,11 @@ export interface EmployeeAttendance {
   checkInScreenshotPath?: string | null;
   checkOutScreenshotPath?: string | null;
   screenCaptureUrl?: string | null;
+  checkInSignedUrl?: string | null;
+  checkOutSignedUrl?: string | null;
+  isProofMissing?: boolean;
+  isCheckInProofMissing?: boolean;
+  isCheckOutProofMissing?: boolean;
   checkInEvidenceType?: AttendanceEvidenceType | null;
   checkOutEvidenceType?: AttendanceEvidenceType | null;
   checkInMetadata?: any;
