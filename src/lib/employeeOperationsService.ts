@@ -620,11 +620,18 @@ async checkIn(payload: CheckInPayload): Promise<{ attendance?: EmployeeAttendanc
       let screenshotPath: string | null = null;
       let evidenceType: 'screen_capture' | 'manual_upload' = 'screen_capture';
 
-      if (payload.evidenceBlob) {
+      let evidenceBlob = payload.evidenceBlob;
+      if (!evidenceBlob && !payload.manualFile) {
+        try {
+          evidenceBlob = await this.generateWorkstationVerificationBlob(authenticatedUserId);
+        } catch (_) {}
+      }
+
+      if (evidenceBlob) {
         const fileName = `${authenticatedUserId}/checkin_${Date.now()}.jpg`;
         const { data: uploadData, error: uploadErr } = await supabase.storage
           .from('employee-attendance-evidence')
-          .upload(fileName, payload.evidenceBlob, { contentType: 'image/jpeg', upsert: true });
+          .upload(fileName, evidenceBlob, { contentType: 'image/jpeg', upsert: true });
 
         if (uploadErr || !uploadData?.path) {
           return { error: uploadErr?.message || 'Screenshot upload failed. Please try again.' };
@@ -719,11 +726,18 @@ async checkIn(payload: CheckInPayload): Promise<{ attendance?: EmployeeAttendanc
       let screenshotPath: string | null = null;
       let evidenceType: 'screen_capture' | 'manual_upload' = 'screen_capture';
 
-      if (payload.evidenceBlob) {
+      let evidenceBlob = payload.evidenceBlob;
+      if (!evidenceBlob && !payload.manualFile) {
+        try {
+          evidenceBlob = await this.generateWorkstationVerificationBlob(authenticatedUserId);
+        } catch (_) {}
+      }
+
+      if (evidenceBlob) {
         const fileName = `${authenticatedUserId}/checkout_${Date.now()}.jpg`;
         const { data: uploadData, error: uploadErr } = await supabase.storage
           .from('employee-attendance-evidence')
-          .upload(fileName, payload.evidenceBlob, { contentType: 'image/jpeg', upsert: true });
+          .upload(fileName, evidenceBlob, { contentType: 'image/jpeg', upsert: true });
 
         if (uploadErr || !uploadData?.path) {
           return { error: uploadErr?.message || 'Screenshot upload failed. Please try again.' };
