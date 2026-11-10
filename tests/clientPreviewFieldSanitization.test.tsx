@@ -6,6 +6,7 @@ import { useOpsStore } from '../src/store/opsStore';
 import { Sidebar } from '../src/components/layout/Sidebar';
 import { SelectedClientHeader } from '../src/components/clients/SelectedClientHeader';
 import { ClientKanbanCard } from '../src/components/tasks/ClientKanbanCard';
+import { ClientDetailsTab } from '../src/components/clients/ClientDetailsTab';
 import { filterAndSanitizeClientDeliverables } from '../src/components/clients/ClientWorkspaceView';
 import { CLIENT_PERMITTED_LINK_KEYS, isInternalOrSensitiveUrl, sanitizeClientDeliverableTitle, isInternalOnlyTask } from '../src/lib/permissions';
 
@@ -507,5 +508,74 @@ describe('Client Preview Field & Layout Security Suite', () => {
 
     // 3. No start button
     expect(pendingContainer.querySelector('[data-testid^="start-task-btn-"]')).toBeNull();
+  });
+
+  it('Check 9: ClientDetailsTab in archived workspace renders zero Save Changes buttons, zero Discard buttons, hides Add Profile drawer, and disables all fields', () => {
+    const archivedClient: ClientRecord = {
+      id: '5d585580-d378-44a5-8dc1-d2653d4d6d8a',
+      companyName: 'Finfix Pro',
+      clientName: 'Finfix Pro Owner',
+      operationalManagerName: 'Muhammad Atif Naseer',
+      clientEmail: 'owner@finfixpro.com',
+      status: 'Archived',
+      archivedAt: '2026-11-09T00:00:00Z',
+      archiveReason: 'Client offboarded',
+      totalTasks: 10,
+      completedTasks: 5,
+      overdueTasks: 0,
+      healthScore: 80,
+      links: {
+        website: 'https://finfixpro.com',
+        important_docs: 'https://docs.google.com/test'
+      }
+    };
+
+    const { container } = render(
+      <ClientDetailsTab
+        client={archivedClient}
+        currentUserProfile={ownerProfile}
+        eligibleManagers={[ownerProfile]}
+        onClientUpdated={vi.fn()}
+        isClientView={false}
+      />
+    );
+
+    // 1. Must show "Archived (Read-Only)" badge
+    expect(container.textContent).toContain('Archived (Read-Only)');
+
+    // 2. Must NOT render "Save Changes" button anywhere
+    const buttons = Array.from(container.querySelectorAll('button'));
+    const saveButtons = buttons.filter(b => b.textContent?.includes('Save Changes'));
+    expect(saveButtons.length).toBe(0);
+
+    // 3. Must NOT render "Discard Changes" button anywhere
+    const discardButtons = buttons.filter(b => b.textContent?.includes('Discard'));
+    expect(discardButtons.length).toBe(0);
+
+    // 4. Must NOT render "Add Additional LinkedIn Profile"
+    expect(container.textContent).not.toContain('Add Additional LinkedIn Profile');
+
+    // 5. Must NOT render "Archive Client" danger button (it's already archived)
+    const archiveButtons = buttons.filter(b => b.textContent?.includes('Archive Client'));
+    expect(archiveButtons.length).toBe(0);
+
+    // 6. All inputs and textareas must be disabled
+    const inputs = Array.from(container.querySelectorAll('input:not([type="hidden"])')) as HTMLInputElement[];
+    const textareas = Array.from(container.querySelectorAll('textarea')) as HTMLTextAreaElement[];
+    const selects = Array.from(container.querySelectorAll('select')) as HTMLSelectElement[];
+
+    expect(inputs.length).toBeGreaterThan(0);
+    inputs.forEach(input => {
+      expect(input.disabled).toBe(true);
+    });
+
+    expect(textareas.length).toBeGreaterThan(0);
+    textareas.forEach(textarea => {
+      expect(textarea.disabled).toBe(true);
+    });
+
+    selects.forEach(select => {
+      expect(select.disabled).toBe(true);
+    });
   });
 });

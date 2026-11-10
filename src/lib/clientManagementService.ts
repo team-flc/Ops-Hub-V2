@@ -1199,6 +1199,17 @@ export const clientManagementService = {
     }
 
     try {
+      // Check if client is archived
+      const { data: clientRec } = await supabase
+        .from('clients')
+        .select('status')
+        .eq('id', clientId)
+        .single();
+
+      if (clientRec?.status === 'Archived') {
+        return { error: 'Direct modification of an Archived client is prohibited.' };
+      }
+
       // Check duplicate URL
       const { data: existing } = await supabase
         .from('client_linkedin_profiles')
@@ -1293,11 +1304,15 @@ export const clientManagementService = {
     try {
       const { data: previous } = await supabase
         .from('client_linkedin_profiles')
-        .select('*')
+        .select('*, clients:client_id(status)')
         .eq('id', profileId)
         .single();
 
       if (!previous) return { error: 'Profile not found.' };
+
+      if ((previous as any).clients?.status === 'Archived') {
+        return { error: 'Direct modification of an Archived client is prohibited.' };
+      }
 
       const updates: any = {
         updated_at: new Date().toISOString()
@@ -1403,9 +1418,15 @@ export const clientManagementService = {
     try {
       const { data: profile } = await supabase
         .from('client_linkedin_profiles')
-        .select('client_id, profile_label')
+        .select('client_id, profile_label, clients:client_id(status)')
         .eq('id', profileId)
         .single();
+
+      if (!profile) return { success: false, error: 'Profile not found.' };
+
+      if ((profile as any).clients?.status === 'Archived') {
+        return { success: false, error: 'Direct modification of an Archived client is prohibited.' };
+      }
 
       const { error } = await supabase
         .from('client_linkedin_profiles')

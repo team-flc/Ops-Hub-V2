@@ -429,16 +429,18 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
 
   const isPreview = typeof window !== 'undefined' && window.location.search.includes('preview=true');
   const isEffectiveClientView = Boolean(isClientView || currentUserProfile?.role === 'client' || isPreview);
+  const isArchived = client.status === 'Archived';
+  const isReadOnly = Boolean(isEffectiveClientView || isArchived);
   const isTeamMember = currentUserProfile?.role === 'team_member';
-  const isManagerOrOwner = !isEffectiveClientView && (currentUserProfile?.role === 'owner' || currentUserProfile?.role === 'operational_manager');
+  const isManagerOrOwner = !isReadOnly && (currentUserProfile?.role === 'owner' || currentUserProfile?.role === 'operational_manager');
   const readiness = calculateLinkedInReadiness(requiredLinkedInCount, profiles);
   const displayLogoUrl = useSignedUrl('client-logos', logoUrl);
 
-  const isBioLocked = isEffectiveClientView || (isTeamMember && Boolean(client.businessBio?.trim()));
-  const isIndustryLocked = isEffectiveClientView || (isTeamMember && Boolean(client.industry?.trim()));
+  const isBioLocked = isReadOnly || (isTeamMember && Boolean(client.businessBio?.trim()));
+  const isIndustryLocked = isReadOnly || (isTeamMember && Boolean(client.industry?.trim()));
 
   const isLinkLocked = (linkKey: ClientLinkType | string) => {
-    if (isEffectiveClientView) return true;
+    if (isReadOnly) return true;
     if (!isTeamMember) return false;
     let existing: string | undefined;
     if (linkKey === 'important_docs' || linkKey === 'important_documents') {
@@ -459,6 +461,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
 
   // Handle Logo Upload
   const handleLogoUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (isReadOnly || client.status === 'Archived') return;
     const file = e.target.files?.[0];
     if (!file) return;
     const validation = storageService.validateImage(file);
@@ -515,6 +518,11 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
   // Core save routine with race-condition guards
   const performSave = useCallback(
     async (isManualClick = false): Promise<boolean> => {
+      if (isReadOnly || client.status === 'Archived') {
+        if (isManualClick) setErrorMsg('Cannot modify details for an archived workspace.');
+        return false;
+      }
+
       if (!verifyClientUrlMatch()) {
         return false;
       }
@@ -679,7 +687,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
 
   // Debounced Autosave Effect for valid changes
   useEffect(() => {
-    if (!isDirty) {
+    if (isReadOnly || client.status === 'Archived' || !isDirty) {
       return;
     }
     if (!companyName.trim() || !clientName.trim()) {
@@ -691,7 +699,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
     }, 1200);
 
     return () => clearTimeout(timer);
-  }, [isDirty, performSave, companyName, clientName]);
+  }, [isReadOnly, client.status, isDirty, performSave, companyName, clientName]);
 
   // Save Core Client Details and Workspace Links via manual click
   const handleSaveDetails = async (e: React.FormEvent) => {
@@ -701,6 +709,9 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
 
   // Add a new LinkedIn Profile
   const handleAddNewProfile = async () => {
+    if (isReadOnly || client.status === 'Archived') {
+      return;
+    }
     setErrorMsg(null);
 
     if (!verifyClientUrlMatch()) {
@@ -771,6 +782,9 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
 
   // Toggle or update existing LinkedIn profile
   const handleUpdateProfile = async (profileId: string, updates: Partial<LinkedInProfileInput>) => {
+    if (isReadOnly || client.status === 'Archived') {
+      return;
+    }
     if (!verifyClientUrlMatch()) {
       return;
     }
@@ -848,6 +862,9 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
 
   // Archive LinkedIn profile
   const handleArchiveProfile = async (profileId: string) => {
+    if (isReadOnly || client.status === 'Archived') {
+      return;
+    }
     try {
       const res = await clientManagementService.archiveLinkedInProfile(
         profileId,
@@ -893,7 +910,13 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
               <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">
                 Client Details & Configuration
               </h3>
-              {!isEffectiveClientView && isDirty && (
+              {isArchived && (
+                <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-gray-100 dark:bg-dark-200 text-gray-600 dark:text-gray-400 border border-gray-200 dark:border-dark-border">
+                  <Lock className="w-3 h-3" />
+                  Archived (Read-Only)
+                </span>
+              )}
+              {!isReadOnly && isDirty && (
                 <span
                   data-testid="unsaved-changes-indicator"
                   className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20 animate-fade-in"
@@ -908,7 +931,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
             </p>
           </div>
 
-          {!isEffectiveClientView && (
+          {!isReadOnly && (
             <div className="flex items-center gap-2.5 shrink-0">
             <AutosaveBadge status={autosaveStatus} error={autosaveError} />
 
@@ -925,6 +948,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
 
             <button
               type="submit"
+              data-testid="save-client-btn"
               disabled={isSaving}
               className="flex items-center gap-2 px-5 py-2.5 bg-brand-500 hover:bg-brand-600 text-white rounded-xl text-xs font-bold shadow-md shadow-brand-500/20 transition-all cursor-pointer disabled:opacity-50"
             >
@@ -963,7 +987,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                   {companyName.split(' ').map(n => n[0]).join('').substring(0, 2).toUpperCase() || 'CL'}
                 </div>
               )}
-              {!isEffectiveClientView && !isTeamMember && (
+              {!isReadOnly && !isTeamMember && (
                 <label htmlFor="client-logo-upload"
                   className="absolute inset-0 bg-black/60 backdrop-blur-[1px] rounded-2xl opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white cursor-pointer transition-all duration-200 text-center p-1"
                 >
@@ -983,7 +1007,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 accept="image/jpeg,image/png,image/webp"
                 onChange={handleLogoUpload}
                 className="hidden"
-                disabled={isEffectiveClientView || isTeamMember || isUploadingLogo || isSaving}
+                disabled={isReadOnly || isTeamMember || isUploadingLogo || isSaving}
               />
             </div>
             <div className="flex-1 space-y-1 text-center sm:text-left">
@@ -993,7 +1017,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
               <p className="text-[11px] text-gray-500 dark:text-gray-400 max-w-md">
                 Displayed in the Client Switcher, header breadcrumbs, and task workspaces. Allowed: JPG, PNG, WebP up to 5MB.
               </p>
-              {logoUrl && !isTeamMember && (
+              {logoUrl && !isReadOnly && !isTeamMember && (
                 <button
                   type="button"
                   onClick={() => setLogoUrl(null)}
@@ -1032,7 +1056,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 type="text"
                 value={companyName}
                 onChange={(e) => setCompanyName(e.target.value)}
-                disabled={isEffectiveClientView || isTeamMember}
+                disabled={isReadOnly || isTeamMember}
                 required
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
@@ -1055,7 +1079,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 type="text"
                 value={clientName}
                 onChange={(e) => setClientName(e.target.value)}
-                disabled={isEffectiveClientView || isTeamMember}
+                disabled={isReadOnly || isTeamMember}
                 required
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
@@ -1102,7 +1126,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 id="detail-package"
                 value={pkg}
                 onChange={(e) => setPkg(e.target.value as ClientPackage)}
-                disabled={isEffectiveClientView || isTeamMember}
+                disabled={isReadOnly || isTeamMember}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {PACKAGES.map((p) => (
@@ -1127,7 +1151,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 id="detail-manager"
                 value={managerId}
                 onChange={(e) => setManagerId(e.target.value)}
-                disabled={isEffectiveClientView || isTeamMember}
+                disabled={isReadOnly || isTeamMember}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               >
                 {eligibleManagers.map((m) => (
@@ -1159,7 +1183,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 type="date"
                 value={activationDate}
                 onChange={(e) => setActivationDate(e.target.value)}
-                disabled={isEffectiveClientView || isTeamMember}
+                disabled={isReadOnly || isTeamMember}
                 required
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
@@ -1184,9 +1208,12 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 id="detail-status"
                 value={status}
                 onChange={(e) => setStatus(e.target.value as ClientStatus)}
-                disabled={isEffectiveClientView || isTeamMember}
+                disabled={isReadOnly || isTeamMember}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               >
+                {status === 'Archived' && (
+                  <option value="Archived">Archived</option>
+                )}
                 {STATUSES.map((s) => (
                   <option key={s} value={s}>{s}</option>
                 ))}
@@ -1213,7 +1240,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 max="20"
                 value={requiredLinkedInCount}
                 onChange={(e) => setRequiredLinkedInCount(Math.max(1, parseInt(e.target.value) || 1))}
-                disabled={isEffectiveClientView || isTeamMember}
+                disabled={isReadOnly || isTeamMember}
                 className="w-full px-3.5 py-2.5 rounded-xl border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none focus:ring-2 focus:ring-brand-500/50 disabled:opacity-60 disabled:cursor-not-allowed"
               />
             </div>
@@ -1252,7 +1279,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 id="detail-pause-reason"
                 value={pauseReason}
                 onChange={(e) => setPauseReason(e.target.value as ClientPauseReason)}
-                disabled={isEffectiveClientView || isTeamMember}
+                disabled={isReadOnly || isTeamMember}
                 className="w-full px-3.5 py-2 rounded-xl border border-amber-300 dark:border-amber-700/50 bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none disabled:opacity-60"
               >
                 {PAUSE_REASONS.map((r) => (
@@ -2023,7 +2050,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                     </a>
                   </div>
 
-                  {!isEffectiveClientView && (
+                  {!isReadOnly && (
                   <button
                     type="button"
                     onClick={() => handleArchiveProfile(p.id)}
@@ -2042,7 +2069,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                       Label
                     </label>
                     <input
-                      type="text" value={p.profileLabel} disabled={isEffectiveClientView} onChange={(e) => handleUpdateProfile(p.id, { profileLabel: e.target.value })}
+                      type="text" value={p.profileLabel} disabled={isReadOnly} onChange={(e) => handleUpdateProfile(p.id, { profileLabel: e.target.value })}
                       className="w-full px-3 py-1.5 rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none"
                     />
                   </div>
@@ -2052,7 +2079,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                       LinkedIn URL
                     </label>
                     <input
-                      type="url" value={p.profileUrl} disabled={isEffectiveClientView} onChange={(e) => handleUpdateProfile(p.id, { profileUrl: e.target.value })}
+                      type="url" value={p.profileUrl} disabled={isReadOnly} onChange={(e) => handleUpdateProfile(p.id, { profileUrl: e.target.value })}
                       className="w-full px-3 py-1.5 rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-xs text-gray-900 dark:text-gray-100 focus:outline-none"
                     />
                   </div>
@@ -2062,7 +2089,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 <div className="pt-2 border-t border-gray-100 dark:border-dark-border/60 flex flex-wrap items-center gap-4">
                   <label className="flex items-center gap-2 cursor-pointer select-none">
                     <input
-                      type="checkbox" checked={p.salesNavigatorActive} disabled={isEffectiveClientView} onChange={(e) => {
+                      type="checkbox" checked={p.salesNavigatorActive} disabled={isReadOnly} onChange={(e) => {
                         const checked = e.target.checked;
                         handleUpdateProfile(p.id, {
                           salesNavigatorActive: checked,
@@ -2082,7 +2109,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                       <input
                         type="date"
                         value={p.salesNavigatorActivatedOn || ''}
-                        disabled={isEffectiveClientView}
+                        disabled={isReadOnly}
                         onChange={(e) => handleUpdateProfile(p.id, { salesNavigatorActivatedOn: e.target.value })}
                         className="px-2.5 py-1 text-xs rounded-lg border border-gray-200 dark:border-dark-border bg-white dark:bg-dark-200 text-gray-900 dark:text-gray-100 focus:outline-none"
                       />
@@ -2094,7 +2121,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                 <div className="pt-2 flex items-center gap-4">
                   <label className="flex items-center gap-2 cursor-pointer select-none">
                     <input
-                      type="checkbox" checked={p.linkedinVerified || false} disabled={isEffectiveClientView} onChange={(e) => handleUpdateProfile(p.id, { linkedinVerified: e.target.checked })}
+                      type="checkbox" checked={p.linkedinVerified || false} disabled={isReadOnly} onChange={(e) => handleUpdateProfile(p.id, { linkedinVerified: e.target.checked })}
                       className="w-4 h-4 rounded text-blue-600 focus:ring-blue-500 border-gray-300"
                     />
                     <span className="text-xs font-semibold text-gray-700 dark:text-gray-300">
@@ -2109,7 +2136,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                     <input
                       type="checkbox"
                       checked={p.hasGmailAccount || false}
-                      disabled={isEffectiveClientView}
+                      disabled={isReadOnly}
                       onChange={(e) => {
                         const checked = e.target.checked;
                         handleUpdateProfile(p.id, {
@@ -2130,7 +2157,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
                       <input
                         type="email"
                         value={p.gmailAddress || ''}
-                        disabled={isEffectiveClientView}
+                        disabled={isReadOnly}
                         onChange={(e) => {
                           const val = e.target.value;
                           setProfiles(profiles.map(pr => pr.id === p.id ? { ...pr, gmailAddress: val } : pr));
@@ -2148,7 +2175,7 @@ export const ClientDetailsTab: React.FC<ClientDetailsTabProps> = ({
         </div>
 
         {/* Add New Profile Drawer */}
-        {!isEffectiveClientView && (
+        {!isReadOnly && (
         <div className="p-4 rounded-xl border border-blue-500/20 bg-blue-500/5 space-y-3">
           <div className="text-xs font-bold text-blue-700 dark:text-blue-300 flex items-center gap-1.5">
             <Plus className="w-4 h-4" />
