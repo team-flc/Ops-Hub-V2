@@ -589,6 +589,8 @@ export interface ClientTask {
   launchBatchId?: string | null;
   unreadCount?: number;
   hasUnread?: boolean;
+  isClientVisible?: boolean;
+  isInternalOnly?: boolean;
 }
 
 export interface ClientActiveAnnouncement {

@@ -7,7 +7,7 @@ import { Sidebar } from '../src/components/layout/Sidebar';
 import { SelectedClientHeader } from '../src/components/clients/SelectedClientHeader';
 import { ClientKanbanCard } from '../src/components/tasks/ClientKanbanCard';
 import { filterAndSanitizeClientDeliverables } from '../src/components/clients/ClientWorkspaceView';
-import { CLIENT_PERMITTED_LINK_KEYS, isInternalOrSensitiveUrl, sanitizeClientDeliverableTitle } from '../src/lib/permissions';
+import { CLIENT_PERMITTED_LINK_KEYS, isInternalOrSensitiveUrl, sanitizeClientDeliverableTitle, isInternalOnlyTask } from '../src/lib/permissions';
 
 vi.mock('../src/lib/safeRouterHooks', () => ({
   useSafeNavigate: () => vi.fn(),
@@ -175,5 +175,62 @@ describe('Client Preview Field & Layout Security Suite', () => {
     // No assignee or internal text
     expect(container.textContent).not.toContain('Muhammad Atif Naseer');
     expect(container.textContent).not.toContain('6 PM shift');
+  });
+
+  it('Check 5: Finfix Pro INTERNAL ONLY leak prevention & reconciliation', () => {
+    const finfixTasks: ClientTask[] = [
+      {
+        id: '833be413-d4ad-464e-ad01-ba26e9d4f891',
+        clientId: '5d585580-d378-44a5-8dc1-d2653d4d6d8a',
+        weekNumber: 1,
+        title: 'FinFix naam confirm karo (FinFix Pro vs FinFix)',
+        details: "Kahan se aaya: Client Variations chat 12 Oct. Background: FinFix variations me 'FinFix Pro' naam use hua (client docs se). Faseeh bataye ke plain 'FinFix' chahiye ya Pro theek hai. Priority P2 kyun: Chhota naming faisla hai. Karna kya hai: Naam confirm karo.",
+        departmentId: 'dept-1',
+        priority: 'Low',
+        status: 'Completed',
+        approvalMode: 'Internal Only',
+        isClientVisible: false,
+        sortOrder: 1,
+        createdAt: '2026-10-14T09:00:00Z',
+        updatedAt: '2026-10-14T09:00:00Z'
+      },
+      ...['Headline Research', 'Profile Picture & Banner Creation', 'Grid Posting on Page & all LinkedIn Profiles', 'Profile Verification', 'About Section Optimization', 'Featured Section Creation redirect to our Landing Page', 'Recommendations Exchange', 'Update Information according to Business.', 'Sales Navigator Activation'].map((title, idx) => ({
+        id: `finfix-week2-${idx}`,
+        clientId: '5d585580-d378-44a5-8dc1-d2653d4d6d8a',
+        weekNumber: 2 as const,
+        title,
+        departmentId: 'dept-2',
+        priority: 'Normal' as const,
+        status: 'Draft' as const,
+        approvalMode: 'Internal Only' as const,
+        isClientVisible: false,
+        sortOrder: idx + 1,
+        createdAt: '2026-10-15T06:52:40Z',
+        updatedAt: '2026-10-15T06:52:40Z'
+      }))
+    ];
+
+    expect(finfixTasks).toHaveLength(10);
+
+    // Sanitize for client deliverable view
+    const clientVisible = filterAndSanitizeClientDeliverables(finfixTasks);
+
+    // Exactly 9 client-visible deliverables (Week 1 internal task filtered out)
+    expect(clientVisible).toHaveLength(9);
+    expect(clientVisible.find((t) => t.id === '833be413-d4ad-464e-ad01-ba26e9d4f891')).toBeUndefined();
+    expect(clientVisible.find((t) => t.title.includes('FinFix naam confirm karo'))).toBeUndefined();
+
+    // Staff reconciliation calculations: 9 Visible + 1 Internal = 10 Total
+    const internalTasks = finfixTasks.filter((t) => isInternalOnlyTask(t));
+    expect(internalTasks).toHaveLength(1);
+    expect(internalTasks[0].id).toBe('833be413-d4ad-464e-ad01-ba26e9d4f891');
+
+    const totalStaffTasks = finfixTasks.length;
+    const totalInternalTasks = internalTasks.length;
+    const totalClientVisibleTasks = totalStaffTasks - totalInternalTasks;
+
+    expect(totalStaffTasks).toBe(10);
+    expect(totalInternalTasks).toBe(1);
+    expect(totalClientVisibleTasks).toBe(9);
   });
 });

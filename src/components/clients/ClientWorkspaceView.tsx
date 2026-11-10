@@ -599,7 +599,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                 />
 
                 {/* Staff Reconciliation Bar (Hidden for Client) */}
-                {!isEffectiveClientView && totalInternalTasks > 0 && (
+                {!isEffectiveClientView && totalStaffTasks > 0 && (
                   <div
                     data-testid="staff-client-reconciliation"
                     className="px-4 py-3 rounded-xl bg-white dark:bg-dark-card border border-slate-200 dark:border-dark-border text-xs text-slate-700 dark:text-slate-300 space-y-2 shadow-xs"
@@ -611,13 +611,15 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                           <strong className="font-bold">Client Safe Reconciliation:</strong> {totalClientVisibleTasks} Client Visible Deliverables + {totalInternalTasks} Internal Staff Only = {totalStaffTasks} Total Tasks
                         </span>
                       </div>
-                      <button
-                        type="button"
-                        onClick={() => setShowShieldedBreakdown(!showShieldedBreakdown)}
-                        className="text-[11px] font-bold text-brand-600 dark:text-brand-400 hover:underline cursor-pointer flex items-center gap-1"
-                      >
-                        <span>{showShieldedBreakdown ? 'Hide Breakdown ▲' : `View ${totalInternalTasks} Shielded Tasks & Reasons ▼`}</span>
-                      </button>
+                      {totalInternalTasks > 0 && (
+                        <button
+                          type="button"
+                          onClick={() => setShowShieldedBreakdown(!showShieldedBreakdown)}
+                          className="text-[11px] font-bold text-brand-600 dark:text-brand-400 hover:underline cursor-pointer flex items-center gap-1"
+                        >
+                          <span>{showShieldedBreakdown ? 'Hide Breakdown ▲' : `View ${totalInternalTasks} Shielded Tasks & Reasons ▼`}</span>
+                        </button>
+                      )}
                     </div>
                     {showShieldedBreakdown && (
                       <div className="pt-2 border-t border-slate-200 dark:border-dark-border text-[11px] space-y-1.5">

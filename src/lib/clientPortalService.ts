@@ -17,6 +17,7 @@ import {
   PortalDateRange
 } from '../types';
 import { taskManagementService } from './taskManagementService';
+import { isInternalOnlyTask } from './permissions';
 
 export interface PortalDataResult {
   client: ClientRecord | null;
@@ -236,10 +237,12 @@ export const clientPortalService = {
 
       // Filter tasks by publication boundary:
       // A client sees a task IF:
-      // a) is_client_visible is true, OR
-      // b) status is in ('Client Review', 'Completed'), OR
-      // c) approvalMode is 'Client Approval Required' AND task has started work
+      // a) NOT internal only, AND
+      // b) is_client_visible is true, OR
+      // c) status is in ('Client Review', 'Completed'), OR
+      // d) approvalMode is 'Client Approval Required' AND task has started work
       const publishedTasks = allTasks.filter((t: any) => {
+        if (isInternalOnlyTask(t)) return false;
         if (t.isClientVisible) return true;
         if (t.status === 'Client Review' || t.status === 'Completed') return true;
         if (t.approvalMode === 'Client Approval Required' && t.status !== 'Draft') return true;

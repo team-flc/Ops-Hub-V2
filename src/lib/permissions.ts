@@ -209,9 +209,11 @@ export function isInternalOnlyTask(task: {
   details?: string | null;
   approvalMode?: string | null;
   isInternalOnly?: boolean | null;
+  isClientVisible?: boolean | null;
+  [key: string]: any;
 }): boolean {
   if (!task) return false;
-  if (task.isInternalOnly) return true;
+  if (task.isInternalOnly === true || (task as any).is_internal_only === true) return true;
 
   const t = (task.title || '').toLowerCase().trim();
   const d = (task.details || '').toLowerCase().trim();
@@ -224,13 +226,39 @@ export function isInternalOnlyTask(task: {
     return true;
   }
 
+  // Internal seed marker / chat origins
+  if (d.includes('kahan se aaya') || t.includes('kahan se aaya')) {
+    return true;
+  }
+
   // Financial references, invoices, salaries, internal operational chatter
   if (
     /invoice|billing|payment|salary|payroll|pkr\s*[\d,]+|\$[\d,]+|\bfee\b|internal\s+admin|admin\s+task|internal\s+ops|gmail\s+notes|internal\s+chat/i.test(t) ||
     t.includes('zain se') ||
     t.includes('login/hosting') ||
     t.includes('approve karo') ||
-    t.includes('asset bank ke baad')
+    t.includes('confirm karo') ||
+    t.includes('naam confirm karo') ||
+    t.includes('decide karo') ||
+    t.includes('verify karo') ||
+    t.includes('fix karo') ||
+    t.includes('update karo') ||
+    t.includes('expand karo') ||
+    t.includes('complete karo') ||
+    t.includes('start karo') ||
+    t.includes('optimize karo') ||
+    t.includes('asset bank ke baad') ||
+    t.includes('faseeh bataye') ||
+    t.includes('faseeh ko yaad dilao') ||
+    t.startsWith('internal:') ||
+    t.startsWith('thu meeting:') ||
+    t.includes('discrepancy resolve karo') ||
+    t.includes('rebuild commission karo') ||
+    t.includes('trial: subscribe karna ya nahi') ||
+    t.includes('faseeh one-liner do') ||
+    t.includes('go-ahead do') ||
+    t.includes('verdicts do') ||
+    t.includes('answers do')
   ) {
     return true;
   }
@@ -246,18 +274,33 @@ export function getInternalTaskReason(task: {
   details?: string | null;
   approvalMode?: string | null;
   isInternalOnly?: boolean | null;
+  isClientVisible?: boolean | null;
+  [key: string]: any;
 }): string | null {
   if (!task) return null;
-  if (task.isInternalOnly) return 'Marked as Internal Only';
+  if (task.isInternalOnly || (task as any).is_internal_only) return 'Marked as Internal Only';
   const t = (task.title || '').toLowerCase().trim();
   const d = (task.details || '').toLowerCase().trim();
   if (/invoice|billing|payment|fee/i.test(t)) return 'Financial / Invoice / Billing';
   if (/salary|payroll/i.test(t)) return 'Staff Payroll / Salary';
   if (/pkr\s*[\d,]+|\$[\d,]+/i.test(t)) return 'Financial figures in title';
-  if (/internal\s+admin|admin\s+task|internal\s+ops/i.test(t)) return 'Internal Administration';
+  if (/internal\s+admin|admin\s+task|internal\s+ops/i.test(t) || t.startsWith('internal:')) return 'Internal Administration';
   if (/gmail\s+notes|internal\s+chat/i.test(t)) return 'Internal notes / chatter';
   if (/remind.*shift/i.test(t) || /remind.*shift/i.test(d)) return 'Staff Shift Reminder';
-  if (t.includes('login/hosting') || t.includes('zain se') || t.includes('asset bank ke baad')) return 'Internal operational coordination';
+  if (t.startsWith('thu meeting:')) return 'Internal Staff Meeting';
+  if (
+    d.includes('kahan se aaya') ||
+    t.includes('confirm karo') ||
+    t.includes('naam confirm karo') ||
+    t.includes('decide karo') ||
+    t.includes('verify karo') ||
+    t.includes('faseeh bataye') ||
+    t.includes('login/hosting') ||
+    t.includes('zain se') ||
+    t.includes('asset bank ke baad')
+  ) {
+    return 'Internal Operations Coordination';
+  }
   if (isInternalOnlyTask(task)) return 'Internal Operations Only';
   return null;
 }

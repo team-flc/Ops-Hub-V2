@@ -255,13 +255,20 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
               </span>
 
               {/* Approval Mode Badge */}
-              <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border ${
-                task.approvalMode === 'Client Approval Required'
-                  ? 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'
-                  : 'bg-gray-100 text-gray-600 border-gray-200 dark:bg-dark-100 dark:text-gray-400 dark:border-dark-border'
-              }`}>
-                {task.approvalMode || 'Internal Only'}
-              </span>
+              {!isClient && (
+                <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border ${
+                  task.approvalMode === 'Client Approval Required'
+                    ? 'bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800'
+                    : 'bg-gray-100 text-gray-600 border-gray-200 dark:bg-dark-100 dark:text-gray-400 dark:border-dark-border'
+                }`}>
+                  {task.approvalMode || 'Internal Only'}
+                </span>
+              )}
+              {isClient && task.approvalMode === 'Client Approval Required' && (
+                <span className="px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider border bg-amber-100 text-amber-700 border-amber-300 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800">
+                  Client Approval Required
+                </span>
+              )}
 
               {/* Priority Badge */}
               <span className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase tracking-wider ${

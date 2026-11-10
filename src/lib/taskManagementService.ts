@@ -443,7 +443,9 @@ export const taskManagementService = {
           planWeek: row.plan_week || null,
           occurrenceId: row.occurrence_id || null,
           launchBatchId: row.launch_batch_id || null,
-          isOverdue
+          isOverdue,
+          isClientVisible: !isInternalOnlyTask(row),
+          isInternalOnly: isInternalOnlyTask(row)
         };
       });
 
@@ -597,7 +599,9 @@ export const taskManagementService = {
           planWeek: row.plan_week || null,
           occurrenceId: row.occurrence_id || null,
           launchBatchId: row.launch_batch_id || null,
-          isOverdue
+          isOverdue,
+          isClientVisible: !isInternalOnlyTask(row),
+          isInternalOnly: isInternalOnlyTask(row)
         };
       });
 
