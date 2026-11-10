@@ -383,7 +383,7 @@ export const ClientKanbanCard: React.FC<ClientKanbanCardProps> = ({
 
           {/* Approval Actions: Manager can Approve to Done or Return with Feedback */}
           {isApproval && (
-            isOwnerOrManager ? (
+            (isOwnerOrManager && !isArchived) ? (
               <div className="flex items-center gap-1">
                 <button
                   type="button"

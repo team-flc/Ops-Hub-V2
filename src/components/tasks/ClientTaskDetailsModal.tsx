@@ -304,7 +304,7 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
 
           {/* Action Icons */}
           <div className="flex items-center gap-1.5 flex-shrink-0">
-            {!isClient && !isTaskArchived && (
+            {!isClient && !isTaskArchived && !isClientArchived && (
               <button
                 type="button"
                 onClick={() => {
@@ -318,7 +318,7 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
               </button>
             )}
 
-            {isOwnerOrManager && !isTaskArchived && (
+            {isOwnerOrManager && !isTaskArchived && !isClientArchived && (
               <button
                 type="button"
                 onClick={() => setShowArchiveConfirm(true)}
@@ -472,8 +472,8 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
             </div>
           )}
 
-          {/* WORKFLOW STATUS MANAGEMENT BAR (Hidden in client view and preview) */}
-          {(!isClientView && !isPreview) && (
+          {/* WORKFLOW STATUS MANAGEMENT BAR (Hidden in client view, preview, and archived workspaces) */}
+          {(!isClientView && !isPreview && !isClientArchived) && (
             <TaskReviewActions
               task={task}
               activeUser={activeUser}
@@ -482,6 +482,7 @@ export const ClientTaskDetailsModal: React.FC<ClientTaskDetailsModalProps> = ({
               isAssignedMember={isAssignedMember}
               isClientPaused={isClientPaused}
               isTaskArchived={isTaskArchived}
+              isClientArchived={isClientArchived}
               isUpdatingStatus={isUpdatingStatus}
               onStatusChange={handleStatusChange}
               onRequestReasonModal={(params) => {

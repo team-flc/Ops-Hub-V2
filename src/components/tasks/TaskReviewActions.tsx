@@ -10,6 +10,7 @@ interface TaskReviewActionsProps {
   isAssignedMember: boolean;
   isClientPaused: boolean;
   isTaskArchived: boolean;
+  isClientArchived?: boolean;
   isUpdatingStatus: boolean;
   onStatusChange: (status: ClientTaskStatus, reason?: string) => void;
   onRequestReasonModal: (params: {
@@ -29,10 +30,12 @@ export const TaskReviewActions: React.FC<TaskReviewActionsProps> = ({
   isAssignedMember,
   isClientPaused,
   isTaskArchived,
+  isClientArchived = false,
   isUpdatingStatus,
   onStatusChange,
   onRequestReasonModal
 }) => {
+  if (isClientArchived) return null;
   const isOwner = activeUser?.role === 'owner';
   const disabled = isUpdatingStatus || isClientPaused || isTaskArchived;
 

@@ -432,4 +432,80 @@ describe('Client Preview Field & Layout Security Suite', () => {
     expect(internalTasks).toHaveLength(2);
     expect(rawCloudZTasks.length - internalTasks.length).toBe(4);
   });
+
+  it('Check 8: Archived workspaces render zero Add Task buttons, zero action buttons, and reject mutations', () => {
+    const archivedClient: ClientRecord = {
+      id: '5d585580-d378-44a5-8dc1-d2653d4d6d8a',
+      companyName: 'Finfix Pro',
+      clientName: 'Finfix Owner',
+      operationalManagerName: 'Manager Name',
+      clientEmail: 'contact@finfix.com',
+      status: 'Archived',
+      totalTasks: 10,
+      completedTasks: 5,
+      overdueTasks: 0,
+      healthScore: 80
+    };
+
+    const approvalTask: ClientTask = {
+      id: 'task-archived-1',
+      clientId: archivedClient.id,
+      title: 'Review financial accounts',
+      status: 'Approval',
+      weekNumber: 1
+    };
+
+    const pendingTask: ClientTask = {
+      id: 'task-archived-2',
+      clientId: archivedClient.id,
+      title: 'Setup ledger accounts',
+      status: 'Pending',
+      weekNumber: 1
+    };
+
+    // Render ClientKanbanCard with isArchived = true
+    const { container: cardContainer } = render(
+      <ClientKanbanCard
+        task={approvalTask}
+        currentUserProfile={ownerProfile}
+        isClientView={false}
+        onSelectTask={vi.fn()}
+        onOpenEditModal={vi.fn()}
+        onStatusChange={vi.fn()}
+        onStartWork={vi.fn()}
+        onPauseTimer={vi.fn()}
+        onResumeTimer={vi.fn()}
+        onRequestApproval={vi.fn()}
+        onRequestFeedback={vi.fn()}
+        isArchived={true}
+      />
+    );
+
+    // 1. Approval card in archived workspace renders NO approve or reject buttons
+    expect(cardContainer.querySelector('[data-testid^="approve-task-btn-"]')).toBeNull();
+    expect(cardContainer.querySelector('[data-testid^="reject-task-btn-"]')).toBeNull();
+    // 2. No edit pencil button
+    expect(cardContainer.querySelector('button[title="Edit Task Fields"]')).toBeNull();
+
+    // Render pending task with isArchived = true
+    const { container: pendingContainer } = render(
+      <ClientKanbanCard
+        task={pendingTask}
+        currentUserProfile={ownerProfile}
+        isClientView={false}
+        onSelectTask={vi.fn()}
+        onOpenEditModal={vi.fn()}
+        onStatusChange={vi.fn()}
+        onStartWork={vi.fn()}
+        onPauseTimer={vi.fn()}
+        onResumeTimer={vi.fn()}
+        onRequestApproval={vi.fn()}
+        onRequestFeedback={vi.fn()}
+        isArchived={true}
+      />
+    );
+
+    // 3. No start button
+    expect(pendingContainer.querySelector('[data-testid^="start-task-btn-"]')).toBeNull();
+  });
 });

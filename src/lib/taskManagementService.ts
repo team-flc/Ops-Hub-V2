@@ -1131,6 +1131,21 @@ export const taskManagementService = {
       return { data: null, error: isSunday(params.dueDate) ? 'Due date cannot fall on a Sunday.' : 'Due date cannot fall on a Saturday.' };
     }
 
+    if (supabase) {
+      try {
+        const { data: taskClient } = await supabase
+          .from('client_tasks')
+          .select('id, client_id, clients(status)')
+          .eq('id', params.taskId)
+          .single();
+        if (taskClient && (taskClient as any).clients?.status === 'Archived') {
+          return { data: null, error: 'Cannot modify tasks in an archived workspace.' };
+        }
+      } catch {
+        // Continue to edge function
+      }
+    }
+
     const edgeRes = await this.invokeEdgeFunction('update', {
       task_id: params.taskId,
       title: params.title,
@@ -1208,6 +1223,21 @@ export const taskManagementService = {
     }
     if (status === 'In Progress' && (currentStatus === 'Team Review' || currentStatus === 'Client Review') && (!reason || !reason.trim())) {
       return { error: 'A reason is required when returning a task for changes.' };
+    }
+
+    if (supabase) {
+      try {
+        const { data: taskClient } = await supabase
+          .from('client_tasks')
+          .select('id, client_id, clients(status)')
+          .eq('id', taskId)
+          .single();
+        if (taskClient && (taskClient as any).clients?.status === 'Archived') {
+          return { error: 'Cannot modify tasks in an archived workspace.' };
+        }
+      } catch {
+        // Continue
+      }
     }
 
     const edgeRes = await this.invokeEdgeFunction('update_status', {
@@ -1335,6 +1365,19 @@ export const taskManagementService = {
     }
 
     try {
+      const { data: clientRec } = await supabase
+        .from('clients')
+        .select('status')
+        .eq('id', clientId)
+        .single();
+      if (clientRec?.status === 'Archived') {
+        return { error: 'Cannot rename weeks in an archived workspace.' };
+      }
+    } catch {
+      // Continue
+    }
+
+    try {
       const { error } = await supabase
         .from('client_weeks')
         .upsert(
@@ -1363,6 +1406,19 @@ export const taskManagementService = {
   async startTimer(taskId: string): Promise<{ error: string | null; task?: ClientTask }> {
     if (!isSupabaseConfigured || !supabase || !taskId) {
       return { error: 'Supabase client not initialized' };
+    }
+
+    try {
+      const { data: taskClient } = await supabase
+        .from('client_tasks')
+        .select('id, client_id, clients(status)')
+        .eq('id', taskId)
+        .single();
+      if (taskClient && (taskClient as any).clients?.status === 'Archived') {
+        return { error: 'Cannot modify tasks in an archived workspace.' };
+      }
+    } catch {
+      // Continue
     }
 
     try {
@@ -1397,6 +1453,19 @@ export const taskManagementService = {
   ): Promise<{ error: string | null; task?: ClientTask; elapsedSecs?: number }> {
     if (!isSupabaseConfigured || !supabase || !taskId) {
       return { error: 'Supabase client not initialized' };
+    }
+
+    try {
+      const { data: taskClient } = await supabase
+        .from('client_tasks')
+        .select('id, client_id, clients(status)')
+        .eq('id', taskId)
+        .single();
+      if (taskClient && (taskClient as any).clients?.status === 'Archived') {
+        return { error: 'Cannot modify tasks in an archived workspace.' };
+      }
+    } catch {
+      // Continue
     }
 
     try {
@@ -1449,6 +1518,19 @@ export const taskManagementService = {
   ): Promise<{ error: string | null; task?: ClientTask }> {
     if (!isSupabaseConfigured || !supabase || !taskId) {
       return { error: 'Supabase client not initialized' };
+    }
+
+    try {
+      const { data: taskClient } = await supabase
+        .from('client_tasks')
+        .select('id, client_id, clients(status)')
+        .eq('id', taskId)
+        .single();
+      if (taskClient && (taskClient as any).clients?.status === 'Archived') {
+        return { error: 'Cannot modify tasks in an archived workspace.' };
+      }
+    } catch {
+      // Continue
     }
 
     try {
@@ -1530,6 +1612,19 @@ export const taskManagementService = {
   ): Promise<{ error: string | null; task?: ClientTask }> {
     if (!isSupabaseConfigured || !supabase || !taskId) {
       return { error: 'Supabase client not initialized' };
+    }
+
+    try {
+      const { data: taskClient } = await supabase
+        .from('client_tasks')
+        .select('id, client_id, clients(status)')
+        .eq('id', taskId)
+        .single();
+      if (taskClient && (taskClient as any).clients?.status === 'Archived') {
+        return { error: 'Cannot modify tasks in an archived workspace.' };
+      }
+    } catch {
+      // Continue
     }
 
     try {
@@ -1635,6 +1730,19 @@ export const taskManagementService = {
     }
 
     try {
+      const { data: taskClient } = await supabase
+        .from('client_tasks')
+        .select('id, client_id, clients(status)')
+        .eq('id', taskId)
+        .single();
+      if (taskClient && (taskClient as any).clients?.status === 'Archived') {
+        return { error: 'Cannot modify tasks in an archived workspace.' };
+      }
+    } catch {
+      // Continue
+    }
+
+    try {
       const startMs = new Date(currentTimerStartedAt).getTime();
       const additionalSeconds = isNaN(startMs)
         ? 0
@@ -1686,6 +1794,19 @@ export const taskManagementService = {
   ): Promise<{ error: string | null; task?: ClientTask }> {
     if (!isSupabaseConfigured || !supabase || !taskId) {
       return { error: 'Supabase client not initialized' };
+    }
+
+    try {
+      const { data: taskClient } = await supabase
+        .from('client_tasks')
+        .select('id, client_id, clients(status)')
+        .eq('id', taskId)
+        .single();
+      if (taskClient && (taskClient as any).clients?.status === 'Archived') {
+        return { error: 'Cannot modify tasks in an archived workspace.' };
+      }
+    } catch {
+      // Continue
     }
 
     try {
@@ -1754,6 +1875,19 @@ export const taskManagementService = {
     const hasNotes = !!(opts.completionNotes && opts.completionNotes.trim());
     if (!hasEvidence && !hasNotes) {
       return { error: 'At least a completion note or evidence URL is required before submitting for approval.' };
+    }
+
+    try {
+      const { data: taskClient } = await supabase
+        .from('client_tasks')
+        .select('id, client_id, clients(status)')
+        .eq('id', taskId)
+        .single();
+      if (taskClient && (taskClient as any).clients?.status === 'Archived') {
+        return { error: 'Cannot modify tasks in an archived workspace.' };
+      }
+    } catch {
+      // Continue
     }
 
     try {
@@ -1849,6 +1983,21 @@ export const taskManagementService = {
   async archiveTask(taskId: string, reason: string): Promise<{ error: string | null }> {
     if (!reason || !reason.trim()) {
       return { error: 'A reason is mandatory to archive a task.' };
+    }
+
+    if (supabase) {
+      try {
+        const { data: taskClient } = await supabase
+          .from('client_tasks')
+          .select('id, client_id, clients(status)')
+          .eq('id', taskId)
+          .single();
+        if (taskClient && (taskClient as any).clients?.status === 'Archived') {
+          return { error: 'Cannot modify tasks in an archived workspace.' };
+        }
+      } catch {
+        // Continue
+      }
     }
 
     const edgeRes = await this.invokeEdgeFunction('archive', {

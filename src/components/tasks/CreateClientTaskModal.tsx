@@ -178,6 +178,11 @@ export const CreateClientTaskModal: React.FC<CreateClientTaskModalProps> = ({
     e.preventDefault();
     setErrorMessage(null);
 
+    if (client.status === 'Archived') {
+      setErrorMessage('Cannot create tasks in an archived workspace.');
+      return;
+    }
+
     if (!title.trim()) {
       setErrorMessage('Task title is required.');
       return;

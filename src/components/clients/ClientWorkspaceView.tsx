@@ -148,6 +148,10 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
   const currentWeekNum = (weekTabs.find((w) => w.id === activeWeek)?.weekNum || 1) as 1 | 2 | 3 | 4;
 
   const handleOpenCreateTaskFlow = () => {
+    if (isArchived || client.status === 'Archived' || isEffectiveClientView || !canAddTask) {
+      showToast('This workspace is archived and read-only.');
+      return;
+    }
     setModalWeekNumber(currentWeekNum);
     setIsModeModalOpen(true);
   };
@@ -308,6 +312,10 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
   };
 
   const handleRenameWeek = async (weekNum: 1 | 2 | 3 | 4, newName: string) => {
+    if (isArchived || client.status === 'Archived') {
+      showToast('This workspace is archived and read-only.');
+      return;
+    }
     const res = await taskManagementService.renameClientWeek(client.id, weekNum, newName);
     if (res.error) {
       showToast(`Rename failed: ${res.error}`);
@@ -343,6 +351,10 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
   };
 
   const handleStartWork = async (task: ClientTask) => {
+    if (isArchived || client.status === 'Archived') {
+      showToast('This workspace is archived and read-only.');
+      return;
+    }
     if (!task.assigneeId) {
       showToast('Assign a Team Member before starting this task.');
       return;
@@ -368,6 +380,10 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
   };
 
   const handlePauseTimer = async (task: ClientTask) => {
+    if (isArchived || client.status === 'Archived') {
+      showToast('This workspace is archived and read-only.');
+      return;
+    }
     if (!task.timerStartedAt) return;
     try {
       const res = await taskManagementService.pauseTimer(
@@ -394,6 +410,10 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
   };
 
   const handleResumeTimer = async (task: ClientTask) => {
+    if (isArchived || client.status === 'Archived') {
+      showToast('This workspace is archived and read-only.');
+      return;
+    }
     try {
       const assigneeName = task.assigneeName || currentUserProfile?.fullName || 'Team';
       const res = await taskManagementService.resumeTimer(task.id, task.clientId, assigneeName, task.title);
@@ -422,6 +442,10 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
       completionNotes?: string;
     }
   ) => {
+    if (isArchived || client.status === 'Archived') {
+      showToast('This workspace is archived and read-only.');
+      return;
+    }
     try {
       // Role permission check: only management can approve to Done
       if (newStatus === 'Done' || newStatus === 'Completed') {
@@ -669,7 +693,7 @@ export const ClientWorkspaceView: React.FC<ClientWorkspaceViewProps> = ({
                     </div>
                   )}
 
-                  {!isEffectiveClientView && (
+                  {!isEffectiveClientView && !isArchived && client.status !== 'Archived' && canAddTask && (
                     <div className="flex items-center gap-2">
                       {client.status === 'Paused' ? (
                         <span 
