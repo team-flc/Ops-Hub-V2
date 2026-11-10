@@ -172,27 +172,95 @@ export function sanitizeClientDeliverableTitle(title: string = ''): string {
   if (!title) return 'Client Deliverable';
   let t = title.trim();
 
-  // Clean up Maven ICP final -> Ideal Customer Profile (ICP) Strategy
-  if (/maven\s+icp\s+final/i.test(t) || /icp\s+final/i.test(t) || /maven\s+icp/i.test(t)) {
+  // 1. Direct high-precision mappings for known deliverable suites
+  if (/statics?\s*\+\s*carousel/i.test(t)) {
+    return 'Static Creatives & Carousel Assets';
+  }
+  if (/ads\s+live.*report/i.test(t) || /paid\s+ads.*report/i.test(t) || /paid\s+ads\s+strategic\s+plan/i.test(t)) {
+    return 'Paid Ads Campaign Launch & Performance Report';
+  }
+  if (/linkedin.*assets.*optimize/i.test(t) || (/linkedin/i.test(t) && /optimize\s+karo/i.test(t))) {
+    return 'LinkedIn Profile & Digital Assets Optimization';
+  }
+  if (/icp\s+final/i.test(t) || /icp\/offer/i.test(t) || /pehli\s+audience/i.test(t) || /icp.*strategy/i.test(t)) {
     return 'Ideal Customer Profile (ICP) Strategy';
   }
+  if (/video\s+approval/i.test(t) || /vsl\s+video/i.test(t) || /animation\s+style/i.test(t) || /reference\s+video/i.test(t)) {
+    return 'Promotional Video Asset Review';
+  }
+  if (/setup\s+clean\/organize/i.test(t) || /organize.*drive.*socials/i.test(t)) {
+    return 'Workspace Organization & Social Channels Setup';
+  }
+  if (/9-post\s+grid|grid\s+doc/i.test(t)) {
+    return 'Social Media Grid Strategy & Designs';
+  }
+  if (/variations/i.test(t)) {
+    return 'Creative & Copy Variations Planning';
+  }
+  if (/vsl\s+script/i.test(t)) {
+    return 'Video Sales Letter (VSL) Script';
+  }
+  if (/social\s+media\s+complete/i.test(t)) {
+    return 'Social Media Management & Assets';
+  }
+  if (/asset\s+bank/i.test(t)) {
+    return 'Digital Asset Bank Compilation';
+  }
+  if (/portfolio\s*\+\s*pricing/i.test(t)) {
+    return 'Agency Portfolio & Service Offerings';
+  }
+  if (/booking\s+link|featured\s+section/i.test(t)) {
+    return 'Booking Link & Featured Content Setup';
+  }
+  if (/learn\s+framework/i.test(t)) {
+    return 'Client Strategy Framework Documentation';
+  }
+  if (/strategy\s+session/i.test(t)) {
+    return 'Strategic Planning Session';
+  }
+  if (/procedure.*kaam\s+start/i.test(t)) {
+    return 'Operations Onboarding & Kickoff';
+  }
+  if (/requirements\/proposals\s+lo/i.test(t)) {
+    return 'Requirements Gathering & Proposal Scoping';
+  }
+  if (/profile\s+pics/i.test(t) || /dp\s+redo/i.test(t)) {
+    return 'Professional Profile Photography & Graphics';
+  }
+  if (/ghl\s+lifecycle/i.test(t) || /active\s+calendars/i.test(t)) {
+    return 'CRM & Calendar Automation Setup';
+  }
 
-  // Purely operational reminders / shift chatter
-  if (/^remind\s+/i.test(t) || (/shift\b/i.test(t) && /remind/i.test(t))) {
+  // 2. Purely operational reminders / shift chatter fallback
+  if (/^remind\s+/i.test(t) || (/shift\b/i.test(t) && /remind/i.test(t)) || /yaad\s+dilao/i.test(t) || /prep:/i.test(t)) {
     return 'Operations Workflow Coordination';
   }
 
-  // Strip financial references (e.g., PKR 18,300 or $5,000)
-  t = t.replace(/pkr\s*[\d,]+(\.\d+)?/gi, '').replace(/\$[\d,]+(\.\d+)?/g, '').trim();
+  // 3. Remove client prefixes like "Maven: ", "Maven prep: ", "Cloud ZTech: ", "PPC: ", etc.
+  t = t.replace(/^(maven|cloud\s+ztech|bizease|ppc|solid\s+books|o2ocon|accelera\s+ops|axioware|danything|mirai\s+studios|wise360|finfix|pixel\s+algo)(\s+prep)?:?\s*/gi, '');
 
-  // Strip invoice / payment / billing if left over
+  // 4. Strip financial references (e.g., PKR 18,300 or $5,000)
+  t = t.replace(/pkr\s*[\d,]+(\.\d+)?/gi, '').replace(/\$[\d,]+(\.\d+)?/g, '').trim();
   t = t.replace(/\b(invoice\s+payment|invoice|payment|billing|fee)\b/gi, '').trim();
 
-  // Clean internal phrases and chatter (preserving normal deliverables like Sales Navigator Activation)
-  t = t.replace(/\b(kahan se aaya|remind\s+[\w\s]+shift|internal\s+ops|approve karo|asset bank ke baad|login\/hosting|zain se)\b/gi, '').trim();
+  // 5. Strip raw filenames like (13-9-2026 Mp.mp4) or (firstlogin102@gmail.com)
+  t = t.replace(/\([^\)]*\.(mp4|pdf|mov|png|jpg)[^\)]*\)/gi, '').trim();
+  t = t.replace(/\([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\)/gi, '').trim();
 
-  // Remove leading/trailing punctuation and whitespace
-  t = t.replace(/^[-–—:\s]+|[-–—:\s]+$/g, '').trim();
+  // 6. Strip staff names followed by particles or colons (e.g. "Haider se", "Faseeh ko", "Maaz:")
+  t = t.replace(/\b(faseeh|haider|maaz|taha|zohaib|mushahid|latif|saad|atif|zain|jhanzaib|ahmad|umair|omer|abdulrauf|sana|mushtaq)\s*(se|ko|ne|ki|ka|ke|:)?\b/gi, '').trim();
+
+  // 7. Strip internal process wording and Urdu directives
+  t = t.replace(/\b(kahan se aaya|remind\s+[\w\s]+shift|internal\s+ops|approve karo|review karo|confirm karo|decide karo|verify karo|fix karo|update karo|expand karo|complete karo|start karo|optimize karo|asset bank ke baad|login\/hosting|zain se|confirmation lo|ready rakho|yaad dilao|karna ya nahi|verdicts do|go-ahead do|answers do|bhejo|banao|lo|do|prep)\b/gi, '').trim();
+
+  // 8. Clean up punctuation, double spaces, and dashes
+  t = t.replace(/^[-–—:\s/]+|[-–—:\s/]+$/g, '').trim();
+  t = t.replace(/\s{2,}/g, ' ');
+
+  // 9. Capitalize first letter of deliverable title
+  if (t.length > 0) {
+    t = t.charAt(0).toUpperCase() + t.slice(1);
+  }
 
   return t || 'Client Deliverable';
 }
@@ -219,15 +287,15 @@ export function isInternalOnlyTask(task: {
   const d = (task.details || '').toLowerCase().trim();
 
   // Purely operational reminders / shift chatter
-  if (/^remind\s+/i.test(t) || (/shift\b/i.test(t) && /remind/i.test(t))) {
-    return true;
-  }
-  if (/remind.*shift/i.test(d)) {
-    return true;
-  }
-
-  // Internal seed marker / chat origins
-  if (d.includes('kahan se aaya') || t.includes('kahan se aaya')) {
+  if (
+    /^remind\s+/i.test(t) ||
+    (/shift\b/i.test(t) && /remind/i.test(t)) ||
+    /yaad\s+dilao/i.test(t) ||
+    /prep:/i.test(t) ||
+    /remind.*shift/i.test(d) ||
+    /faseeh ko yaad dilao/i.test(d) ||
+    /shift ki baat kare/i.test(d)
+  ) {
     return true;
   }
 
@@ -236,29 +304,23 @@ export function isInternalOnlyTask(task: {
     /invoice|billing|payment|salary|payroll|pkr\s*[\d,]+|\$[\d,]+|\bfee\b|internal\s+admin|admin\s+task|internal\s+ops|gmail\s+notes|internal\s+chat/i.test(t) ||
     t.includes('zain se') ||
     t.includes('login/hosting') ||
-    t.includes('approve karo') ||
-    t.includes('confirm karo') ||
     t.includes('naam confirm karo') ||
-    t.includes('decide karo') ||
-    t.includes('verify karo') ||
-    t.includes('fix karo') ||
-    t.includes('update karo') ||
-    t.includes('expand karo') ||
-    t.includes('complete karo') ||
-    t.includes('start karo') ||
-    t.includes('optimize karo') ||
-    t.includes('asset bank ke baad') ||
-    t.includes('faseeh bataye') ||
-    t.includes('faseeh ko yaad dilao') ||
-    t.startsWith('internal:') ||
-    t.startsWith('thu meeting:') ||
-    t.includes('discrepancy resolve karo') ||
-    t.includes('rebuild commission karo') ||
+    t.includes('chhota naming faisla') ||
     t.includes('trial: subscribe karna ya nahi') ||
     t.includes('faseeh one-liner do') ||
     t.includes('go-ahead do') ||
     t.includes('verdicts do') ||
-    t.includes('answers do')
+    t.includes('answers do') ||
+    t.startsWith('thu meeting:') ||
+    t.startsWith('internal:') ||
+    t.includes('discrepancy resolve karo') ||
+    t.includes('rebuild commission karo') ||
+    t.includes('deploy fail') ||
+    t.includes('ci fail') ||
+    t.includes('drive edit access') ||
+    t.includes('whatsapp login lo') ||
+    d.includes('faseeh bataye') ||
+    d.includes('chhota naming faisla')
   ) {
     return true;
   }
@@ -286,10 +348,9 @@ export function getInternalTaskReason(task: {
   if (/pkr\s*[\d,]+|\$[\d,]+/i.test(t)) return 'Financial figures in title';
   if (/internal\s+admin|admin\s+task|internal\s+ops/i.test(t) || t.startsWith('internal:')) return 'Internal Administration';
   if (/gmail\s+notes|internal\s+chat/i.test(t)) return 'Internal notes / chatter';
-  if (/remind.*shift/i.test(t) || /remind.*shift/i.test(d)) return 'Staff Shift Reminder';
+  if (/remind.*shift/i.test(t) || /remind.*shift/i.test(d) || /shift ki baat kare/i.test(d)) return 'Staff Shift Reminder';
   if (t.startsWith('thu meeting:')) return 'Internal Staff Meeting';
   if (
-    d.includes('kahan se aaya') ||
     t.includes('confirm karo') ||
     t.includes('naam confirm karo') ||
     t.includes('decide karo') ||
@@ -297,7 +358,9 @@ export function getInternalTaskReason(task: {
     t.includes('faseeh bataye') ||
     t.includes('login/hosting') ||
     t.includes('zain se') ||
-    t.includes('asset bank ke baad')
+    t.includes('asset bank ke baad') ||
+    d.includes('chhota naming faisla') ||
+    d.includes('faseeh bataye')
   ) {
     return 'Internal Operations Coordination';
   }

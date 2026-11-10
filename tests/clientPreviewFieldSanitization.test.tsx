@@ -233,4 +233,120 @@ describe('Client Preview Field & Layout Security Suite', () => {
     expect(totalInternalTasks).toBe(1);
     expect(totalClientVisibleTasks).toBe(9);
   });
+
+  it('Check 6: Maven Week 3 internal working titles sanitized and reminders shielded', () => {
+    const rawMavenWeek3Tasks: ClientTask[] = [
+      {
+        id: 'ffb7cf97-f0ad-447f-88de-98c24c6b9f9c',
+        clientId: mavenClient.id,
+        weekNumber: 3,
+        title: 'Paid Ads Campaign Launch & Performance Report',
+        details: 'Kahan se aaya: Register (MV-2). Background: Ads live karwane hain aur 3 din ki ads report Thu meeting ke liye tayyar rakhni hai.',
+        status: 'Approval'
+      },
+      {
+        id: '971c794e-8fca-440a-86f0-37c6e516fdc5',
+        clientId: mavenClient.id,
+        weekNumber: 3,
+        title: 'Maven: 3 Sales Navigator + PKR 18,300 invoice; Zain se login/hosting',
+        details: 'Kahan se aaya: Gmail notes 13 Oct (Zain Harris meeting).',
+        status: 'In Progress'
+      },
+      {
+        id: '1eb67b76-b305-4f92-984e-2ae4af03e33f',
+        clientId: mavenClient.id,
+        weekNumber: 3,
+        title: 'Maven: ICP final (property vs e-commerce)',
+        details: 'Kahan se aaya: Register (MV-4) + Gmail notes 13 Oct.',
+        status: 'In Progress'
+      },
+      {
+        id: 'e18d3e7f-189e-4c2b-892b-ff6b1414d44d',
+        clientId: mavenClient.id,
+        weekNumber: 3,
+        title: 'Static Creatives & Carousel Assets',
+        details: 'Kahan se aaya: Slack #maven-professionals + register (MV-6).',
+        status: 'Approval'
+      },
+      {
+        id: '27cf0bfe-9b77-4123-a9cb-d55964482ee0',
+        clientId: mavenClient.id,
+        weekNumber: 3,
+        title: 'Maven: LinkedIn + assets optimize karo',
+        details: 'Kahan se aaya: Register (MV-3).',
+        status: 'Approval'
+      },
+      {
+        id: '928400f1-04e4-479f-8942-d79fe9cc0fc0',
+        clientId: mavenClient.id,
+        weekNumber: 3,
+        title: 'Thu meeting: Maven Professionals 5 PM',
+        details: 'Kahan se aaya: Weekly roster (MEMORY.md).',
+        status: 'Approval'
+      },
+      {
+        id: '624fa6f3-44f5-4692-bdec-0a247fa767fc',
+        clientId: mavenClient.id,
+        weekNumber: 3,
+        title: 'Video approval: Maven (13-9-2026 Mp.mp4)',
+        details: 'Kahan se aaya: Slack #maven-professionals 13 Oct 7:52 PM.',
+        status: 'Approval'
+      },
+      {
+        id: '16db0741-e3d8-4bf4-8500-8e0cb7b9d7ff',
+        clientId: mavenClient.id,
+        weekNumber: 3,
+        title: 'Maven: setup clean/organize (Ops Hub, Drive, socials)',
+        details: 'Kahan se aaya: Register (MV-1) 12 Oct.',
+        status: 'Approval'
+      },
+      {
+        id: 'dcf70001-25cc-4515-b65d-18d22b14641d',
+        clientId: mavenClient.id,
+        weekNumber: 3,
+        title: 'Maven Professional VSL Script',
+        details: 'i want 40 to 50 seconds Maven Professional VSL Script',
+        status: 'Approval'
+      },
+      {
+        id: 'fd08be37-1866-4b8c-ae64-940f21be62cc',
+        clientId: mavenClient.id,
+        weekNumber: 3,
+        title: 'Maven prep: Faseeh ko yaad dilao Maven 6 PM shift ki baat kare',
+        details: 'Kahan se aaya: Clients Weekly Meetings chat 14 Oct + MEMORY.md.',
+        status: 'Approval'
+      }
+    ];
+
+    expect(rawMavenWeek3Tasks).toHaveLength(10);
+
+    const clientVisible = filterAndSanitizeClientDeliverables(rawMavenWeek3Tasks);
+
+    // 1. None of the three internal working titles appears in client preview
+    const visibleTitles = clientVisible.map(t => t.title);
+    expect(visibleTitles).not.toContain('Maven prep: Faseeh ko yaad dilao Maven 6 PM shift ki baat kare');
+    expect(visibleTitles).not.toContain('Maven statics+carousel: Haider se confirmation lo');
+    expect(visibleTitles).not.toContain('Maven: ads live + 3-day report ready rakho');
+
+    // 2. Zero staff names in client-visible titles
+    visibleTitles.forEach(title => {
+      expect(title).not.toMatch(/\b(faseeh|haider|maaz|taha|zohaib|mushahid|latif|saad|atif|zain|ahmad)\b/i);
+      expect(title).not.toMatch(/\b(yaad dilao|confirmation lo|ready rakho|optimize karo|bhejo|banao)\b/i);
+    });
+
+    // 3. Professional deliverable titles appear
+    expect(visibleTitles).toContain('Paid Ads Campaign Launch & Performance Report');
+    expect(visibleTitles).toContain('Static Creatives & Carousel Assets');
+    expect(visibleTitles).toContain('Ideal Customer Profile (ICP) Strategy');
+    expect(visibleTitles).toContain('LinkedIn Profile & Digital Assets Optimization');
+    expect(visibleTitles).toContain('Promotional Video Asset Review');
+    expect(visibleTitles).toContain('Workspace Organization & Social Channels Setup');
+    expect(visibleTitles).toContain('Video Sales Letter (VSL) Script');
+
+    // 4. Exactly 7 deliverables visible, 3 shielded
+    expect(clientVisible).toHaveLength(7);
+    const internalTasks = rawMavenWeek3Tasks.filter(isInternalOnlyTask);
+    expect(internalTasks).toHaveLength(3);
+    expect(rawMavenWeek3Tasks.length - internalTasks.length).toBe(7);
+  });
 });
