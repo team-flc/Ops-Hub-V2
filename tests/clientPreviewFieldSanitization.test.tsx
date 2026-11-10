@@ -349,4 +349,87 @@ describe('Client Preview Field & Layout Security Suite', () => {
     expect(internalTasks).toHaveLength(3);
     expect(rawMavenWeek3Tasks.length - internalTasks.length).toBe(7);
   });
+
+  it('Check 7: Cloud Z internal working titles sanitized and draft delete shielded', () => {
+    const rawCloudZTasks: ClientTask[] = [
+      {
+        id: '2b91f8be-eed6-4ca8-b8fb-e6b44ef6f9e6',
+        clientId: 'd3d666c2-24c7-4cc7-b879-55c6d5881185',
+        weekNumber: 2,
+        title: 'Technical Requirements & Proposals Scoping',
+        details: 'Kahan se aaya: Register (CZ-2) + Gmail notes 12 Oct + Slack #cloud-z-tech. Background: Client (Mushahid Ali Mirza) se client requirements aur proposals lene hain.',
+        status: 'Approval'
+      },
+      {
+        id: 'fd411616-351a-48b1-8c4d-c7a54ffc245d',
+        clientId: 'd3d666c2-24c7-4cc7-b879-55c6d5881185',
+        weekNumber: 2,
+        title: 'Mushahid 9-post grid doc approve karo',
+        details: 'Kahan se aaya: Client Variations chat 12 Oct.',
+        status: 'Done'
+      },
+      {
+        id: '48dbb073-cb98-46d8-862b-255c7c4f9cc0',
+        clientId: 'd3d666c2-24c7-4cc7-b879-55c6d5881185',
+        weekNumber: 2,
+        title: 'Thu meeting: Cloud ZTech 8 PM',
+        details: 'Kahan se aaya: Weekly roster.',
+        status: 'Done'
+      },
+      {
+        id: '2c3202e6-15fb-4899-b218-010517c89c94',
+        clientId: 'd3d666c2-24c7-4cc7-b879-55c6d5881185',
+        weekNumber: 2,
+        title: 'Cloud ZTech 120 Zoho variations DRAFT review/approve karo',
+        details: 'Kahan se aaya: Client Variations chat 14 Oct.',
+        status: 'Approval'
+      },
+      {
+        id: 'c2d79f93-d1da-48fe-858c-29aa167ce7f8',
+        clientId: 'd3d666c2-24c7-4cc7-b879-55c6d5881185',
+        weekNumber: 2,
+        title: 'Cloud ZTech: pehli audience decide karo',
+        details: 'Kahan se aaya: Register (CZ-3).',
+        status: 'Approval'
+      },
+      {
+        id: '0b537fca-849d-431c-bbaa-655fa84bb7ac',
+        clientId: 'd3d666c2-24c7-4cc7-b879-55c6d5881185',
+        weekNumber: 2,
+        title: 'Cloud ZTech purana DRAFT PDF delete confirm karo',
+        details: 'Kahan se aaya: Client Variations chat 13 Oct. Background: Purana ghalat DRAFT PDF rename karke SUPERSEDED-DO-NOT-USE kar diya gaya hai, delete nahi kiya.',
+        status: 'Done'
+      }
+    ];
+
+    expect(rawCloudZTasks).toHaveLength(6);
+
+    const clientVisible = filterAndSanitizeClientDeliverables(rawCloudZTasks);
+
+    // 1. Neither internal working title appears in client preview
+    const visibleTitles = clientVisible.map(t => t.title);
+    expect(visibleTitles).not.toContain('Mushahid Mirza se requirements/proposals lo');
+    expect(visibleTitles).not.toContain('Cloud ZTech: Mushahid Mirza se requirements/proposals lo');
+    expect(visibleTitles).not.toContain('purana DRAFT PDF delete confirm karo');
+    expect(visibleTitles).not.toContain('Cloud ZTech purana DRAFT PDF delete confirm karo');
+    expect(visibleTitles).not.toContain('Purana DRAFT PDF delete');
+
+    // 2. Zero owner names (Mushahid Mirza) and zero draft delete wording in deliverable titles
+    visibleTitles.forEach(title => {
+      expect(title).not.toMatch(/\b(mushahid|mirza|shariq|faseeh)\b/i);
+      expect(title).not.toMatch(/\b(purana|draft.*delete|delete.*confirm|approve karo|decide karo)\b/i);
+    });
+
+    // 3. Clean deliverable titles appear
+    expect(visibleTitles).toContain('Technical Requirements & Proposals Scoping');
+    expect(visibleTitles).toContain('Social Media Grid Strategy & Designs');
+    expect(visibleTitles).toContain('Creative & Copy Variations Planning');
+    expect(visibleTitles).toContain('Ideal Customer Profile (ICP) Strategy');
+
+    // 4. Exactly 4 deliverables visible, 2 shielded
+    expect(clientVisible).toHaveLength(4);
+    const internalTasks = rawCloudZTasks.filter(isInternalOnlyTask);
+    expect(internalTasks).toHaveLength(2);
+    expect(rawCloudZTasks.length - internalTasks.length).toBe(4);
+  });
 });

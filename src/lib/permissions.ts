@@ -221,8 +221,8 @@ export function sanitizeClientDeliverableTitle(title: string = ''): string {
   if (/procedure.*kaam\s+start/i.test(t)) {
     return 'Operations Onboarding & Kickoff';
   }
-  if (/requirements\/proposals\s+lo/i.test(t)) {
-    return 'Requirements Gathering & Proposal Scoping';
+  if (/requirements\/proposals|mushahid.*mirza.*requirements/i.test(t)) {
+    return 'Technical Requirements & Proposals Scoping';
   }
   if (/profile\s+pics/i.test(t) || /dp\s+redo/i.test(t)) {
     return 'Professional Profile Photography & Graphics';
@@ -248,10 +248,10 @@ export function sanitizeClientDeliverableTitle(title: string = ''): string {
   t = t.replace(/\([a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}\)/gi, '').trim();
 
   // 6. Strip staff names followed by particles or colons (e.g. "Haider se", "Faseeh ko", "Maaz:")
-  t = t.replace(/\b(faseeh|haider|maaz|taha|zohaib|mushahid|latif|saad|atif|zain|jhanzaib|ahmad|umair|omer|abdulrauf|sana|mushtaq)\s*(se|ko|ne|ki|ka|ke|:)?\b/gi, '').trim();
+  t = t.replace(/\b(faseeh|haider|maaz|taha|zohaib|mushahid|mirza|shariq|latif|saad|atif|zain|jhanzaib|ahmad|umair|omer|abdulrauf|sana|mushtaq)\s*(se|ko|ne|ki|ka|ke|:)?\b/gi, '').trim();
 
   // 7. Strip internal process wording and Urdu directives
-  t = t.replace(/\b(kahan se aaya|remind\s+[\w\s]+shift|internal\s+ops|approve karo|review karo|confirm karo|decide karo|verify karo|fix karo|update karo|expand karo|complete karo|start karo|optimize karo|asset bank ke baad|login\/hosting|zain se|confirmation lo|ready rakho|yaad dilao|karna ya nahi|verdicts do|go-ahead do|answers do|bhejo|banao|lo|do|prep)\b/gi, '').trim();
+  t = t.replace(/\b(kahan se aaya|remind\s+[\w\s]+shift|internal\s+ops|approve karo|review karo|confirm karo|decide karo|verify karo|fix karo|update karo|expand karo|complete karo|start karo|optimize karo|asset bank ke baad|login\/hosting|zain se|confirmation lo|ready rakho|yaad dilao|karna ya nahi|verdicts do|go-ahead do|answers do|bhejo|banao|lo|do|prep|purana|delete)\b/gi, '').trim();
 
   // 8. Clean up punctuation, double spaces, and dashes
   t = t.replace(/^[-–—:\s/]+|[-–—:\s/]+$/g, '').trim();
@@ -295,6 +295,14 @@ export function isInternalOnlyTask(task: {
     /remind.*shift/i.test(d) ||
     /faseeh ko yaad dilao/i.test(d) ||
     /shift ki baat kare/i.test(d)
+  ) {
+    return true;
+  }
+
+  // Internal housekeeping, draft deletions, file cleanup
+  if (
+    /purana.*draft.*delete|draft.*delete|delete.*draft|delete.*confirm|superseded.*draft/i.test(t) ||
+    /purana.*draft.*delete|draft.*delete|delete.*draft|delete.*confirm|superseded.*draft/i.test(d)
   ) {
     return true;
   }
@@ -349,6 +357,9 @@ export function getInternalTaskReason(task: {
   if (/internal\s+admin|admin\s+task|internal\s+ops/i.test(t) || t.startsWith('internal:')) return 'Internal Administration';
   if (/gmail\s+notes|internal\s+chat/i.test(t)) return 'Internal notes / chatter';
   if (/remind.*shift/i.test(t) || /remind.*shift/i.test(d) || /shift ki baat kare/i.test(d)) return 'Staff Shift Reminder';
+  if (/purana.*draft.*delete|draft.*delete|delete.*draft|delete.*confirm|superseded.*draft/i.test(t) || /purana.*draft.*delete|draft.*delete|delete.*draft|delete.*confirm|superseded.*draft/i.test(d)) {
+    return 'Internal Housekeeping / Draft Archival';
+  }
   if (t.startsWith('thu meeting:')) return 'Internal Staff Meeting';
   if (
     t.includes('confirm karo') ||
