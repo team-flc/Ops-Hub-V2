@@ -109,9 +109,14 @@ export const RoleManagerDashboard: React.FC<RoleManagerDashboardProps> = ({
                 <CheckCircle2 className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-sm font-extrabold text-gray-900 dark:text-gray-100">
-                  Team Approval Queue
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-extrabold text-gray-900 dark:text-gray-100">
+                    Team Approval Queue
+                  </h3>
+                  <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 dark:bg-dark-200 dark:text-gray-300 border border-slate-200 dark:border-dark-border">
+                    Staff Only
+                  </span>
+                </div>
                 <p className="text-[11px] text-gray-400">Deliverables submitted by reporting staff</p>
               </div>
             </div>
@@ -201,9 +206,14 @@ export const RoleManagerDashboard: React.FC<RoleManagerDashboardProps> = ({
                 <Users className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-sm font-extrabold text-gray-900 dark:text-gray-100">
-                  Reporting Team Workload
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-extrabold text-gray-900 dark:text-gray-100">
+                    Reporting Team Workload
+                  </h3>
+                  <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 dark:bg-dark-200 dark:text-gray-300 border border-slate-200 dark:border-dark-border">
+                    Staff Only
+                  </span>
+                </div>
                 <p className="text-[11px] text-gray-400">Direct reports capacity & active tasks</p>
               </div>
             </div>

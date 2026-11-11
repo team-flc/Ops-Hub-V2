@@ -275,6 +275,23 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
       return isManagerOrOwner ? <EmployeeManagementDashboardView /> : <EmployeeDashboardView />;
     }
     if (location.pathname === '/' || location.pathname.startsWith('/dashboard') || viewMode === 'dashboard') {
+      if (isClientView) {
+        const clientRecord = (profile?.role === 'client' && profile.organizationId)
+          ? (clients.find((c) => c.id === profile.organizationId) || selectedClient)
+          : selectedClient;
+        if (clientRecord) {
+          return (
+            <ClientWorkspaceView
+              key={clientRecord.id}
+              client={clientRecord}
+              currentUserProfile={profile}
+              eligibleManagers={eligibleManagers}
+              onClientUpdated={updateClientRecord}
+              isClientView={true}
+            />
+          );
+        }
+      }
       return <DashboardView />;
     }
 

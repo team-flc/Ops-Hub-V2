@@ -28,6 +28,9 @@ export const ApprovalTurnaroundChart: React.FC<ApprovalTurnaroundChartProps> = (
             <h3 className="text-sm font-extrabold text-gray-900 dark:text-gray-100">
               Quality Assurance & First-Pass Approval Rate
             </h3>
+            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 dark:bg-dark-200 dark:text-gray-300 border border-slate-200 dark:border-dark-border">
+              Staff Only
+            </span>
           </div>
           <p className="text-xs text-gray-400 mt-0.5">
             Deliverable quality compliance and management turnaround metrics.

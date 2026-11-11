@@ -104,9 +104,14 @@ export const RoleOwnerDashboard: React.FC<RoleOwnerDashboardProps> = ({
                 <CheckCircle2 className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-sm font-extrabold text-gray-900 dark:text-gray-100">
-                  Company Approvals Queue
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-extrabold text-gray-900 dark:text-gray-100">
+                    Company Approvals Queue
+                  </h3>
+                  <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 dark:bg-dark-200 dark:text-gray-300 border border-slate-200 dark:border-dark-border">
+                    Staff Only
+                  </span>
+                </div>
                 <p className="text-[11px] text-gray-400">Deliverables awaiting executive sign-off</p>
               </div>
             </div>
@@ -196,9 +201,14 @@ export const RoleOwnerDashboard: React.FC<RoleOwnerDashboardProps> = ({
                 <Clock className="w-4 h-4" />
               </div>
               <div>
-                <h3 className="text-sm font-extrabold text-gray-900 dark:text-gray-100">
-                  Live Active Timers
-                </h3>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm font-extrabold text-gray-900 dark:text-gray-100">
+                    Live Active Timers
+                  </h3>
+                  <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 dark:bg-dark-200 dark:text-gray-300 border border-slate-200 dark:border-dark-border">
+                    Staff Only
+                  </span>
+                </div>
                 <p className="text-[11px] text-gray-400">Team members currently logging active work</p>
               </div>
             </div>
@@ -261,9 +271,14 @@ export const RoleOwnerDashboard: React.FC<RoleOwnerDashboardProps> = ({
           <div className="flex items-center justify-between pb-3 border-b border-amber-200/60 dark:border-amber-900/40">
             <div className="flex items-center gap-2">
               <Activity className="w-4 h-4 text-amber-600 dark:text-amber-400" />
-              <h3 className="text-sm font-extrabold text-amber-950 dark:text-amber-200">
-                Submitted Daily Operations Reports
-              </h3>
+              <div className="flex items-center gap-2">
+                <h3 className="text-sm font-extrabold text-amber-950 dark:text-amber-200">
+                  Submitted Daily Operations Reports
+                </h3>
+                <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-amber-200/80 text-amber-900 dark:bg-amber-900/60 dark:text-amber-200 border border-amber-300 dark:border-amber-800">
+                  Staff Only
+                </span>
+              </div>
             </div>
             <span className="px-2 py-0.5 rounded-full text-xs font-bold bg-amber-200 text-amber-900 dark:bg-amber-900 dark:text-amber-200">
               {unreviewedReports.length} Awaiting Review

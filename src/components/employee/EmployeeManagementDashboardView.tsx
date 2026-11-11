@@ -1544,6 +1544,9 @@ export const EmployeeManagementDashboardView: React.FC = () => {
             <h2 className="text-sm font-bold text-slate-900 dark:text-gray-100 flex items-center gap-2">
               <Award className="w-4 h-4 text-amber-500" />
               <span>Performance Logs, Coaching & Formal Warnings</span>
+              <span className="text-[9px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 dark:bg-dark-200 dark:text-gray-300 border border-slate-200 dark:border-dark-border">
+                Staff Only
+              </span>
             </h2>
             <button
               type="button"

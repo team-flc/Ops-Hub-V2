@@ -672,6 +672,9 @@ export const PersonalCrossClientKanban: React.FC<PersonalCrossClientKanbanProps>
               <ShieldCheck className="w-5 h-5 text-brand-500" />
               <span>Cross-Client Operations Kanban</span>
             </h2>
+            <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-slate-100 text-slate-700 dark:bg-dark-200 dark:text-gray-300 border border-slate-200 dark:border-dark-border">
+              Staff Only
+            </span>
             <span className="px-2.5 py-0.5 rounded-full text-xs font-black bg-brand-500/10 text-brand-600 dark:text-brand-400">
               {isLoading ? (
                 <span className="inline-block w-12 h-3.5 bg-brand-500/20 rounded animate-pulse" />

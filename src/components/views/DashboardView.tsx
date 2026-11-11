@@ -176,6 +176,27 @@ export const DashboardView: React.FC = () => {
 
   const displayName = profile?.fullName || user?.email?.split('@')[0] || 'Team Member';
 
+  // Strict Staff-Only & Client-Preview Isolation Guard:
+  // Never expose internal dashboard, operations progress, or charts in client preview or to client role.
+  const isClientRole = profile?.role === 'client';
+  const isClientPreview = typeof window !== 'undefined' && window.location.search.includes('preview=true');
+
+  if (isClientRole || isClientPreview) {
+    return (
+      <div className="p-8 text-center space-y-4 max-w-lg mx-auto mt-12 bg-white dark:bg-dark-300 rounded-3xl border border-gray-200 dark:border-dark-border shadow-sm">
+        <div className="w-12 h-12 rounded-2xl bg-amber-500/10 text-amber-500 border border-amber-500/20 flex items-center justify-center mx-auto">
+          <ShieldCheck className="w-6 h-6" />
+        </div>
+        <h3 className="text-base font-bold text-gray-900 dark:text-gray-100">
+          Staff Operational Dashboard &bull; Internal Only
+        </h3>
+        <p className="text-xs text-gray-500 dark:text-gray-400 leading-relaxed">
+          This operational telemetry dashboard is strictly restricted to staff members and is never exposed in client preview mode.
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="p-4 sm:p-6 lg:p-8 space-y-6 max-w-7xl mx-auto select-none animate-in fade-in duration-200">
       {/* 1. Header & Quick Actions Bar */}
@@ -184,6 +205,9 @@ export const DashboardView: React.FC = () => {
           <div className="flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-brand-400">
             <Zap className="w-4 h-4 fill-current" />
             <span>Operational Headquarters & Intelligence</span>
+            <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-brand-500/20 text-brand-300 border border-brand-500/30">
+              Staff Only &bull; Shielded from Client Preview
+            </span>
           </div>
           <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
             {greeting}, {displayName}
