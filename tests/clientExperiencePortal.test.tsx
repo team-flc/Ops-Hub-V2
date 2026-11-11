@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { MemoryRouter } from 'react-router-dom';
 import { clientPortalService } from '../src/lib/clientPortalService';
 import {
@@ -538,6 +538,126 @@ describe('Ops Hub Client Experience Portal - Automated Test Suite', () => {
       );
 
       expect(res.error).toContain('Forbidden: Only the Owner can configure client portal recipients');
+    });
+
+    it('displays strict login gate and authorized-recipient-only policy instead of anyone with link', async () => {
+      vi.spyOn(clientPortalService, 'fetchApprovedRecipients').mockResolvedValueOnce([]);
+
+      render(
+        <ClientLinkSharingModal
+          isOpen={true}
+          onClose={vi.fn()}
+          clientId="client-finfix"
+          clientName="Finfix Pro Client"
+          companyName="Finfix Pro"
+          currentUserRole="owner"
+          initialTab="links"
+        />
+      );
+
+      // Verify strict login gate and authorized recipient wording
+      expect(screen.getByText('Access Rule: Authorized & Authenticated Recipients Only')).toBeDefined();
+      expect(screen.getByText('[STRICT LOGIN GATE: /login]')).toBeDefined();
+      expect(screen.getByText('[REVOCABLE BY OWNER]')).toBeDefined();
+      expect(screen.getByText(/Opening this link without an active authenticated session strictly redirects to/i)).toBeDefined();
+
+      // Ensure forbidden misleading phrases never exist
+      expect(screen.queryByText(/anyone with link/i)).toBeNull();
+      expect(screen.queryByText(/no expiry/i)).toBeNull();
+    });
+
+    it('displays access expiry and revocation governance controls', async () => {
+      vi.spyOn(clientPortalService, 'fetchApprovedRecipients').mockResolvedValueOnce([
+        {
+          id: 'rec-1',
+          clientId: 'client-111',
+          profileId: 'prof-1',
+          email: 'client@alpha.com',
+          fullName: 'Client Alpha',
+          status: 'active',
+          createdAt: '2026-01-01T00:00:00Z',
+          updatedAt: '2026-01-01T00:00:00Z'
+        }
+      ]);
+
+      render(
+        <ClientLinkSharingModal
+          isOpen={true}
+          onClose={vi.fn()}
+          clientId="client-111"
+          clientName="Alice Alpha"
+          companyName="Alpha Logistics"
+          currentUserRole="owner"
+          initialTab="links"
+        />
+      );
+
+      expect(await screen.findByText('Access Expiry & Revocation Controls')).toBeDefined();
+      expect(screen.getByText(/Access Expiry Policy:/i)).toBeDefined();
+      expect(screen.getByText(/Revocation Governance:/i)).toBeDefined();
+      expect(screen.getByRole('button', { name: /Revoke Portal Access/i })).toBeDefined();
+    });
+
+    it('allows owner to revoke all portal access and locks client link', async () => {
+      const revokeSpy = vi.spyOn(clientPortalService, 'revokeAllPortalRecipients').mockResolvedValueOnce({ revokedCount: 1 });
+      vi.spyOn(clientPortalService, 'fetchApprovedRecipients')
+        .mockResolvedValueOnce([
+          {
+            id: 'rec-1',
+            clientId: 'client-111',
+            profileId: 'prof-1',
+            email: 'client@alpha.com',
+            fullName: 'Client Alpha',
+            status: 'active',
+            createdAt: '2026-01-01T00:00:00Z',
+            updatedAt: '2026-01-01T00:00:00Z'
+          }
+        ])
+        .mockResolvedValueOnce([]); // After revocation, 0 active recipients
+
+      render(
+        <ClientLinkSharingModal
+          isOpen={true}
+          onClose={vi.fn()}
+          clientId="client-111"
+          clientName="Alice Alpha"
+          companyName="Alpha Logistics"
+          currentUserRole="owner"
+          initialTab="links"
+        />
+      );
+
+      const revokeBtn = await screen.findByRole('button', { name: /Revoke Portal Access/i });
+      fireEvent.click(revokeBtn);
+
+      // Shows confirmation
+      expect(screen.getByText('Revoke all access?')).toBeDefined();
+      const confirmBtn = screen.getByRole('button', { name: /Yes, Revoke All/i });
+      fireEvent.click(confirmBtn);
+
+      await waitFor(() => {
+        expect(revokeSpy).toHaveBeenCalledWith('client-111', expect.anything());
+      });
+      revokeSpy.mockRestore();
+    });
+
+    it('blocks non-owner staff from revoking all portal recipients', async () => {
+      const nonOwnerProfile: UserProfile = {
+        id: 'user-tm-1',
+        email: 'tm@faseehlall.com',
+        fullName: 'Team Member',
+        role: 'team_member',
+        status: 'active',
+        createdAt: '2026-01-01T00:00:00Z',
+        updatedAt: '2026-01-01T00:00:00Z'
+      };
+
+      const res = await clientPortalService.revokeAllPortalRecipients(
+        'client-111',
+        nonOwnerProfile
+      );
+
+      expect(res.error).toContain('Forbidden: Only the Owner can revoke client portal access');
     });
   });
 

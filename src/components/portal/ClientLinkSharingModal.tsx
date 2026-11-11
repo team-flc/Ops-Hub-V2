@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { 
-  X, Link2, Copy, Check, Eye, AlertTriangle, Shield
+  X, Link2, Copy, Check, Eye, AlertTriangle, Shield, ShieldAlert, CheckCircle2
 } from 'lucide-react';
 import { ClientPortalRecipient } from '../../types';
 import { clientPortalService } from '../../lib/clientPortalService';
@@ -45,6 +45,9 @@ export const ClientLinkSharingModal: React.FC<ClientLinkSharingModalProps> = ({
   const [copiedPreview, setCopiedPreview] = useState(false);
   const [recipients, setRecipients] = useState<ClientPortalRecipient[]>([]);
   const [isLoadingRecipients, setIsLoadingRecipients] = useState(false);
+  const [isRevokingAll, setIsRevokingAll] = useState(false);
+  const [confirmRevokeAll, setConfirmRevokeAll] = useState(false);
+  const [revokeSuccessMessage, setRevokeSuccessMessage] = useState<string | null>(null);
 
   // New recipient form state
   const [newName, setNewName] = useState('');
@@ -150,6 +153,26 @@ export const ClientLinkSharingModal: React.FC<ClientLinkSharingModalProps> = ({
     }
   };
 
+  const handleRevokeAllAccess = async () => {
+    setIsRevokingAll(true);
+    setRevokeSuccessMessage(null);
+    try {
+      const res = await clientPortalService.revokeAllPortalRecipients(clientId, profile);
+      if (res.error) {
+        setFormError(res.error);
+      } else {
+        setConfirmRevokeAll(false);
+        setRevokeSuccessMessage('All client portal access has been revoked. The portal link is now locked.');
+        await loadRecipients();
+        setTimeout(() => setRevokeSuccessMessage(null), 6000);
+      }
+    } catch (err: any) {
+      setFormError(err.message || 'Failed to revoke portal access.');
+    } finally {
+      setIsRevokingAll(false);
+    }
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -165,7 +188,7 @@ export const ClientLinkSharingModal: React.FC<ClientLinkSharingModalProps> = ({
               </h3>
             </div>
             <p className="text-xs text-gray-500">
-              {companyName} ({clientName})
+              {companyName} ({clientName}) &bull; Strict Login Gate &bull; Authorized Recipients Only &bull; Revocable
             </p>
           </div>
 
@@ -211,6 +234,27 @@ export const ClientLinkSharingModal: React.FC<ClientLinkSharingModalProps> = ({
         {/* Tab 1: Links */}
         {activeTab === 'links' && (
           <div className="p-6 space-y-6 overflow-y-auto">
+            {/* Real Security Gate Policy Notice */}
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-dark-200/60 border border-slate-200 dark:border-dark-border text-xs space-y-2">
+              <div className="flex items-center justify-between flex-wrap gap-2">
+                <div className="flex items-center gap-2 font-black text-gray-900 dark:text-gray-100">
+                  <Shield className="w-4 h-4 text-brand-500" />
+                  <span>Access Rule: Authorized & Authenticated Recipients Only</span>
+                </div>
+                <div className="flex items-center gap-1.5">
+                  <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                    [STRICT LOGIN GATE: /login]
+                  </span>
+                  <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20">
+                    [REVOCABLE BY OWNER]
+                  </span>
+                </div>
+              </div>
+              <p className="text-[11px] text-gray-600 dark:text-gray-300 leading-relaxed">
+                Opening this link without an active authenticated session strictly redirects to <code>/login</code>. Link possession alone does not grant access. Access is permitted strictly after an authorized recipient is registered, and access remains revocable at any time.
+              </p>
+            </div>
+
             {/* Set up access alert if 0 active recipients */}
             {!hasActiveRecipients && !isLoadingRecipients && (
               <div className="p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-900 dark:text-amber-200 text-xs flex items-start gap-3">
@@ -218,7 +262,7 @@ export const ClientLinkSharingModal: React.FC<ClientLinkSharingModalProps> = ({
                 <div className="space-y-1">
                   <p className="font-bold">Set up client access before sharing</p>
                   <p className="text-[11px] opacity-90">
-                    No active authorized client contacts have been registered yet. The portal link alone does not grant access; at least one authorized recipient is required. Switch to the <strong className="underline cursor-pointer" onClick={() => setActiveTab('recipients')}>Authorized Recipients</strong> tab to register client contacts before sharing.
+                    {companyName} currently has <strong>0 active authorized recipients</strong> registered. The portal link is locked and uncopyable until an authorized contact is registered. Switch to the <strong className="underline cursor-pointer" onClick={() => setActiveTab('recipients')}>Authorized Recipients</strong> tab to register client contacts before sharing.
                   </p>
                 </div>
               </div>
@@ -230,6 +274,9 @@ export const ClientLinkSharingModal: React.FC<ClientLinkSharingModalProps> = ({
                 <label className="text-xs font-black uppercase tracking-wider text-gray-700 dark:text-gray-300 flex items-center gap-2">
                   <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/10 text-emerald-600 border border-emerald-500/20 font-black">
                     [PRODUCTION LINK]
+                  </span>
+                  <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-500/10 text-blue-600 border border-blue-500/20 font-black">
+                    [STRICT LOGIN GATE]
                   </span>
                   <span>Client Production Link</span>
                 </label>
@@ -267,14 +314,93 @@ export const ClientLinkSharingModal: React.FC<ClientLinkSharingModalProps> = ({
               <p className="text-[11px] text-gray-400">
                 {!hasActiveRecipients ? (
                   <span className="text-amber-600 dark:text-amber-400 font-semibold">
-                    Set up client access before sharing. Clients must have an active authorized account in Authorized Recipients to access this link.
+                    Set up client access before sharing. Access is locked because 0 authorized recipients exist. Opening this link redirects to /login.
                   </span>
                 ) : (
                   <span>
-                    Share this link with authorized contacts. Clients authenticate with their registered credentials. Link possession alone does not grant access.
+                    Share this link with authorized contacts. Access is permitted strictly to registered authorized recipients. Opening this link redirects unauthenticated visitors to /login, and access is revocable at any time.
                   </span>
                 )}
               </p>
+            </div>
+
+            {/* Portal Access Governance & Revocation Control */}
+            <div className="p-4 rounded-2xl border border-gray-200 dark:border-dark-border bg-gray-50/50 dark:bg-dark-200/40 space-y-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <ShieldAlert className="w-4 h-4 text-brand-500" />
+                  <span className="text-xs font-black uppercase tracking-wider text-gray-900 dark:text-gray-100">
+                    Access Expiry & Revocation Controls
+                  </span>
+                </div>
+                <span className={`text-[10px] font-black px-2 py-0.5 rounded-full border ${
+                  hasActiveRecipients
+                    ? 'bg-emerald-500/10 text-emerald-600 border-emerald-500/20'
+                    : 'bg-rose-500/10 text-rose-600 border-rose-500/20'
+                }`}>
+                  {hasActiveRecipients ? 'ACTIVE · REVOCABLE' : 'LOCKED · 0 ACTIVE RECIPIENTS'}
+                </span>
+              </div>
+
+              <div className="text-[11px] text-gray-500 dark:text-gray-400 space-y-1">
+                <p>
+                  <strong className="text-gray-700 dark:text-gray-300">Access Expiry Policy:</strong> Access remains valid strictly while an authorized recipient is registered in active status.
+                </p>
+                <p>
+                  <strong className="text-gray-700 dark:text-gray-300">Revocation Governance:</strong> Access can be revoked on demand at any time. Revoking access immediately locks the client portal link and blocks client logins.
+                </p>
+              </div>
+
+              {revokeSuccessMessage && (
+                <div className="p-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-emerald-600 dark:text-emerald-400 text-xs font-semibold flex items-center gap-2">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                  <span>{revokeSuccessMessage}</span>
+                </div>
+              )}
+
+              <div className="pt-2 flex items-center justify-between border-t border-gray-100 dark:border-dark-border">
+                <button
+                  type="button"
+                  onClick={() => setActiveTab('recipients')}
+                  className="text-xs font-bold text-brand-600 dark:text-brand-400 hover:underline cursor-pointer"
+                >
+                  Manage Recipient List ({activeRecipientCount} active) &rarr;
+                </button>
+
+                {profile?.role === 'owner' && hasActiveRecipients && (
+                  <div>
+                    {confirmRevokeAll ? (
+                      <div className="flex items-center gap-2">
+                        <span className="text-[11px] text-rose-600 font-bold">Revoke all access?</span>
+                        <button
+                          type="button"
+                          disabled={isRevokingAll}
+                          onClick={handleRevokeAllAccess}
+                          className="px-2.5 py-1 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-[11px] font-bold transition-colors disabled:opacity-50 cursor-pointer"
+                        >
+                          {isRevokingAll ? 'Revoking...' : 'Yes, Revoke All'}
+                        </button>
+                        <button
+                          type="button"
+                          disabled={isRevokingAll}
+                          onClick={() => setConfirmRevokeAll(false)}
+                          className="px-2 py-1 rounded-lg border border-gray-200 dark:border-dark-border text-gray-600 dark:text-gray-300 text-[11px] font-medium hover:bg-gray-100 dark:hover:bg-dark-200 cursor-pointer"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmRevokeAll(true)}
+                        className="px-3 py-1.5 rounded-xl border border-rose-200 dark:border-rose-900/40 text-rose-600 dark:text-rose-400 hover:bg-rose-50 dark:hover:bg-rose-950/20 text-xs font-bold transition-colors cursor-pointer"
+                      >
+                        Revoke Portal Access
+                      </button>
+                    )}
+                  </div>
+                )}
+              </div>
             </div>
 
             {/* Staff Preview Link */}
@@ -325,6 +451,17 @@ export const ClientLinkSharingModal: React.FC<ClientLinkSharingModalProps> = ({
         {/* Tab 2: Recipients */}
         {activeTab === 'recipients' && (
           <div className="p-6 space-y-6 overflow-y-auto">
+            {/* Recipient Security & Expiry Explanatory Banner */}
+            <div className="p-4 rounded-2xl bg-slate-50 dark:bg-dark-200/60 border border-slate-200 dark:border-dark-border text-xs space-y-1.5">
+              <div className="flex items-center gap-2 font-black text-gray-900 dark:text-gray-100">
+                <Shield className="w-4 h-4 text-brand-500" />
+                <span>Authorized Recipient Access Governance</span>
+              </div>
+              <p className="text-[11px] text-gray-600 dark:text-gray-300 leading-relaxed">
+                Only individuals authorized below can sign in to the Client Portal. Access is active as long as the recipient status is active. Revoking access blocks the recipient immediately, and revoking all recipients locks the portal link.
+              </p>
+            </div>
+
             {/* Add Recipient Form */}
             {profile?.role === 'owner' ? (
               <form onSubmit={handleAddRecipient} className="p-4 rounded-2xl bg-gray-50 dark:bg-dark-200/50 border border-gray-100 dark:border-dark-border space-y-3">

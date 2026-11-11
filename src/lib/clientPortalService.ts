@@ -597,6 +597,36 @@ export const clientPortalService = {
   },
 
   /**
+   * Revoke all active client portal recipients for a client (Owner only)
+   * Immediately locks portal link sharing and client access
+   */
+  async revokeAllPortalRecipients(
+    clientId: string,
+    callerProfile: UserProfile | null
+  ): Promise<{ error?: string; revokedCount?: number }> {
+    if (!callerProfile || callerProfile.role !== 'owner') {
+      return { error: 'Forbidden: Only the Owner can revoke client portal access.' };
+    }
+
+    if (!supabase) return { error: 'Database service unconfigured.' };
+    if (!clientId) return { error: 'Client ID is required.' };
+
+    try {
+      const { data, error } = await supabase
+        .from('client_portal_recipients')
+        .update({ status: 'revoked', updated_at: new Date().toISOString() })
+        .eq('client_id', clientId)
+        .eq('status', 'active')
+        .select();
+
+      if (error) return { error: error.message };
+      return { revokedCount: data?.length || 0 };
+    } catch (err: any) {
+      return { error: err?.message || 'Failed to revoke all client portal recipients.' };
+    }
+  },
+
+  /**
    * Submit Client Review decision (Approve or Request Changes)
    */
   async submitClientTaskDecision(
