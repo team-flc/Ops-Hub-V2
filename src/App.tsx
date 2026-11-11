@@ -272,7 +272,7 @@ export const OpsHubWorkspace: React.FC<{ initialView?: 'directory' | 'dashboard'
       return <EmployeeDossierView />;
     }
     if (location.pathname.startsWith('/operations/employees') || viewMode === 'employee_operations') {
-      return isManagerOrOwner ? <EmployeeManagementDashboardView /> : <EmployeeDashboardView />;
+      return <EmployeeManagementDashboardView />;
     }
     if (location.pathname === '/' || location.pathname.startsWith('/dashboard') || viewMode === 'dashboard') {
       if (isClientView) {
@@ -518,7 +518,7 @@ export const App: React.FC = () => {
       <Route
         path="/operations/employees"
         element={
-          <ProtectedRoute allowedRoles={['owner', 'operational_manager']}>
+          <ProtectedRoute allowedRoles={['owner', 'operational_manager', 'team_member']}>
             <OpsHubWorkspace initialView="employee_operations" />
           </ProtectedRoute>
         }

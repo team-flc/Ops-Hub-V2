@@ -42,23 +42,42 @@ export const EmployeeManagementDashboardView: React.FC = () => {
   const { profile: currentUserProfile } = useAuth();
   const navigate = useSafeNavigate();
 
+  const isOwner = currentUserProfile?.role === 'owner' || (currentUserProfile as any)?.systemRole === 'owner';
+  const isTeamMember = currentUserProfile?.role === 'team_member';
+  const isManager = currentUserProfile?.role === 'operational_manager';
+
   // Active Tab
   const [activeTab, setActiveTab] = useState<'attendance' | 'directory' | 'payroll' | 'assets' | 'performance' | 'concerns' | 'settlement'>(() => {
     if (typeof window !== 'undefined') {
       const params = new URLSearchParams(window.location.search);
       const tabParam = params.get('tab');
       if (tabParam === 'attendance') return 'attendance';
-      if (tabParam === 'directory') return 'directory';
-      if (tabParam === 'payroll') return 'payroll';
-      if (tabParam === 'assets') return 'assets';
-      if (tabParam === 'performance') return 'performance';
-      if (tabParam === 'concerns') return 'concerns';
-      if (tabParam === 'settlement') return 'settlement';
+      if (!isTeamMember) {
+        if (tabParam === 'directory') return 'directory';
+        if (tabParam === 'payroll') return 'payroll';
+        if (tabParam === 'assets') return 'assets';
+        if (tabParam === 'performance') return 'performance';
+        if (tabParam === 'concerns') return 'concerns';
+        if (tabParam === 'settlement') return 'settlement';
+      }
     }
     return 'attendance';
   });
 
+  // Strict fail-safe: team members cannot open management tabs under any circumstances
+  useEffect(() => {
+    if (isTeamMember && activeTab !== 'attendance') {
+      setActiveTab('attendance');
+      if (typeof window !== 'undefined') {
+        const url = new URL(window.location.href);
+        url.searchParams.set('tab', 'attendance');
+        window.history.replaceState({}, '', url.toString());
+      }
+    }
+  }, [isTeamMember, activeTab]);
+
   const handleTabChange = (tab: typeof activeTab) => {
+    if (isTeamMember && tab !== 'attendance') return;
     setActiveTab(tab);
     if (typeof window !== 'undefined') {
       const url = new URL(window.location.href);
@@ -66,8 +85,6 @@ export const EmployeeManagementDashboardView: React.FC = () => {
       window.history.replaceState({}, '', url.toString());
     }
   };
-
-  const isOwner = currentUserProfile?.role === 'owner' || (currentUserProfile as any)?.systemRole === 'owner';
   const [rosterSelectedDate, setRosterSelectedDate] = useState<string>(() => getPKTTodayDateString());
   const [selectedDeleteAttendance, setSelectedDeleteAttendance] = useState<DeleteAttendanceRecordData | null>(null);
   // Roster Filters
@@ -129,6 +146,52 @@ export const EmployeeManagementDashboardView: React.FC = () => {
     setIsLoading(true);
 
     try {
+      if (isTeamMember) {
+        // Strict self-isolation for team member: only query their own record and attendance
+        const [empRec, allShifts, allSchedules] = await Promise.all([
+          employeeOperationsService.fetchEmployeeRecord(currentUserProfile.id),
+          employeeOperationsService.fetchWorkShifts(),
+          employeeOperationsService.fetchCompanyWorkSchedules()
+        ]);
+
+        const selfMemberRecord: TeamMemberRecord = {
+          id: currentUserProfile.id,
+          fullName: currentUserProfile.fullName || 'Current User',
+          workEmail: currentUserProfile.workEmail || '',
+          role: currentUserProfile.role,
+          status: (currentUserProfile.status as any) || 'active',
+          designationName: currentUserProfile.designationName || 'Team Member',
+          departments: [],
+          clientIds: [],
+          startDate: currentUserProfile.startDate || '',
+          clientAccessCount: 0,
+          createdAt: currentUserProfile.createdAt || '',
+          updatedAt: currentUserProfile.updatedAt || ''
+        };
+
+        setTeamMembers([selfMemberRecord]);
+        setEmployeeRecords(empRec ? [empRec] : []);
+        setShifts(allShifts);
+        setCompanySchedules(allSchedules);
+        setAssets([]);
+        setPayrollRecords([]);
+        setPerformanceRecords([]);
+        setConcerns([]);
+        setSettlements([]);
+        setDepartments([]);
+        setDesignations([]);
+        setEligibleManagers([]);
+        setMissingCheckIns([]);
+
+        const todayAttendance = await employeeOperationsService.fetchAllTodayAttendance(
+          rosterSelectedDate,
+          currentUserProfile.id
+        );
+        const scopedAttendance = todayAttendance.filter(a => a.employeeId === currentUserProfile.id);
+        setTodayAttendanceList(scopedAttendance);
+        return;
+      }
+
       // Authoritative Work Date in PKT format (YYYY-MM-DD)
       const todayDate = getPKTTodayDateString();
 
@@ -218,7 +281,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
-  }, [currentUserProfile, selectedMonth]);
+  }, [currentUserProfile, selectedMonth, isTeamMember, rosterSelectedDate]);
 
   useEffect(() => {
     loadAllData();
@@ -227,22 +290,22 @@ export const EmployeeManagementDashboardView: React.FC = () => {
   // Load roster attendance when rosterSelectedDate changes
   useEffect(() => {
     if (activeTab === 'attendance' && attendanceSubTab === 'roster') {
-      employeeOperationsService.fetchAllTodayAttendance(rosterSelectedDate)
-        .then(setTodayAttendanceList)
+      employeeOperationsService.fetchAllTodayAttendance(rosterSelectedDate, isTeamMember ? currentUserProfile?.id : undefined)
+        .then((records) => setTodayAttendanceList(isTeamMember ? records.filter(r => r.employeeId === currentUserProfile?.id) : records))
         .catch(() => {});
     }
-  }, [activeTab, attendanceSubTab, rosterSelectedDate]);
+  }, [activeTab, attendanceSubTab, rosterSelectedDate, isTeamMember, currentUserProfile?.id]);
 
     // Load attendance proofs when proofSelectedDate changes
   useEffect(() => {
     if (activeTab === 'attendance' && attendanceSubTab === 'proof') {
       setIsLoadingProof(true);
-      employeeOperationsService.fetchAllTodayAttendance(proofSelectedDate)
-        .then((records) => setProofAttendanceList(records))
+      employeeOperationsService.fetchAllTodayAttendance(proofSelectedDate, isTeamMember ? currentUserProfile?.id : undefined)
+        .then((records) => setProofAttendanceList(isTeamMember ? records.filter(r => r.employeeId === currentUserProfile?.id) : records))
         .catch(() => setProofAttendanceList([]))
         .finally(() => setIsLoadingProof(false));
     }
-  }, [activeTab, attendanceSubTab, proofSelectedDate]);
+  }, [activeTab, attendanceSubTab, proofSelectedDate, isTeamMember, currentUserProfile?.id]);
 
   // Generate Monthly Payroll Cycle
   const handleGeneratePayroll = async () => {
@@ -281,8 +344,24 @@ export const EmployeeManagementDashboardView: React.FC = () => {
   }, [employeeRecords]);
 
   // Inclusive staff list including currentUserProfile if owner/manager and not already present
-  const allStaffMembers = useMemo(() => {
-    const list = [...teamMembers];
+  const allStaffMembers: TeamMemberRecord[] = useMemo(() => {
+    if (isTeamMember && currentUserProfile) {
+      return [{
+        id: currentUserProfile.id,
+        fullName: currentUserProfile.fullName || 'Current User',
+        workEmail: currentUserProfile.workEmail || '',
+        role: currentUserProfile.role,
+        status: (currentUserProfile.status as any) || 'active',
+        designationName: currentUserProfile.designationName || 'Team Member',
+        departments: [],
+        clientIds: [],
+        startDate: currentUserProfile.startDate || '',
+        clientAccessCount: 0,
+        createdAt: currentUserProfile.createdAt || '',
+        updatedAt: currentUserProfile.updatedAt || ''
+      }];
+    }
+    const list: TeamMemberRecord[] = [...teamMembers];
     if (currentUserProfile && !list.some(m => m.id === currentUserProfile.id)) {
       list.unshift({
         id: currentUserProfile.id,
@@ -290,6 +369,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
         workEmail: currentUserProfile.workEmail || '',
         role: currentUserProfile.role,
         status: (currentUserProfile.status as any) || 'active',
+        designationName: currentUserProfile.designationName || 'Team Member',
         departments: [],
         clientIds: [],
         startDate: currentUserProfile.startDate || '',
@@ -299,7 +379,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
       });
     }
     return list;
-  }, [teamMembers, currentUserProfile]);
+  }, [teamMembers, currentUserProfile, isTeamMember]);
 
   // Partition staff into Configured Active Staff vs Setup Pending (strict parameter verification)
   const { configuredActiveStaff, setupPendingStaff } = useMemo(() => {
@@ -394,19 +474,19 @@ export const EmployeeManagementDashboardView: React.FC = () => {
   };
   return (
     <div className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto space-y-6 animate-fade-in">
-      {/* View Switcher for Owner & Manager */}
+      {/* View Switcher for Staff */}
       <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-slate-100 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border w-fit">
         <button
           type="button"
           className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold bg-white dark:bg-dark-card text-brand-700 dark:text-brand-300 shadow-sm"
         >
           <Users className="w-4 h-4" />
-          <span>Team Attendance Roster & Operations</span>
+          <span>{isTeamMember ? 'Attendance Roster & Proof Vault' : 'Team Attendance Roster & Operations'}</span>
         </button>
         <button
           type="button"
           onClick={() => navigate('/employee/dashboard')}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-gray-100 transition-colors"
+          className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-gray-100 transition-colors cursor-pointer"
         >
           <Clock className="w-4 h-4" />
           <span>My Personal Punch & Attendance</span>
@@ -421,10 +501,12 @@ export const EmployeeManagementDashboardView: React.FC = () => {
           </div>
           <div>
             <h1 className="text-xl sm:text-2xl font-black text-slate-900 dark:text-gray-100 tracking-tight">
-              Employee Operations & HR Governance
+              {isTeamMember ? 'Personal Attendance Record & Proof Vault' : 'Employee Operations & HR Governance'}
             </h1>
             <p className="text-xs text-slate-500 dark:text-gray-400">
-              Attendance tracking, authoritative payroll, asset control & employee dossiers (Asia/Karachi PKT)
+              {isTeamMember
+                ? 'Your personal shift attendance, punch screenshots & verified deductions (Asia/Karachi PKT)'
+                : 'Attendance tracking, authoritative payroll, asset control & employee dossiers (Asia/Karachi PKT)'}
             </p>
           </div>
         </div>
@@ -433,7 +515,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
           <button
             type="button"
             onClick={loadAllData}
-            className="p-2.5 rounded-xl border border-slate-200 dark:border-dark-border text-slate-600 dark:text-gray-300 hover:bg-slate-100 dark:hover:bg-dark-100 transition-colors"
+            className="p-2.5 rounded-xl border border-slate-200 dark:border-dark-border text-slate-600 dark:text-gray-300 hover:bg-slate-100 dark:hover:bg-dark-100 transition-colors cursor-pointer"
             title="Refresh All Data"
           >
             <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
@@ -442,7 +524,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
       </div>
 
       {/* 60-Minute Missing Check-Ins Alert Banner (Configured Staff Only) */}
-      {missingCheckIns.length > 0 && (
+      {!isTeamMember && missingCheckIns.length > 0 && (
         <div className="p-4 sm:p-5 rounded-3xl bg-rose-50 dark:bg-rose-950/30 border border-rose-200 dark:border-rose-900/50 text-rose-900 dark:text-rose-200 space-y-3 shadow-xs">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2.5 font-bold text-sm">
@@ -494,28 +576,54 @@ export const EmployeeManagementDashboardView: React.FC = () => {
       {/* KPI Counters Bar */}
       <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
         <div className="p-4 rounded-2xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border space-y-1">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Configured Staff</span>
-          <div className="text-xl font-black text-slate-900 dark:text-gray-100 font-mono">{activeStaffCount}</div>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+            {isTeamMember ? 'My Shift' : 'Configured Staff'}
+          </span>
+          <div className="text-xl font-black text-slate-900 dark:text-gray-100 font-mono">
+            {isTeamMember ? (configuredActiveStaff.length > 0 ? 'Active' : 'Setup Pending') : activeStaffCount}
+          </div>
         </div>
         <div className="p-4 rounded-2xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border space-y-1">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">Checked In</span>
-          <div className="text-xl font-black text-emerald-600 font-mono">{checkedInTodayCount}</div>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">
+            {isTeamMember ? 'Punch Status' : 'Checked In'}
+          </span>
+          <div className="text-xl font-black text-emerald-600 font-mono">
+            {isTeamMember ? (checkedInTodayCount > 0 ? 'Clocked In' : 'No Punch') : checkedInTodayCount}
+          </div>
         </div>
         <div className="p-4 rounded-2xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border space-y-1">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600">Late Today</span>
-          <div className="text-xl font-black text-amber-600 font-mono">{lateTodayCount}</div>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-amber-600">
+            {isTeamMember ? 'Punctuality' : 'Late Today'}
+          </span>
+          <div className="text-xl font-black text-amber-600 font-mono">
+            {isTeamMember ? (lateTodayCount > 0 ? 'Late (+500)' : 'On Time') : lateTodayCount}
+          </div>
         </div>
         <div className="p-4 rounded-2xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border space-y-1">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600">Missing (&gt;60m)</span>
-          <div className="text-xl font-black text-rose-600 font-mono">{missingCheckIns.length}</div>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600">
+            {isTeamMember ? 'Absence Status' : 'Missing (>60m)'}
+          </span>
+          <div className="text-xl font-black text-rose-600 font-mono">
+            {isTeamMember ? (todayAttendanceList.some(a => a.status === 'absent') ? 'Absent' : 'None') : missingCheckIns.length}
+          </div>
         </div>
         <div className="p-4 rounded-2xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border space-y-1">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600">Pending Payroll</span>
-          <div className="text-xl font-black text-indigo-600 font-mono">{pendingPayrollCount}</div>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600">
+            {isTeamMember ? 'Today Deductions' : 'Pending Payroll'}
+          </span>
+          <div className="text-xl font-black text-indigo-600 font-mono">
+            {isTeamMember
+              ? `PKR ${(todayAttendanceList[0]?.lateDeduction || 0) + (todayAttendanceList[0]?.absenceDeduction || 0)}`
+              : pendingPayrollCount}
+          </div>
         </div>
         <div className="p-4 rounded-2xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border space-y-1">
-          <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700">Setup Pending</span>
-          <div className="text-xl font-black text-amber-700 dark:text-amber-400 font-mono">{setupPendingCount}</div>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-amber-700">
+            {isTeamMember ? 'Setup Status' : 'Setup Pending'}
+          </span>
+          <div className="text-xl font-black text-amber-700 dark:text-amber-400 font-mono">
+            {isTeamMember ? (setupPendingStaff.length > 0 ? 'Pending' : 'Ready') : setupPendingCount}
+          </div>
         </div>
       </div>
 
@@ -531,86 +639,93 @@ export const EmployeeManagementDashboardView: React.FC = () => {
           }`}
         >
           <Clock className="w-3.5 h-3.5" />
-          <span>Live Attendance</span>
+          <span>{isTeamMember ? 'Personal Attendance & Proof' : 'Live Attendance'}</span>
         </button>
 
-        <button
-          type="button"
-          onClick={() => handleTabChange('directory')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'directory'
-              ? 'bg-white dark:bg-dark-card text-brand-700 dark:text-brand-300 shadow-sm'
-              : 'text-slate-600 dark:text-gray-400 hover:text-slate-900'
-          }`}
-        >
-          <Users className="w-3.5 h-3.5" />
-          <span>Employee Directory</span>
-        </button>
+        {!isTeamMember && (
+          <>
+            <button
+              type="button"
+              onClick={() => handleTabChange('directory')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+                activeTab === 'directory'
+                  ? 'bg-white dark:bg-dark-card text-brand-700 dark:text-brand-300 shadow-sm'
+                  : 'text-slate-600 dark:text-gray-400 hover:text-slate-900'
+              }`}
+            >
+              <Users className="w-3.5 h-3.5" />
+              <span>Employee Directory</span>
+            </button>
 
-        <button
-          type="button"
-          onClick={() => handleTabChange('payroll')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'payroll'
-              ? 'bg-white dark:bg-dark-card text-brand-700 dark:text-brand-300 shadow-sm'
-              : 'text-slate-600 dark:text-gray-400 hover:text-slate-900'
-          }`}
-        >
-          <DollarSign className="w-3.5 h-3.5" />
-          <span>Payroll (1st–End)</span>
-        </button>
+            <button
+              type="button"
+              onClick={() => handleTabChange('payroll')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+                activeTab === 'payroll'
+                  ? 'bg-white dark:bg-dark-card text-brand-700 dark:text-brand-300 shadow-sm'
+                  : 'text-slate-600 dark:text-gray-400 hover:text-slate-900'
+              }`}
+            >
+              <DollarSign className="w-3.5 h-3.5" />
+              <span>Payroll (1st–End)</span>
+            </button>
 
-        <button
-          type="button"
-          onClick={() => handleTabChange('assets')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'assets'
-              ? 'bg-white dark:bg-dark-card text-brand-700 dark:text-brand-300 shadow-sm'
-              : 'text-slate-600 dark:text-gray-400 hover:text-slate-900'
-          }`}
-        >
-          <Laptop className="w-3.5 h-3.5" />
-          <span>Company Assets ({assets.length})</span>
-        </button>
+            <button
+              type="button"
+              onClick={() => handleTabChange('assets')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+                activeTab === 'assets'
+                  ? 'bg-white dark:bg-dark-card text-brand-700 dark:text-brand-300 shadow-sm'
+                  : 'text-slate-600 dark:text-gray-400 hover:text-slate-900'
+              }`}
+            >
+              <Laptop className="w-3.5 h-3.5" />
+              <span>Company Assets ({assets.length})</span>
+            </button>
 
-        <button
-          type="button"
-          onClick={() => handleTabChange('performance')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'performance'
-              ? 'bg-white dark:bg-dark-card text-brand-700 dark:text-brand-300 shadow-sm'
-              : 'text-slate-600 dark:text-gray-400 hover:text-slate-900'
-          }`}
-        >
-          <Award className="w-3.5 h-3.5" />
-          <span>Performance & Incidents</span>
-        </button>
+            <button
+              type="button"
+              onClick={() => handleTabChange('performance')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+                activeTab === 'performance'
+                  ? 'bg-white dark:bg-dark-card text-brand-700 dark:text-brand-300 shadow-sm'
+                  : 'text-slate-600 dark:text-gray-400 hover:text-slate-900'
+              }`}
+            >
+              <Award className="w-3.5 h-3.5" />
+              <span>Performance & Incidents</span>
+              <span className="text-[9px] font-bold px-1.5 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                Staff Only
+              </span>
+            </button>
 
-        <button
-          type="button"
-          onClick={() => handleTabChange('concerns')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'concerns'
-              ? 'bg-white dark:bg-dark-card text-brand-700 dark:text-brand-300 shadow-sm'
-              : 'text-slate-600 dark:text-gray-400 hover:text-slate-900'
-          }`}
-        >
-          <MessageSquare className="w-3.5 h-3.5" />
-          <span>Employee Concerns ({openConcernsCount})</span>
-        </button>
+            <button
+              type="button"
+              onClick={() => handleTabChange('concerns')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+                activeTab === 'concerns'
+                  ? 'bg-white dark:bg-dark-card text-brand-700 dark:text-brand-300 shadow-sm'
+                  : 'text-slate-600 dark:text-gray-400 hover:text-slate-900'
+              }`}
+            >
+              <MessageSquare className="w-3.5 h-3.5" />
+              <span>Employee Concerns ({openConcernsCount})</span>
+            </button>
 
-        <button
-          type="button"
-          onClick={() => handleTabChange('settlement')}
-          className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
-            activeTab === 'settlement'
-              ? 'bg-white dark:bg-dark-card text-brand-700 dark:text-brand-300 shadow-sm'
-              : 'text-slate-600 dark:text-gray-400 hover:text-slate-900'
-          }`}
-        >
-          <Calculator className="w-3.5 h-3.5" />
-          <span>Final Settlements</span>
-        </button>
+            <button
+              type="button"
+              onClick={() => handleTabChange('settlement')}
+              className={`px-4 py-2 rounded-xl text-xs font-bold transition-all flex items-center gap-2 whitespace-nowrap ${
+                activeTab === 'settlement'
+                  ? 'bg-white dark:bg-dark-card text-brand-700 dark:text-brand-300 shadow-sm'
+                  : 'text-slate-600 dark:text-gray-400 hover:text-slate-900'
+              }`}
+            >
+              <Calculator className="w-3.5 h-3.5" />
+              <span>Final Settlements</span>
+            </button>
+          </>
+        )}
       </div>
 
       {/* TAB 1: LIVE ATTENDANCE */}
@@ -629,7 +744,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
               }`}
             >
               <Users className="w-4 h-4" />
-              <span>Today's Live Roster</span>
+              <span>{isTeamMember ? 'Personal Live Roster' : "Today's Live Roster"}</span>
             </button>
 
             <button
@@ -643,15 +758,17 @@ export const EmployeeManagementDashboardView: React.FC = () => {
               }`}
             >
               <Camera className="w-4 h-4" />
-              <span>Clock-In Proof</span>
+              <span>{isTeamMember ? 'My Clock-In Proof' : 'Clock-In Proof'}</span>
             </button>
           </div>
           {/* Today's Attendance Summary KPI Bar */}
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
             <div className="p-4 rounded-2xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border space-y-1 shadow-xs">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Team Members</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">
+                {isTeamMember ? 'Personal Record' : 'Team Members'}
+              </span>
               <div className="text-xl font-black text-slate-900 dark:text-gray-100 font-mono">{allStaffMembers.length}</div>
-              <p className="text-[10px] text-slate-500">Registered staff</p>
+              <p className="text-[10px] text-slate-500">{isTeamMember ? 'Self only' : 'Registered staff'}</p>
             </div>
             <div className="p-4 rounded-2xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border space-y-1 shadow-xs">
               <span className="text-[10px] font-bold uppercase tracking-wider text-emerald-600">Clocked In</span>
@@ -669,9 +786,11 @@ export const EmployeeManagementDashboardView: React.FC = () => {
               <p className="text-[10px] text-slate-500">Approved leaves</p>
             </div>
             <div className="p-4 rounded-2xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border space-y-1 shadow-xs">
-              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600">Expected Today</span>
+              <span className="text-[10px] font-bold uppercase tracking-wider text-indigo-600">
+                {isTeamMember ? 'My Shift' : 'Expected Today'}
+              </span>
               <div className="text-xl font-black text-indigo-600 font-mono">{allStaffMembers.filter(m => m.status === 'active').length}</div>
-              <p className="text-[10px] text-slate-500">Scheduled shifts</p>
+              <p className="text-[10px] text-slate-500">{isTeamMember ? 'Assigned shift' : 'Scheduled shifts'}</p>
             </div>
             <div className="p-4 rounded-2xl bg-white dark:bg-dark-300 border border-slate-200 dark:border-dark-border space-y-1 shadow-xs">
               <span className="text-[10px] font-bold uppercase tracking-wider text-rose-600">Absent</span>
@@ -687,10 +806,12 @@ export const EmployeeManagementDashboardView: React.FC = () => {
               <div>
                 <h2 className="text-sm font-bold text-slate-900 dark:text-gray-100 flex items-center gap-2">
                   <Users className="w-4 h-4 text-brand-600" />
-                  <span>Team Attendance Roster ({allStaffMembers.length} Members)</span>
+                  <span>{isTeamMember ? 'Personal Attendance Roster (1 Member)' : `Team Attendance Roster (${allStaffMembers.length} Members)`}</span>
                 </h2>
                 <p className="text-xs text-slate-500 dark:text-gray-400">
-                  Live workstation attendance tracking, scheduled shifts, and punch records for {rosterSelectedDate}
+                  {isTeamMember
+                    ? `Live personal attendance tracking, scheduled shift, and punch records for ${rosterSelectedDate}`
+                    : `Live workstation attendance tracking, scheduled shifts, and punch records for ${rosterSelectedDate}`}
                 </p>
               </div>
 
@@ -707,26 +828,28 @@ export const EmployeeManagementDashboardView: React.FC = () => {
                   <span>Export</span>
                 </button>
 
-                <button
-                  type="button"
-                  onClick={() => setSelectedAttendanceCorrection({
-                    id: '',
-                    employeeId: '',
-                    workDate: getPKTTodayDateString(),
-                    scheduledCheckIn: '11:00:00',
-                    scheduledCheckOut: '20:00:00',
-                    minutesLate: 0,
-                    status: 'on_time',
-                    lateDeduction: 0,
-                    absenceDeduction: 0,
-                    createdAt: '',
-                    updatedAt: ''
-                  })}
-                  className="px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-brand-600 text-white text-xs font-bold hover:bg-slate-800 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                  <span>Manual Attendance Log</span>
-                </button>
+                {!isTeamMember && (
+                  <button
+                    type="button"
+                    onClick={() => setSelectedAttendanceCorrection({
+                      id: '',
+                      employeeId: '',
+                      workDate: getPKTTodayDateString(),
+                      scheduledCheckIn: '11:00:00',
+                      scheduledCheckOut: '20:00:00',
+                      minutesLate: 0,
+                      status: 'on_time',
+                      lateDeduction: 0,
+                      absenceDeduction: 0,
+                      createdAt: '',
+                      updatedAt: ''
+                    })}
+                    className="px-3.5 py-2 rounded-xl bg-slate-900 dark:bg-brand-600 text-white text-xs font-bold hover:bg-slate-800 transition-colors flex items-center gap-1.5 cursor-pointer shadow-xs"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    <span>Manual Attendance Log</span>
+                  </button>
+                )}
               </div>
             </div>
 
@@ -961,16 +1084,18 @@ export const EmployeeManagementDashboardView: React.FC = () => {
                           <td className="py-3 px-3 text-right">
                             <div className="flex items-center justify-end gap-1.5">
                               {/* Configure button */}
-                              <button
-                                type="button"
-                                data-testid={`configure-btn-${member.id}`}
-                                onClick={() => setEditingMemberForSetup(member)}
-                                className="px-2.5 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-[11px] transition-colors shadow-xs flex items-center gap-1 cursor-pointer"
-                                title="Configure Shift, Schedule & Compensation"
-                              >
-                                <Settings className="w-3 h-3" />
-                                <span>Configure</span>
-                              </button>
+                              {!isTeamMember && (
+                                <button
+                                  type="button"
+                                  data-testid={`configure-btn-${member.id}`}
+                                  onClick={() => setEditingMemberForSetup(member)}
+                                  className="px-2.5 py-1.5 rounded-xl bg-brand-600 hover:bg-brand-700 text-white font-bold text-[11px] transition-colors shadow-xs flex items-center gap-1 cursor-pointer"
+                                  title="Configure Shift, Schedule & Compensation"
+                                >
+                                  <Settings className="w-3 h-3" />
+                                  <span>Configure</span>
+                                </button>
+                              )}
 
                               {/* View Frame if screenshot exists */}
                               {(att?.screenCaptureUrl || att?.checkInScreenshotPath) && (
@@ -985,26 +1110,28 @@ export const EmployeeManagementDashboardView: React.FC = () => {
                               )}
 
                               {/* Log / Adjust Attendance */}
-                              <button
-                                type="button"
-                                onClick={() => setSelectedAttendanceCorrection(att || {
-                                  id: '',
-                                  employeeId: member.id,
-                                  workDate: rosterSelectedDate,
-                                  scheduledCheckIn: shift?.startTime || '11:00:00',
-                                  scheduledCheckOut: shift?.endTime || '20:00:00',
-                                  minutesLate: 0,
-                                  status: 'on_time',
-                                  lateDeduction: 0,
-                                  absenceDeduction: 0,
-                                  createdAt: '',
-                                  updatedAt: ''
-                                })}
-                                className="p-1.5 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-slate-100 dark:hover:bg-dark-100 transition-colors cursor-pointer"
-                                title="Adjust Attendance"
-                              >
-                                <Edit3 className="w-3.5 h-3.5" />
-                              </button>
+                              {!isTeamMember && (
+                                <button
+                                  type="button"
+                                  onClick={() => setSelectedAttendanceCorrection(att || {
+                                    id: '',
+                                    employeeId: member.id,
+                                    workDate: rosterSelectedDate,
+                                    scheduledCheckIn: shift?.startTime || '11:00:00',
+                                    scheduledCheckOut: shift?.endTime || '20:00:00',
+                                    minutesLate: 0,
+                                    status: 'on_time',
+                                    lateDeduction: 0,
+                                    absenceDeduction: 0,
+                                    createdAt: '',
+                                    updatedAt: ''
+                                  })}
+                                  className="p-1.5 rounded-lg text-slate-400 hover:text-brand-600 hover:bg-slate-100 dark:hover:bg-dark-100 transition-colors cursor-pointer"
+                                  title="Adjust Attendance"
+                                >
+                                  <Edit3 className="w-3.5 h-3.5" />
+                                </button>
+                              )}
 
                               {/* Owner-Only Delete Attendance Button */}
                               {isOwner && att && att.id && (
@@ -1043,10 +1170,12 @@ export const EmployeeManagementDashboardView: React.FC = () => {
                 <div>
                   <h2 className="text-sm font-bold text-slate-900 dark:text-gray-100 flex items-center gap-2">
                     <Camera className="w-4 h-4 text-brand-600" />
-                    <span>Workstation Clock-In & Check-Out Proof Vault</span>
+                    <span>{isTeamMember ? 'Personal Clock-In & Check-Out Proof Vault' : 'Workstation Clock-In & Check-Out Proof Vault'}</span>
                   </h2>
                   <p className="text-xs text-slate-500 dark:text-gray-400 mt-0.5">
-                    Review authentic workstation screenshot proof captures for all 39 team members with PKT timestamps.
+                    {isTeamMember
+                      ? 'Review authentic workstation screenshot proof captures for your personal shifts with PKT timestamps.'
+                      : 'Review authentic workstation screenshot proof captures for all 39 team members with PKT timestamps.'}
                   </p>
                 </div>
 
@@ -1063,13 +1192,18 @@ export const EmployeeManagementDashboardView: React.FC = () => {
                   </div>
 
                   <select
-                    value={proofMemberFilter}
-                    onChange={(e) => setProofMemberFilter(e.target.value)}
+                    value={isTeamMember ? (currentUserProfile?.id || '') : proofMemberFilter}
+                    onChange={(e) => {
+                      if (!isTeamMember) setProofMemberFilter(e.target.value);
+                    }}
+                    disabled={isTeamMember}
                     className="px-3 py-1.5 text-xs bg-slate-50 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border rounded-xl text-slate-700 dark:text-gray-300 focus:outline-none"
                   >
-                    <option value="all">All Members (39)</option>
+                    {!isTeamMember && <option value="all">All Members ({allStaffMembers.length})</option>}
                     {allStaffMembers.map(m => (
-                      <option key={m.id} value={m.id}>{m.fullName}</option>
+                      <option key={m.id} value={m.id}>
+                        {m.fullName} {isTeamMember ? '(Self)' : ''}
+                      </option>
                     ))}
                   </select>
 
@@ -1077,8 +1211,8 @@ export const EmployeeManagementDashboardView: React.FC = () => {
                     type="button"
                     onClick={() => {
                       setIsLoadingProof(true);
-                      employeeOperationsService.fetchAllTodayAttendance(proofSelectedDate)
-                        .then(r => setProofAttendanceList(r))
+                      employeeOperationsService.fetchAllTodayAttendance(proofSelectedDate, isTeamMember ? currentUserProfile?.id : undefined)
+                        .then(r => setProofAttendanceList(isTeamMember ? r.filter(a => a.employeeId === currentUserProfile?.id) : r))
                         .finally(() => setIsLoadingProof(false));
                     }}
                     className="px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-dark-card dark:hover:bg-dark-100 text-xs font-bold text-slate-700 dark:text-gray-300 transition-colors flex items-center gap-1 cursor-pointer"
@@ -1096,7 +1230,7 @@ export const EmployeeManagementDashboardView: React.FC = () => {
                 ) : (
                   <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                     {allStaffMembers
-                      .filter(m => proofMemberFilter === 'all' || m.id === proofMemberFilter)
+                      .filter(m => (isTeamMember ? m.id === currentUserProfile?.id : (proofMemberFilter === 'all' || m.id === proofMemberFilter)))
                       .map(member => {
                         const att = proofAttendanceList.find(a => a.employeeId === member.id);
                         const empRec = empRecordMap.get(member.id);

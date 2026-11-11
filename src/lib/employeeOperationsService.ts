@@ -1125,7 +1125,7 @@ async checkIn(payload: CheckInPayload): Promise<{ attendance?: EmployeeAttendanc
     }
   },
 
-  async fetchAllTodayAttendance(dateStr?: string): Promise<EmployeeAttendance[]> {
+  async fetchAllTodayAttendance(dateStr?: string, employeeId?: string): Promise<EmployeeAttendance[]> {
     if (!supabase) return [];
     try {
       const today = dateStr || this.getTodayDatePKT();
@@ -1138,30 +1138,38 @@ async checkIn(payload: CheckInPayload): Promise<{ attendance?: EmployeeAttendanc
         // Query both today and yesterday to capture active overnight shifts spanning midnight
         const nowMs = Date.now();
         const yesterdayPKT = this.getTodayDatePKT(new Date(nowMs - 24 * 60 * 60 * 1000));
-        const res = await supabase
+        let query = supabase
           .from('employee_attendance')
           .select('*')
           .in('work_date', [yesterdayPKT, today])
-          .not('check_in_time', 'is', null)
-          .order('check_in_time', { ascending: true });
+          .not('check_in_time', 'is', null);
+        if (employeeId) {
+          query = query.eq('employee_id', employeeId);
+        }
+        const res = await query.order('check_in_time', { ascending: true });
         data = res.data;
         error = res.error;
       } else {
-        const res = await supabase
+        let query = supabase
           .from('employee_attendance')
           .select('*')
           .eq('work_date', today)
-          .not('check_in_time', 'is', null)
-          .order('check_in_time', { ascending: true });
+          .not('check_in_time', 'is', null);
+        if (employeeId) {
+          query = query.eq('employee_id', employeeId);
+        }
+        const res = await query.order('check_in_time', { ascending: true });
         data = res.data;
         error = res.error;
       }
 
       if (error || !data) return [];
 
+      const filteredList = employeeId ? data.filter((a: any) => a.employee_id === employeeId) : data;
+
       // For live roster, deduplicate per employee prioritizing open active sessions or today's records
       const recordsByEmployee = new Map<string, any>();
-      for (const a of data) {
+      for (const a of filteredList) {
         const isOpen = !a.check_out_time;
         const isToday = a.work_date === today;
         const existing = recordsByEmployee.get(a.employee_id);
@@ -1177,7 +1185,7 @@ async checkIn(payload: CheckInPayload): Promise<{ attendance?: EmployeeAttendanc
         }
       }
 
-      const activeList = isLiveToday ? Array.from(recordsByEmployee.values()) : data;
+      const activeList = isLiveToday ? Array.from(recordsByEmployee.values()) : filteredList;
 
       const parsed = activeList.map((a: any) => {
         let status = a.status;

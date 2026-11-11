@@ -4,7 +4,7 @@ import {
   User, Mail, Phone, Calendar, Clock, DollarSign,
   Laptop, Award, FileText, ArrowLeft, ShieldCheck,
   AlertTriangle, CheckCircle2, Edit3, Plus, RefreshCw,
-  Lock, Eye, AlertCircle, Building2, Briefcase
+  Lock, Eye, AlertCircle, Building2, Briefcase, ShieldAlert
 } from 'lucide-react';
 import { useAuth } from '../../context/AuthContext';
 import { useSafeNavigate } from '../../lib/safeRouterHooks';
@@ -86,6 +86,24 @@ export const EmployeeDossierView: React.FC = () => {
   useEffect(() => {
     loadDossier();
   }, [loadDossier]);
+
+  // Strict privacy guard: Team members can never view another team member's dossier
+  if (currentUserProfile?.role === 'team_member' && targetId !== currentUserProfile.id) {
+    return (
+      <div className="p-8 max-w-lg mx-auto text-center space-y-4">
+        <ShieldAlert className="w-12 h-12 text-rose-500 mx-auto" />
+        <h2 className="text-lg font-bold text-slate-900 dark:text-gray-100">Access Restricted</h2>
+        <p className="text-xs text-slate-500">You are only authorized to view your own employee dossier.</p>
+        <button
+          type="button"
+          onClick={() => navigate('/employee/dashboard')}
+          className="px-4 py-2 rounded-xl bg-brand-600 text-white text-xs font-bold cursor-pointer"
+        >
+          Back to Personal Attendance
+        </button>
+      </div>
+    );
+  }
 
   if (isLoading && !dossier) {
     return (

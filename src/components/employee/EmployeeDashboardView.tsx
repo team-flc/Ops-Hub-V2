@@ -379,16 +379,17 @@ export const EmployeeDashboardView: React.FC = () => {
 
   return (
     <div className="p-4 sm:p-6 md:p-8 max-w-7xl mx-auto space-y-6 animate-fade-in">
-      {/* View Switcher for Owner & Manager */}
-      {(profile?.role === 'owner' || profile?.role === 'operational_manager') && (
+      {/* View Switcher for All Staff (Owner, Manager, Team Member) */}
+      {(profile?.role === 'owner' || profile?.role === 'operational_manager' || profile?.role === 'team_member') && (
         <div className="flex items-center gap-2 p-1.5 rounded-2xl bg-slate-100 dark:bg-dark-sidebar border border-slate-200 dark:border-dark-border w-fit">
           <button
             type="button"
+            data-testid="switch-to-roster-vault-btn"
             onClick={() => navigate('/operations/employees?tab=attendance')}
-            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-gray-100 transition-colors"
+            className="flex items-center gap-2 px-4 py-2 rounded-xl text-xs font-bold text-slate-600 dark:text-gray-400 hover:text-slate-900 dark:hover:text-gray-100 transition-colors cursor-pointer"
           >
             <Users className="w-4 h-4" />
-            <span>Team Attendance Roster & Operations</span>
+            <span>{profile?.role === 'team_member' ? 'Attendance Roster & Proof Vault' : 'Team Attendance Roster & Operations'}</span>
           </button>
           <button
             type="button"
